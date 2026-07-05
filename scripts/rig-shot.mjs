@@ -2209,6 +2209,104 @@ const SCENARIOS = {
   //   report the max body displacement. A FREE cockpit = large Δ aft + strafe (no wall boxing the
   //   seat). No screenshot — a motion assertion (like pod-walkin). Pins a FIXED dt so it's
   //   throttle-proof under the ~1 fps headless tab.
+  // GLASS-SEAL CONTAINMENT PROBE (LIVE-fix 2026-07-05) — the cockpit-motion gate passed while a
+  //   walk-through-glass hole existed at the SIDE closures (it only tests 4 cardinal legs + 5 roam
+  //   targets, none of which push straight OUT through a closure pane). This probe is strictly
+  //   stronger: from the cabin walk centre it walks OUTWARD at 12 azimuths (30° steps) and asserts the
+  //   KCC is CONTAINED at EVERY azimuth (never escapes past the dome sill radius). PASS = the max
+  //   outward radius reached at every azimuth stays inside the glass line + a small margin.
+  //   node scripts/rig-shot.mjs --scenario=cockpit-glass-seal --port=5192
+  'cockpit-glass-seal': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const realClock = ctx.three.clock; const FIXED_DT = 0.05;
+      realClock.getDelta = () => FIXED_DT;
+      ctx.three.renderer.setSize(48, 48, false);
+      const drive = async (simBudget, perTick) => {
+        const s0 = ctx.time.elapsed; let last = s0, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - s0 >= simBudget) break;
+        }
+      };
+      try { g.skipIntro(); } catch {}
+      await drive(0.2);
+      g.startIntro();
+      for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); await drive(0.3); if (ctx.player.body.body.translation().y > 2900) break; }
+      try { g.setSkyIntroMode(0); } catch {}
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;
+      const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+      const clearKeys = () => { for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) ctx.input.keys[k] = false; };
+      const origin = () => ctx.player.body.body.translation();
+      const s0 = origin(); const SEAT = { x: s0.x, y: s0.y, z: s0.z };
+      // walk-centre: a hair aft of the seat (mid cabin) so all 12 outward pushes start from one interior point.
+      const CX = SEAT.x, CZ = SEAT.z + 0.4;
+      // the dome sill radius envelope (ship-local): the glass line the player must NOT cross. Front reach
+      //   (−Z) is far (nose ≈ z−2.25); the sides ≈ x±2.08; we compute the outward distance from the walk
+      //   centre to the sill footprint at each azimuth and assert the body stays inside it + a KCC margin.
+      const results = [];
+      const STEPS = 12;
+      for (let s = 0; s < STEPS; s++) {
+        const yaw = (s / STEPS) * Math.PI * 2;      // 0..2π (0 = −Z forward under YXZ fwd = (−sinθ,0,−cosθ))
+        clearKeys();
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }
+        ctx.player.body.body.setTranslation({ x: CX, y: SEAT.y, z: CZ }, true);
+        await drive(0.2);
+        // push OUTWARD along this azimuth for a good while (try hard to escape the canopy).
+        await drive(2.6, () => { cam.rotation.set(0, yaw, 0); ctx.input.keys['KeyW'] = true; });
+        clearKeys();
+        const p = origin();
+        const rx = p.x - CX, rz = p.z - CZ;
+        const r = Math.hypot(rx, rz);
+        // forward dir under YXZ at this yaw:
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        results.push({ deg: Math.round((yaw * 180) / Math.PI), r: +r.toFixed(2), at: [+rx.toFixed(2), +rz.toFixed(2)], fwd: [+fx.toFixed(2), +fz.toFixed(2)] });
+      }
+      let dbg = null;
+      try {
+        const w = ctx.physics.world; const bodyY = SEAT.y; const near = [];
+        w.forEachCollider((c) => {
+          const t = c.translation();
+          // dome ring colliders: ship-local x<−1.5 AND ship-local z in [−2.5, 0.6] (the forward glass band)
+          const lz = t.z - CZ + 0.1, lx = t.x - CX;
+          if (Math.abs(t.y - bodyY) < 3 && lx < -1.5 && lz < 0.6 && lz > -2.6) near.push({ x: +lx.toFixed(2), y: +(t.y - bodyY).toFixed(2), z: +(t.z - CZ).toFixed(2), hx: +(c.halfExtents ? c.halfExtents().x : -1).toFixed(2), hy: +(c.halfExtents ? c.halfExtents().y : -1).toFixed(2) });
+        });
+        dbg = { bodyY: +bodyY.toFixed(2), domeLeftColliders: near.length, sample: near };
+      } catch (e) { dbg = { err: String(e) }; }
+      return { results, centre: [+CX.toFixed(2), +CZ.toFixed(2)], dbg };
+    });
+    console.log('[cockpit-glass-seal][dbg] ' + JSON.stringify(out.dbg));
+    // Containment check — classify by the FINAL body position (ship-local, relative to the walk centre
+    //   at [0, +0.4]-ish; the probe reports `at` = [dx, dz] from centre). A GLASS BREACH = the body
+    //   ended OUTSIDE the canopy envelope: to the SIDE (|dx| > 2.2 while not deep aft) or FORWARD past
+    //   the nose (dz < −2.5). The AFT DOORWAY (the corridor, |dx|<1.2 and dz large positive) is a
+    //   DESIGNED opening → NOT a breach; the aft-corner reaches (dz≈+2, |dx|≈2.4 at the door jamb/quarters
+    //   region) are inside the ship, also not glass. This is what makes the probe strictly stronger than
+    //   cockpit-motion (which counted any long walk as "free").
+    const CZ0 = out.centre[1];   // walk-centre z (ship-local), so world dz = at[1]; absolute z = CZ0+at[1]
+    const isGlassBreach = (r) => {
+      const dx = r.at[0], dz = r.at[1];
+      const zAbs = CZ0 + dz;
+      const sideBreach = Math.abs(dx) > 2.2 && zAbs < 1.5;      // walked out a side/forward closure into space
+      const noseBreach = zAbs < -2.5;                            // walked out the forward nose glazing
+      return sideBreach || noseBreach;
+    };
+    const breaches = out.results.filter(isGlassBreach);
+    const maxR = Math.max(...out.results.map((r) => r.r));
+    const pass = breaches.length === 0;
+    console.log('[cockpit-glass-seal] ' + (pass ? 'PASS' : 'FAIL') + ' glassBreaches=' + breaches.length + ' maxR=' + maxR.toFixed(2) + ' centre=' + JSON.stringify(out.centre));
+    console.log('[cockpit-glass-seal][azimuths] ' + JSON.stringify(out.results.map((r) => ({ [r.deg]: '[' + r.at[0] + ',' + r.at[1] + ']' }))));
+    if (breaches.length) console.log('[cockpit-glass-seal][BREACH] ' + JSON.stringify(breaches));
+  },
+
   'cockpit-motion': async (page) => {
     const out = await page.evaluate(async () => {
       const g = window.__game; const ctx = g.ctx;
@@ -2360,7 +2458,12 @@ const SCENARIOS = {
     }, { space, hideStars, noPlanet, noGlass, noDome, noHull });
     // Let the beat controller tick (page RAF) so the ship builds + the player seats.
     await page.waitForTimeout(700);
-    const meas = await page.evaluate(({ angle, stand, alert, colliders }) => {
+    // --eye=dx,dy,dz --look=lx,ly,lz — a free camera override in SHIP-LOCAL coords (offsets from the
+    //   spawn XZ / ship floor). Lets a fix-agent shoot arbitrary STANDING / WALKING / CROUCHED vantages
+    //   around the glass perimeter that the fixed seated/stand poses can't reach (the C63 vantage lesson).
+    const eyeOv = argv.eye ? String(argv.eye).split(',').map(Number) : null;
+    const lookOv = argv.look ? String(argv.look).split(',').map(Number) : null;
+    const meas = await page.evaluate(({ angle, stand, alert, colliders, eyeOv, lookOv }) => {
       const g = window.__game;
       const ctx = g.ctx;
       if (alert > 0) { try { g.setCockpitAlert(alert); } catch {} }
@@ -2431,7 +2534,17 @@ const SCENARIOS = {
       const eyeY = stand ? floorY + 1.62 : (tr.y + seatedEye);
       const eyeZ = tr.z + (stand ? -0.1 : 0.1);   // seated: a hair back into the seat
       const eye = new V(tr.x, eyeY, eyeZ);
+      // FREE OVERRIDE (--eye/--look): offset from the spawn XZ + ship floor. dy is height ABOVE the floor.
+      if (eyeOv) { eye.set(tr.x + eyeOv[0], floorY + eyeOv[1], tr.z + eyeOv[2]); }
       cam.position.copy(eye);
+      if (lookOv) {
+        cam.up.set(0, 1, 0);
+        cam.lookAt(new V(tr.x + lookOv[0], floorY + lookOv[1], tr.z + lookOv[2]));
+        cam.updateMatrixWorld(true);
+        const shipF = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        let mF = 0; if (shipF) shipF.traverse((o) => { if (o.isMesh) mF++; });
+        return { found: !!shipF, meshes: mF, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
+      }
       // Look directions in the cockpit-local frame: −Z is forward (window), +Z is aft
       // (the corridor doorway), +X right, −X left.
       if (angle === 'forward') {
@@ -2456,7 +2569,7 @@ const SCENARIOS = {
       let meshes = 0;
       if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
       return { found: !!ship, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
-    }, { angle, stand, alert, colliders });
+    }, { angle, stand, alert, colliders, eyeOv, lookOv });
     // A1 — inject the collider wireframe (green LineSegments) using the game's exposed THREE namespace.
     if (colliders) {
       const cinfo = await page.evaluate(async () => {
@@ -2504,7 +2617,7 @@ const SCENARIOS = {
     await page.waitForTimeout(300);
     const perfC = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit'); let sm = 0; if (ship) ship.traverse((o) => { if (o.isMesh) sm++; }); return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1, shipMeshes: sm }; });
     console.log('[cockpit-perf] ' + JSON.stringify(perfC));
-    const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;
+    const tag = `cockpit-${argv.tag || angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;
     // Clip to the canvas rect + disable animations + generous timeout: the full-page
     // font/compositor wait can stall on the space-mode ship scene (the cockpit build);
     // a clipped grab of just the WebGL canvas snapshots reliably.
@@ -2937,6 +3050,15 @@ const SCENARIOS = {
         //   sits OUTSIDE the hull, not floating/clipping). Not a player view; a build check.
         eye = new V(podX - 2.6, floorY + 2.2, bayZ + 2.4);
         look = new V(podX + 0.2, floorY + 1.3, bayZ);
+      } else if (angle === 'sealed' || angle === 'sealed-left' || angle === 'sealed-right') {
+        // ROUND-1f AIRTIGHT check — seat the eye INSIDE the docked pod facing the CLOSED +X door (the
+        //   user's sealed-eye vantage). Star-gaps down the door sides = the slab clearance against the
+        //   curved shell reads as space. Keep the pod door CLOSED (don't open it). The seat backs the
+        //   aft (−X) wall facing +X, so the eye sits just aft of the door looking +X.
+        try { g.setBayPodDoorOpen(0); } catch {}
+        const zc = angle === 'sealed-left' ? -0.55 : angle === 'sealed-right' ? 0.55 : 0.0;
+        eye = new V(podX + 0.25, floorY + 1.30, bayZ + zc * 0.4);
+        look = new V(podDoorX + 0.4, floorY + 1.12, bayZ + zc);
       } else if (angle === 'wide') {
         // a 3/4 framing from down the corridor, angled INTO the airlock (the docked pod is the subject)
         eye = new V(tr.x + 0.3, floorY + 1.65, bayZ + 3.2);
@@ -4297,6 +4419,44 @@ const SCENARIOS = {
   //    (1) the bay-pod doorway "black wall" lower half, (2) the collider state-flip trap,
   //    (3) the base/ground swap at landing, (4) old+new interior coexistence.
   //    Prints one JSON blob per finding. Never throws (diagnostic).
+  // ROUND-1f — a LIGHT sealed-door render (first screenshot = reliable, unlike pod-diag's late shots).
+  //   Builds the bay pod, keeps the pod door CLOSED, seats the eye INSIDE facing the door (the user's
+  //   sealed-eye vantage), and shoots — the AIRTIGHT check (no star-gaps down the door sides).
+  //   --angle: seated (inside, facing the +X door) [default] | edge-left | edge-right (graze each jamb)
+  'pod-sealed': async (page) => {
+    const angle = argv.angle || 'seated';
+    await page.evaluate(() => {
+      const g = window.__game;
+      g.ctx.flags.thirdPerson = false;
+      if (g.ctx.player.rig) g.ctx.player.rig.group.visible = false;
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship + docked canonical pod
+    });
+    await page.waitForTimeout(900);
+    const meas = await page.evaluate(({ angle }) => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 820, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 820; cam.updateProjectionMatrix(); }
+      const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod');
+      pod.updateMatrixWorld(true);
+      const p = pod.getWorldPosition(new THREE.Vector3());
+      try { g.setBayPodDoorOpen(0); } catch {}   // sealed
+      // seat the eye INSIDE the pod facing the +X door (the door faces +X in the bay).
+      let eye, look;
+      if (angle === 'edge-left') { eye = new THREE.Vector3(p.x + 0.9, p.y + 1.10, p.z - 0.60); look = new THREE.Vector3(p.x + 2.0, p.y + 1.05, p.z - 0.45); }
+      else if (angle === 'edge-right') { eye = new THREE.Vector3(p.x + 0.9, p.y + 1.10, p.z + 0.60); look = new THREE.Vector3(p.x + 2.0, p.y + 1.05, p.z + 0.45); }
+      else { eye = new THREE.Vector3(p.x + 0.35, p.y + 1.30, p.z); look = new THREE.Vector3(p.x + 2.0, p.y + 1.05, p.z); }
+      cam.position.copy(eye); cam.lookAt(look); cam.updateMatrixWorld(true);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      return { angle, podWorld: [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)], eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    }, { angle });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, `scen-pod-sealed-${angle}.png`), fullPage: false });
+    console.log(`[pod-sealed] ${JSON.stringify(meas)} → scen-pod-sealed-${angle}.png`);
+  },
+
   'pod-diag': async (page) => {
     // ── FINDING 1 + 4: the BAY pod (docked) — doorway aperture geometry + interior duplicate audit.
     await page.evaluate(() => {
@@ -4372,19 +4532,166 @@ const SCENARIOS = {
       const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
       if (lL) lL.position.z = (bzL - aHW / 2) - travel;
       if (lR) lR.position.z = (bzL + aHW / 2) + travel;
-      // OPEN the pod door fully (the first-E-open state)
+      // OPEN the pod door fully via the REAL animator (the first-E-open state) — drives _bayDoorPivot.
+      let doorOpened = false;
+      try { g.setBayPodDoorOpen ? g.setBayPodDoorOpen(1) : null; doorOpened = true; } catch {}
       const podDoor = ctx.three.scene.getObjectByName('canonicalPodDoor');
-      if (podDoor) podDoor.rotation.y = -1.9;
-      // stand in the collar mouth at the pod-door face, eye at 1.6 (standing), look straight in (−X)
-      const eye = new V(podDoorX + 0.35, floorY + 1.55, bayZ);
+      if (!doorOpened && podDoor) { podDoor.rotation.y = -1.9; doorOpened = true; }
+      // Stand BACK in the collar (the user's vantage: at the airlock/collar, the just-opened door
+      //   ahead), eye at standing height 1.62, look LEVEL straight in (−X) through the aperture — this
+      //   reproduces the "curved grey sheet walling the lower half of the doorway" the user reports.
+      const eye = new V(podDoorX + 0.85, floorY + 1.62, bayZ);
       cam.position.copy(eye);
-      cam.lookAt(new V(podDoorX - 1.0, floorY + 1.10, bayZ));   // look slightly DOWN into the lower aperture
+      cam.lookAt(new V(podDoorX - 1.2, floorY + 1.20, bayZ));   // look nearly LEVEL into the aperture (slight down)
       cam.updateMatrixWorld(true);
-      return { eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], floorY: +floorY.toFixed(2), doorOpened: !!podDoor };
+      return { eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], floorY: +floorY.toFixed(2), doorOpened };
     });
     await page.waitForTimeout(200);
     await page.screenshot({ path: join(OUT, 'scen-pod-diag-dooropen.png'), fullPage: false });
     console.log('[pod-diag][FINDING-1 rendered] ' + JSON.stringify(openMeas) + ' → scen-pod-diag-dooropen.png');
+
+    // ── FINDING 1b (mesh identification): which named mesh actually OCCLUDES the lower doorway from
+    //    the collar eye? A RAYCAST FAN — fire rays from the standing collar eye through a grid of
+    //    aperture-plane targets covering the LOWER HALF of the doorway (sill 0.11 up to mid), and for
+    //    each ray report the FIRST opaque hit's nearest-named ancestor + the hit world-Y + the mesh's
+    //    pod-local extents. Rays that pass CLEAN through to the interior (hit far interior wall / seat)
+    //    tell us the aperture is clear; rays stopped by a near curved plate name the blocker.
+    const rayProbe = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const THREE = g.THREE;
+      const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod');
+      if (!pod || !THREE) return { error: 'pod or THREE missing' };
+      pod.updateMatrixWorld(true);
+      const podWorld = pod.getWorldPosition(new THREE.Vector3());
+      const cam = ctx.three.camera;
+      const eye = cam.position.clone();
+      // The door faces −X from the eye (podDoorX < eye.x). Aperture plane at pod +X face (world x = podWorld.x + doorPlaneX).
+      const CAB_R = 1.28, SHELL = 0.16, doorPlaneX = CAB_R + SHELL;   // 1.44
+      const apX = podWorld.x + doorPlaneX;
+      // Build a fan of targets on the aperture plane: z (width) across the door ±0.48, y (height) from
+      //   the sill (podWorld.y+0.11) up to mid-door (podWorld.y+1.05) — the LOWER HALF the user reports.
+      const rc = new THREE.Raycaster();
+      const meshes = [];
+      pod.traverse((o) => { if (o.isMesh && o.visible && o.material && !o.material.transparent) meshes.push(o); });
+      const rows = [];
+      for (let yi = 0; yi <= 6; yi++) {
+        const ty = podWorld.y + 0.11 + (yi / 6) * 0.94;   // sill → mid
+        const cols = [];
+        for (let zi = -3; zi <= 3; zi++) {
+          const tz = podWorld.z + (zi / 3) * 0.48;
+          const target = new THREE.Vector3(apX, ty, tz);
+          const dir = target.clone().sub(eye).normalize();
+          rc.set(eye, dir);
+          rc.far = 4.0;
+          const hits = rc.intersectObjects(meshes, false).filter((h) => h.distance > 0.05);
+          if (hits.length === 0) { cols.push('·'); continue; }
+          const h = hits[0];
+          let nm = h.object.name, node = h.object;
+          while (!nm && node.parent && node !== pod) { node = node.parent; nm = node.name; }
+          // hit BEFORE the aperture plane (nearer than apX) AND below mid = a blocker of the lower doorway
+          const beforePlane = h.point.x > apX - 0.02;   // hit at/outside the door plane (a near occluder)
+          const local = pod.worldToLocal(h.point.clone());
+          cols.push({ y: +ty.toFixed(2), z: +tz.toFixed(2), named: nm || '?', hitWorldY: +h.point.y.toFixed(2), hitLocalX: +local.x.toFixed(2), hitLocalY: +local.y.toFixed(2), dist: +h.distance.toFixed(2), near: beforePlane });
+        }
+        rows.push({ ty: +ty.toFixed(2), cols });
+      }
+      // tally the blockers (named hits at the low band that are NEAR occluders)
+      const tally = {};
+      for (const r of rows) for (const c of r.cols) if (c && c.named) tally[c.named] = (tally[c.named] || 0) + 1;
+      return { podWorldY: +podWorld.y.toFixed(3), apertureWorldX: +apX.toFixed(3), eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], sillWorldY: +(podWorld.y + 0.11).toFixed(2), rows, blockerTally: tally };
+    });
+    console.log('[pod-diag][FINDING-1b raycast fan] ' + JSON.stringify(rayProbe, null, 0));
+
+    // ── FINDING 1d (AIRTIGHT SEAL): CLOSE the pod door, seat the eye INSIDE the pod facing the door
+    //    (+X, the user's sealed-eye vantage), and shoot. Star-gaps down the door sides = the slab
+    //    clearance against the curved shell reads as space. The stop-lip fix must make it airtight.
+    const sealMeas = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const THREE = g.THREE;
+      ctx.flags.paused = true;
+      const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod');
+      pod.updateMatrixWorld(true);
+      const podWorld = pod.getWorldPosition(new THREE.Vector3());
+      try { g.setBayPodDoorOpen(0); } catch {}   // CLOSE the door (sealed)
+      // raycast fan at the door SIDES (just inside each vertical edge) from the seated eye — count how
+      //   many rays hit OPAQUE pod metal (sealed) vs pass to the sky (a star-gap crack).
+      const eye = new THREE.Vector3(podWorld.x + 0.55, podWorld.y + 1.35, podWorld.z);   // seated-ish, inside, near the door
+      const cam = ctx.three.camera;
+      cam.position.copy(eye);
+      cam.lookAt(new THREE.Vector3(podWorld.x + 2.0, podWorld.y + 1.15, podWorld.z));   // face +X at the door
+      cam.updateMatrixWorld(true);
+      const rc = new THREE.Raycaster();
+      const meshes = []; pod.traverse((o) => { if (o.isMesh && o.visible && o.material && !o.material.transparent) meshes.push(o); });
+      // aperture edges in world: door plane +X at podWorld.x + 1.44; edges z = podWorld.z ± 0.51; y sill..lintel
+      const apX = podWorld.x + 1.44;
+      let sealed = 0, leaks = 0; const leakPts = [];
+      for (const edgeZ of [-0.50, -0.48, 0.48, 0.50]) {
+        for (let yi = 0; yi <= 8; yi++) {
+          const ty = podWorld.y + 0.13 + (yi / 8) * 1.90;
+          const target = new THREE.Vector3(apX + 0.02, ty, podWorld.z + edgeZ);
+          const dir = target.clone().sub(eye).normalize();
+          rc.set(eye, dir); rc.far = 3.0;
+          const hits = rc.intersectObjects(meshes, false).filter((h) => h.distance > 0.05);
+          if (hits.length > 0 && hits[0].point.x <= apX + 0.12) sealed++;
+          else { leaks++; leakPts.push({ z: +edgeZ.toFixed(2), y: +ty.toFixed(2) }); }
+        }
+      }
+      ctx.three.renderer.setSize(1100, 820, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 820; cam.updateProjectionMatrix(); }
+      ctx.three.renderer.render(ctx.three.scene, cam);   // force a frame (headless rAF is throttled)
+      return { doorClosed: true, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], sealedRays: sealed, leakRays: leaks, leaks: leakPts.slice(0, 10) };
+    });
+    await page.waitForTimeout(150);
+    try { await page.screenshot({ path: join(OUT, 'scen-pod-diag-sealed.png'), fullPage: false, timeout: 15000, animations: 'disabled' }); } catch (e) { console.log('[pod-diag] sealed screenshot flaked: ' + e.name); }
+    console.log('[pod-diag][FINDING-1d AIRTIGHT] ' + JSON.stringify(sealMeas) + ' → scen-pod-diag-sealed.png');
+
+    // ── FINDING 1c (the TWO top-left pipes): stand BACK in the collar (the user's actual vantage),
+    //    shoot the whole open doorway, and project every TALL-THIN rod mesh to screen so we can name
+    //    which pipe-like rods land in the UPPER-LEFT of the door sightline (the ones to relocate).
+    const rods = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const THREE = g.THREE;
+      const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod');
+      if (!pod || !THREE) return { error: 'pod or THREE missing' };
+      pod.updateMatrixWorld(true);
+      const podWorld = pod.getWorldPosition(new THREE.Vector3());
+      const cam = ctx.three.camera;
+      // stand BACK ~1.1m from the door in the collar, eye 1.62, look level −X through the aperture
+      const eye = new THREE.Vector3(podWorld.x + (1.28 + 0.16) + 0.55, podWorld.y + 1.62, podWorld.z);
+      cam.position.copy(eye);
+      cam.lookAt(new THREE.Vector3(podWorld.x - 0.5, podWorld.y + 1.25, podWorld.z));
+      cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+      // find TALL-THIN rod meshes (a vertical rod: bbY span > 0.35, footprint < 0.16) in the interior.
+      const found = [];
+      pod.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; if (!bb) return;
+        const dx = bb.max.x - bb.min.x, dy = bb.max.y - bb.min.y, dz = bb.max.z - bb.min.z;
+        const isRod = dy > 0.35 && Math.max(dx, dz) < 0.18;
+        if (!isRod) return;
+        const c = new THREE.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2).applyMatrix4(o.matrixWorld);
+        const loc = pod.worldToLocal(c.clone());
+        const azBay = Math.atan2(loc.x, loc.z);   // bay-frame azimuth (door faces +X ⇒ az≈π/2)
+        const azCabin = azBay + Math.PI / 2;       // undo the −π/2 interior yaw → cabin-local az the builder used
+        const sp = c.clone().project(cam);         // NDC: x −1(left)..+1(right), y −1(bottom)..+1(top)
+        // is it visible through the door (in front + roughly within the aperture frame)?
+        const onScreen = sp.z < 1 && Math.abs(sp.x) < 1.1 && Math.abs(sp.y) < 1.1;
+        found.push({
+          mat: o.material && o.material.color ? '#' + o.material.color.getHexString() : '?',
+          worldC: [+c.x.toFixed(2), +c.y.toFixed(2), +c.z.toFixed(2)],
+          bayAz: +azBay.toFixed(2), cabinAz: +azCabin.toFixed(2),
+          ndc: [+sp.x.toFixed(2), +sp.y.toFixed(2)],
+          quadrant: (sp.y > 0 ? 'TOP-' : 'BOT-') + (sp.x < 0 ? 'LEFT' : 'RIGHT'),
+          onScreen, dyH: +(bb.max.y - bb.min.y).toFixed(2),
+        });
+      });
+      // upper-left rods through the door = the user's "two pipes"
+      found.sort((a, b) => a.ndc[0] - b.ndc[0]);
+      return { eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], rodCount: found.length, upperLeft: found.filter((r) => r.onScreen && r.ndc[1] > -0.1 && r.ndc[0] < 0.2), all: found };
+    });
+    await page.waitForTimeout(150);
+    try { await page.screenshot({ path: join(OUT, 'scen-pod-diag-collar.png'), fullPage: false, timeout: 15000 }); } catch (e) { console.log('[pod-diag] collar screenshot flaked: ' + e.name); }
+    console.log('[pod-diag][FINDING-1c rods] ' + JSON.stringify(rods, null, 0) + ' → scen-pod-diag-collar.png');
 
     // ── FINDING 2 + 3: the CRASH → WAKE → STEP-OUT collider + base timeline.
     const timeline = await page.evaluate(async () => {

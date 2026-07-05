@@ -324,8 +324,17 @@ const _engBlock = _metal(0x33373d, 0.55, 0.55, { flat: true, grime: true });
 //   vista through; the edge sliver still firms the seal.
 const _glass = new THREE.MeshStandardMaterial({
   color: 0x3a4e5c, roughness: 0.06, metalness: 0.0,
-  emissive: 0x102232, emissiveIntensity: 0.40,
-  transparent: true, opacity: 0.225,
+  // LIVE-fix #2b (2026-07-05): the DOUBLE-SIDED glaze read too HAZY (the user: "a bit too hazy now,
+  //   want it more transparent but still read as glass"). Root cause: DoubleSide draws BOTH faces of
+  //   each pane, so every view-independent glaze term (base emissive + the constant tint floor + the
+  //   base opacity) STACKED ≈2× along the view → a milky veil over the stars. Rebalanced toward
+  //   TRANSPARENCY: base emissive 0.40→0.16, base opacity 0.225→0.10. The glass PRESENCE now comes
+  //   almost entirely from the EDGE glint (the uv-border sheen + the grazing-rim) — see onBeforeCompile,
+  //   where the constant body-tint floor is cut 0.08→0.02. Head-on the stars/planet read through with a
+  //   near-zero veil; the sealed-frame glint + a whisper of tint still say "glass, not open hole".
+  emissive: 0x0c1a26, emissiveIntensity: 0.16,
+  transparent: true, opacity: 0.10,
+  side: THREE.DoubleSide,
 });
 _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
   shader.vertexShader = shader.vertexShader.replace(
@@ -371,11 +380,11 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      //   glass you see the planet through, not frosted. The centre pane is unchanged (it was already clear).
      float gRimEdge = pow(1.0 - gNdV, 3.4);
      totalEmissiveRadiance += gRim * gRimEdge * 0.9;            // a THIN grazing-edge rim glint (the bubble seam)
-     totalEmissiveRadiance += vec3(0.26, 0.34, 0.42) * gSheen;  // the curved-canopy sheen band
-     // COCKPIT-ROUND-2 item-2: a faint CONSTANT cool-glaze tint on every fragment (independent of the
-     //   view angle) so a pane facing dead-on at empty sky still reads as glass present, never an open
-     //   hole. Kept low (0.08) so it's a whisper of body, not fog — the vista still reads through.
-     totalEmissiveRadiance += vec3(0.10, 0.15, 0.20) * 0.08;
+     totalEmissiveRadiance += vec3(0.26, 0.34, 0.42) * gSheen * 0.6;  // the curved-canopy sheen band (dialled back)
+     // LIVE-fix #2b: the CONSTANT cool-glaze tint floor is cut 0.08→0.02 (a bare whisper) so a pane facing
+     //   dead-on at black space reads as clear glass with the stars through it, NOT a milky film. The
+     //   "this cell is glass, not an open hole" read now leans on the edge glint (border + rim) below.
+     totalEmissiveRadiance += vec3(0.10, 0.15, 0.20) * 0.02;
      // a hairline BORDER sheen on the outer few % of each pane's uv → every cell shows a sealed frame
      //   glint even head-on (the "no missing pane" read), without touching the clear centre body.
      float gEdgeU = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
@@ -629,45 +638,52 @@ const COCKPIT_COLLIDERS: ReadonlyArray<BoxSpec> = [
 //    can't express the arc). `curve-fit-collider-segments.md`.
 function _addDomeColliders(ctx: GameContext): void {
   const inb = new THREE.Vector3(DOME_CX, DOME_CY, DOME_CZ);   // dome centre — "inboard" is toward this
-  const H = 3.0;                                              // floor→ceiling tall (block the whole walk band)
-  const cyLocal = 1.5;                                        // segment centre height (matches the side-wall band)
-  for (let mi = 0; mi < _DOME_M.length - 1; mi++) {
-    const a = _domeNode(_DOME_M[mi], 0);
-    const b = _domeNode(_DOME_M[mi + 1], 0);
+  const H = 3.2;                                              // floor→header tall (block the whole walk band; > CK_H so no over/under-slip)
+  const cyLocal = H / 2 - 0.05;                              // segment centred so its bottom sits at ≈floor y=−0.05
+  // LIVE-fix (2026-07-05): the OLD ring built segments from the front meridian nodes + TWO closure
+  //   bridges, but a KCC could still slip out at the side closures (the segments didn't fully back the
+  //   closure glass floor-to-header + left gaps at the closure↔collar corner). REBUILD: walk the ONE
+  //   canonical `_domeSillRing()` (left collar → front arc → right collar) and drop a tall wall segment
+  //   per edge, biased inboard, OVERLAPPING neighbours — so EVERY glass span (front panes AND both side
+  //   closures) is backed floor-to-header with no azimuth gap. Proven by the full-circle containment
+  //   probe (cockpit-glass-seal scenario).
+  const ring = _domeSillRing();
+  const WALLTHK = 0.30;   // half-thickness INTO the hull (the outboard side is unreachable dead space past
+                          //   the glass) — thick enough that a fast KCC can never tunnel the angled wall.
+  for (let i = 0; i < ring.length - 1; i++) {
+    const a = ring[i], b = ring[i + 1];
     const mid = a.clone().add(b).multiplyScalar(0.5);
-    // inboard normal in the XZ plane (toward the dome centre), used to bias the wall a hair inside the glass
     const toC = new THREE.Vector3(inb.x - mid.x, 0, inb.z - mid.z).normalize();
-    const cx = mid.x + toC.x * 0.10;                          // bias 10cm inboard (block just inside the glass)
-    const cz = mid.z + toC.z * 0.10;
-    const segLen = a.distanceTo(b) + 0.10;                    // overlap neighbours a touch (no gaps)
+    // bias the wall so its INBOARD face sits ~0.10 inside the glass: push the box centre OUTboard by its
+    //   half-thickness minus 0.10 (the inboard face lands just inside the glass; the thick body fills the
+    //   dead space out to the hull, so no tunnelling + no reachable outboard face).
+    const cx = mid.x - toC.x * (WALLTHK - 0.10);
+    const cz = mid.z - toC.z * (WALLTHK - 0.10);
+    const segLen = a.distanceTo(b) + 0.20;                    // generous overlap (no azimuth gap between segs)
     const yaw = Math.atan2(b.x - a.x, b.z - a.z);             // segment heading in XZ (about +Y)
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     const col = makeStaticBox(
       ctx.physics.world,
-      { x: segLen / 2, y: H / 2, z: 0.10 },                  // long × tall × thin (thickness into the hull)
+      { x: segLen / 2, y: H / 2, z: WALLTHK },               // long × tall × THICK (thickness into the hull)
       { x: SHIP_ORIGIN.x + cx, y: SHIP_ORIGIN.y + cyLocal, z: SHIP_ORIGIN.z + cz },
       q,
     );
     const body = col.parent();
     if (body) shipBodies.push(body);   // tracked for dispose (like the array colliders)
   }
-  // -- THE SIDE-CLOSURE WALL: bridge each outer dome sill node (m=±1, z≈−0.44) back to the collar side
-  //    (z=COLLAR_Z) so the wrap-to-collar GLASS also has collision (no walking out the side gap).
-  for (const side of [-1, 1]) {
-    const a = _domeNode(side, 0);                            // outer dome sill node
-    const cp = hullProfile(COLLAR_Z);
-    const b = new THREE.Vector3(side * (cp[1].x - 0.05), a.y, COLLAR_Z);   // collar side, at the sill height
-    const mid = a.clone().add(b).multiplyScalar(0.5);
-    const yaw = Math.atan2(b.x - a.x, b.z - a.z);
-    const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-    const col2 = makeStaticBox(
+  // CORNER PILLARS — a tall box at every ring node (incl. the collar termini) so the angle change
+  //   between two rotated wall segments can never leave a slot at the joint. Sized to swallow the node.
+  for (const n of ring) {
+    const toC = new THREE.Vector3(inb.x - n.x, 0, inb.z - n.z).normalize();
+    const cx = n.x - toC.x * (WALLTHK - 0.10);
+    const cz = n.z - toC.z * (WALLTHK - 0.10);
+    const col = makeStaticBox(
       ctx.physics.world,
-      { x: (a.distanceTo(b) + 0.1) / 2, y: H / 2, z: 0.10 },
-      { x: SHIP_ORIGIN.x + mid.x, y: SHIP_ORIGIN.y + cyLocal, z: SHIP_ORIGIN.z + mid.z },
-      q2,
+      { x: WALLTHK, y: H / 2, z: WALLTHK },
+      { x: SHIP_ORIGIN.x + cx, y: SHIP_ORIGIN.y + cyLocal, z: SHIP_ORIGIN.z + cz },
     );
-    const body2 = col2.parent();
-    if (body2) shipBodies.push(body2);
+    const body = col.parent();
+    if (body) shipBodies.push(body);
   }
 }
 
@@ -897,13 +913,65 @@ function hullWallXAt(z: number, y: number): number {
 //    lives at/outside that envelope above waist height (unreachable corners), the deck + the aft
 //    doorway stay WYSIWYG so the walk + corridor join are byte-identical.
 function buildCockpitShell(group: THREE.Group): void {
-  // FLOOR — sub-floor + bright deck plate + a worn CENTRE traffic lane + tread strips + rivets.
-  const floor = _box(CK_W, WALL_T, CK_D, _channel);
-  floor.position.set(0, -WALL_T / 2, 0);
-  group.add(floor);
-  const deck = _box(CK_W - 0.06, 0.04, CK_D - 0.06, _deck);
-  deck.position.set(0, 0.02, 0);
-  group.add(deck);
+  // FLOOR — LIVE-fix (2026-07-05): the OLD floor was a full rectangular slab (x[−3,3] z[−2.5,2.5]) that
+  //   PROTRUDED far past the dome glass line into space — the user walked out through the (then-open)
+  //   side glass and stood on the floor OUTSIDE the canopy. The floor is now a LOFTED PLATE trimmed to
+  //   the dome sill footprint forward of the collar (so the floor edge meets the glass line exactly) and
+  //   kept full-width AFT of the collar (behind the opaque hull, and to meet the corridor). Boundary:
+  //   aft rectangle (±CK_X, z ∈ [COLLAR_Z, CK_Z]) → the dome sill ring forward. Fan-triangulated from an
+  //   interior spine point (the footprint is star-shaped about the cabin walk centre).
+  {
+    const floorTopY = 0.0;                 // sub-floor top (deck plate sits +0.02 above)
+    const ring = _domeSillRing();          // left collar → front arc → right collar (sill height, y=0.545)
+    // the forward boundary in XZ (project the sill ring to the deck) + the aft rectangle corners.
+    const bnd: THREE.Vector2[] = [];
+    bnd.push(new THREE.Vector2(CK_X, CK_Z));                 // aft-right corner
+    bnd.push(new THREE.Vector2(CK_X, COLLAR_Z));             // right side aft-of-collar (full width to hull)
+    // right collar → front arc → left collar (reverse the ring so the loop stays clockwise in XZ)
+    for (let i = ring.length - 1; i >= 0; i--) bnd.push(new THREE.Vector2(ring[i].x, ring[i].z));
+    bnd.push(new THREE.Vector2(-CK_X, COLLAR_Z));            // left side aft-of-collar
+    bnd.push(new THREE.Vector2(-CK_X, CK_Z));               // aft-left corner
+    // fan-triangulate the sub-floor (dark) + the deck plate (bright, +0.02, inset 3cm) from the spine.
+    const spine = new THREE.Vector2(0, 1.0);                 // interior point (aft of the front arc, inside)
+    const subV: number[] = [], deckV: number[] = [];
+    const push = (arr: number[], x: number, y: number, z: number) => arr.push(x, y, z);
+    for (let i = 0; i < bnd.length; i++) {
+      const a = bnd[i], b = bnd[(i + 1) % bnd.length];
+      // sub-floor (top face at floorTopY)
+      push(subV, spine.x, floorTopY, spine.y); push(subV, a.x, floorTopY, a.y); push(subV, b.x, floorTopY, b.y);
+      // deck plate (top face at +0.02, boundary pulled in 0.03 so the sub-floor rim shows as a lip)
+      const inset = (p: THREE.Vector2) => { const d = p.clone().sub(spine); const L = d.length() || 1; return p.clone().sub(d.multiplyScalar(0.03 / L)); };
+      const ai = inset(a), bi = inset(b);
+      push(deckV, spine.x, 0.02, spine.y); push(deckV, ai.x, 0.02, ai.y); push(deckV, bi.x, 0.02, bi.y);
+    }
+    const floor = _skin(subV, _channel); group.add(floor);
+    // give the sub-floor plate real thickness so its underside/edge doesn't read paper-thin from the
+    //   outside-looking-in vantage: a matching down-face + a rim skirt around the boundary.
+    const underV: number[] = [], rimV: number[] = [];
+    for (let i = 0; i < bnd.length; i++) {
+      const a = bnd[i], b = bnd[(i + 1) % bnd.length];
+      push(underV, spine.x, -WALL_T, spine.y); push(underV, b.x, -WALL_T, b.y); push(underV, a.x, -WALL_T, a.y);
+      // rim skirt (vertical wall from the boundary top down to the underside)
+      rimV.push(a.x, floorTopY, a.y, a.x, -WALL_T, a.y, b.x, floorTopY, b.y);
+      rimV.push(b.x, floorTopY, b.y, a.x, -WALL_T, a.y, b.x, -WALL_T, b.y);
+    }
+    group.add(_skin(underV, _channel));
+    group.add(_skin(rimV, _channel));
+    const deck = _skin(deckV, _deck); group.add(deck);
+    // AFT THRESHOLD SILL — LIVE-fix (2026-07-05): the cockpit floor ends at z=CK_Z=2.5 and the corridor
+    //   floor starts at COR_Z0=2.6 → a 0.1m slot at the doorway where stars showed THROUGH the floor
+    //   (the user's straight-down threshold shot). A solid sill plate spans z[2.30..2.80] full doorway
+    //   width, OVERLAPPING both plates so there is no gap; the yellow doorway stripe sits on it. Its
+    //   collider is added below (rule 9).
+    const thr = _box(CK_W - 0.1, WALL_T, 0.50, _channel);
+    thr.position.set(0, -WALL_T / 2 + 0.001, 2.55);          // top flush at y≈0, centred on the seam
+    group.add(thr);
+    const thrDeck = _box(CK_W - 0.2, 0.04, 0.50, _deck);
+    thrDeck.position.set(0, 0.02, 2.55);
+    group.add(thrDeck);
+    // paired collider for the threshold sill (spans the seam so no slot a foot could drop through).
+    _addFurnitureCollider(CK_W - 0.1, WALL_T, 0.50, 0, -WALL_T / 2 + 0.001, 2.55);
+  }
   // a worn DARKER traffic-lane plate down the walk centre (footfall wear — gate fidelity)
   const lane = _box(0.9, 0.045, CK_D - 0.4, _steel);
   lane.position.set(0, 0.022, 0.3);
@@ -1226,6 +1294,40 @@ function _domeNode(m: number, t: number): THREE.Vector3 {
 const _DOME_M = [-1.0, -0.5, 0.0, 0.5, 1.0];                  // 5 meridians (was 7) → 4 wide columns
 const _DOME_T = [0.0, 0.52, 1.0];                             // 3 rings (sill, waist, crown) → 2 bands
 
+// ── LIVE-fix (2026-07-05) — THE ONE SOURCE OF TRUTH FOR THE DOME BASE/PERIMETER. The dome sill line
+//    is NOT just the front arc between the meridian nodes: it must include the two SIDE-CLOSURE spans
+//    (the wrap from each outer dome meridian back to the collar side). The floating-glass defect + the
+//    walk-through-glass hole + the floor-protrudes-past-glass defect all came from three separate bits
+//    of code disagreeing about where that line is. This helper returns the FULL ordered sill footprint
+//    ring (XZ at sill height), used by: the closure glass, the base skirt/kick, the trimmed floor plate,
+//    AND the collider ring — so every one of them lands on the SAME perimeter by construction.
+const DOME_SILL_Y = 0.545;                        // the dome sill node y (≈ _domeNode(m,0).y)
+// The collar-side terminus of each closure at the sill: land it ON the collar ring plane (z=COLLAR_Z),
+//   at the collar hull side x, inset a hair so the glass/skirt tucks just inside the collar flange.
+function _collarSillPt(side: number): THREE.Vector3 {
+  const cp = hullProfile(COLLAR_Z);
+  // interpolate the collar half-profile x at the sill height (so the closure meets the collar at the
+  //   right width, not the deck-edge width).
+  let x = cp[cp.length - 1].x;
+  for (let i = 0; i < cp.length - 1; i++) {
+    const A = cp[i], B = cp[i + 1];
+    if ((DOME_SILL_Y >= A.y && DOME_SILL_Y <= B.y) || (DOME_SILL_Y >= B.y && DOME_SILL_Y <= A.y)) {
+      const t = (DOME_SILL_Y - A.y) / ((B.y - A.y) || 1e-6);
+      x = A.x + (B.x - A.x) * t; break;
+    }
+  }
+  return new THREE.Vector3(side * (x - 0.05), DOME_SILL_Y, COLLAR_Z);
+}
+// The full sill footprint ring, left-collar → left-closure → front arc → right-closure → right-collar.
+//   All at DOME_SILL_Y. Returned as XZ-carrying Vector3s (y = sill height).
+function _domeSillRing(): THREE.Vector3[] {
+  const ring: THREE.Vector3[] = [];
+  ring.push(_collarSillPt(-1));                                  // left collar terminus
+  for (let mi = 0; mi < _DOME_M.length; mi++) ring.push(_domeNode(_DOME_M[mi], 0));  // −1..+1 front arc
+  ring.push(_collarSillPt(1));                                   // right collar terminus
+  return ring;
+}
+
 // ── FABRICATED SKELETON MEMBERS (user feedback 2026-07-04 on the Mk-II canopy: "the mullions look way
 //    too blocky and don't connect cleanly, and are on weird angles"). Three fixes are baked in here:
 //    (1) MEMBER PROFILE — every member is a BEVELED beam (a chamfered-rectangle / elongated-hex cross-
@@ -1311,15 +1413,19 @@ function buildGlazedDome(group: THREE.Group): void {
   const cprof = hullProfile(COLLAR_Z);
   const collarPtAtY = (side: number, y: number): THREE.Vector3 => {
     // walk the collar half-profile, interpolate x by y; inset a hair inboard of the ring's inboard face.
+    //   LIVE-fix (2026-07-05): the aft edge now lands ON the collar ring plane (z=COLLAR_Z) instead of
+    //   0.14 short of it (z=0.20) — that 0.14 stand-off was the "aft edge floats past the hull arch"
+    //   star-gap. The collar ring is at z=COLLAR_Z with 0.16 half-depth, so a hair inside (−0.02) keeps
+    //   the glass edge tucked just under the collar flange (no z-fight, no gap).
     for (let i = 0; i < cprof.length - 1; i++) {
       const A = cprof[i], B = cprof[i + 1];
       if ((y >= A.y && y <= B.y) || (y >= B.y && y <= A.y)) {
         const t = (y - A.y) / ((B.y - A.y) || 1e-6);
-        return new THREE.Vector3(side * (A.x + (B.x - A.x) * t - 0.04), y, COLLAR_Z - 0.14);
+        return new THREE.Vector3(side * (A.x + (B.x - A.x) * t - 0.04), y, COLLAR_Z - 0.02);
       }
     }
     const P = cprof[cprof.length - 1];
-    return new THREE.Vector3(side * (P.x - 0.04), Math.min(y, P.y), COLLAR_Z - 0.14);
+    return new THREE.Vector3(side * (P.x - 0.04), Math.min(y, P.y), COLLAR_Z - 0.02);
   };
   for (const side of [-1, 1]) {
     const mi = side < 0 ? 0 : _DOME_M.length - 1;   // the outer meridian for this side
@@ -1454,71 +1560,58 @@ function buildGlazedDome(group: THREE.Group): void {
     group.add(capMesh);
   }
 
-  // -- COCKPIT-ROUND-2 items 4+5 — THE SILL↔FLOOR BASE CHANNEL. Previously the glass sill ring floated
-  //    at y≈0.55 with an OPEN void down to the floor (the glass bottom "didn't connect to the floor").
-  //    Build a continuous BASE ASSEMBLY around the whole dome foot: (1) a KICK SKIRT lofting from each
-  //    sill node straight DOWN to the deck at that node's footprint (closes the void — the glass now
-  //    lands on a solid base wall); (2) a proud SILL PLATE rail capping the top of the skirt (the finished
-  //    ledge the glass sill sits on); (3) a KICK-PLATE + finished floor EDGE BAND at the foot (the deck
-  //    meets the dome front with a clean machined band, no raw floor poking past the sill line). Runs the
-  //    full sill arc (front + both flanks), so from the seat the glass reads as sealed to a real sill that
-  //    sits on the floor. The base sits a hair OUTBOARD of the glass so the glass tucks behind its lip.
+  // -- THE SILL↔FLOOR BASE CHANNEL — LIVE-fix (2026-07-05). Previously the kick skirt ran ONLY the front
+  //    FLANK meridian segments (skipping the front-centre AND the two SIDE-CLOSURE spans). That left the
+  //    closure glass floating at y≈0.55 with an OPEN void to the floor + stars below it (the user's
+  //    standing/walking-vantage defect). NOW the skirt/lip/edge-band run the ENTIRE sill footprint ring —
+  //    `_domeSillRing()` (left collar → front arc → right collar) — so EVERY glass span (front panes AND
+  //    both side closures) lands on a solid base wall that meets the trimmed floor by construction. Lofted
+  //    strips (not per-segment boxes) so no wedges on the steeply-angled spans. The base sits a hair
+  //    OUTBOARD of the glass so the glass tucks in front of its lip.
   {
-    const skirtV: number[] = [];
     const floorTopY = 0.055;                 // the deck plate top (deck at y 0.02, +0.035 tread)
     const OUTB = 0.03;                        // push the base a hair outboard so the glass tucks in front-inboard
-    // sill-node footprints (t=0) with a small outboard bias
-    const sn = (mi: number): THREE.Vector3 => {
-      const p = _domeNode(_DOME_M[mi], 0);
-      return p.add(outward(p).multiplyScalar(OUTB));
+    const ring = _domeSillRing();             // the FULL footprint (collar → front arc → collar), sill height
+    // each ring node biased a hair OUTBOARD in XZ (so the base wall sits just outboard of the glass line).
+    const biasOut = (p: THREE.Vector3): THREE.Vector3 => {
+      const o = outward(p); o.y = 0; o.normalize();
+      return new THREE.Vector3(p.x + o.x * OUTB, p.y, p.z + o.z * OUTB);
     };
-    // Only the FLANK segments (|m|≥0.5 at the seg midpoint) get the base channel: there the sill sits
-    //   close to the hull side + the floor edge, so a short riser + sill reads as a finished junction the
-    //   player sees. The FRONT-CENTRE sill sweeps far forward+down (the nose glazing to the ground view)
-    //   and is fronted by the console — a vertical skirt there made an ugly triangular wedge on the deck,
-    //   so it's SKIPPED (the sill fascia cap already finishes that edge).
-    const isFlank = (mi: number): boolean => Math.abs((_DOME_M[mi] + _DOME_M[mi + 1]) * 0.5) >= 0.5;
-    for (let mi = 0; mi < _DOME_M.length - 1; mi++) {
-      if (!isFlank(mi)) continue;
-      const a = sn(mi), b = sn(mi + 1);
-      // foot points straight below each sill node (same XZ, at the deck top)
-      const af = new THREE.Vector3(a.x, floorTopY, a.z);
-      const bf = new THREE.Vector3(b.x, floorTopY, b.z);
-      // wind so the skirt normal faces INBOARD (toward the cabin/pilot)
-      skirtV.push(a.x, a.y, a.z, af.x, af.y, af.z, b.x, b.y, b.z);
-      skirtV.push(b.x, b.y, b.z, af.x, af.y, af.z, bf.x, bf.y, bf.z);
-    }
-    const skirt = _skin(skirtV, _channel);   // dark recessed base wall (the kick riser)
-    group.add(skirt);
-    // (2) a proud SILL LIP + a floor EDGE BAND, built as LOFTED SKIN RINGS that follow the flank sill arc
-    //     EXACTLY (per-segment flat boxes on the steeply-angled flank sill read as ugly wedges — the R3
-    //     defect — so these are lofted strips instead). The sill lip = a short inboard ledge at the glass
-    //     foot (the finished surface the glass lands on); the edge band = a thin machined strip on the deck
-    //     at the footprint (item 4 — the deck meets the dome front with a clean band, no raw floor past it).
-    const lipV: number[] = [], edgeV: number[] = [];
     const lipInb = (p: THREE.Vector3, s: number): THREE.Vector3 => {
       const inb = outward(p).negate(); inb.y = 0; inb.normalize();
       return new THREE.Vector3(p.x + inb.x * s, p.y, p.z + inb.z * s);
     };
-    for (let mi = 0; mi < _DOME_M.length - 1; mi++) {
-      if (!isFlank(mi)) continue;
-      const a = sn(mi), b = sn(mi + 1);
-      // sill lip: a small inboard ledge at the sill height (a≈0.55) — outer edge at the glass, inner edge
-      //   jutting 0.12 inboard, dropped 0.05 so it reads as a ledge the glass sits on.
-      const aI = lipInb(a, 0.12), bI = lipInb(b, 0.12);
-      aI.y -= 0.05; bI.y -= 0.05;
+    const skirtV: number[] = [], lipV: number[] = [], edgeV: number[] = [];
+    for (let i = 0; i < ring.length - 1; i++) {
+      const a = biasOut(ring[i]), b = biasOut(ring[i + 1]);
+      // (1) KICK SKIRT — a solid wall from the sill node straight DOWN to the deck at that footprint.
+      const af = new THREE.Vector3(a.x, floorTopY, a.z);
+      const bf = new THREE.Vector3(b.x, floorTopY, b.z);
+      // wind so the skirt normal faces INBOARD (toward the cabin/pilot). Double-wound (both faces) so the
+      //   base wall reads solid from inside AND from the outside-looking-in vantage.
+      skirtV.push(a.x, a.y, a.z, af.x, af.y, af.z, b.x, b.y, b.z);
+      skirtV.push(b.x, b.y, b.z, af.x, af.y, af.z, bf.x, bf.y, bf.z);
+      // (2) SILL LIP — a short inboard ledge at the sill height (the finished surface the glass sits on).
+      const aI = lipInb(a, 0.12), bI = lipInb(b, 0.12); aI.y -= 0.05; bI.y -= 0.05;
       lipV.push(a.x, a.y, a.z, aI.x, aI.y, aI.z, b.x, b.y, b.z);
       lipV.push(b.x, b.y, b.z, aI.x, aI.y, aI.z, bI.x, bI.y, bI.z);
-      // floor edge band: a thin strip on the deck from the foot inboard 0.14 (a finished machined band).
-      const af = new THREE.Vector3(a.x, floorTopY + 0.008, a.z), bf = new THREE.Vector3(b.x, floorTopY + 0.008, b.z);
-      const afI = lipInb(af, 0.14), bfI = lipInb(bf, 0.14);
-      edgeV.push(af.x, af.y, af.z, afI.x, afI.y, afI.z, bf.x, bf.y, bf.z);
-      edgeV.push(bf.x, bf.y, bf.z, afI.x, afI.y, afI.z, bfI.x, bfI.y, bfI.z);
+      // (3) FLOOR EDGE BAND — a thin machined strip on the deck at the footprint (the trimmed floor edge
+      //     meets the dome front with a clean band, no raw floor past the sill line).
+      const af2 = new THREE.Vector3(a.x, floorTopY + 0.008, a.z), bf2 = new THREE.Vector3(b.x, floorTopY + 0.008, b.z);
+      const afI = lipInb(af2, 0.14), bfI = lipInb(bf2, 0.14);
+      edgeV.push(af2.x, af2.y, af2.z, afI.x, afI.y, afI.z, bf2.x, bf2.y, bf2.z);
+      edgeV.push(bf2.x, bf2.y, bf2.z, afI.x, afI.y, afI.z, bfI.x, bfI.y, bfI.z);
     }
-    const lip = _skin(lipV, _band);       // proud machined sill ledge (lighter)
-    group.add(lip);
-    const edgeBand = _skin(edgeV, _band); // finished floor edge band at the footprint
-    group.add(edgeBand);
+    const skirt = _skin(skirtV, _channel); skirt.material = _channel; group.add(skirt);
+    // the skirt is a single-sided loft; add its BACK face so the outside-looking-in vantage never sees a
+    //   see-through base wall (a second mesh with reversed winding — cheaper than a DoubleSide clone).
+    const skirtBack: number[] = [];
+    for (let k = 0; k < skirtV.length; k += 9) {
+      skirtBack.push(skirtV[k], skirtV[k + 1], skirtV[k + 2], skirtV[k + 6], skirtV[k + 7], skirtV[k + 8], skirtV[k + 3], skirtV[k + 4], skirtV[k + 5]);
+    }
+    group.add(_skin(skirtBack, _channel));
+    group.add(_skin(lipV, _band));         // proud machined sill ledge (lighter)
+    group.add(_skin(edgeV, _band));        // finished floor edge band at the footprint
   }
 }
 
@@ -4053,8 +4146,11 @@ export function releasePodFromBay(t: number): void {
   _bayGroup.position.x = BAY_POD_X + Math.sin(ph * 1.7) * shudder;
   _bayGroup.position.y = Math.sin(ph * 2.3) * shudder;
   _bayGroup.rotation.z = Math.sin(ph * 1.3) * shudder * 0.5;
-  // the front door RATTLES in its frame as the bolts fire (a small judder off closed)
-  if (_bayDoorPivot) _bayDoorPivot.rotation.y = Math.sin(ph * 3.1) * shudder * 0.4;
+  // LIVE-fix (2026-07-05): the front-door pivot RATTLE is REMOVED. It was authored for the OUTSIDE
+  //   view; from INSIDE the pod (bay-until-eject) a door swinging ±1.4° around its pivot reads as the
+  //   door ajar/broken. The whole-pod shudder (_bayGroup position/roll above) carries the tear-free feel
+  //   on its own. Pin the door dead-closed (rotation.y = 0) throughout the release.
+  if (_bayDoorPivot) _bayDoorPivot.rotation.y = 0;
   // the bay glow flares hot then everything's about to be disposed
   if (_bayGlowLight) _bayGlowLight.intensity = 1.5 + k * 3.0;
 }
