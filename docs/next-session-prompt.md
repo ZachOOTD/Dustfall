@@ -1,83 +1,45 @@
-# Next session — PAUSED PRE-WALK-TEST (2026-07-04 evening); dist BUILT from 0cef120
+# Next session — OVERNIGHT LIVE-FIX MARATHON COMPLETE (2026-07-05); the released game hardened
 
-**RESUME POINT:** the user paused to take a break BEFORE the final walk-test. ALL Y-queue +
-round-2 work is committed/pushed through `0cef120` (…+ Y8 one-door-construction w/ sealed
-bore + two-face hardware + lamp parity + quadratic blast ramp; Y9 cockpit dome round 2
-[8 wide panes, two-tone machined members, sill/floor base channel, junction tabs fixed] +
-the bay doorway bands gapped). `npm run build:intro` RAN on this exact state — dist is
-CURRENT (never let the user test a stale dist again; that caused two false bug reports).
-Final bench: PRELOAD Σ-entry 31.6ms, 0 stutters >50ms, 0 freezes. The user SKIPPED the
-final redundant gate re-run (each unit gated individually). ON RESUME: (1) start the
-`dustfall-intro-preview` server (port 4173) — it serves the already-built dist; (2) the
-user walk-tests; (3) on their confirmation run the RELEASE steps below (flag flip → default-
-build re-gate → merge --no-ff to master → push → watch deploy.yml → probe the live link).
+The game RELEASED to master + GitHub Pages yesterday; the user's first live playthrough filed
+9 defect rounds (steering-archive 2026-07-05, rounds 1a-1j) + granted overnight autonomy.
+ALL of it shipped tonight, plus proactive work. Live at https://zachootd.github.io/Dustfall/.
 
-**THE RELEASE IS STAGED.** The full Y-queue shipped through `b6ade67` (cockpit Mk-III glazed
-dome w/ user review round; the ONE-pod consistency + interior Mk-II; pivoting levers at
-seated reach; rotate-then-eject 180° beat; visible eject pull; real-glass hallway windows +
-densified real starfield; z-fights root-caused; menu freeze-frame loading; Model Stage +
-Geometry Lint tooling; E-to-sit + no-emoji fixes). Full suite green incl. the new permanent
-gates (door-flush-audit 7 states · doorway-torture 6/6). The 4173 server serves the release
-build. ON THE USER'S CONFIRMATION: (1) flip `FEATURES.escapePodIntro` default ON w/ env
-kill-switch (`!== '0'`), (2) re-gate the DEFAULT build (plain `npm run build` + smoke) + the
-Continue-with-old-save path, (3) `git merge --no-ff` → master + push, (4) watch deploy.yml →
-verify the LIVE Pages link (New Game → cockpit; old-save Continue skips the intro), (5) docs
-+ campaign-state to RELEASED. If the user reports issues instead: fold into a new queue,
-re-verify, THEN release.
+## What shipped overnight (all pushed to master; per-unit detail in git log 8bfaf2b..15c2c58)
+- **The dome base/perimeter unified** (one _domeSillRing drives glass/base/floor/colliders):
+  closure gaps sealed, GLASS COLLISION at every azimuth (new cockpit-glass-seal gate — the
+  old 3-direction probe passed while a hole existed), floor re-lofted to the dome footprint,
+  the cockpit↔corridor threshold star-slots sealed, two-sided glaze tuned transparent.
+- **The pod doorway truth**: the "sheet of metal" = the scorch-fade + foot lathes never gapped
+  at the door (raycast-proven 42→0); sightline pipes relocated; the AIRTIGHT door rebate
+  (36/36 edge rays sealed) on both builds.
+- **The sequence-break watchdog**: escaping the hull during ship beats now rescues to the
+  spawn (the user's "world lighting broken" = they fell 3000m with the intro active — the
+  state-restore code was proven clean by 3 converging probes). + __game.lightDebug().
+- **THE HERO SHIP EXPLOSION IS VISIBLE FOR THE FIRST TIME**: the FX planes were never
+  billboarded + the porthole glass depth-write killed every additive pass — the pillar beat
+  showed a black window since it was authored (studio-vantage false-passes). Now a staged
+  reactor detonation (flash → aft fireball → spine secondaries → recognizable hull pieces →
+  shockwave → ember husk) through the glass.
+- **Flanks + the ship-wide z-fight sweep**: one service spine per flank; the archway reveal
+  was the biggest real z-fighter (1.082%→0.001% flicker); 444 pairs triaged; 18 pre-merge
+  floaters→1 (unreachable); new zfight-probe rig scenario.
+- **Perf**: the full profile (docs/research/perf-profile-2026-07-05.md) — verdict: NOT at the
+  browser's limit (~580 steady draws; worst 2323 = unmerged POI with scoped fixes); Leviathan
+  merged 16→5; +66 shader variants prewarmed (detonation compile hitch gone; PRELOAD entry
+  20.4ms, 0 stutters).
+- **The full-journey adversarial gate**: PASS (0 confirmed SEV1); its real SEV2s fixed (cabin
+  dangle→clamped conduit + the DEAD wake-spark toggle restored; floor tread taper; can-light/
+  brace clash; the planet depth-occluder shell + anchor truth stamp). TWO more rig-truth
+  repairs: the crashed-pod scenario drove the DEV-ONLY wreck (4 phantom findings); the cockpit
+  mirror placed the planet at a stale anchor (the "stars through the planet" read).
 
---- (superseded prior state below) ---
-# X-queue COMPLETE (overnight 2026-07-04); awaiting the user's walk-test
+## For the user's next playthrough
+Everything from rounds 1a-1j is fixed + live. Flags for their eyes: the glaze transparency
+balance (tuned per their note — final say is theirs), the felt eject rhythm (lever pull →
+rotate → blast), the explosion staging timing (SHIP_BLAST_AT in sequence.ts if they want it
+earlier/later), the collar depth in motion.
 
-The full overnight batch from the user's W2 walk-test feedback SHIPPED (9 commits,
-`bab0cd9..a97a3de`, all pushed). Boot from this file + `docs/campaign/steering-archive.md`
-(2026-07-04 entries). Branch `campaign/escape-pod-intro`. The intro preview build + local
-server (port 4173, `dustfall-intro-preview`) were rebuilt at close-out.
-
-## What shipped (all gates green; per-unit detail in the git log)
-- ✅ **X1+X1p COCKPIT FULL REBUILD** — 8-pane faceted panoramic canopy (research-grounded),
-  side walls cleaned, bolts root-caused (_stud axis), rib strips re-seated, hauler nose
-  matched + made legible; polish: uniform pane clarity (Fresnel overdrive), slim A-posts,
-  rooted beacon, sill fascia. Adversarial gate PASS.
-- ✅ **X2a THE ONE POD** — the bay pod IS the real cabin (one interior path, sealed shell,
-  no space visible inside), console/eject detail redesign, flush door (hinge root cause),
-  pale-at-eject killed, landed pod on plain terrain w/ clear plumb door + walk-back-in.
-- ✅ **X3 FLOW** — board straight from the engine check (bay-reach arming); red-alert strobes
-  through the whole boarding + release; BAY-UNTIL-EJECT (the frame swap rides the eject
-  blast; same door in view before/after).
-- ✅ **X4 CORRIDOR** — walkable lived-in crew quarters (sliding door, CREW placard, bunk/
-  locker/desk/props); the starboard viewport strip; bay-entrance hull seams root-caused +
-  sealed; bay-pod collision ring verified; airlock detail; pipe ends in manifolds; engine
-  detail.
-- ✅ **X6 WRAP** — combined 3-lens adversarial gate (11 agents) → 3 confirmed SEV1s + SEV2s
-  ALL fixed + own-eyes re-verified (viewport = real starfield window [root cause: an opaque
-  reveal panel COVERED the glass], quarters doorway conduits split + capped, airlock leaves
-  matched + aligned seal lamps, plumb open pod door [swing sag + over-rotation], sealed ring
-  seams, capped conduits, seated hauler brow). SHIP-WIDE COLLISION AUDIT: rule-9 PASS, zero
-  stale colliders, zero uncovered walkables. Suite: verify:all · smoke-intro beats:12 ·
-  pod-walkin · pod-walkout · airlock-motion · smoke-pod-persistence · bench:intro (PRELOAD
-  Σ-entry 21.3ms, 0 frames >50ms — no hitch regression; bench takes ~30min wall-clock under
-  swiftshader, that is NORMAL).
-
-## WALK-TEST FLAGS for the user (stills can't gate these — their eyes decide)
-1. The cockpit seated WOW + head-turn parallax through the wrap panes (+ the planet framing).
-2. The boarding rhythm end-to-end: engine check → straight to the airlock → E-opens → sit →
-   red-alert flashing throughout → eject WITH the bay visible until the blast.
-3. The collar depth read in motion (a critic still counts the door jamb as a "nested frame").
-4. The viewport strip on the corridor walk (star backdrop; largest stars read faintly square).
-5. The quarters peek (lived-in read; furniture is intentionally walk-through decoration).
-6. The landed pod: plumb open door, walk-back-in, plain terrain (sand dressing removed —
-   re-enable lever: ENABLE_CRASH_GROUND_DRESSING in podScene.ts).
-7. Audio mix balance (standing flag).
-
-## Known non-blocking residuals
-- ship-explode rig scenario shows a false-pale cabin (live-loop noon stomp — documented in
-  steering-archive; judge the eject cabin in-game or via pod-interior scenarios).
-- The bench COLD path rose 124→181ms with the new geometry; the shipped PRELOAD path is
-  the gate and held (~21ms). If COLD ever matters, extend the preload warm list.
-- Star quads: texture point-sprites would be crisper (deferred by draw-call discipline).
-
-## Next after the walk-test
-Fold the user's feedback (steering → a new queue); then the remaining campaign phases
-(the CLAUDE.md note: Phase 3 hauler/disaster polish → 4 crash/tutorial → 5 audio) per
-`docs/campaign/campaign-state.json`. Rule 9 stands: collision matches models, same change,
-motion-proven.
+## Standing next steps (documented, not started)
+Pickup instancing (perf candidate 1 — HUMAN-ATTENDED per D263) · light-pool trim (candidate 4,
+needs real-GPU measurement) · the audio mix listen-pass · Skyfall wreck + CAVE rework
+(attended sessions). Rule 9 + the model-stage/lint/adversarial-gate discipline stand.
