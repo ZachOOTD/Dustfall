@@ -1,0 +1,15 @@
+{
+  // Cloudflare WORKERS static-assets deploy of the Vite build — the campaign-branch PREVIEW
+  // (user steering 2026-06-29). Only used if you deploy the preview via Cloudflare Workers
+  // (`npx wrangler deploy` reads this). Netlify (netlify.toml) + Cloudflare Pages don't use it.
+  //
+  // This is an ASSETS-ONLY worker (no server code): it serves ./dist as a static site, with
+  // SPA fallback (unknown paths → index.html). Set these BUILD env vars in Cloudflare so
+  // `npm run build` produces the right bundle:  VITE_ESCAPE_POD_INTRO=1  and  VITE_BASE=/
+  "name": "dustfall-preview",
+  "compatibility_date": "2024-12-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

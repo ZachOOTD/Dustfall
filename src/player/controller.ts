@@ -105,14 +105,24 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
 
   const { body, collider, controller } = ctx.player.body;
   const { keys } = ctx.input;
-  const f = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
-  const r = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  let f = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  let r = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  // Escape-pod intro (T0.2) — gate locomotion by the beat's control mode (D269).
+  // 'seated'/'scripted' disable WASD + jump (the intro owns the capsule); free-look
+  // stays (camera rotation is independent). 'walk' (+ the normal game) moves normally.
+  const introLocoLocked = ctx.intro?.active === true && ctx.intro.mode !== 'walk';
+  if (introLocoLocked) { f = 0; r = 0; }
   const moving = f !== 0 || r !== 0;
   // Crouch: hold LeftControl. Disables sprint, lowers camera, slows speed.
   ctx.player.crouching = !!(keys['ControlLeft'] || keys['ControlRight']);
-  ctx.player.eyeOffset = ctx.player.crouching
-    ? Tuning.CROUCH_EYE_OFFSET
-    : Tuning.PLAYER_EYE_OFFSET;
+  // Escape-pod intro (T1.3) — while SEATED in a pod/cockpit chair (mode seated/scripted),
+  // lower the eye to the viewport line (POD_SEATED_EYE_OFFSET) so the window reads at eye
+  // level. Reverts automatically once the intro ends (introLocoLocked false → standing eye).
+  ctx.player.eyeOffset = introLocoLocked
+    ? Tuning.POD_SEATED_EYE_OFFSET
+    : ctx.player.crouching
+      ? Tuning.CROUCH_EYE_OFFSET
+      : Tuning.PLAYER_EYE_OFFSET;
   // ACC playtest — player towing a sled on foot disables sprint +
   // slows walk. Realism: dragging a loaded scrap-metal sled across
   // sand is hard work. Engages only for player-tethered sleds (the
@@ -218,7 +228,7 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   desired.multiplyScalar(speed * dt);
 
   // Jump: Space while grounded kicks velocityY upward; gravity does the rest.
-  if (ctx.player.onGround && ctx.input.pressed.has('Space')) {
+  if (ctx.player.onGround && ctx.input.pressed.has('Space') && !introLocoLocked) {
     ctx.player.velocityY = Tuning.JUMP_VELOCITY;
   }
 
@@ -436,8 +446,35 @@ function applyStormCameraSway(ctx: GameContext): void {
   _swayActive = true;
 }
 
+// Escape-pod intro (T2.3) — the TUMBLING REVEAL. The shipExplode beat eases an intro
+// `tumble` intensity (scratch.tumble: 1 at the eject/blast → 0 settled); here we ride it as a
+// decaying tumbled POSE (rolled + pitched up toward the blast + yawed aside, settling level
+// into the descent) plus a jostle wobble — post-multiplied onto the look like the storm sway
+// (undo last frame so it never accumulates on the PointerLockControls orientation).
+const _tumbleQuat = new THREE.Quaternion();
+const _tumbleInv = new THREE.Quaternion();
+const _tumbleEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+let _tumbleActive = false;
+function applyIntroTumble(ctx: GameContext): void {
+  const cam = ctx.three.camera;
+  if (_tumbleActive) { cam.quaternion.multiply(_tumbleInv); _tumbleActive = false; }
+  const s = (ctx.intro?.scratch?.tumble as number) ?? 0;   // 1 at the blast → 0 settled
+  if (s <= 0.001) return;
+  const t = ctx.time.elapsed;
+  const wob = s * 0.16;
+  const roll = 1.45 * s + Math.cos(t * 5.1) * wob;          // big roll, leveling
+  const pitch = 0.55 * s + Math.sin(t * 4.3) * wob;         // pitched up toward the blast, settling
+  const yaw = -0.75 * s + Math.sin(t * 3.7 + 1.0) * wob * 0.7;
+  _tumbleEuler.set(pitch, yaw, roll);
+  _tumbleQuat.setFromEuler(_tumbleEuler);
+  _tumbleInv.copy(_tumbleQuat).invert();
+  cam.quaternion.multiply(_tumbleQuat);
+  _tumbleActive = true;
+}
+
 function syncCameraToBody(ctx: GameContext): void {
   applyStormCameraSway(ctx);
+  applyIntroTumble(ctx);
   const tr = ctx.player.body.body.translation();
   if (ctx.flags.thirdPerson) {
     const cam = ctx.three.camera;

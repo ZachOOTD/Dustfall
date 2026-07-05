@@ -8,6 +8,7 @@ export const Tuning = {
   PLAYER_CAPSULE_HALF_HEIGHT: 0.5,   // cylindrical part halved
   PLAYER_CAPSULE_RADIUS: 0.35,
   PLAYER_EYE_OFFSET: 0.85,           // camera Y above body center
+  POD_SEATED_EYE_OFFSET: 0.50,       // escape-pod intro (T1.3) — camera Y above body center while SEATED in a pod/cockpit chair (lowers the eye to the viewport line VP_CY≈1.34 so the window reads at eye level, not looked-down-at). Applied while ctx.intro.mode is seated/scripted; reverts to PLAYER_EYE_OFFSET at the desert handoff.
   WALK_SPEED: 6.0,                   // JJ-2 — bumped 4.2 → 6.0 (felt sluggish in playtest)
   SPRINT_MULTIPLIER: 2.2,             // JJ-2 — bumped 1.7 → 2.2 (sprint = 13.2 m/s)
   JUMP_VELOCITY: 7.0,                // m/s upward kick on jump (~1m apex)
@@ -651,7 +652,7 @@ export const Tuning = {
   // Session V — moon, stars, shooting stars, distant planet
   MOON_DISC_SIZE: 32,                 // larger crescent (was 16 full disc)
   MOON_DISC_DISTANCE: 400,
-  STAR_COUNT: 800,
+  STAR_COUNT: 2400,                   // Y2 — DENSIFIED (was 800): the corridor viewport now shows the REAL space dome (the fake star-quad backdrop was deleted), so NO azimuth may read as empty black. A dense field fills every direction; also enriches the cockpit dome + the desert night sky. Draw cost is one Points call regardless of count.
   STAR_SPHERE_RADIUS: 460,            // just inside sky sphere
   SHOOTING_STAR_POOL: 4,
   SHOOTING_STAR_MIN_INTERVAL: 4,      // seconds, scaled inversely with nightMix

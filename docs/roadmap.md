@@ -129,12 +129,105 @@ and promotes the second.
 
 ## Up next
 
-> **ACTIVE: campaign `campaign/2026-06-18`** (`--until=roadmap-empty --checkpoint=milestone
-> --max-cycles=12 --visual-gate=auto`, gate `npm run verify:all`). **Review cadence = PHASE-level**
-> (user, 2026-06-18): the loop runs an ENTIRE phase unattended — **committing every cycle** (one cycle ≈
-> one session ≈ a chunk of a milestone; a milestone spans several cycles/commits) — and PAUSES for review
-> only at a `### Milestone:` PHASE marker below, **not** at each M-milestone. Full per-unit detail in
-> [iteration-plan.md](iteration-plan.md). **Awaiting `/campaign-approve` at the `plan-review` checkpoint.**
+> **ACTIVE: campaign `campaign/escape-pod-intro`** (`--until=roadmap-empty --checkpoint=milestone
+> --max-cycles=150 --visual-gate=auto`, gate `npm run verify:all`). **ENRICH-NOT-CUT.** Review cadence
+> = **PHASE-level** — the loop builds each phase unattended (commit every cycle) and PAUSES at each
+> `### Milestone:` (phase boundary) for the user's **walk-test**. Full plan + per-tier detail:
+> [feature-escape-pod-intro.md](feature-escape-pod-intro.md) (the BUILD PLAN). The prior
+> `campaign/2026-06-18` (M11→M13 + Phase A/B) is COMPLETE + user-approved — its tiers below are SHIPPED.
+
+### ▶ ACTIVE — REBUILD v2: the real-world physical intro (R1→R5) · supersedes the v1 phased build below
+The user walk-tested the v1 build (overnight C19-C26) + directed a re-architecture — full plan + locked
+decisions in [feature-escape-pod-intro.md](feature-escape-pod-intro.md) `## REBUILD v2`. Re-ground the intro
+in the REAL world; ONE physical pod; space = a wrapping celestial skybox (the real sky in "space mode");
+descent = the pod PHYSICALLY falling + crashing into the real desert. The loop builds R1→R5 IN ORDER, pausing
+at each `### Milestone:` for the user's art-direction. The v1 logic/audio/staging/beats CARRY OVER (re-grounded).
+- **R1 — Real-world re-grounding (the keystone):** **✅ R1a — the real sky in "space mode" SHIPPED** (the cockpit
+  window now shows real wrapping stars + a real-scale planet + atmosphere limb; `setSkyIntroMode`; the fake star
+  plane is gone). **✅ R1b — DESCENT re-grounded to real-world coords (SHIPPED)** — the pod physically FALLS through the
+  real desert above the spawn (`setDescentBase(returnPos)` + `setDescentProgress` drives the altitude; body+camera
+  ride down); the viewport shows the REAL terrain + sky (no fake — ~430 lines of `LOWALT_FS`/`STAR_FS`/planet/atmo
+  shaders deleted; only the re-entry plasma/shimmer kept, over the real world). *Concession:* `DESCENT_ALT`=600m
+  (not 3000m) — the world is only ±1200m + the upright capsule's SIDE porthole looks down only ~22° (cabin occludes
+  more), so high = real sky, the last half = the desert rushing up. A 3000m "from-orbit" read = an R4 enrichment
+  (tilt the capsule nose-down + couple the seated eye). **R1c — folded into R3** (removing the teleport seams = physical
+  continuity through ONE consistent pod model; can't be done before the model is unified, so it merges into R3).
+  **R1 (the spatial re-grounding — orbit sky + the real-world descent) is COMPLETE at R1a+R1b.**
+### ✅ Milestone: REBUILD R1 — real-world re-grounding COMPLETE — USER-APPROVED to continue (2026-06-30). Walk-tested; fixed 2 reported bugs live (the orbit planet drawing on top of the ship → depth-test; dust visible in space → re-suppress every frame). **⚠ R1 POLISH TBD — the user will give another round of feedback later** (likely the planet size/placement/surface + the descent feel). The user asked to **keep building (checkpoint→NONE)** through R2-R5, then review the batch. So: build R2→R5, surface the hero looks in the changelog/preview, the user reviews + art-directs later.
+- **✅ R2 — The space scene hero-polish SHIPPED** — a milky-way band (dome haze + per-star band weights, gated to
+  space mode) + richer stars; a planet surface that reads as a real world (domain-warped continents/seas, banding,
+  polar caps, cloud swirls, a dramatic terminator, Dune palette); a thin believable atmosphere limb. **Planet
+  SIZE/PLACEMENT kept at the default — the user art-directs the framing in their next feedback round.** Non-destructive.
+### Milestone: REBUILD R2 — space scene COMPLETE (checkpoint=none → no pause; user reviews the batch later)
+- **R3 — The ONE physical pod:** **✅ R3a SHIPPED** — the player wakes in + climbs out of the SAME hero cabin they
+  rode down (no model-swap): `setCabinCrashPose` (crashed tilt + drop the collider + dawn wake-light) + a real hatch
+  cut into the cabin (`buildCabinHatch`) that swings onto the dawn desert + `blowCabinHatch`; the crashed exterior
+  re-sized to MATCH the cabin (~2.9m capsule, the C18 in↔out size-match); deleted `buildWakeInterior`. **R3b — the docked-in-ship physical ENTER/EJECT → FOLDED INTO R5** (the pod-bay
+  the player walks into IS part of the ship interior — building it in the greybox ship now + redoing it in R5 = double
+  work; R5 builds the pod-bay + the physical enter/eject with the ship). The old R1c continuity (pod→crash→wake→exit)
+  is done via R3a. [hero model — look polish (exterior silhouette, wake lighting) → user art-direction batch]
+### Milestone: REBUILD R3 — the one physical pod COMPLETE → USER WALK-TEST (enter → eject → ride → exit, consistent) → /campaign-approve
+- **✅ R4 — physical descent + crash + timing fixes SHIPPED** — the pod physically falls + crashes into the real
+  desert (R1b). **Parachute gag now MID-FALL** (descent hands off at ~384m; the 3 pulls + snap land between 384m→112m;
+  the pod keeps falling to impact at the ground — `tickParachute` continues the fall; was "on the ground"). **Real
+  ~2s+ blackouts** (`_phaseFade` hold-then-fade ~2.3s; impact→wake ~2.07s; was a 0.35s flash). The fall FEEL is a walk-test item.
+### Milestone: REBUILD R4 — physical descent + crash COMPLETE (checkpoint=none → no pause; user reviews the batch)
+- **R5 — Ship interior redesign** (⏸ PAUSED by the user 2026-06-30):
+  - **✅ R5a — the COCKPIT redesigned OFF the greybox box → a worn industrial-hauler fuselage cockpit** (SHIPPED as a
+    strong default via a 4-round adversarial-gate loop, beauty 4→6.75; commit `07fa124`): lofted vaulted ribbed
+    D-section fuselage + raked mullioned windscreen + asymmetric avionics console + a real crash-seat + a deep
+    bulkhead doorway + cool neutral metal. The box/wine-barrel/grinning-face/floating-seat/placeholder-doorway reads
+    are all KILLED. **RESIDUALS → the user's art-direction (why we paused):** (a) finish the rugged/matte hull material
+    pass (user steering — the current metal reads "too pristine/shiny"; the pass was interrupted mid-flight); (b) the
+    FP "strapped-in" seat read is a plateaued procedural nut (geometry's all there); (c) the planet frames the
+    windscreen too large/flat at the cockpit beat (R2/sky framing).
+  - **✅ R5b — the CORRIDOR fully modelled/detailed** (`49b4e08`): greybox tube → a lived-in freighter passage (rib
+    frames + deck plating + conduit/cable runs + access hatches + grab-rails + real can-lights, cockpit materials/grime
+    reused); the disaster staging drives real fire + red-alert lighting (not a flat wash). Colliders byte-identical.
+  - **✅ R5c — the pod-bay + the physical ENTER/EJECT** (`fb7cb6f`): the size-matched pod docked in a hazard-framed
+    airlock bay at the corridor's bridge end; `tickEnterPod` is now a physical walk-up → continuous scripted climb-in
+    → hatch-seal (NO teleport; R3a cabin swapped-in under the dim) → eject; `tickShipExplode` fires explosive-bolt
+    release before the blast → the R1b descent. Bay visual = greybox-plus (cost-scoped); motion/feel = walk-test.
+  [hero models — bay/cockpit look polish → user art-direction]
+### Milestone: REBUILD R5 — ship interiors COMPLETE ✅ → **REBUILD v2 FEATURE REWORK COMPLETE (2026-06-30/07-01 overnight)** → USER final walk-test/listen
+Remaining polish/residuals (NOT blockers — for the user's review + art-direction): the planet frames the cockpit-beat
+windscreen too large/flat (R2/sky framing — being addressed next); the FP seat-read (geometry done); the pod-bay + cockpit
+look polish; the walk-test-only feel items (climb-in curve, eject shudder, corridor strobe/fire, the beautiful-descent).
+
+### Escape-pod intro — the phased build (v1, SUPERSEDED by REBUILD v2 above — historical) ([feature-escape-pod-intro.md](feature-escape-pod-intro.md))
+The loop builds these in order, pausing at each `### Milestone:` (phase boundary) for the user's walk-test.
+DoD = a new game plays the whole sequence (Beats 0-11) hero-quality, behind `FEATURES.escapePodIntro`.
+- **✅ Phase 0 — Greybox spine + new-game flow — SHIPPED (C1-C8, 2026-06-28):** T0.0 framework (D269) · T0.1 new-game flow + `introComplete` marker + dev hooks (D270) · T0.2 greybox ship + Beats 0-2 + HUD suppression · T0.3 greybox descent + seated pod + the parachute gag · T0.4 wake → desert handoff + pod-as-spawn-wreck + tutorial scaffold + the `__game.smokeIntro` smoke check. **DoD MET:** the whole sequence plays end-to-end in greybox (`verify:all` + live gates each cycle; flag-OFF byte-unchanged).
+### ⏸ Milestone: escape-pod Phase 0 — greybox spine COMPLETE — **AWAITING USER WALK-TEST** (the whole flow + pacing; validates FLOW not beauty) → `/campaign-approve` releases Phase 1
+- **✅ Phase 1 — The pod (hero) — SHIPPED (C9-C13, 2026-06-29; REDESIGNED CYLINDRICAL per user steering, D271):** T1.1 exterior + T1.2 interior + T1.3 seated-FP camera. The **vertical riveted-aluminium capsule** (NOT the originally-built box, which the user rejected): half-buried hero exterior + a round riveted cabin (viewport, the chunky red parachute lever, the guarded yellow eject, console, seat) + the seated eye/beat-framing. Built via the procedural-modeler + **adversarial 5-critic visual gates** (caught + fixed a helmet-read, a float, a forward-face, a void floor, boxy-walls). **DoD MET.** Deferred to later phases: the planet/atmosphere VISTA through the viewport = Phase 2.
+### ⏸ Milestone: escape-pod Phase 1 — pod hero COMPLETE — **AWAITING USER WALK-TEST** (pod in + out) → `/campaign-approve` releases Phase 2
+- **✅ Phase 2 — The descent showpiece — SHIPPED (C14-C17, 2026-06-29):** **T2.1** the descentProgress-driven orbit→atmosphere→desert vista through the pod viewport (curved desert planet + Fresnel atmosphere limb + starfield → cross-fade → barchan dune surface with raking dawn light + closing scale; gate-passed @ beauty 8) **+ the cabin interior-lit-by-exterior** (the capsule warms cool→dawn as the desert fills the viewport). · **T2.2** re-entry FX (plasma past the glass [white-hot core, slipstream] + viewport heat-shimmer + white flash + speed-coupled shake, on a shared re-entry curve peaking p≈0.24 before the desert cross-fade; gate-passed @ beauty 8). · **T2.3** the tumbling reveal + interior-lit-by-exterior (eject → blast → the pod tumbles, the cabin blast-floods + the camera rolls, settling into the descent; `applyIntroTumble` post-multiply + `setTumbleLight`). **DoD MET** (the descent plays as the vision describes). Deferred: the **hero ship explosion staged through the tumble frame = Phase 3**; the felt tumble MOTION = the walk-test.
+### ✅ Milestone: escape-pod Phase 2 — descent COMPLETE — **USER-APPROVED 2026-06-30** (after an extended attended walk-test + C18 polish: upright/calm/slow/seamless descent, close orbit → real-desert horizon → ground rushing up to impact). The user then asked to run the loop OVERNIGHT (checkpoint→none) through Phase 3-5 → Phase 3 released.
+- **Phase 3 — The hauler + disaster** *(in progress, C19–)*: **⚠ STRATEGIC PIVOT (C20): hero VISUALS → user art-direction (morning); the overnight loop builds the PLAYABLE intro (logic/staging/audio).** Two consecutive hero visuals plateaued below the bar + the user art-directs them anyway (descent precedent) → defer them, build what makes the intro PLAY.
+  - **⚠ T3.1 hauler exterior — BUILT, BELOW the hero bar (C19) → DEFERRED to USER ART-DIRECTION** (gate failed ×2; modeler plateaued 8 rounds; wired placeholder — `__game.buildHauler()` / `rig-shot --scenario=hauler`).
+  - **⚠ T3.3 cockpit interior — BUILT + much improved (C20), BELOW the hero bar → DEFERRED to USER ART-DIRECTION for surface-fidelity** (gate failed ×2 @ beauty 4→5; the opening shot READS but surfaces/CRT/gauges/lighting need the user's eye; the real cockpit now — `rig-shot --scenario=cockpit`; `setCockpitAlert(0|1|2)` hook ready for T3.4).
+  - **⚠ T3.2 explosion FX — DEFERRED** (depends on the finalized hauler).
+  - **✅ T3.4 — disaster STAGING SHIPPED (C21, main-loop logic)**: the corridor walk → engine-fire eruption at the dead-end → red-alert flood + concussive jolt/flash → "GET TO THE ESCAPE POD!" → flee forward to the bridge → enterPod. `setEngineFire`/`setShipAlert` hooks + the E2 console escalation (ORBIT→CORE TEMP CRITICAL→HULL BREACH via `setCockpitAlert`). The disaster PLAYS. **Deferred to user art-direction:** the hero CORRIDOR GEOMETRY + hero FIRE FX (smoke/particles/light) + the full E1 door-funnel + E3 spatial-audio (audio = Phase 5).
+  - **▶ NEXT (overnight) = PHASE 4** (crash/wake/reveal + tutorial — main-loop logic; see below). Phase 3's remaining HERO VISUALS (T3.1 hauler, T3.2 explosion, T3.3 cockpit-fidelity, hero corridor) await the user's morning art-direction.
+### Milestone: escape-pod Phase 3 — ship COMPLETE — USER WALK-TEST (ship + explosion + diegetic guidance) → /campaign-approve
+- **Phase 4 — Crash · wake · reveal + tutorial** *(in progress, C22–)*: **✅ T4.1 impact + WAKE-INSIDE-POD + BLOW-DOOR SHIPPED (C22)** — wake inside the crashed pod at the desert (teleport hidden under the crash black) → kick the hatch open → walk out into the dunes (NO magic teleport-to-open-desert); the wreck stays where you climbed out. `buildWakeInterior`/`blowWakeHatch` + the reworked wake/stepOut beats. **✅ T4.2 desert reveal SHIPPED (C23)** — DAWN at the handoff (`dayTime=0.26`, cohesive with the descent) + aftermath-silence reveal pacing (E7 — a held quiet HUD-less beat before the game's bustle) + the horizon hook (E8 — the emergence faces origin-ward where the M5a hero-landmark silhouettes ring the map). **⚠ T4.3 craft+salvage tutorial — DEFERRED to USER (C24)** — feel-critical (tutorial teaching) + comic-hero (the chute-pop gag) + the salvage-pry INTERACTION can't be verified unattended (preview hangs on the desert). For the user's morning: wire the crashed pod as a pryable `escape_pod` salvageable (the `scrap_machete`/D261 pry tool + the salvage system EXIST — set `group.userData.accessPanel` on the pod's salvage door + register via `registerSalvageable`), scrap glints (E10), starting supplies, + the comic chute-pop (the parachute pops the pod crown).
+  - **✅ [C18 walk-test req — DONE in T4.1/C22]** the player now wakes INSIDE the pod + blows the door to walk out (not teleport-out). **⚠ STILL DEFERRED to user art-direction:** the HERO crashed-cabin interior (the C22 wake interior is dark/greybox) + the **crashed-pod EXTERIOR↔INTERIOR size-match** (same vessel in + out) — with the other hero visuals.
+  - **[C17 walk-test — user req]** The **half-buried pod EXTERIOR (`placeCrashedPodWreck`) must match the INTERIOR cabin's size** (CAB_R / WALL_H) for consistency — the player rides the interior down then wakes beside the exterior, so the two must read as the same vessel. Adjust the exterior dimensions to match (or note the scale ratio).
+### Milestone: escape-pod Phase 4 — crash/tutorial COMPLETE — USER WALK-TEST (crash→desert→tutorial→gag; fresh-player clarity) → /campaign-approve
+- **Phase 5 — Audio + music** *(in progress, C24–)*: **✅ T5.1a intro SFX one-shots SHIPPED (C24)** (eject/explosion/klaxon/hull-groan/re-entry/lever/crash/door). **✅ T5.1b ambient LOOPS SHIPPED (C25)** — the cockpit hum (calm in-orbit bed, Beat 0→eject) + the descent rush (the air-rush of the fall, descent→impact), with start/stop lifecycle (C16). **✅ T5.2 music SHIPPED (C26)** — procedural pads: a tense escape sting (disaster→eject) → a beautiful descent swell (the fall) → a desert easing (the dawn reveal, self-resolving into gameplay). **⏸ OVERNIGHT RUN COMPLETE** — every remaining item needs the user, so the loop paused for the morning review.
+
+### ⏸ AWAITING THE USER (the morning review) — autonomous overnight work is complete
+The whole intro PLAYS end-to-end with full SFX + music (C19-C26, behind `FEATURES.escapePodIntro`). **For the user (prioritize):**
+- **[hero VISUALS — art-direction]** the hauler exterior (`__game.buildHauler()`), the cockpit surface-fidelity (`rig --scenario=cockpit`), the ship-explosion FX (T3.2), the hero corridor geometry + fire FX, the HERO crashed-cabin wake interior + the crashed-pod exterior↔interior size-match, a dedicated horizon-hook landmark. The autonomous modeler plateaued on these; they need the user's eye (as the descent did).
+- **[feel/playtest] T4.3** the craft+salvage tutorial (wire the pod as a pryable `escape_pod` salvageable — `scrap_machete`/D261 + the salvage system exist) + the comic **chute-pop** payoff. Needs in-game playtest (can't verify unattended).
+- **[audio] LISTEN + balance** the SFX/loop/music mix.
+- Then the **Phase 3-5 milestone walk-tests** + `/campaign-approve` to release any further passes.
+### Milestone: escape-pod Phase 5 — audio COMPLETE → FEATURE COMPLETE — USER LISTEN + final review → /campaign-approve
+
+---
+**↓ SHIPPED — prior campaign `campaign/2026-06-18` (M11→M13 + Phase A/B), complete + user-approved. Historical record below.**
+
+> *(historical) The 2026-06-18 campaign banner + its Phase A/B/M11-M13 ladder follows. All shipped.*
 
 ### Phase A — Build-out (M1→M5b; all build-now, runs unattended → ONE review after) · [BUILD-NOW]
 Tiers in order (each spans 1+ cycles; the loop commits every cycle and pauses at NONE of these):

@@ -85,6 +85,614 @@ export function playCrashImpact(distance: number): void {
   thud.start(t); thud.stop(t + 0.3);
 }
 
+// ── Escape-pod intro SFX (Phase 5 T5.1) — procedural one-shots wired to the intro beats
+//    (sequence.ts). Web Audio synthesis, no samples — the game's idiom. The intro starts the
+//    audio context (ensureAudioStarted, on the new-game click) so these fire. Sustained ambient
+//    loops (cockpit hum, wind) + music are a follow-up (T5.1b/T5.2).
+
+/** Eject — a heavy pneumatic THUNK + a launch whoosh as the pod fires clear. */
+export function playEjectThunk(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const thud = a.ctx.createOscillator();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(180, t);
+  thud.frequency.exponentialRampToValueAtTime(44, t + 0.14);
+  const te = a.ctx.createGain();
+  te.gain.setValueAtTime(0.0001, t);
+  te.gain.exponentialRampToValueAtTime(0.5, t + 0.006);
+  te.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  thud.connect(te).connect(a.sfx);
+  thud.start(t); thud.stop(t + 0.32);
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.8;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.setValueAtTime(300, t);
+  bp.frequency.exponentialRampToValueAtTime(1400, t + 0.5); bp.Q.value = 0.8;
+  const we = a.ctx.createGain();
+  we.gain.setValueAtTime(0.0001, t);
+  we.gain.linearRampToValueAtTime(0.32, t + 0.08);
+  we.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  src.connect(bp).connect(we).connect(a.sfx);
+  src.start(t); src.stop(t + 0.65);
+}
+
+/** Ship explosion — a big concussive boom (noise burst + deep sub + a bright crack). */
+export function playExplosionBoom(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.5;
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(1800, t);
+  lp.frequency.exponentialRampToValueAtTime(300, t + 0.6); lp.Q.value = 0.6;
+  const be = a.ctx.createGain();
+  be.gain.setValueAtTime(0.0001, t);
+  be.gain.exponentialRampToValueAtTime(0.6, t + 0.02);
+  be.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+  src.connect(lp).connect(be).connect(a.sfx);
+  src.start(t); src.stop(t + 0.95);
+  const sub = a.ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(64, t);
+  sub.frequency.exponentialRampToValueAtTime(32, t + 1.4);
+  const se = a.ctx.createGain();
+  se.gain.setValueAtTime(0.0001, t);
+  se.gain.exponentialRampToValueAtTime(0.32, t + 0.05);
+  se.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+  sub.connect(se).connect(a.sfx);
+  sub.start(t); sub.stop(t + 2.05);
+  const cr = a.ctx.createOscillator();
+  cr.type = 'square';
+  cr.frequency.setValueAtTime(420, t);
+  cr.frequency.exponentialRampToValueAtTime(120, t + 0.12);
+  const ce = a.ctx.createGain();
+  ce.gain.setValueAtTime(0.0001, t);
+  ce.gain.exponentialRampToValueAtTime(0.18, t + 0.004);
+  ce.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  cr.connect(ce).connect(a.sfx);
+  cr.start(t); cr.stop(t + 0.2);
+}
+
+/** Klaxon — a 3-pulse two-tone alarm (the disaster). */
+export function playKlaxon(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t0 = a.ctx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const t = t0 + i * 0.42;
+    const o = a.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.setValueAtTime(440, t + 0.18);
+    const lp = a.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 1.0;
+    const e = a.ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.linearRampToValueAtTime(0.2, t + 0.02);
+    e.gain.setValueAtTime(0.2, t + 0.32);
+    e.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.connect(lp).connect(e).connect(a.sfx);
+    o.start(t); o.stop(t + 0.42);
+  }
+}
+
+/** Hull groan — a low metallic stress groan (the dying ship). */
+export function playHullGroan(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(70, t);
+  o.frequency.linearRampToValueAtTime(54, t + 1.4);
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 160; bp.Q.value = 3.0;
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(0.16, t + 0.3);
+  e.gain.linearRampToValueAtTime(0.11, t + 1.0);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+  o.connect(bp).connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 1.85);
+}
+
+/** Re-entry rumble — a swelling roar as the pod punches into the atmosphere, then passes. */
+export function playReentryRumble(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.6; src.loop = true;
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(280, t);
+  lp.frequency.linearRampToValueAtTime(900, t + 1.5);
+  lp.frequency.linearRampToValueAtTime(300, t + 4.0); lp.Q.value = 0.8;
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(0.32, t + 1.2);
+  e.gain.setValueAtTime(0.32, t + 2.2);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 4.5);
+  src.connect(lp).connect(e).connect(a.sfx);
+  src.start(t); src.stop(t + 4.6);
+}
+
+/** Parachute lever YANK — a stiff mechanical click-clunk. */
+export function playLeverClick(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(220, t);
+  o.frequency.exponentialRampToValueAtTime(90, t + 0.05);
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.exponentialRampToValueAtTime(0.24, t + 0.003);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  o.connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 0.1);
+}
+
+/** Lever SNAP — the parachute lever breaks off (a sharp metal snap). */
+export function playLeverSnap(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(900, t);
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.08);
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.exponentialRampToValueAtTime(0.3, t + 0.002);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+  o.connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 0.18);
+}
+
+/** Hatch BLOW — the wake hatch kicks off (a metal bang + debris scatter). */
+export function playDoorBlow(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(300, t);
+  o.frequency.exponentialRampToValueAtTime(70, t + 0.2);
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.exponentialRampToValueAtTime(0.4, t + 0.004);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  o.connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 0.42);
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 1.1;
+  const bp = a.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.7;
+  const ne = a.ctx.createGain();
+  ne.gain.setValueAtTime(0.0001, t);
+  ne.gain.linearRampToValueAtTime(0.2, t + 0.01);
+  ne.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  src.connect(bp).connect(ne).connect(a.sfx);
+  src.start(t); src.stop(t + 0.4);
+}
+
+/** Chute POP (T4.3) — the comic parachute FWOOMP as the failed chute finally deploys, uselessly,
+ *  on the ground. A soft airy WHOOSH (band-passed noise swelling as the canopy inflates) + a low
+ *  springy BOING that wobbles up then settles (the "sproing" of the spring-loaded chute mortar).
+ *  Deliberately a bit goofy — it's the comedy button on the whole opening. */
+export function playChutePop(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // 1. the airy canopy WHOOSH — band-passed noise that swells (fabric filling) then trails off.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.85;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.Q.value = 0.6;
+  bp.frequency.setValueAtTime(500, t);
+  bp.frequency.linearRampToValueAtTime(1400, t + 0.18);   // the canopy fills — brightens
+  bp.frequency.exponentialRampToValueAtTime(400, t + 0.9); // then the flap settles
+  const ne = a.ctx.createGain();
+  ne.gain.setValueAtTime(0.0001, t);
+  ne.gain.linearRampToValueAtTime(0.26, t + 0.09);         // fast swell (the pop)
+  ne.gain.exponentialRampToValueAtTime(0.001, t + 0.95);   // airy trail
+  src.connect(bp).connect(ne).connect(a.sfx);
+  src.start(t); src.stop(t + 1.0);
+  // 2. the springy BOING — a mortar "sproing": a wobbling sine that jumps up, overshoots, settles.
+  const o = a.ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(90, t);
+  o.frequency.exponentialRampToValueAtTime(230, t + 0.06);   // the spring launches
+  o.frequency.exponentialRampToValueAtTime(150, t + 0.16);   // overshoot back down
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.28);   // wobble up (the comic sproing)
+  o.frequency.exponentialRampToValueAtTime(120, t + 0.5);    // settle
+  const oe = a.ctx.createGain();
+  oe.gain.setValueAtTime(0.0001, t);
+  oe.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+  oe.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  o.connect(oe).connect(a.sfx);
+  o.start(t); o.stop(t + 0.62);
+}
+
+/** Explosive-BOLT release (T5.3 gap-fill) — the sharp pyrotechnic SHEAR as the docked pod tears
+ *  from its bay cradle (R5c physical detach), layered BEFORE the pneumatic playEjectThunk. A
+ *  hard metallic CRACK (highpassed noise burst — the bolts firing) + a brief screech of tearing
+ *  metal (a resonant bandpass swept down as the cradle rips). Distinct from the low eject thunk:
+ *  this is bright + violent (the bolts blow), the thunk is the launch heave under it. */
+export function playBoltShear(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // 1. the BOLT CRACK — a sharp bright transient (highpassed noise), the pyros firing.
+  const crack = a.ctx.createBufferSource();
+  crack.buffer = a.noiseBuffer; crack.playbackRate.value = 1.5;
+  const hp = a.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
+  const ce = a.ctx.createGain();
+  ce.gain.setValueAtTime(0.0001, t);
+  ce.gain.exponentialRampToValueAtTime(0.34, t + 0.003);
+  ce.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+  crack.connect(hp).connect(ce).connect(a.sfx);
+  crack.start(t); crack.stop(t + 0.13);
+  // 2. the tearing-METAL SCREECH — a resonant bandpass on noise, swept DOWN as the cradle rips.
+  const tear = a.ctx.createBufferSource();
+  tear.buffer = a.noiseBuffer; tear.playbackRate.value = 1.0;
+  const bp = a.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6;
+  bp.frequency.setValueAtTime(2000, t);
+  bp.frequency.exponentialRampToValueAtTime(600, t + 0.3);   // the shear rips downward
+  const te = a.ctx.createGain();
+  te.gain.setValueAtTime(0.0001, t);
+  te.gain.linearRampToValueAtTime(0.20, t + 0.02);
+  te.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+  tear.connect(bp).connect(te).connect(a.sfx);
+  tear.start(t); tear.stop(t + 0.36);
+}
+
+/** Hatch pressure SEAL (T5.3 gap-fill) — the hiss + pressurisation as the escape-pod hatch seals
+ *  behind the player (enterPod 'seal' phase), layered UNDER the metallic playDoorBlow clunk. A
+ *  band-passed noise HISS that fades in then chokes off (the seal closing + the air equalising) +
+ *  a soft low pressurise THUMP tail (the cabin going airtight). The clunk is the door; this is the
+ *  air. */
+export function playHatchSeal(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // pressure HISS — band-passed noise swelling then choking as the seal bites.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 1.2;
+  const bp = a.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
+  bp.frequency.setValueAtTime(1600, t);
+  bp.frequency.exponentialRampToValueAtTime(700, t + 0.5);   // the hiss darkens as it seals
+  const he = a.ctx.createGain();
+  he.gain.setValueAtTime(0.0001, t);
+  he.gain.linearRampToValueAtTime(0.16, t + 0.08);
+  he.gain.setValueAtTime(0.14, t + 0.30);
+  he.gain.exponentialRampToValueAtTime(0.001, t + 0.6);      // chokes off (airtight)
+  src.connect(bp).connect(he).connect(a.sfx);
+  src.start(t); src.stop(t + 0.62);
+  // pressurise THUMP — a soft low body as the cabin goes airtight (the ears-pop).
+  const o = a.ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(150, t + 0.34);
+  o.frequency.exponentialRampToValueAtTime(70, t + 0.5);
+  const oe = a.ctx.createGain();
+  oe.gain.setValueAtTime(0.0001, t + 0.34);
+  oe.gain.exponentialRampToValueAtTime(0.12, t + 0.37);
+  oe.gain.exponentialRampToValueAtTime(0.001, t + 0.56);
+  o.connect(oe).connect(a.sfx);
+  o.start(t + 0.34); o.stop(t + 0.58);
+}
+
+/** Ship-death ROAR + tail (T5.3 gap-fill) — the sustained SPECTACLE layer under the ship
+ *  explosion (shipExplode 'blast' phase), started at the detonation to run beneath the
+ *  playExplosionBoom one-shots for the ~2.3s the fireball/breakup unfolds. A deep rolling roar
+ *  (very-slow lowpassed noise, swelling then decaying over ~3.6s) + a groaning sub that bends
+ *  down (the hull tearing itself apart) + a metallic debris-GROAN tail (a detuned sawtooth pair
+ *  through a resonant bandpass, sweeping down late — the husk buckling as it recedes). One long
+ *  self-terminating voice (no loop registry — it has a finite life; ~3.6s), so it can't leak. */
+export function playShipDeathRoar(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // 1. the rolling ROAR — heavy lowpassed noise, a big slow swell then a long decay.
+  const roar = a.ctx.createBufferSource();
+  roar.buffer = a.noiseBuffer; roar.playbackRate.value = 0.28;
+  const rlp = a.ctx.createBiquadFilter(); rlp.type = 'lowpass';
+  rlp.frequency.setValueAtTime(500, t);
+  rlp.frequency.exponentialRampToValueAtTime(140, t + 3.4); rlp.Q.value = 0.7;
+  const re = a.ctx.createGain();
+  re.gain.setValueAtTime(0.0001, t);
+  re.gain.linearRampToValueAtTime(0.34, t + 0.35);   // the blast wave swells
+  re.gain.setValueAtTime(0.30, t + 1.2);
+  re.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
+  roar.connect(rlp).connect(re).connect(a.sfx);
+  roar.start(t); roar.stop(t + 3.6);
+  // 2. the tearing SUB — a low sine bending down (the hull rupturing under the fireball).
+  const sub = a.ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(58, t);
+  sub.frequency.exponentialRampToValueAtTime(26, t + 2.4);
+  const se = a.ctx.createGain();
+  se.gain.setValueAtTime(0.0001, t + 0.08);
+  se.gain.exponentialRampToValueAtTime(0.26, t + 0.3);
+  se.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+  sub.connect(se).connect(a.sfx);
+  sub.start(t + 0.08); sub.stop(t + 2.65);
+  // 3. the metallic debris-GROAN tail — a detuned saw pair through a resonant bandpass swept down
+  //    late in the beat (the burning husk buckling + debris shearing as it recedes).
+  const gt = t + 1.1;   // the groan enters mid-explosion (the breakup phase)
+  const bp = a.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3.5;
+  bp.frequency.setValueAtTime(240, gt);
+  bp.frequency.exponentialRampToValueAtTime(90, gt + 2.2);
+  const ge = a.ctx.createGain();
+  ge.gain.setValueAtTime(0.0001, gt);
+  ge.gain.linearRampToValueAtTime(0.14, gt + 0.4);
+  ge.gain.exponentialRampToValueAtTime(0.001, gt + 2.3);
+  ge.connect(bp).connect(a.sfx);   // NOTE: bp → sfx; the saws feed ge
+  for (const f of [82, 84.5]) {
+    const o = a.ctx.createOscillator();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f, gt);
+    o.frequency.linearRampToValueAtTime(f * 0.7, gt + 2.2);   // groans downward as it dies
+    o.connect(ge);
+    o.start(gt); o.stop(gt + 2.35);
+  }
+}
+
+/** Vista / awe SWELL (T5.3 gap-fill) — the low, wide awe-drone for the desert step-out reveal
+ *  (the horizon-hook moment, layered UNDER startMusicDesert). A slowly-swelling open-fifth drone
+ *  (a warm sine cluster) through a filter that opens as it swells + a very long release, so it
+ *  reads as a held breath of awe as the vista opens — NOT a fanfare. Self-terminating (~9s life,
+ *  not in the loop registry), routed to the ambient bus so it sits UNDER the mix. */
+export function playAweSwell(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.Q.value = 0.6;
+  lp.frequency.setValueAtTime(300, t);
+  lp.frequency.linearRampToValueAtTime(900, t + 4.0);   // opens as the vista opens
+  const bus = a.ctx.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.linearRampToValueAtTime(0.10, t + 3.5);      // a slow, held swell
+  bus.gain.setValueAtTime(0.10, t + 5.0);
+  bus.gain.exponentialRampToValueAtTime(0.0008, t + 9.0);   // a long, awed release
+  lp.connect(bus).connect(a.ambient);
+  // A low open-fifth drone (C2 / G2 / C3) — spacious + hollow, the scale of the horizon.
+  for (const f of [65.41, 98.0, 130.81]) {
+    const o = a.ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = f;
+    o.detune.value = (Math.random() * 2 - 1) * 4;   // a hair of chorus for width
+    const g = a.ctx.createGain(); g.gain.value = 0.5;
+    o.connect(g).connect(lp);
+    o.start(t); o.stop(t + 9.3);
+  }
+}
+
+// ── Looping ambient beds (Phase 5 T5.1b) — sustained intro loops with explicit start/stop
+//    lifecycle (C16 lesson: stop on beat exit so nothing dangles). Keyed by name; idempotent
+//    start, safe fade-out stop, stopAllIntroLoops() on intro teardown. They feed a.ambient.
+interface LoopVoice { nodes: AudioScheduledSourceNode[]; gain: GainNode; }
+const _introLoops = new Map<string, LoopVoice>();
+
+function _stopLoop(name: string, fade = 0.4): void {
+  const v = _introLoops.get(name);
+  if (!v) return;
+  _introLoops.delete(name);
+  const a = getAudioInternals();
+  if (!a) return;
+  const now = a.ctx.currentTime;
+  try {
+    v.gain.gain.cancelScheduledValues(now);
+    v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value), now);
+    v.gain.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+  } catch { /* ctx torn down */ }
+  for (const n of v.nodes) { try { n.stop(now + fade + 0.05); } catch { /* already stopped */ } }
+  // the stopped sources auto-disconnect; the now-unreferenced gain GCs.
+}
+
+/** Stop every intro ambient loop (called on intro teardown — any exit path). */
+export function stopAllIntroLoops(): void {
+  for (const name of Array.from(_introLoops.keys())) _stopLoop(name, 0.25);
+}
+
+/** Cockpit hum — the calm low ambient bed aboard the ship in orbit (Beat 0): a steady detuned
+ *  drone + a soft air-handling noise bed + a faint electronics tone. Loops until stopped at
+ *  eject. Idempotent. */
+export function startCockpitHum(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('cockpitHum')) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.16, t + 1.2);   // fade in
+  gain.connect(a.ambient);
+  const nodes: AudioScheduledSourceNode[] = [];
+  for (const f of [58, 58.4]) {   // two slightly detuned saws → a thick steady hum
+    const o = a.ctx.createOscillator();
+    o.type = 'sawtooth'; o.frequency.value = f;
+    const lp = a.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220; lp.Q.value = 0.6;
+    const og = a.ctx.createGain(); og.gain.value = 0.5;
+    o.connect(lp).connect(og).connect(gain);
+    o.start(t); nodes.push(o);
+  }
+  const src = a.ctx.createBufferSource();   // air-handling noise bed
+  src.buffer = a.noiseBuffer; src.loop = true; src.playbackRate.value = 0.4;
+  const nlp = a.ctx.createBiquadFilter(); nlp.type = 'bandpass'; nlp.frequency.value = 340; nlp.Q.value = 0.5;
+  const ng = a.ctx.createGain(); ng.gain.value = 0.25;
+  src.connect(nlp).connect(ng).connect(gain);
+  src.start(t); nodes.push(src);
+  const el = a.ctx.createOscillator();   // a faint high electronics tone
+  el.type = 'sine'; el.frequency.value = 1180;
+  const eg = a.ctx.createGain(); eg.gain.value = 0.015;
+  el.connect(eg).connect(gain);
+  el.start(t); nodes.push(el);
+  _introLoops.set('cockpitHum', { nodes, gain });
+}
+export function stopCockpitHum(): void { _stopLoop('cockpitHum', 0.5); }
+
+/** Descent rush — the sustained wind/air-rush of the pod falling through the atmosphere (the
+ *  descent beat); filtered looping noise that swells as you fall faster. Stopped at impact. */
+export function startDescentRush(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('descentRush')) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(0.22, t + 3.0);   // swell as the fall accelerates
+  gain.connect(a.ambient);
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.loop = true; src.playbackRate.value = 0.7;
+  const lp = a.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.7;
+  src.connect(lp).connect(gain);
+  src.start(t);
+  _introLoops.set('descentRush', { nodes: [src], gain });
+}
+export function stopDescentRush(): void { _stopLoop('descentRush', 0.6); }
+
+/** Engine FIRE roar (T5.3 gap-fill) — the sustained crackling blaze at the corridor dead-end
+ *  once the engine bay erupts (setEngineFire). A low roaring bed (lowpassed looping noise) + a
+ *  brighter band-passed crackle layer flickering via a fast tremolo LFO on its own gain, so it
+ *  reads as an out-of-control fire, not flat noise. Feeds the ambient bus (a bed under the klaxon
+ *  + hull-groan one-shots). Loops until stopped on eject (stopEngineFire) / any intro teardown.
+ *  Idempotent. */
+export function startEngineFire(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('engineFire')) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(0.20, t + 0.5);   // the blaze catches fast
+  gain.connect(a.ambient);
+  const nodes: AudioScheduledSourceNode[] = [];
+  // ROAR bed — slow, heavy lowpassed noise (the body of the fire).
+  const roar = a.ctx.createBufferSource();
+  roar.buffer = a.noiseBuffer; roar.loop = true; roar.playbackRate.value = 0.32;
+  const rlp = a.ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 420; rlp.Q.value = 0.6;
+  const rg = a.ctx.createGain(); rg.gain.value = 0.75;
+  roar.connect(rlp).connect(rg).connect(gain);
+  roar.start(t); nodes.push(roar);
+  // CRACKLE layer — brighter band-passed noise, amplitude-flickered by a fast LFO so the fire
+  //   spits + snaps (the licking-flame read). The LFO modulates the crackle gain around a bias.
+  const crk = a.ctx.createBufferSource();
+  crk.buffer = a.noiseBuffer; crk.loop = true; crk.playbackRate.value = 0.9;
+  const cbp = a.ctx.createBiquadFilter(); cbp.type = 'bandpass'; cbp.frequency.value = 1500; cbp.Q.value = 0.9;
+  const cg = a.ctx.createGain(); cg.gain.value = 0.14;   // bias level (the LFO wobbles around it)
+  crk.connect(cbp).connect(cg).connect(gain);
+  crk.start(t); nodes.push(crk);
+  const lfo = a.ctx.createOscillator(); lfo.type = 'sawtooth'; lfo.frequency.value = 9;
+  const lg = a.ctx.createGain(); lg.gain.value = 0.10;   // crackle flicker depth
+  lfo.connect(lg).connect(cg.gain);
+  lfo.start(t); nodes.push(lfo);
+  _introLoops.set('engineFire', { nodes, gain });
+}
+export function stopEngineFire(): void { _stopLoop('engineFire', 0.5); }
+
+/** Desert WIND ambience (T5.3 gap-fill) — the held dawn-desert bed for the wake come-to + the
+ *  step-out vista reveal: a soft, breathy, slowly-undulating wind (band-passed looping noise with
+ *  a slow filter LFO so it swells + sighs like gusting air over dunes). Deliberately QUIET (E7
+ *  aftermath-silence) so it's a presence, not a sound effect. Feeds the ambient bus; loops until
+ *  the intro hands off. The real game's own wind/soundscape takes over after endEscapePodIntro
+ *  (stopAllIntroLoops stops this). Idempotent. */
+export function startDesertWind(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('desertWind')) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(0.09, t + 2.5);   // a slow, gentle fade-in (the quiet dawn)
+  gain.connect(a.ambient);
+  const nodes: AudioScheduledSourceNode[] = [];
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.loop = true; src.playbackRate.value = 0.5;
+  const bp = a.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 620; bp.Q.value = 0.7;
+  src.connect(bp).connect(gain);
+  src.start(t); nodes.push(src);
+  // a slow filter LFO — the wind gusts + sighs (the band centre drifts).
+  const lfo = a.ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.08;
+  const lg = a.ctx.createGain(); lg.gain.value = 260;
+  lfo.connect(lg).connect(bp.frequency);
+  lfo.start(t); nodes.push(lfo);
+  _introLoops.set('desertWind', { nodes, gain });
+}
+export function stopDesertWind(): void { _stopLoop('desertWind', 1.5); }
+
+// ── Music cues (Phase 5 T5.2) — procedural synthesized PADS (no samples), arcing the intro's
+//    emotion: a tense ESCAPE sting (disaster→eject) → a beautiful DESCENT swell (the calm fall)
+//    → a gentle DESERT easing (the dawn reveal). They feed the ambient bus + reuse the
+//    _introLoops lifecycle (stopAllIntroLoops cleans them on teardown). The user LISTENS to balance.
+interface PadOpts {
+  type: OscillatorType; cutoff: number; peak: number; attack: number;
+  voiceGain: number; detune?: number; lfo?: number; lfoDepth?: number;
+}
+function _startPad(name: string, freqs: number[], opts: PadOpts): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has(name)) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(opts.peak, t + opts.attack);   // swell in
+  gain.connect(a.ambient);
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = opts.cutoff; lp.Q.value = 0.6;
+  lp.connect(gain);
+  const nodes: AudioScheduledSourceNode[] = [];
+  for (const f of freqs) {
+    const o = a.ctx.createOscillator();
+    o.type = opts.type; o.frequency.value = f;
+    if (opts.detune) o.detune.value = (Math.random() * 2 - 1) * opts.detune;
+    const og = a.ctx.createGain(); og.gain.value = opts.voiceGain;
+    o.connect(og).connect(lp);
+    o.start(t); nodes.push(o);
+  }
+  if (opts.lfo) {   // a slow filter LFO for movement
+    const lfo = a.ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = opts.lfo;
+    const lg = a.ctx.createGain(); lg.gain.value = opts.lfoDepth ?? 200;
+    lfo.connect(lg).connect(lp.frequency);
+    lfo.start(t); nodes.push(lfo);
+  }
+  _introLoops.set(name, { nodes, gain });
+}
+
+/** ESCAPE sting — a tense low minor cluster with a dissonant tension note (disaster→eject). */
+export function startMusicEscape(): void {
+  _startPad('musicEscape', [110, 130.81, 155.56, 233.08], {   // A2, C3, Eb3 (dim), Bb3 — unease
+    type: 'sawtooth', cutoff: 900, peak: 0.10, attack: 0.8, voiceGain: 0.22, detune: 6,
+  });
+}
+export function stopMusicEscape(): void { _stopLoop('musicEscape', 1.0); }
+
+/** DESCENT swell — a warm, spacious, slowly-swelling open chord (the beautiful fall). */
+export function startMusicDescent(): void {
+  _startPad('musicDescent', [98, 146.83, 196, 246.94, 392], {   // G2, D3, G3, B3, G4 — open major
+    type: 'triangle', cutoff: 1600, peak: 0.13, attack: 4.0, voiceGain: 0.16, detune: 4, lfo: 0.05, lfoDepth: 500,
+  });
+}
+export function stopMusicDescent(): void { _stopLoop('musicDescent', 2.0); }
+
+/** DESERT easing — a soft, warm, resolving chord that fades itself out over a long tail so the
+ *  cue bridges gently into gameplay as the game takes over (the dawn calm). Self-managed (a
+ *  finite life, removed from the loop registry) so it isn't cut short by the intro teardown. */
+export function startMusicDesert(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('musicDesert')) return;
+  _startPad('musicDesert', [130.81, 196, 261.63, 392], {   // C3, G3, C4, G4 — open + warm
+    type: 'sine', cutoff: 1400, peak: 0.11, attack: 2.5, voiceGain: 0.18, detune: 3, lfo: 0.04, lfoDepth: 300,
+  });
+  const v = _introLoops.get('musicDesert');
+  if (!v) return;
+  const t = a.ctx.currentTime;
+  v.gain.gain.cancelScheduledValues(t);
+  v.gain.gain.setValueAtTime(0.0001, t);
+  v.gain.gain.linearRampToValueAtTime(0.11, t + 2.5);
+  v.gain.gain.setValueAtTime(0.11, t + 6.0);
+  v.gain.gain.exponentialRampToValueAtTime(0.0001, t + 11.0);   // a long, gentle resolve into gameplay
+  for (const n of v.nodes) { try { n.stop(t + 11.3); } catch { /* noop */ } }
+  _introLoops.delete('musicDesert');   // self-managed from here (finite) — not cut by stopAllIntroLoops
+}
+
 /** Set master volume, 0..1. Settings panel calls this. */
 export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;

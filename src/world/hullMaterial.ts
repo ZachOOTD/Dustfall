@@ -91,6 +91,20 @@ export interface RustedHullOptions {
   abrasionStrength?: number;
   /** Hex of the pale UV-chalk veil on top/upper faces. Default a pale cool ochre. */
   chalkHex?: number;
+  /** Sample the procedural weathering in OBJECT-LOCAL space instead of world space.
+   *  Default false (world-space — the correct default for STATIC wrecks, so adjacent
+   *  wrecks/panels sharing a world position line up their grime).
+   *
+   *  Set true for meshes whose parent group MOVES at runtime (the escape pod falls ~600m
+   *  during the descent). With world-space sampling the noise field is pinned to world
+   *  space, so as the mesh translates the pattern SLIDES across the surface — the "texture
+   *  crawling" bug. Local-space sampling pins the pattern to the surface so it rides with
+   *  the mesh, motionless relative to the hull. NOTE: only the position-based noise is
+   *  pinned; `vWorldNormalHull` stays WORLD-space (the slope masks — streaks run down, sun
+   *  bleach on top — must track true orientation; a static crash-pose re-orient of them is
+   *  correct + causes no crawl). At rest the look is identical (a one-time constant offset
+   *  of the noise field is invisible; the pattern statistics/scale are unchanged). */
+  localSpace?: boolean;
 }
 
 /**
@@ -120,6 +134,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
   const oxDeepStrength = opts.oxDeepStrength ?? 0;
   const seamRustStrength = opts.seamRustStrength ?? 0;
   const abrasionStrength = opts.abrasionStrength ?? 0;
+  const localSpace = opts.localSpace ?? false;
 
   const mat = new THREE.MeshLambertMaterial({
     color: baseColor,
@@ -167,11 +182,16 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         varying float vLocalYHull;
       `,
     );
+    // localSpace: for meshes on a MOVING parent (the escape pod falls ~600m during the
+    // descent), sample the noise from OBJECT-LOCAL position so the pattern is PINNED to the
+    // surface and rides with the pod (world-space sampling makes it CRAWL as the pod moves).
+    // The normal stays WORLD-space either way — the slope masks must track true orientation.
+    const posExpr = localSpace ? 'position' : '(modelMatrix * vec4(position, 1.0)).xyz';
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
       /* glsl */ `
         #include <begin_vertex>
-        vWorldPositionHull = (modelMatrix * vec4(position, 1.0)).xyz;
+        vWorldPositionHull = ${posExpr};
         // For meshes whose model matrix only translates+rotates (no
         // scale), mat3(modelMatrix) * normal is the correct world-
         // space normal. Wrecks DO get rotated (yaw/pitch/roll for the

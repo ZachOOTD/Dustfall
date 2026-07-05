@@ -1597,6 +1597,2938 @@ const SCENARIOS = {
     console.log(`[sarlacc-test] ${JSON.stringify({ before, after })}`);
   },
 
+  // Crashed-pod (T1.1) — the HERO escape-pod exterior at the desert wake spot.
+  // Reproduces the REAL stepOut placement (placeCrashedPodWreck at player+4,+4,
+  // half-buried + tilted; camera at the player's wake eye looking at the pod), NOT
+  // an isolated studio rig (the C60/C63 false-pass trap — visual-diagnostic-
+  // methodology.md D165). Angles: wake (player's-eye approach), hatch (close-up into
+  // the blown salvage face), oblique (3/4 of the whole silhouette), back (the modular
+  // panels). --time=<0..1> for the dawn/morning desert light. Front-lit.
+  // (the 'smoke-intro' health GATE lives further down — a single definition now.)
+
+  'crashed-pod': async (page) => {
+    const angle = argv.angle || 'wake';
+    const t = argv.time !== undefined ? Number(argv.time) : 0.32;   // dawn-ish, sun low + warm
+    const popchute = !!argv.popchute;   // T4.3 — fire the comic chute-pop + freeze on the fully-inflated frame
+    const r = await page.evaluate(({ ang, t, popchute }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      g.setTime(t);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      ctx.three.renderer.toneMappingExposure = 1.25;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(960, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 960 / 720; cam.updateProjectionMatrix(); }
+      // Place the pod at a clear anchor near the player (mirrors stepOut's +4,+4
+      // wake-beside read, offset further to clear the spawn-area fuselage wreck so
+      // the hero pod is the subject — the real stepOut spot still applies in-game).
+      const tr = ctx.player.body.body.translation();
+      const px = tr.x + 14, pz = tr.z - 12;
+      g.placeCrashedPod(px, pz);
+      // T4.3 — fire the comic chute-pop + advance it fully so the paused frame catches
+      //   the FULLY-inflated canopy draped over the pod (placeCrashedPod arms it).
+      if (popchute) g.popChute(3.0);
+      const gy = ctx.terrain.heightAt(px, pz);
+      const V = cam.position.constructor;
+      ctx.flags.paused = true;
+      // C11 — TALL VERTICAL CAPSULE: the visible standing pod runs ~gy → gy+1.9
+      // (hatch centred ~gy+0.65, porthole ~gy+1.25). Aim at the mid-body so the
+      // whole standing silhouette frames; cameras pulled back + raised vs the old
+      // wide box. Still reproduces the real half-buried wake placement.
+      const aimY = gy + 0.95;
+      if (ang === 'wake') {
+        // Player's-eye: standing ~4.5m away, eye height, biased to the +X side so
+        // the +Z hatch/porthole face AND the +X riveted flank both read at ~45°
+        // (a round 3D volume, not a flat-on slab). The real wake-beside read.
+        cam.position.set(px + 4.0, gy + 1.7, pz + 2.6);
+        cam.lookAt(px - 0.1, aimY, pz);
+      } else if (ang === 'hatch') {
+        // Close-up squarely onto the blown-open hatch (the salvage face). The hatch
+        // is on the capsule's LOCAL +Z face; the pod is yawed ~0.55, so the hatch
+        // world-normal is (sin0.55, 0, cos0.55). Frame dead-on along that normal.
+        const hy = 0.55, hnx = Math.sin(hy), hnz = Math.cos(hy);
+        const hd2 = 3.0;
+        cam.position.set(px + hnx * hd2, gy + 1.2, pz + hnz * hd2);
+        cam.lookAt(px + hnx * 0.3, gy + 0.8, pz + hnz * 0.3);
+      } else if (ang === 'oblique') {
+        // 3/4 of the WHOLE standing silhouette from a higher, further vantage so
+        // the nose dome + base both frame.
+        cam.position.set(px + 4.6, gy + 2.6, pz + 4.0);
+        cam.lookAt(px, aimY + 0.1, pz);
+      } else if (ang === 'back') {
+        // The riveted flank away from the hatch — verifies the strippable panels.
+        cam.position.set(px - 4.0, gy + 1.9, pz - 3.4);
+        cam.lookAt(px, aimY, pz);
+      } else if (ang === 'iso') {
+        // DIAGNOSTIC studio: lift the whole capsule ABOVE the sand (un-bury) so the
+        // FULL standing form is judgeable in isolation (additional shot, never the
+        // verdict — the buried wake read is the gate). Re-pose upright, clean 3/4.
+        const pod2 = ctx.three.scene.getObjectByName('crashedPod');
+        if (pod2) { pod2.position.y = gy + 0.1; pod2.rotation.set(0, 0.55, 0); pod2.updateMatrixWorld(true); }
+        cam.position.set(px + 3.6, gy + 1.9, pz + 4.0);
+        cam.lookAt(px, gy + 1.2, pz);
+      } else { // close — tight detail of the upper hull (porthole / rivets / nose)
+        cam.position.set(px + 2.8, gy + 2.0, pz + 2.8);
+        cam.lookAt(px, gy + 1.3, pz);
+      }
+      cam.updateMatrixWorld(true);
+      // Front KEY light from above + beside the camera so the camera-facing hull is
+      // LIT (not a backlit silhouette — the harness front-light prerequisite).
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      let key = ctx.three.scene.getObjectByName('__podKey');
+      if (!key && DirCtor) { key = new DirCtor(); key.name = '__podKey'; key.intensity = 1.8; key.color.set(0xffe9cf); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (key) {
+        const toP = new V(px - cam.position.x, 0, pz - cam.position.z);
+        key.position.set(cam.position.x + toP.x * 0.2 + 2, cam.position.y + 3, cam.position.z + toP.z * 0.2 + 1);
+        key.target.position.set(px, aimY, pz); key.target.updateMatrixWorld(true);
+      }
+      if (!ctx.three.scene.getObjectByName('__podFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.5); fill.name = '__podFill'; ctx.three.scene.add(fill); }
+      // Report: the pod's exposed height above the sand + structural mesh count.
+      const pod = ctx.three.scene.getObjectByName('crashedPod');
+      let meshes = 0, maxY = -1e9, minY = 1e9;
+      if (pod) { pod.updateMatrixWorld(true); pod.traverse((o) => { if (o.isMesh && o.geometry) { meshes++; o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; for (const cy of [bb.min.y, bb.max.y]) { const wv = new V(0, cy, 0); o.localToWorld(wv); maxY = Math.max(maxY, wv.y); minY = Math.min(minY, wv.y); } } }); }
+      return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, found: !!pod };
+    }, { ang: angle, t, popchute });
+    await page.waitForTimeout(350);
+    const tag = popchute ? `${angle}-chute` : angle;
+    await page.screenshot({ path: join(OUT, `scen-crashed-pod-${tag}.png`), fullPage: false });
+    console.log(`[crashed-pod] ${JSON.stringify(r)}`);
+  },
+
+  // Pod-interior (T1.2): the REAL seated first-person view inside the HERO escape-pod
+  // cabin. Drives the game's OWN intro path (startIntro → jumpToBeat) so the camera +
+  // seat are EXACTLY what the player sees through enterPod/descent/parachute — NOT an
+  // idealized studio rig. --angle: forward (viewport ahead), lever (look right at the
+  // parachute lever + console), eject (look left at the eject control), wide (head-
+  // turned 3/4 of the cabin), descent (forward with the planet swelled). --pull=<0..1>
+  // poses the parachute lever; --snap droops it (the gag's broken state).
+  'pod-interior': async (page) => {
+    const angle = argv.angle || 'forward';
+    const beat = argv.beat || (angle === 'descent' ? 'descent' : 'enterPod');
+    const pull = argv.pull !== undefined ? Number(argv.pull) : 0;
+    const snap = !!argv.snap;
+    // --descent=<0..1> drives the vista swell/atmosphere ramp so the planet can be shot
+    // at several altitudes (high 0.0 → low 0.9). Overrides the beat's own 0.7 default.
+    const descent = argv.descent !== undefined ? Number(argv.descent) : null;
+    const r = await page.evaluate(({ angle, beat, pull, snap, descent }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      // First-person (the seated read); hide the rig so it doesn't block the FP camera.
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // Drive the real intro: start it (force), jump to the requested beat so the beat
+      // controller builds the pod + seats the player facing −Z (the genuine FP frame).
+      g.startIntro();
+      g.jumpToBeat(beat);
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+      if (descent !== null) { try { g.setDescentProgress(descent); } catch {} }
+      else if (angle === 'descent' || beat === 'descent') { try { g.setDescentProgress(0.7); } catch {} }
+      if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
+      return { beat, angle };
+    }, { angle, beat, pull, snap, descent });
+    // Let the beat controller tick (it runs in the page's RAF loop) so the pod builds +
+    // the player is seated, THEN pose the camera for the chosen look. We re-seat from the
+    // real spawn + aim the head — mirroring the seated FP look directions.
+    await page.waitForTimeout(600);
+    const meas = await page.evaluate(({ angle, pull, snap, descent }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      if (descent !== null) { try { g.setDescentProgress(descent); } catch {} }
+      if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
+      // R1b — mirror tickDescent's fog thinning so the rig sees the SAME real-world descent
+      // view the player gets (the game's survival fog otherwise hazes the ground from altitude).
+      if (descent !== null) {
+        const fog = ctx.three.scene.fog;
+        // W6 item 5 — mirror the descent fog: thin high (the clear vista), blending to survival as
+        //   the pod drops below ~150 m (altitude = 600·(1−p^1.7)). Faithful to blendDescentFog.
+        if (fog && 'density' in fog) {
+          const alt = 600 * (1 - Math.pow(descent, 1.7));
+          const kRaw = Math.max(0, Math.min(1, 1 - alt / 150));
+          const k = kRaw * kRaw * (3 - 2 * kRaw);
+          const survival = 0.0018;   // FOG_DENSITY_CLEAR (the game's survival target at ground level)
+          fog.density = 0.00006 + (survival - 0.00006) * k;
+        }
+        // Mirror tickDescent's SKY blend: space (1) high → desert (0) as the pod drops. Without this
+        // the rig's descent shows the normal daytime sky (a tan fog wall), not the orbit vista.
+        // W6 item 3 — drive the planet APPROACH with the NEW two-phase curve (slow far, faster near)
+        //   via the exported planetApproachCurve, so the rig shows the reworked approach faithfully.
+        try { g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (descent - 0.14) / 0.34))); } catch {}
+        try { g.setPlanetApproach(g.planetApproachCurve(descent)); } catch {}
+      }
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // R1b — the pod now PHYSICALLY descends (setDescentProgress moves the pod GROUP + the
+      // collider cage to the current altitude). setDescentProgress(descent) above moved the
+      // pod, but NOT the player body, so derive the seated EYE from the POD GROUP world origin
+      // (floor-top centre) — the genuine seated FP eye relative to the descending capsule. The
+      // seat math mirrors getPodSpawn: origin + (halfHeight+radius) for the body centre, +0.35
+      // aft, + the seated eyeOffset for the eye. Falls back to the body if the pod isn't found.
+      const pod0 = ctx.three.scene.getObjectByName('escapePodCabin');
+      let eye;
+      if (pod0) {
+        pod0.updateMatrixWorld(true);
+        const o = pod0.getWorldPosition(new V());
+        const pb = ctx.player.body;
+        const bodyY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3);
+        eye = new V(o.x, bodyY + (ctx.player.eyeOffset || 0.5), o.z + 0.35);
+        // Re-seat the actual body too (so any live tick agrees + nothing snaps it back).
+        pb.body.setTranslation({ x: o.x, y: bodyY, z: o.z + 0.35 }, true);
+      } else {
+        const tr = ctx.player.body.body.translation();
+        eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.6), tr.z);
+      }
+      cam.position.copy(eye);
+      // Look directions in the pod-local frame: −Z is forward (viewport), +X is right
+      // (the parachute lever / console), −X is left (the eject control).
+      let look;
+      if (angle === 'forward') look = new V(eye.x, eye.y - 0.08, eye.z - 1);
+      // R1b — the DESCENT look pitch tracks altitude (matches tickDescent): SHALLOW high (the
+      // horizon + far dunes read) → STEEP low (the desert rushes up). pitch = -0.12 - 0.28·p².
+      else if (angle === 'descent') {
+        const dp = descent !== null ? descent : 0.7;
+        const pitch = -0.12 - 0.28 * (dp * dp);
+        look = new V(eye.x, eye.y + Math.tan(pitch), eye.z - 1);
+      }
+      else if (angle === 'down') look = new V(eye.x, eye.y - 1.0, eye.z - 0.45);   // R1b probe — look DOWN-and-out the porthole at the approaching ground
+      else if (angle === 'lever') look = new V(eye.x + 1, eye.y - 0.25, eye.z - 0.55);
+      else if (angle === 'eject') look = new V(eye.x - 0.9, eye.y - 0.25, eye.z - 0.8);
+      else if (angle === 'wide') look = new V(eye.x + 0.7, eye.y - 0.1, eye.z - 0.7);
+      else if (angle === 'floor') look = new V(eye.x, eye.y - 1.0, eye.z - 0.6);   // look DOWN at the deck/footwell
+      else look = new V(eye.x, eye.y - 0.08, eye.z - 1);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      // Report: is the cabin built? mesh count? eye world pos? pod altitude above the spawn?
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let meshes = 0;
+      if (pod) pod.traverse((o) => { if (o.isMesh) meshes++; });
+      const rp = ctx.intro && ctx.intro.returnPos ? ctx.intro.returnPos : null;
+      const podY = pod ? +pod.getWorldPosition(new V()).y.toFixed(1) : null;
+      const altAboveSpawn = (pod && rp) ? +(pod.getWorldPosition(new V()).y - rp.y).toFixed(1) : null;
+      return {
+        found: !!pod, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)],
+        podY, altAboveSpawn, spawn: rp ? [+rp.x.toFixed(1), +rp.y.toFixed(1), +rp.z.toFixed(1)] : null,
+      };
+    }, { angle, pull, snap, descent });
+    // RE-ANCHOR the camera-relative space planet + star field + sky dome to the posed camera, and
+    // apply the space-mode fog/background darkening — all of which updateSky does per-frame but we
+    // paused before it could run at the pod's high-altitude camera. Without this the porthole shows
+    // the stale desert-fog/background TAN (the same bug the cockpit had), not the real orbit vista.
+    await page.evaluate((descent) => {
+      const ctx = window.__game.ctx;
+      const cam = ctx.three.camera; cam.updateMatrixWorld(true);
+      const V = cam.position.constructor;
+      const s = (ctx.three.scene);
+      if (descent === null) return;
+      // The space blend for this altitude (mirrors tickDescent): full space high → dawn desert low.
+      // C3 — MATCH tickDescent's (descent−0.14)/0.34 curve so the rig's blend is faithful.
+      const space01 = 1 - Math.min(1, Math.max(0, (descent - 0.14) / 0.34));
+      // W6 item 3 — the planet-approach factor at this altitude via the NEW two-phase curve (slow
+      //   far, faster near), so the paused rig mirrors the reworked approach.
+      const approach = window.__game.planetApproachCurve(descent);
+      if (space01 <= 0.01) return;   // low in the fall the sky has crossed to the dawn desert — leave it
+      let dome = null, stars = null, planetGroup = null;
+      s.traverse((o) => {
+        if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) dome = o;
+        if (o.isPoints && o.renderOrder === -0.5) stars = o;
+        if (o.isMesh && o.renderOrder === -0.4 && o.parent) planetGroup = o.parent;
+      });
+      // Manually APPLY the space-mode uniforms + anchor (applySpaceMode runs in updateSky, which is
+      // gated by the pause — so at a paused descent frame the dome is still the daytime sky). Set the
+      // dome black + kill clouds + lift stars, matching applySpaceMode, scaled by space01.
+      if (dome) {
+        const u = dome.material.uniforms; const C = u.uTopColor.value.constructor;
+        u.uTopColor.value.lerp(new C(0x01020a), space01);
+        u.uHorizonColor.value.lerp(new C(0x03050f), space01);
+        if (u.uSpace) u.uSpace.value = space01;
+        if (u.uCloudiness) u.uCloudiness.value *= (1 - space01);
+        if (u.uSunGlow) u.uSunGlow.value *= (1 - space01 * 0.9);
+        dome.position.copy(cam.position); dome.updateMatrixWorld(true);
+      }
+      if (stars) {
+        const u = stars.material.uniforms;
+        if (u.uOpacity) u.uOpacity.value = Math.max(u.uOpacity.value, space01);
+        if (u.uBrightness) u.uBrightness.value = 3.0 * space01 + u.uBrightness.value * (1 - space01);
+        if (u.uSpace) u.uSpace.value = space01;
+        stars.position.copy(cam.position); stars.updateMatrixWorld(true);
+      }
+      const dir = new V(0.30, 0.10, -1).normalize();
+      const DIST = 400;
+      if (planetGroup) {
+        // C3 — mirror applySpaceMode's APPROACH: scale the group up + slide it DOWN as the planet
+        //   approaches (ease-in), so the paused rig shows the SAME swelling planet the live descent
+        //   produces (the planet fills the porthole across d0→d0.2). Match sky.ts constants.
+        const ae = approach * approach;
+        const scale = 1 + (3.6 - 1) * ae;      // _PLANET_APPROACH_MAX_SCALE = 3.6
+        const drop = 150 * ae;                  // _PLANET_APPROACH_DROP = 150
+        planetGroup.scale.setScalar(scale);
+        planetGroup.position.set(cam.position.x + dir.x*DIST, cam.position.y + dir.y*DIST - drop, cam.position.z + dir.z*DIST);
+        planetGroup.updateMatrixWorld(true);
+        planetGroup.traverse((o) => { if (o.material && o.material.uniforms && o.material.uniforms.uOpacity) o.material.uniforms.uOpacity.value = space01; });
+      }
+      // darken the background + thin/space-tint the fog (mirrors applySpaceMode) so no tan shows.
+      const bg = s.background;
+      if (bg && bg.isColor) { const C = bg.constructor; bg.lerp(new C(0x01020a), space01); }
+      const fog = s.fog;
+      if (fog && fog.density !== undefined) { fog.density = fog.density * (1 - space01) + 0.00002 * space01; if (fog.color) { const C = fog.color.constructor; fog.color.lerp(new C(0x03050f), space01); } }
+      // Full-intro coherence fix mirror: dim the WORLD sun + ambient by the orbit blend so the
+      // paused rig shows the SAME vacuum-lit cabin the in-game applySpaceMode now produces (the
+      // desert noon light no longer floods the pod cabin to pale white). See sky.ts applySpaceMode.
+      if (ctx.lights) {
+        ctx.lights.sun.intensity *= (1 - space01 * 0.88);
+        ctx.lights.ambient.intensity *= (1 - space01 * 0.94);
+      }
+    }, descent);
+    await page.waitForTimeout(300);
+    const perfPi = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; const pod = ctx.three.scene.getObjectByName('escapePodCabin'); let pm = 0; if (pod) pod.traverse((o) => { if (o.isMesh) pm++; }); return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1, podMeshes: pm }; });
+    console.log('[pod-interior-perf] ' + JSON.stringify(perfPi));
+    const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
+    const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
+    console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // W6 item 6 — THE SEALED CABIN DOOR must sit FLUSH (not slanted) at every sealed stage. Probes the
+  //   cabin hatch pivot's rotation (x,y,z) at descent (sealed), impact (sealed, crashed), and reports
+  //   whether any residual tilt exists; then shoots a TRUE head-on porthole-centred frame at descent
+  //   so the door slab edges vs the frame can be eyeballed. A non-zero pivot.x/z (or y≠0 when sealed)
+  //   = the slant. --descent=<0..1> picks the sealed descent altitude to shoot (default 0.02).
+  'door-check': async (page) => {
+    const descent = argv.descent !== undefined ? Number(argv.descent) : 0.02;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      g.startIntro();
+      g.jumpToBeat('descent');   // the descent init tick (next RAF) builds + seats the pod
+    });
+    await page.waitForTimeout(700);   // let the descent init tick build the pod (like pod-interior)
+    const probe = await page.evaluate((descent) => {
+      const g = window.__game;
+      try { g.setDescentProgress(descent); } catch {}
+      const atDescent = g.probeCabinDoor();
+      // IMPACT (sealed, crashed) — the crash pose tilts the GROUP; the door pivot LOCAL should stay 0.
+      try { g.setDescentProgress(1); g.setCabinCrashPose(1); } catch {}
+      const atImpact = g.probeCabinDoor();
+      // back to the sealed descent pose for the head-on shot
+      try { g.setCabinCrashPose(0); g.setDescentProgress(descent); } catch {}
+      return { atDescent, atImpact };
+    }, descent);
+    console.log('[door-check] pivot ' + JSON.stringify(probe));
+    // head-on shot: camera at the porthole centre height, dead −Z, close.
+    await page.waitForTimeout(300);
+    await page.evaluate((descent) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = true;
+      try { window.__game.setDescentProgress(descent); } catch {}
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      pod.updateMatrixWorld(true);
+      const o = pod.getWorldPosition(new V());
+      // VP_CY = 1.34 (porthole centre height above the floor origin); CAB_R front wall at z = o.z − 1.28.
+      cam.position.set(o.x, o.y + 1.34, o.z + 0.9);
+      cam.lookAt(o.x, o.y + 1.34, o.z - 1.28);
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.setSize(900, 900, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+    }, descent);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, 'scen-door-check.png'), fullPage: false, animations: 'disabled', timeout: 60000 });
+    console.log('[door-check] → scen-door-check.png');
+  },
+
+  // Hauler (T3.1): the HERO cargo-hauler exterior seen THROUGH the pod porthole at the
+  // shipExplode beat — the worn freighter the player just fled, floating in orbit ahead
+  // (−Z) about to explode. Builds the pod cabin (so the porthole frames the shot) + the
+  // hauler exterior, seats the camera at the seated EYE facing −Z (the real FP-through-
+  // porthole view), then shoots that + a couple of framing angles. --angle:
+  //   porthole  the FP-through-the-window view (the GATE — the seated eye, −Z)         [default]
+  //   wide      a framing angle: the whole hauler in free space (no pod), 3/4
+  //   broadside the hauler dead-on broadside (silhouette legibility)
+  //   engines   a closer 3/4 on the rear engine cluster (the explosion feature)
+  //   nose      a closer 3/4 on the cockpit/bridge
+  'hauler': async (page) => {
+    const angle = argv.angle || 'porthole';
+    // C1 — --depart=<0..1> drives the post-eject DEPARTURE recession (0 = the framed hero pose,
+    //   1 = the ship receded/drifted away as the pod pulls clear). For the eject-departure shots.
+    const depart = argv.depart !== undefined ? Number(argv.depart) : null;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // Build the real pod cabin (porthole frame) via the intro path, then the hauler.
+      g.startIntro();
+      // enterPod builds the pod cabin + seats the player at the porthole eye (the proven
+      // pod-interior path); shipExplode's scripted camera doesn't seat in the pod.
+      g.jumpToBeat('enterPod');
+      // Reset the descent vista to deep ORBIT (0) so the porthole shows SPACE (the
+      // shipExplode beat sits in orbit) — not the low-altitude desert that swells in
+      // later. The hauler then reads through the window against the star void.
+      try { g.setDescentProgress(0); } catch {}
+      g.buildHauler();
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+    });
+    // Let the beat controller tick so the pod builds + the player is seated.
+    await page.waitForTimeout(600);
+    const meas = await page.evaluate(({ angle, depart }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      try { g.setDescentProgress(0); } catch {}
+      // C1 — pose the eject-departure recession (the ship receding in the porthole).
+      if (depart !== null) { try { g.setHaulerDeparture(depart); } catch {} }
+      // Hide the descent VISTA (orbital planet + atmosphere + its own starfield + the
+      // depth-occluder) so the porthole shows the HAULER against ITS star backdrop. The
+      // vista meshes use ShaderMaterials or the starOccluder flag; the cabin structure
+      // uses Lambert/rusted-hull mats. Done HERE (after the pod has built on a tick).
+      const cabin0 = ctx.three.scene.getObjectByName('escapePodCabin');
+      if (cabin0) cabin0.traverse((o) => {
+        if (!o.isMesh) return;
+        const m = o.material;
+        if ((m && m.isShaderMaterial) || (o.userData && o.userData.starOccluder)) o.visible = false;
+      });
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // Locate the hauler centre (world) so the framing angles can orbit it.
+      const hauler = ctx.three.scene.getObjectByName('escapePodHauler');
+      let hc = null;
+      if (hauler) { hauler.updateMatrixWorld(true); hc = new V(); hauler.getWorldPosition(hc); }
+      if (angle === 'porthole') {
+        // THE GATE: the seated EYE world position, looking straight out −Z (the porthole).
+        const tr = ctx.player.body.body.translation();
+        const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.6), tr.z);
+        cam.position.copy(eye);
+        cam.lookAt(eye.x, eye.y - 0.05, eye.z - 1);
+      } else if (hc) {
+        // Free-space framing angles (the studio diagnostic — additional, not the verdict).
+        // Hide the pod cabin so it doesn't block the external read.
+        const cabin = ctx.three.scene.getObjectByName('escapePodCabin');
+        if (cabin) cabin.visible = false;
+        // The ship's local axes in WORLD space (so framing angles track the yaw).
+        const Q = cam.quaternion.constructor;
+        const hq = hauler.getWorldQuaternion(new Q());
+        const axX = new V(1, 0, 0).applyQuaternion(hq);   // ship NOSE direction (local +X)
+        const axZ = new V(0, 0, 1).applyQuaternion(hq);   // ship broadside flank (local +Z)
+        if (angle === 'broadside') {
+          cam.position.set(hc.x, hc.y + 1.0, hc.z + 15);
+          cam.lookAt(hc.x, hc.y, hc.z);
+        } else if (angle === 'engines') {
+          // off the TAIL (−X) end + the camera-side flank → the flared nozzles read.
+          const e = new V(hc.x - axX.x * 9 + axZ.x * 6, hc.y + 2.5, hc.z - axX.z * 9 + axZ.z * 6);
+          cam.position.copy(e);
+          cam.lookAt(hc.x - axX.x * 6, hc.y, hc.z - axX.z * 6);
+        } else if (angle === 'nose') {
+          // off the NOSE (+X) end + the camera-side flank → the cockpit/windscreen reads.
+          const n = new V(hc.x + axX.x * 9 + axZ.x * 6, hc.y + 2, hc.z + axX.z * 9 + axZ.z * 6);
+          cam.position.copy(n);
+          cam.lookAt(hc.x + axX.x * 6, hc.y + 0.5, hc.z + axX.z * 6);
+        } else { // wide 3/4
+          cam.position.set(hc.x + 11, hc.y + 5, hc.z + 15);
+          cam.lookAt(hc.x, hc.y, hc.z);
+        }
+      }
+      cam.updateMatrixWorld(true);
+      let meshes = 0;
+      if (hauler) hauler.traverse((o) => { if (o.isMesh) meshes++; });
+      // DIAGNOSTIC: where is the camera, where is the hauler, what's the descent state?
+      const cabin = ctx.three.scene.getObjectByName('escapePodCabin');
+      let lowAltVis = null, planetVis = null;
+      if (cabin) cabin.traverse((o) => {
+        if (o.material && o.material.uniforms && o.material.uniforms.uLowAlt) lowAltVis = { vis: o.visible, lowAlt: o.material.uniforms.uLowAlt.value };
+      });
+      console.error('[hauler-diag] camPos=' + [cam.position.x, cam.position.y, cam.position.z].map((v) => +v.toFixed(1)).join(',') +
+        ' haulerPos=' + (hc ? [hc.x, hc.y, hc.z].map((v) => +v.toFixed(1)).join(',') : 'null') +
+        ' cabin=' + !!cabin + ' lowAlt=' + JSON.stringify(lowAltVis));
+      return { found: !!hauler, meshes, angle };
+    }, { angle, depart });
+    await page.waitForTimeout(300);
+    const deptag = depart !== null ? `-depart${String(depart).replace('.', '')}` : '';
+    await page.screenshot({ path: join(OUT, `scen-hauler-${angle}${deptag}.png`), fullPage: false });
+    console.log(`[hauler] ${JSON.stringify(meas)} → scen-hauler-${angle}${deptag}.png`);
+  },
+
+  // Ship-explode (T3.2): THE CLIMACTIC SPECTACLE — the player watches their hauler DIE
+  // through the porthole. Builds the pod cabin (porthole frame) + the hauler, drives the
+  // explosion FX to a chosen moment (--t=<0..1> into the blast; default 0.22 = mid-fireball),
+  // and shoots the REAL seated FP-through-the-window view (−Z). --view=free renders a free
+  // 3/4 angle on the exploding ship instead (the studio diagnostic). --strip captures a
+  // sequence of moments (0.03 flash → 0.15 fireball → 0.35 breakup → 0.7 husk) in one boot.
+  'ship-explode': async (page) => {
+    const view = argv.view || 'porthole';
+    const t = argv.t !== undefined ? Number(argv.t) : 0.22;
+    const strip = !!argv.strip;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // Build the real pod cabin at the ORBIT frame + seat the player at the porthole eye,
+      // then the hauler. (buildPodOrbit builds+seats deterministically — the enterPod beat
+      // stalls in its walk-up phase in a headless boot, never sealing the cabin.)
+      g.startIntro();
+      g.jumpToBeat('shipExplode');   // the real beat context (mode seated, faces −Z)
+      g.buildPodOrbit();             // build + seat the pod cabin at orbit (porthole eye)
+      try { g.setDescentProgress(0); } catch {}   // orbital vista through the window
+      g.buildHauler();
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+    });
+    await page.waitForTimeout(600);   // let the pod cabin build + seat on a tick
+    // Frame + drive-explosion + shoot. `moments` is a list of (tag, explosionT) — one for a
+    // single shot, or the strip preset.
+    const moments = strip
+      ? [['f00-flash', 0.03], ['f01-bloom', 0.13], ['f02-fireball', 0.24], ['f03-breakup', 0.42], ['f04-husk', 0.72]]
+      : [[`t${String(t).replace('.', '')}`, t]];
+    for (const [tag, et] of moments) {
+      const meas = await page.evaluate(({ view, et }) => {
+        const g = window.__game;
+        const ctx = g.ctx;
+        ctx.flags.paused = true;
+        try { g.setDescentProgress(0); } catch {}
+        try { g.setHaulerExplosion(et); } catch {}
+        const cam = ctx.three.camera;
+        const V = cam.position.constructor;
+        // Hide any cabin ShaderMaterial meshes (the re-entry plasma/shimmer — invisible at
+        // descent=0 anyway) so nothing layers over the porthole read (matches the hauler scenario).
+        const cabin = ctx.three.scene.getObjectByName('escapePodCabin');
+        if (cabin) cabin.traverse((o) => {
+          if (!o.isMesh) return;
+          const m = o.material;
+          if ((m && m.isShaderMaterial) || (o.userData && o.userData.starOccluder)) o.visible = false;
+        });
+        // Full-intro coherence fix mirror: this beat sits in full orbit (descent=0, space01=1) —
+        // dim the world sun+ambient so the paused rig shows the vacuum-lit cabin (not the pale
+        // noon-flooded one). Matches sky.ts applySpaceMode (sun ×0.12, ambient ×0.06 at s=1).
+        // X2a gate post-mortem: the old one-shot `*=` compounded across strip re-evaluates AND
+        // could be re-derived back to noon by a live lighting tick before the capture (the false
+        // PALE frame). Idempotent SET from a stashed base; re-applied again just before capture.
+        if (ctx.lights) {
+          if (window.__rigSpaceBase === undefined) window.__rigSpaceBase = { sun: ctx.lights.sun.intensity, amb: ctx.lights.ambient.intensity };
+          ctx.lights.sun.intensity = window.__rigSpaceBase.sun * 0.12;
+          ctx.lights.ambient.intensity = window.__rigSpaceBase.amb * 0.06;
+        }
+        const hauler = ctx.three.scene.getObjectByName('escapePodHauler');
+        let hc = null;
+        if (hauler) { hauler.updateMatrixWorld(true); hc = new V(); hauler.getWorldPosition(hc); }
+        if (view === 'porthole') {
+          // THE GATE: the seated EYE world pos (derived from the cabin group), looking −Z.
+          let eye;
+          const pod0 = ctx.three.scene.getObjectByName('escapePodCabin');
+          if (pod0) {
+            pod0.updateMatrixWorld(true);
+            const o = pod0.getWorldPosition(new V());
+            const pb = ctx.player.body;
+            const bodyY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3);
+            eye = new V(o.x, bodyY + (ctx.player.eyeOffset || 0.5), o.z + 0.35);
+          } else {
+            const tr = ctx.player.body.body.translation();
+            eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
+          }
+          cam.position.copy(eye);
+          cam.lookAt(eye.x, eye.y - 0.05, eye.z - 1);
+        } else if (hc) {
+          // FREE 3/4 on the exploding ship (studio diagnostic — hide the cabin).
+          if (cabin) cabin.visible = false;
+          cam.position.set(hc.x + 12, hc.y + 6, hc.z + 17);
+          cam.lookAt(hc.x, hc.y, hc.z);
+        }
+        cam.updateMatrixWorld(true);
+        return { view, et, hauler: !!hauler };
+      }, { view, et });
+      await page.waitForTimeout(250);
+      // Re-assert the vacuum dim AFTER the settle wait — a live lighting tick during the wait
+      // re-derives noon sun/ambient and produced the false PALE cabin frame (X2a flag).
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        if (ctx.lights && window.__rigSpaceBase !== undefined) {
+          ctx.lights.sun.intensity = window.__rigSpaceBase.sun * 0.12;
+          ctx.lights.ambient.intensity = window.__rigSpaceBase.amb * 0.06;
+        }
+      });
+      const fname = strip ? `scen-ship-explode-${tag}.png` : `scen-ship-explode-${view}-${tag}.png`;
+      await page.screenshot({ path: join(OUT, fname), fullPage: false });
+      console.log(`[ship-explode] ${JSON.stringify(meas)} → ${fname}`);
+    }
+  },
+
+  // W1 COLLIDER ENUM (item 7 diagnosis) — list every collider whose AABB sits in the cockpit box,
+  //   flagging those AFT of the seat (z_local > 0) that could box the player in. No shot.
+  'cockpit-colliders': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const realClock = ctx.three.clock; realClock.getDelta = () => 0.05;
+      ctx.three.renderer.setSize(48, 48, false);
+      try { g.skipIntro(); } catch {}
+      for (let i = 0; i < 40; i++) { await sleep(16); if (!ctx.intro || !ctx.intro.active) break; }
+      g.startIntro();
+      for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); for (let i = 0; i < 30; i++) { await sleep(16); if (ctx.player.body.body.translation().y > 2900) break; } if (ctx.player.body.body.translation().y > 2900) break; }
+      const sp = ctx.player.body.body.translation();
+      const ORIGIN = { x: sp.x, y: sp.y - (ctx.player.body.halfHeight + ctx.player.body.radius) - 0.85, z: sp.z + 0.30 };  // approx ship origin (seat z_local=-0.30)
+      const world = ctx.physics.world;
+      const hits = [];
+      world.forEachCollider((col) => {
+        const t = col.translation();
+        // local to ship origin
+        const lx = t.x - sp.x, ly = t.y, lz = t.z - (sp.z + 0.30);
+        // only near the cockpit (|lx|<4, |lz|<4, world y near ship origin ~3000)
+        if (Math.abs(lx) < 4 && Math.abs(lz) < 4 && ty(t.y)) {
+          let half = null;
+          try { const s = col.halfExtents ? col.halfExtents() : null; if (s) half = [ +s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2) ]; } catch {}
+          hits.push({ lx: +lx.toFixed(2), lz: +lz.toFixed(2), wy: +t.y.toFixed(1), half, aftOfSeat: lz > -0.15 && Math.abs(lx) < 0.9 });
+        }
+        function ty(y) { return y > 2990 && y < 3010; }
+      });
+      const aft = hits.filter((h) => h.aftOfSeat);
+      return { total: hits.length, aftOfSeat: aft, all: hits };
+    });
+    console.log('[cockpit-colliders] total=' + out.total + ' aftOfSeat=' + out.aftOfSeat.length);
+    for (const h of out.aftOfSeat) console.log('[cockpit-colliders][AFT] ' + JSON.stringify(h));
+    for (const h of out.all) console.log('[cockpit-colliders] ' + JSON.stringify(h));
+  },
+
+  // W1 COCKPIT MOTION PROBE (item 7 — "remove the chair collider + the invisible collider behind
+  //   the chair; I want to walk the cockpit freely"). The B1.f real-KCC motion proof: seat the
+  //   player at getShipSpawn, then drive REAL WASD in each direction (aft / left / right / fwd) and
+  //   report the max body displacement. A FREE cockpit = large Δ aft + strafe (no wall boxing the
+  //   seat). No screenshot — a motion assertion (like pod-walkin). Pins a FIXED dt so it's
+  //   throttle-proof under the ~1 fps headless tab.
+  'cockpit-motion': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const realClock = ctx.three.clock; const FIXED_DT = 0.05;
+      realClock.getDelta = () => FIXED_DT;
+      ctx.three.renderer.setSize(48, 48, false);
+      const drive = async (simBudget, perTick) => {
+        const s0 = ctx.time.elapsed; let last = s0, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - s0 >= simBudget) break;
+        }
+      };
+      try { g.skipIntro(); } catch {}
+      await drive(0.2);
+      g.startIntro();
+      for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); await drive(0.3); if (ctx.player.body.body.translation().y > 2900) break; }
+      try { g.setSkyIntroMode(0); } catch {}
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;   // isPlaying() → real KCC motion processed
+      const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+      const clearKeys = () => { for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) ctx.input.keys[k] = false; };
+      const origin = () => ctx.player.body.body.translation();
+      // capture the SEAT as the seated spawn position (the body is at getShipSpawn right after the jump)
+      const s0 = origin(); const SEAT = { x: s0.x, y: s0.y, z: s0.z };
+      const reseat = () => ctx.player.body.body.setTranslation({ x: SEAT.x, y: SEAT.y, z: SEAT.z }, true);
+      const runLeg = async (label, yaw, key) => {
+        clearKeys(); reseat();
+        // force WALK mode + standing eye (the cockpit opening is SEATED by design → locomotion off;
+        //   "walk the cockpit freely" is the walk-enabled state — that's what item 7 tests).
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }
+        await drive(0.2);
+        const start = origin(); const p0 = { x: start.x, z: start.z };
+        await drive(2.2, () => { cam.rotation.set(0, yaw, 0); ctx.input.keys[key] = true; });
+        clearKeys();
+        const p1 = origin();
+        const d = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+        const dir = ctx.three.camera.getWorldDirection(new (ctx.three.camera.position.constructor)());
+        return { label, dx: +(p1.x - p0.x).toFixed(2), dz: +(p1.z - p0.z).toFixed(2), d: +d.toFixed(2),
+                 camY: +ctx.three.camera.rotation.y.toFixed(2), fwd: [+dir.x.toFixed(2), +dir.z.toFixed(2)],
+                 introActive: !!(ctx.intro && ctx.intro.active), mode: ctx.intro && ctx.intro.mode, eyeOff: +(ctx.player.eyeOffset||0).toFixed(2) };
+      };
+      const legs = [];
+      // KeyW drives ALONG the camera-forward; yaw π → aft(+Z, the door egress), −π/2 → −X, +π/2 → +X, 0 → fwd(−Z)
+      legs.push(await runLeg('aft(+Z)', Math.PI, 'KeyW'));
+      legs.push(await runLeg('left(−X)', -Math.PI / 2, 'KeyW'));
+      legs.push(await runLeg('right(+X)', Math.PI / 2, 'KeyW'));
+      legs.push(await runLeg('fwd(−Z)', 0, 'KeyW'));
+      // ── WHOLE-COCKPIT ROAM (coordinator: prove the whole floor, not just the egress lane). Place
+      //    the body at each aisle spot + walk TOWARD a target corner; report how close it reaches.
+      //    ORIGIN.z = SEAT.z + 0.30. Walkable band ≈ |x|<1.9, z ∈ (−1.0 .. 2.2).
+      const OZ = SEAT.z + 0.30;
+      const roam = [];
+      const roamTo = async (label, from, target) => {
+        clearKeys();
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }
+        ctx.player.body.body.setTranslation({ x: SEAT.x + from.x, y: SEAT.y, z: OZ + from.z }, true);
+        await drive(0.2);
+        const yawTo = Math.atan2(-(target.x - from.x), -(target.z - from.z));   // face the target (YXZ fwd = (−sinθ,0,−cosθ))
+        await drive(2.0, () => { cam.rotation.set(0, yawTo, 0); ctx.input.keys['KeyW'] = true; });
+        clearKeys();
+        const p = origin();
+        const reached = Math.hypot((p.x - SEAT.x) - target.x, (p.z - OZ) - target.z);
+        return { label, at: [+(p.x - SEAT.x).toFixed(2), +(p.z - OZ).toFixed(2)], distToTarget: +reached.toFixed(2) };
+      };
+      roam.push(await roamTo('fwd-L (beside console)', { x: -1.4, z: -0.6 }, { x: -1.6, z: -1.1 }));
+      roam.push(await roamTo('fwd-R (beside console)', { x: 1.4, z: -0.6 }, { x: 1.6, z: -1.1 }));
+      roam.push(await roamTo('wall-L (mid)', { x: 0, z: 0.4 }, { x: -1.8, z: 0.4 }));
+      roam.push(await roamTo('wall-R (mid)', { x: 0, z: 0.4 }, { x: 1.8, z: 0.4 }));
+      roam.push(await roamTo('aft-door', { x: 0, z: 1.0 }, { x: 0, z: 2.3 }));
+      return { legs, roam, seat: [+SEAT.x.toFixed(2), +SEAT.y.toFixed(2), +SEAT.z.toFixed(2)] };
+    });
+    const freeDirs = out.legs.filter((l) => l.d >= 0.8).length;
+    // roam OK = each target reached within a capsule-radius standoff (~0.55) OR the body walked PAST
+    //   it (overshoot past a wall-clear target = even freer). The aft-door target is a pass-through.
+    const roamOk = out.roam.every((r) => {
+      if (r.label === 'aft-door') return r.at[1] >= 2.0;          // walked to/through the door mouth
+      return r.distToTarget <= 0.6 || Math.abs(r.at[0]) >= Math.abs(1.6);   // reached the corner or the wall standoff
+    });
+    const pass = freeDirs >= 3 && out.legs.find((l) => l.label === 'aft(+Z)').d >= 0.8 && roamOk;
+    console.log('[cockpit-motion] ' + (pass ? 'PASS' : 'FAIL') + ' freeDirs=' + freeDirs + ' roamOk=' + roamOk);
+    console.log('[cockpit-motion][legs] ' + JSON.stringify(out.legs.map((l) => ({ [l.label]: l.d }))));
+    console.log('[cockpit-motion][roam] ' + JSON.stringify(out.roam));
+  },
+
+  // Cockpit (T3.3): the GAME'S OPENING SHOT — the REAL seated first-person view inside the
+  // HERO single-pilot cockpit. Drives the game's OWN intro path (startIntro → jumpToBeat
+  // 'cockpit') so the beat machine builds the ship + seats the player at getShipSpawn facing
+  // −Z (looking out the forward window at the orbit view) — NOT an idealized studio rig.
+  //   --angle: forward (Beat-0 seated, out the window)   [default]
+  //            console (look down-forward at the dash/screens)
+  //            door    (stood + turned aft to the corridor doorway — the "check engines" exit)
+  //            left/right (head-turned reads of the side walls / clutter)
+  //            wide    (head-turned 3/4 of the whole bridge)
+  //   --stand draws the standing eye (rise + walk read) instead of the seated eye.
+  //   --alert=<0|1|2> drives the cockpit alert state (verify the escalation surface).
+  'cockpit': async (page) => {
+    const angle = argv.angle || 'forward';
+    const stand = !!argv.stand;
+    const colliders = !!argv.colliders;   // A1 evidence — overlay the Rapier collider wireframe on the hull
+    const alert = argv.alert !== undefined ? Number(argv.alert) : 0;
+    const space = argv.space !== undefined ? Number(argv.space === true ? 1 : argv.space) : 0; // REBUILD v2 R1a — --space[=0..1] drives the orbit sky
+    const hideStars = !!argv.hidestars;
+    const noPlanet = !!argv.noplanet;
+    const noGlass = !!argv.noglass;
+    const noDome = !!argv.nodome;
+    const noHull = !!argv.nohull;
+    await page.evaluate(({ space, hideStars, noPlanet, noGlass, noDome, noHull }) => {
+      window.__RIG_SPACE01 = space;
+      window.__RIG_HIDESTARS = hideStars;
+      window.__RIG_NOPLANET = noPlanet;
+      window.__RIG_NOGLASS = noGlass;
+      window.__RIG_NODOME = noDome;
+      window.__RIG_NOHULL = noHull;
+      const g = window.__game;
+      const ctx = g.ctx;
+      // First-person seated read; hide the rig so it doesn't block the FP camera.
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // KILL the weather (the rain/dust streaks read as a dirty-lens filter over the cockpit
+      // — they are world atmosphere, not the cabin) + a touch of warm exposure for the mood.
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      try { ctx.three.renderer.toneMappingExposure = 1.08; } catch {}
+      // Drive the real intro: start it (force) + jump to the cockpit beat → the beat
+      // controller builds the ship + seats the player facing −Z (the genuine FP frame).
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      // REBUILD v2 R1a — drive the real sky into space mode so the window reads as orbit.
+      if (space > 0) {
+        try { g.setSkyIntroMode(space); } catch {}
+        // Vacuum cabin has no floating dust — suppress the camera-anchored mote/dust
+        // layers (these are atmospheric, not orbital). The space BEATS must do the same
+        // (coordinator handoff); here we mirror that so the sky read is clean.
+        try { if (ctx.dustMotes) ctx.dustMotes.particles.visible = false; } catch {}
+        try { if (ctx.ambientDust) ctx.ambientDust.particles.visible = false; } catch {}
+        try { for (const k of ['near', 'mid', 'far']) { const L = ctx.weather.layers && ctx.weather.layers[k]; if (L && L.particles) L.particles.visible = false; } } catch {}
+      } else { try { g.setSkyIntroMode(0); } catch {} }   // control: prove space-mode off = normal sky
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+    }, { space, hideStars, noPlanet, noGlass, noDome, noHull });
+    // Let the beat controller tick (page RAF) so the ship builds + the player seats.
+    await page.waitForTimeout(700);
+    const meas = await page.evaluate(({ angle, stand, alert, colliders }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      if (alert > 0) { try { g.setCockpitAlert(alert); } catch {} }
+      // A1 EVIDENCE — overlay the Rapier collider wireframe (bright green LineSegments, depthTest off)
+      //   so the shot shows the collider surface OVER the visible hull skin. The COCKPIT colliders are
+      //   at world y≈3000 (SHIP_ORIGIN.y), so they render right on the cockpit hull. `three` is reached
+      //   via a dynamic import (Vite serves the module); the overlay is finished in an async step below.
+      if (colliders) { window.__RIG_WANT_COLLIDERS = true; }
+      // REBUILD v2 R1a debug — --hidestars proves whether the top speckles are the
+      // real star sphere (set the env via argv passthrough below).
+      if (window.__RIG_HIDESTARS) {
+        ctx.three.scene.traverse((o) => { if (o.isPoints && o.renderOrder === -0.5) o.visible = false; });
+      }
+      if (window.__RIG_NOPLANET) { ctx.three.scene.traverse((o)=>{ if(o.isMesh && (o.renderOrder===-0.4||o.renderOrder===-0.39)) o.visible=false; }); }
+      // --noglass: hide the windscreen glass + smudge + streak overlays (transparent meshes near the
+      // -Z window plane) to see the RAW background behind the window.
+      if (window.__RIG_NOGLASS) {
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        if (ship) ship.traverse((o) => {
+          if (o.isMesh && o.material && o.material.transparent && o.position.z < -1.8) o.visible = false;
+        });
+      }
+      // --nodome: hide the sky dome sphere (the big uTopColor mesh) so we can tell if the tan is the sky.
+      if (window.__RIG_NODOME) {
+        ctx.three.scene.traverse((o) => { if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) o.visible = false; });
+      }
+      // --nohull: hide every ship mesh FORWARD of the eye (world z<2998.7) to strip whatever fills the window.
+      if (window.__RIG_NOHULL) {
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        const hidden = {};
+        if (ship) ship.traverse((o) => {
+          if (o.isMesh && o.visible) {
+            const wp = o.getWorldPosition(new (ctx.three.camera.position.constructor)());
+            if (wp.z < 2998.7) { o.visible = false; const k=(o.material&&o.material.name)||(o.geometry&&o.geometry.type)||'?'; hidden[k]=(hidden[k]||0)+1; }
+          }
+        });
+        console.error('[nohull] hid ' + JSON.stringify(hidden));
+      }
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // Keep the framed aspect for THIS shot (other scenarios may have left a stale size).
+      ctx.three.renderer.setSize(1100, 760, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      // The SEATED PILOT eye: LOW + leaned back into the seat (a pilot sits low at the
+      // controls). The spawn is the forward pilot station; the seated pose lowers the eye to
+      // ~1.15m above the floor (this mirrors the in-game seated pose sequence.ts will wire —
+      // see the agent's hand-back note). For "stand", raise to a standing eye + step aft.
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius); // ship floor world-y
+      if (angle === 'wide') {
+        // The WIDE 3/4 is NOT a seated-eye shot — it must SHOW the seat + station, so park the
+        // camera up + WELL behind the pilot's right shoulder (near the aft wall), looking
+        // forward-down over the whole chair at the dash + window (the chair clearly in frame).
+        const sx = tr.x + 1.3, sy = floorY + 2.05, sz = tr.z + 2.0;
+        cam.position.set(sx, sy, sz);
+        cam.lookAt(tr.x - 0.25, floorY + 0.7, tr.z - 1.4);
+        cam.updateMatrixWorld(true);
+        const ship0 = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        let m0 = 0; if (ship0) ship0.traverse((o) => { if (o.isMesh) m0++; });
+        return { found: !!ship0, meshes: m0, eye: [+sx.toFixed(2), +sy.toFixed(2), +sz.toFixed(2)], alert };
+      }
+      // The SEATED PILOT eye = the REAL in-game seated eye: body-centre + the seated eye
+      // offset (POD_SEATED_EYE_OFFSET 0.50 → floor + 0.85 + 0.50 = floor+1.35). This is the
+      // genuine Beat-0 frame the player sees (NOT a fabricated viewpoint). For "stand", raise
+      // to a standing eye + step aft (the rise + walk-to-the-door read).
+      const seatedEye = (ctx.player.eyeOffset || 0.5);   // the controller sets this to the seated offset in intro
+      const eyeY = stand ? floorY + 1.62 : (tr.y + seatedEye);
+      const eyeZ = tr.z + (stand ? -0.1 : 0.1);   // seated: a hair back into the seat
+      const eye = new V(tr.x, eyeY, eyeZ);
+      cam.position.copy(eye);
+      // Look directions in the cockpit-local frame: −Z is forward (window), +Z is aft
+      // (the corridor doorway), +X right, −X left.
+      if (angle === 'forward') {
+        // Mirror the beat's OWN opening framing (tickCockpit faceControl(-0.09, -0.03)) via the SAME
+        // YXZ euler method — so this shot is the REAL in-game opening gaze, not a fabricated lookAt.
+        // rotation.set(pitch, yaw, 0) with YXZ; faceControl(yaw, pitch) → set(pitch, yaw, 0).
+        cam.rotation.order = 'YXZ';
+        cam.rotation.set(-0.03, -0.09, 0);
+        cam.updateMatrixWorld(true);
+      } else {
+        let look;
+        if (angle === 'console') look = new V(eye.x, eye.y - 0.7, eye.z - 0.8);    // down-forward at the dash
+        else if (angle === 'door') look = new V(eye.x, eye.y - 0.05, eye.z + 1);        // turn aft to the corridor
+        else if (angle === 'left') look = new V(eye.x - 1, eye.y - 0.1, eye.z - 0.2);
+        else if (angle === 'right') look = new V(eye.x + 1, eye.y - 0.1, eye.z - 0.2);
+        else look = new V(eye.x, eye.y + 0.06, eye.z - 1);
+        cam.lookAt(look);
+        cam.updateMatrixWorld(true);
+      }
+      // Report: is the cockpit built? mesh count? eye height?
+      const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+      let meshes = 0;
+      if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!ship, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
+    }, { angle, stand, alert, colliders });
+    // A1 — inject the collider wireframe (green LineSegments) using the game's exposed THREE namespace.
+    if (colliders) {
+      const cinfo = await page.evaluate(async () => {
+        const ctx = window.__game.ctx;
+        const three = window.__game.THREE;
+        const dr = ctx.physics.world.debugRender();
+        const bg = new three.BufferGeometry();
+        bg.setAttribute('position', new three.BufferAttribute(dr.vertices, 3));
+        const mat = new three.LineBasicMaterial({ color: 0x39ff5a, depthTest: false, transparent: true, opacity: 0.95 });
+        const seg = new three.LineSegments(bg, mat);
+        seg.renderOrder = 9999; seg.frustumCulled = false;
+        ctx.three.scene.add(seg);
+        return { segVerts: dr.vertices.length / 3 };
+      });
+      console.log('[cockpit] collider wireframe: ' + JSON.stringify(cinfo));
+    }
+    // RE-ANCHOR the camera-relative space planet to the NOW-POSED camera. The planet is
+    // anchored each frame in updateSky (cam + dir*distance); we paused before it could run
+    // at the ship-origin camera (y≈3000), so it was left stale 3000m below at y≈0 → NOT in
+    // the window. Mirror applySpaceMode's anchor here so the rig shows the REAL in-game
+    // frame (the planet where the seated pilot actually sees it out the windscreen).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let group = null;
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.renderOrder === -0.4 && o.parent) group = o.parent; });
+      if (!group) return;
+      const cam = ctx.three.camera; cam.updateMatrixWorld(true);
+      const V = cam.position.constructor;
+      const dir = new V(0.30, 0.10, -1).normalize();
+      const DIST = 400;   // keep in sync with _SPACE_PLANET_DIR/_DISTANCE in sky.ts
+      group.position.set(cam.position.x + dir.x * DIST, cam.position.y + dir.y * DIST, cam.position.z + dir.z * DIST);
+      group.updateMatrixWorld(true);
+      // Re-anchor the star field + sky DOME to the posed camera too (updateSky does this each
+      // frame via .position.copy(cam), but we paused before it ran at the ship-origin camera →
+      // they'd be stuck at the world origin 3000m below, so the window showed no stars). Mirror it.
+      ctx.three.scene.traverse((o) => {
+        if (o.isPoints && o.renderOrder === -0.5) { o.position.copy(cam.position); o.updateMatrixWorld(true); }        // stars
+        if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) { o.position.copy(cam.position); o.updateMatrixWorld(true); }   // dome sphere
+      });
+      // Full-intro coherence fix mirror: dim the world sun+ambient by the orbit blend so the paused
+      // cockpit rig shows the SAME vacuum lighting the in-game applySpaceMode now applies (no desert
+      // noon flooding the cockpit at orbit). Uses window.__RIG space passthrough via the closure arg.
+      if (ctx.lights) { const sp = (window.__RIG_SPACE01 || 0); ctx.lights.sun.intensity *= (1 - sp * 0.88); ctx.lights.ambient.intensity *= (1 - sp * 0.94); }
+    });
+    await page.waitForTimeout(300);
+    const perfC = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit'); let sm = 0; if (ship) ship.traverse((o) => { if (o.isMesh) sm++; }); return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1, shipMeshes: sm }; });
+    console.log('[cockpit-perf] ' + JSON.stringify(perfC));
+    const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;
+    // Clip to the canvas rect + disable animations + generous timeout: the full-page
+    // font/compositor wait can stall on the space-mode ship scene (the cockpit build);
+    // a clipped grab of just the WebGL canvas snapshots reliably.
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, clip: { x: 0, y: 0, width: 1100, height: 760 }, animations: 'disabled', timeout: 60000 });
+    console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // PARALLAX-FIX PROBE (sky.ts): measure the space planet's projected ANGULAR DIAMETER
+  // from (a) the seated pilot eye and (b) ~10m aft down the corridor doorway, comparing the
+  // OLD camera-anchored placement (planet re-centered on the camera → ZERO parallax → it
+  // balloons as the ship shrinks) vs the NEW fixed-world-anchor placement (near-constant
+  // angular size + natural tiny parallax). Prints hard numbers — the reproduction + the fix
+  // evidence. Drives the real cockpit beat + space mode LIVE (updateSky/applySpaceMode run,
+  // so the NEW numbers come from the shipped code, not a rig fabrication).
+  //   node scripts/rig-shot.mjs --scenario=planet-parallax
+  'planet-parallax': async (page) => {
+    const aft = argv.aft !== undefined ? Number(argv.aft) : 10;   // metres aft to sample the "backed down the corridor" view
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      g.setSkyIntroMode(1);
+    });
+    // Let the beat build the ship + seat the player, and let a few live frames run so
+    // updateSky→applySpaceMode CAPTURES the world anchor at the seated eye (the fix).
+    await page.waitForTimeout(900);
+    // Shrink the canvas so each throttled tick is cheap, then RESET + re-engage space mode
+    // AFTER the seat has settled — the first (transient, pre-seat) capture frame is gone, so
+    // the anchor now captures at the real seated eye. Then pump time so the recapture-on-teleport
+    // path also has a chance to run. Mirrors the real game where the 60fps loop recaptures freely.
+    await page.evaluate(() => {
+      const g = window.__game;
+      g.ctx.three.renderer.setSize(96, 96, false);
+      g.setSkyIntroMode(0);   // drop the stale pre-seat anchor
+      g.setSkyIntroMode(1);   // re-engage → next sky tick captures at the seated eye
+    });
+    await page.waitForTimeout(1400);
+    const r = await page.evaluate(({ aft }) => {
+      const g = window.__game; const ctx = g.ctx;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // Find the space-planet group + its geometric radius.
+      let planetMesh = null;
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.renderOrder === -0.4) planetMesh = o; });
+      if (!planetMesh) return { error: 'planet mesh not found (space mode not built?)' };
+      const group = planetMesh.parent;
+      const R = (planetMesh.geometry.boundingSphere
+        ? planetMesh.geometry.boundingSphere.radius
+        : (planetMesh.geometry.computeBoundingSphere(), planetMesh.geometry.boundingSphere.radius));
+
+      // The REAL seated eye (mirror the cockpit scenario's seated pose).
+      const tr = ctx.player.body.body.translation();
+      const seatedEye = (ctx.player.eyeOffset || 0.5);
+      const eye = new V(tr.x, tr.y + seatedEye, tr.z + 0.1);
+      // Aft sample = eye stepped +Z down the corridor doorway (backing away from the −Z window).
+      const eyeAft = new V(eye.x, eye.y, eye.z + aft);
+
+      // Angular DIAMETER (deg) of a sphere radius R at centre C seen from P: 2*asin(R/|C−P|).
+      const angDiam = (Cx, Cy, Cz, P) => {
+        const dx = Cx - P.x, dy = Cy - P.y, dz = Cz - P.z;
+        const dist = Math.hypot(dx, dy, dz);
+        const s = Math.min(1, R / dist);
+        return { deg: 2 * Math.asin(s) * 180 / Math.PI, dist };
+      };
+
+      // The LIVE (NEW, fixed-world-anchor) planet centre — where applySpaceMode has it now.
+      const Cnew = group.getWorldPosition(new V());
+
+      // OLD camera-anchored math: centre = camera + dir*DIST (recomputed per camera pos → the bug).
+      // DIST is read LIVE from the current anchor→seat distance (W4 moved it 400→1400), so the "old"
+      // camera-anchored reference uses the SAME geometry as the live planet — the comparison stays honest.
+      const dir = new V(0.30, 0.10, -1).normalize();
+      const DIST = Cnew.distanceTo(eye);
+      const oldCentre = (P) => new V(P.x + dir.x * DIST, P.y + dir.y * DIST, P.z + dir.z * DIST);
+
+      const oldSeat = angDiam(oldCentre(eye).x, oldCentre(eye).y, oldCentre(eye).z, eye);
+      const oldAft  = angDiam(oldCentre(eyeAft).x, oldCentre(eyeAft).y, oldCentre(eyeAft).z, eyeAft);
+      // NEW: the planet is fixed at Cnew; only the eye moves.
+      const newSeat = angDiam(Cnew.x, Cnew.y, Cnew.z, eye);
+      const newAft  = angDiam(Cnew.x, Cnew.y, Cnew.z, eyeAft);
+
+      const pct = (a, b) => +((b.deg - a.deg) / a.deg * 100).toFixed(2);
+      return {
+        // World-fixed planet centre (NEW) + the seated eye it was captured from.
+        planetWorld: [+Cnew.x.toFixed(1), +Cnew.y.toFixed(1), +Cnew.z.toFixed(1)],
+        seatedEye: [+eye.x.toFixed(1), +eye.y.toFixed(1), +eye.z.toFixed(1)],
+        aftMeters: aft,
+        planetRadius: R,
+        old: {
+          seatedDeg: +oldSeat.deg.toFixed(3), aftDeg: +oldAft.deg.toFixed(3),
+          seatedDist: +oldSeat.dist.toFixed(1), aftDist: +oldAft.dist.toFixed(1),
+          changePct: pct(oldSeat, oldAft),
+        },
+        new: {
+          seatedDeg: +newSeat.deg.toFixed(3), aftDeg: +newAft.deg.toFixed(3),
+          seatedDist: +newSeat.dist.toFixed(1), aftDist: +newAft.dist.toFixed(1),
+          changePct: pct(newSeat, newAft),
+        },
+        // Sanity: at the SEATED eye the new anchor should EQUAL the old placement (capture == camera-relative).
+        seatedMatchDeg: +(newSeat.deg - oldSeat.deg).toFixed(4),
+        maxCamDist: +Math.max(newSeat.dist, newAft.dist).toFixed(1),
+      };
+    }, { aft });
+    console.log(`[planet-parallax] ${JSON.stringify(r, null, 2)}`);
+  },
+
+  // REAL-CHAIN PARALLAX PROBE (W4 regression). The old `planet-parallax` probe FABRICATES the aft
+  // sample (it measures a synthetic eyeAft point against the already-captured centre; it never moves
+  // the body + re-runs updateSky), so it can't see a per-frame regression. THIS drives the REAL chain:
+  // start intro → cockpit (space mode engaged live) → physically walk the body +Z down the corridor
+  // frame-by-frame, letting updateSky→applySpaceMode run EACH ticked frame, and SAMPLES the planet
+  // group's WORLD position + projected angular DIAMETER at the seat / 10m aft / 15m aft. If the planet
+  // moves WITH the camera (world pos tracks the body) the anchor isn't holding → the balloon regression.
+  //   node scripts/rig-shot.mjs --scenario=planet-parallax-real
+  'planet-parallax-real': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const FIXED_DT = 0.05;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const V = ctx.three.camera.position.constructor;
+      // Drive the live loop until cond() or simBudget sim-seconds (throttle-proof; mirrors pod-walkout).
+      const drive = async (simBudget, cond, perTick) => {
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          if (cond && cond()) return { ok: true, sim: +(nowSim - simStart).toFixed(2) };
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return { ok: cond ? cond() : true, sim: +(ctx.time.elapsed - simStart).toFixed(2) };
+      };
+      // Find the space-planet mesh + its geometric radius (renderOrder −0.4).
+      const findPlanet = () => { let m = null; ctx.three.scene.traverse((o) => { if (o.isMesh && o.renderOrder === -0.4) m = o; }); return m; };
+      // Angular DIAMETER (deg) of the planet sphere seen from the current camera, using the LIVE
+      // world-space group position + the live group scale (the approach scale grows the visual radius).
+      const sample = (label) => {
+        const planetMesh = findPlanet();
+        if (!planetMesh) return { label, error: 'planet mesh not found' };
+        const group = planetMesh.parent;
+        group.updateMatrixWorld(true);
+        const C = group.getWorldPosition(new V());
+        const R0 = planetMesh.geometry.boundingSphere
+          ? planetMesh.geometry.boundingSphere.radius
+          : (planetMesh.geometry.computeBoundingSphere(), planetMesh.geometry.boundingSphere.radius);
+        const scl = group.scale.x;                         // the approach scale (1 in orbit)
+        const R = R0 * scl;
+        const cam = ctx.three.camera.position;
+        const body = ctx.player.body.body.translation();
+        const dx = C.x - cam.x, dy = C.y - cam.y, dz = C.z - cam.z;
+        const dist = Math.hypot(dx, dy, dz);
+        const s = Math.min(1, R / dist);
+        // The camera-anchored distant-planet SPRITE (makePlanetTexture, renderOrder 0) — should be
+        // fully faded (opacity ~0) in full space mode. If it's still visible it's a 2nd, zero-parallax
+        // planet (a candidate "balloon" the anchor fix never touched).
+        let spriteOp = -1, spriteVis = false;
+        ctx.three.scene.traverse((o) => { if (o.isSprite && o.material && o.material.map && o.renderOrder === 0 && o.scale.x > 5) { spriteOp = o.material.opacity; spriteVis = o.visible; } });
+        return {
+          label,
+          bodyZ: +body.z.toFixed(2), camZ: +cam.z.toFixed(2), camY: +cam.y.toFixed(1),
+          planetWorld: [+C.x.toFixed(1), +C.y.toFixed(1), +C.z.toFixed(1)],
+          groupScale: +scl.toFixed(3),
+          camDist: +dist.toFixed(1),
+          angDiamDeg: +(2 * Math.asin(s) * 180 / Math.PI).toFixed(3),
+          distSprite: { op: +spriteOp.toFixed(3), vis: spriteVis },
+        };
+      };
+      const samples = [];
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(64, 64, false);   // tiny canvas → more real frames tick per second
+        // FORCE the pointer-lock gate open so isPlaying()===true → updatePlayer runs REAL KCC + camera-anchor.
+        ctx.input.controls.isLocked = true;
+        ctx.flags.paused = false;
+        g.startIntro();                              // REAL new-game entry point (beat 0 = cockpit)
+        // let the cockpit build + several live frames run so applySpaceMode CAPTURES the anchor at the SEATED eye
+        await drive(2.0, () => ctx.intro && ctx.intro.beat === 'cockpit' && ctx.intro.scratch.shipBuilt === true);
+        await drive(0.6, null);
+        samples.push(sample('seat'));
+        // Advance to checkEngines the REAL way: the cockpit dwell auto-advances after COCKPIT_DWELL, but
+        // drive it deterministically — jumpToBeat('checkEngines') flips mode='walk' (stand up + walk),
+        // matching the real transition. NO setSkyIntroMode call here → the anchor must HOLD.
+        g.jumpToBeat('checkEngines');
+        await drive(0.6, null);
+        samples.push(sample('stand'));               // stood up (eyeOffset 0.5→0.85) — anchor still held?
+        // WALK AFT by translating the body in small increments, letting updatePlayer anchor the camera
+        // NATURALLY (no cameraSnapNextFrame) so this is the realest possible per-frame camera-follow the
+        // anchor path sees. Each increment is followed by ticked frames so updateSky→applySpaceMode runs
+        // at the freshly-anchored camera. This traverses the full 14m corridor + then a big 80m jump to
+        // FORCE the recapture path (proving whether recapture returns the camera-relative balloon).
+        const shipZ = ctx.player.body.body.translation().z;
+        const glideTo = async (targetDz, label, snap) => {
+          const steps = Math.max(6, Math.ceil(Math.abs(targetDz)));   // ~1m per increment
+          const startZ = ctx.player.body.body.translation().z;
+          for (let k = 1; k <= steps; k++) {
+            const t = ctx.player.body.body.translation();
+            const z = startZ + (shipZ + targetDz - startZ) * (k / steps);
+            ctx.player.body.body.setTranslation({ x: t.x, y: t.y, z }, true);
+            if (snap) ctx.player.cameraSnapNextFrame = true;   // else the camera lerps/snaps via syncCameraToBody naturally
+            await drive(0.15, null);
+          }
+          samples.push(sample(label));
+        };
+        window.__PP_seatZ = shipZ;
+        await glideTo(10, 'aft10', false);
+        await glideTo(14, 'aft14', false);
+        // Back toward the window (−Z) — "walk back" toward the seat/planet.
+        await glideTo(0.5, 'backToWindow', false);
+        // ── A/B MODEL COMPARISON (the design call, kept for the record). At the SEAT and 12m AFT,
+        //   compute the planet's projected on-screen DIAMETER (NDC, = "size in the frame") under three
+        //   anchor models at the SAME ~19° seat framing: (400) the OLD world-anchor @400m [the W4
+        //   regression the user re-reported], (cam) pure camera-anchor [0% — but glued to the camera],
+        //   and (LIVE) the SHIPPED far world-anchor [read from the module's live geometry]. This is what
+        //   the user actually SEES; it shows the shipped model reads "same size as I move" (≈−1%).
+        {
+          const cam = ctx.three.camera;
+          const planetMesh = findPlanet();
+          const Rlive = planetMesh.geometry.boundingSphere.radius;     // the SHIPPED radius (module const)
+          const Clive = planetMesh.parent.getWorldPosition(new V());   // the SHIPPED anchor (module const · dir)
+          const distLive = Clive.distanceTo(new V(0, 3001.4, shipZ));  // the SHIPPED distance
+          const dir = new V(0.30, 0.10, -1).normalize();
+          const ndcDiam = (C, R, eye) => {
+            const d = Math.hypot(C.x - eye.x, C.y - eye.y, C.z - eye.z);
+            const ang = 2 * Math.asin(Math.min(1, R / d));
+            const fov = cam.fov * Math.PI / 180;
+            return ang / fov;                                          // fraction of the vertical FOV the disc spans
+          };
+          const seatEye = new V(0, 3001.4, shipZ);
+          const aftEye = new V(0, 3001.4, shipZ + 12);
+          // OLD 400m world anchor with a radius that hits the SAME seat framing (66 for a 19° disc @400).
+          const R400 = 66, D400 = 400;
+          const C400 = new V(seatEye.x + dir.x * D400, seatEye.y + dir.y * D400, seatEye.z + dir.z * D400);
+          const mk = (eye) => ({
+            oldWorldAnchor400: +ndcDiam(C400, R400, eye).toFixed(4),
+            cameraAnchored: +ndcDiam(new V(eye.x + dir.x * D400, eye.y + dir.y * D400, eye.z + dir.z * D400), R400, eye).toFixed(4),
+            shippedFarAnchor: +ndcDiam(Clive, Rlive, eye).toFixed(4),
+          });
+          window.__PP_ab = { seat: mk(seatEye), aft12: mk(aftEye), shippedDist: +distLive.toFixed(0) };
+        }
+        // ── DESCENT-APPROACH regression check: the planet MUST still GROW during the descent beats
+        //   (intentional — "we are falling INTO that"). Drive setSkyIntroMode + setPlanetApproach exactly
+        //   as tickDescent does, at progress 0 / 0.11 / 0.22, and measure the group scale + angular diameter
+        //   from the descending pod eye. The disc should visibly swell across the approach (scale 1→3.6).
+        const descSamples = [];
+        for (const prog of [0.0, 0.11, 0.22]) {
+          g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (prog - 0.14) / 0.34)));
+          g.setPlanetApproach(Math.min(1, prog / 0.22));
+          await drive(0.15, null);
+          const pm = findPlanet();
+          const grp = pm.parent; grp.updateMatrixWorld(true);
+          const C = grp.getWorldPosition(new V());
+          const scl = grp.scale.x;
+          const R = pm.geometry.boundingSphere.radius * scl;
+          const cam2 = ctx.three.camera.position;
+          const dist = Math.hypot(C.x - cam2.x, C.y - cam2.y, C.z - cam2.z);
+          descSamples.push({ prog, groupScale: +scl.toFixed(3), camDist: +dist.toFixed(0), angDiamDeg: +(2 * Math.asin(Math.min(1, R / dist)) * 180 / Math.PI).toFixed(2) });
+        }
+        window.__PP_desc = descSamples;
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+      }
+      return { samples, ab: window.__PP_ab, desc: window.__PP_desc };
+    });
+    if (log.desc) {
+      console.log('[planet-parallax-real] DESCENT-APPROACH (must GROW — intentional): progress → group scale / angular diameter:');
+      for (const d of log.desc) console.log(`[planet-parallax-real]   p=${d.prog}: scale ${d.groupScale}× · camDist ${d.camDist}m · angDiam ${d.angDiamDeg}°`);
+    }
+    if (log.ab) {
+      const pct = (a, b) => ((b - a) / a * 100).toFixed(1) + '%';
+      console.log(`[planet-parallax-real] MODEL A/B — planet on-screen diameter (fraction of vertical FOV), seat → 12m aft (shipped anchor dist=${log.ab.shippedDist}m):`);
+      for (const model of ['oldWorldAnchor400', 'cameraAnchored', 'shippedFarAnchor']) {
+        const s = log.ab.seat[model], a = log.ab.aft12[model];
+        console.log(`[planet-parallax-real]   ${model}: ${s} → ${a}  (${pct(s, a)} change as you back up 12m)`);
+      }
+    }
+    console.log('[planet-parallax-real] REAL-CHAIN samples (seat → 10m aft → 15m aft):');
+    for (const s of log.samples) console.log('[planet-parallax-real] ' + JSON.stringify(s));
+    // Drift = angular-diameter change relative to the seat sample.
+    const seat = log.samples.find((s) => s.label === 'seat');
+    if (seat && !seat.error) {
+      for (const s of log.samples) {
+        if (s.error || s.label === 'seat') continue;
+        const drift = (s.angDiamDeg - seat.angDiamDeg) / seat.angDiamDeg * 100;
+        const posDrift = Math.hypot(s.planetWorld[0] - seat.planetWorld[0], s.planetWorld[1] - seat.planetWorld[1], s.planetWorld[2] - seat.planetWorld[2]);
+        console.log(`[planet-parallax-real] ${s.label}: angDiam ${seat.angDiamDeg}°→${s.angDiamDeg}° (${drift >= 0 ? '+' : ''}${drift.toFixed(2)}%), planet world moved ${posDrift.toFixed(2)}m from the seat anchor`);
+      }
+    }
+  },
+
+  // Corridor disaster (T3.4): the engine-bay FIRE + the RED-ALERT corridor (the disaster the
+  // player flees). Builds the ship, drives the disaster state (fire + red-alert + HULL BREACH),
+  // and shoots the corridor. --angle: fire (mid-corridor looking AFT at the engine-bay blaze)
+  //   [default] · flee (at the dead-end looking FORWARD down the red corridor toward the bridge).
+  'corridor': async (page) => {
+    const angle = argv.angle || 'fire';
+    if (argv.smoke) {
+      await page.evaluate(() => { window.__game.startIntro(); });
+      const res = await page.evaluate(() => window.__game.smokeIntro());
+      console.log(`[corridor-smoke] ${JSON.stringify(res)}`);
+      return;
+    }
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship + seats the player
+    });
+    await page.waitForTimeout(700);
+    const calm = !!argv.calm;   // --calm shoots the pre-disaster (normal-lit) corridor
+    const meas = await page.evaluate(({ angle, calm }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      // Drive the disaster state directly (the corridor beat does this at the dead-end).
+      if (calm) { try { g.setEngineFire(0, 0); g.setShipAlert(0, 0); g.setCockpitAlert(0); } catch {} }
+      else { try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {} }
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);   // ship floor world-y
+      const V = cam.position.constructor;
+      // Corridor runs +Z (local z 2.6→14.6); the engine-bay fire sits at the dead-end (z≈14.4).
+      let eye, look;
+      if (angle === 'flee') {
+        eye = new V(tr.x, floorY + 1.55, tr.z + 12.5);              // at the dead-end
+        look = new V(tr.x, floorY + 1.2, tr.z + 2.0);              // forward down the red corridor to the bridge
+      } else if (angle === 'engineroom') {
+        eye = new V(tr.x, floorY + 1.55, tr.z + 12.4);             // close to the dead-end glass door
+        look = new V(tr.x, floorY + 1.35, tr.z + 17.0);           // aft THROUGH the glass into the engine room
+      } else {
+        eye = new V(tr.x, floorY + 1.5, tr.z + 7.0);               // mid-corridor
+        look = new V(tr.x, floorY + 1.1, tr.z + 14.5);            // aft at the engine-bay blaze
+      }
+      cam.position.copy(eye);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+      let meshes = 0;
+      if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!ship, meshes, shipAlert: g.ctx ? undefined : 0, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    }, { angle, calm });
+    await page.waitForTimeout(300);
+    const perfCo = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1 }; });
+    console.log('[corridor-perf] ' + JSON.stringify(perfCo));
+    const tag = `corridor-${angle}${calm ? '-calm' : ''}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // Pod-bay (R5c): the DOCKED escape pod in its bay at the bridge end — what the fleeing player
+  // runs toward + physically enters (no teleport). Builds the ship (bay + docked pod), then shoots
+  // the REAL in-corridor view. --angle: flee (down the corridor at the bay, the flee approach)
+  //   [default] · hatch (close at the open hatch — cabin peek + the swung door) · wide (a framing
+  //   3/4 of the bay alcove). --calm shoots pre-disaster lighting (default calm; --disaster for red).
+  'pod-bay': async (page) => {
+    const angle = argv.angle || 'flee';
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship (incl. the pod-bay + docked pod)
+    });
+    await page.waitForTimeout(700);
+    const disaster = !!argv.disaster;
+    const meas = await page.evaluate(({ angle, disaster }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      if (disaster) { try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {} }
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);   // ship floor world-y
+      const V = cam.position.constructor;
+      // W2b airlock layout: aperture at local z≈4.8 on the −X wall (x=−1.0); collar to x=−1.92; the
+      //   docked pod centre x = SHIP_ORIGIN.x − 3.36 (mostly OUTSIDE the hull); pod door face x=−1.92.
+      const bayZ = tr.z + 4.8;            // world z of the airlock centre (tr.z is SHIP_ORIGIN.z at spawn)
+      const wallX = tr.x - 1.0;           // the −X wall / sliding-door plane
+      const podDoorX = tr.x - 1.92;       // the pod door face (collar far end)
+      const podX = tr.x - 3.36;           // the docked pod centre (out in the void)
+      // open the sliding door for the hatch/collar/exterior reads so the pod door + collar show.
+      //   setBayAirlockDoor isn't yet on __game (the orchestrator wires it) — drive the named leaves
+      //   directly here (mirror the slide math: fore leaf −Z, aft leaf +Z into wall pockets).
+      if (angle === 'hatch' || angle === 'collar' || angle === 'exterior') {
+        const aHW = 0.72, travel = 0.82, bzL = 4.8;   // LOCAL bay-group z (group is at SHIP_ORIGIN)
+        const lL = ctx.three.scene.getObjectByName('airlockDoorLeafL');
+        const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
+        if (lL) lL.position.z = (bzL - aHW / 2) - travel;
+        if (lR) lR.position.z = (bzL + aHW / 2) + travel;
+      }
+      let eye, look;
+      if (angle === 'hatch') {
+        // in the collar mouth, looking −X at the whole pod door face + the lit cabin peek through its glass
+        eye = new V(wallX - 0.05, floorY + 1.45, bayZ + 0.05);
+        look = new V(podDoorX - 0.2, floorY + 1.2, bayZ);
+      } else if (angle === 'collar') {
+        // stood back in the CORRIDOR at the open sliding door, looking down the lit collar to the pod
+        //   door (the sliding door → airlock collar → docked pod read — the money shot)
+        eye = new V(wallX + 1.9, floorY + 1.55, bayZ);
+        look = new V(podDoorX, floorY + 1.28, bayZ);
+      } else if (angle === 'exterior') {
+        // DIAGNOSTIC — from outside the ship's −X hull, looking back at the docked pod (verifies the pod
+        //   sits OUTSIDE the hull, not floating/clipping). Not a player view; a build check.
+        eye = new V(podX - 2.6, floorY + 2.2, bayZ + 2.4);
+        look = new V(podX + 0.2, floorY + 1.3, bayZ);
+      } else if (angle === 'wide') {
+        // a 3/4 framing from down the corridor, angled INTO the airlock (the docked pod is the subject)
+        eye = new V(tr.x + 0.3, floorY + 1.65, bayZ + 3.2);
+        look = new V(podDoorX + 0.2, floorY + 1.3, bayZ);
+      } else {
+        // flee: near the corridor centreline, level with the airlock, looking across at the
+        //   sliding door in the −X wall (the run-past-and-see-THE-EXIT read; door CLOSED by default).
+        //   W2 gate post-mortem: the old x=+0.85 eye stood 0.15m off the +X wall — proud wall hardware
+        //   (breaker-box latch, steel greebles) grazed the frame edge as "floating triangle" slivers
+        //   the real centreline player never sees (the D165 harness-viewpoint trap). Judge from where
+        //   the player actually runs.
+        eye = new V(tr.x + 0.45, floorY + 1.62, bayZ + 2.2);
+        look = new V(wallX - 0.2, floorY + 1.3, bayZ - 0.1);
+      }
+      cam.position.copy(eye);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      const bay = ctx.three.scene.getObjectByName('escapePodBay');
+      let meshes = 0; if (bay) bay.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!bay, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    }, { angle, disaster });
+    await page.waitForTimeout(300);
+    const tag = `pod-bay-${angle}${disaster ? '-red' : ''}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    console.log(`[pod-bay] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // Wake interior (T4.1): the REAL first-person view as you COME TO inside the crashed pod in
+  // the desert, looking out the ajar hatch (the C18 wake-inside read). Drives the intro to the
+  // wake beat (which builds the wake interior + seats the player at the desert spawn), lets the
+  // come-to black fade, then poses the seated eye looking −Z out the hatch + shoots.
+  'wake': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      g.setTime(0.46);   // CONSISTENT-MIDDAY (user re-scope) — the wake now happens at bright clear midday (not dawn); the beat sets this too
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      // R3a — the wake now happens INSIDE the real hero cabin (no separate shell). Run the
+      // chain through impact (which settles the cabin to its crashed pose at the spawn + frees
+      // the player), then jump to wake (seats inside the crashed cabin, looking at its hatch).
+      g.jumpToBeat('impact');
+    });
+    await page.waitForTimeout(2800);   // let impact settle the crashed cabin + fade
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
+    await page.waitForTimeout(4200);   // let the come-to black fade naturally (mode seated, ticking)
+    if (argv.blow) await page.evaluate(() => { try { window.__game.blowCabinHatch(1); } catch {} });   // R3a — force the hatch fully open (the climb-out read: the dawn desert through the wide door)
+    // The come-to fade is a transient; we grade the STEADY wake-INSIDE read (the cabin lighting),
+    //   so force the black overlay clear before the shot (else we'd grade the fade, not the cabin —
+    //   the fade doesn't auto-complete in the non-pointer-locked scenario tick).
+    await page.evaluate(() => { const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0'; });
+    const meas = await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const tr = ctx.player.body.body.translation();
+      const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
+      cam.position.copy(eye);
+      // CLUSTER D — look at the cabin's merged FRONT DOOR (−Z, FDOOR_AZ=π → outward dir (0,-1)). The
+      //   wake camera faces the door (yaw 0) in-beat; mirror it here so the shot frames the front door
+      //   + the midday desert past it, with the riveted cabin wall around (the SAME hero cabin read).
+      const haz = Math.PI;
+      cam.lookAt(new V(eye.x + Math.sin(haz) * 2, eye.y - 0.05, eye.z + Math.cos(haz) * 2));
+      cam.updateMatrixWorld(true);
+      const wi = ctx.three.scene.getObjectByName('escapePodCabin');
+      let meshes = 0; if (wi) wi.traverse((o) => { if (o.isMesh) meshes++; });
+      let sunI = 0; ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) sunI = o.intensity; });
+      const expo = +ctx.three.renderer.toneMappingExposure.toFixed(2);
+      // sanity: the come-to fade overlay must be clear for the wake read (else the shot grades the
+      //   black fade, not the cabin — the footgun this scenario hit before the pre-shot fade-clear).
+      const fadeEl = document.getElementById('intro-fade');
+      const fadeOp = fadeEl ? +getComputedStyle(fadeEl).opacity : -1;
+      return { found: !!wi, meshes, fadeOp, sunI: +sunI.toFixed(2), expo, dayTime: +ctx.time.dayTime.toFixed(3), eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    });
+    await page.waitForTimeout(300);
+    const wtag = argv.blow ? 'scen-wake-blown.png' : 'scen-wake.png';
+    await page.screenshot({ path: join(OUT, wtag), fullPage: false });
+    console.log(`[wake] ${JSON.stringify(meas)} → ${wtag}`);
+    // CRASH-AFTERMATH (2026-07-03) — GATE the interior wake lamp-flicker mechanism (a still can't
+    //   judge a temporal flicker): arm + drive it headlessly, report lamp varied / spark toggled / settled.
+    const flick = await page.evaluate(() => { try { return window.__game.smokeWakeFlicker(); } catch (e) { return { error: String(e) }; } });
+    console.log(`[wake-flicker] ${JSON.stringify(flick)}`);
+  },
+
+  // ONE-ENTERABLE-POD (user re-scope, 2026-07-01) — drive the REAL chain through stepOut, which
+  // UNIFIES the crashed cabin into the ONE persistent walk-in pod (exterior skin + walkable
+  // colliders), then shoot it FROM OUTSIDE in the real game: the step-out-beside read, the
+  // walk-back-in approach at the hatch, a look INTO the interior through the open hatch, and a
+  // descent-low-vs-stepout light-match. --angle=beside|approach|interior|3q (default beside).
+  // Verifies: no model swap (ONE pod in↔out), it's enterable (open hatch + walkable interior),
+  // and the light/time is a CONSISTENT bright midday. Front-lit by the real midday sun.
+  'stepout-pod': async (page) => {
+    const angle = argv.angle || 'beside';
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1000, 800, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 800; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      g.jumpToBeat('impact');
+    });
+    await page.waitForTimeout(2600);
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
+    await page.waitForTimeout(1600);
+    // drive the REAL stepOut (unify) — jump to stepOut + let its init tick run (unifyEnterablePod),
+    //   then let the reveal-dwell (~4s) elapse so endEscapePodIntro HANDS OFF to the real game (the
+    //   real midday sun + game exposure take over — the pod is now a real-world lit object). Shoot
+    //   the HANDED-OFF game, not the mid-intro suppressed-light frame.
+    await page.evaluate(() => { window.__game.jumpToBeat('stepOut'); });
+    await page.waitForTimeout(1400);   // let stepOut's init tick run unifyEnterablePod (builds the skin + colliders + salvage)
+    // The rig tab is throttled (dustfall_preview_gotchas), so the reveal-dwell may not tick to the
+    //   natural handoff — force it: skipIntro() calls endEscapePodIntro, which (post-re-scope) does
+    //   NOT dispose the now-ENTERABLE pod (podIsEnterable) but DOES clear the black overlay + restore
+    //   the game HUD/sun. So we hand off to the real game with the ONE unified pod persisting.
+    await page.evaluate(() => { window.__game.skipIntro(); });
+    await page.waitForTimeout(900);    // let the handed-off game run a lit frame (sun/sky/exposure restored)
+    // --popchute (Item 2): fire the comic chute-pop on the UNIFIED pod + synchronously inflate it
+    //   (the paused loop gates the per-frame driver, so advanceSeconds drives the settle). Verifies
+    //   the canopy anchors ON the unified pod's true crown (not floating ~0.4m above it).
+    if (argv.popchute) await page.evaluate(() => { try { window.__game.popChute(2.5); } catch (e) { console.log('popChute err', e); } });
+    const r = await page.evaluate(({ ang }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // the unified pod persists under the SAME group name ('escapePodCabin'); find its world (x,z).
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = p.x; pz = p.z; }
+      const gy = ctx.terrain.heightAt(px, pz);
+      // CLUSTER D — the merged FRONT DOOR faces cabin-local FDOOR_AZ=π (−Z) → world outward dir
+      //   (sin π, cos π) = (0,−1) (the pod yaw≈0). beside/approach/interior frame the −Z front door.
+      const haz = Math.PI, hnx = Math.sin(haz), hnz = Math.cos(haz);
+      if (ang === 'beside') {
+        // the STEP-OUT read: standing a few m out on the hatch side, looking back at the whole pod.
+        cam.position.set(px + hnx * 4.4 + 1.2, gy + 1.7, pz + hnz * 4.4 + 0.6);
+        cam.lookAt(px, gy + 1.1, pz);
+      } else if (ang === 'approach') {
+        // WALK BACK IN: squarely on the open hatch from ~2.6 m out along its normal (the entry read).
+        cam.position.set(px + hnx * 2.8, gy + 1.55, pz + hnz * 2.8);
+        cam.lookAt(px + hnx * 0.2, gy + 1.0, pz + hnz * 0.2);
+      } else if (ang === 'interior') {
+        // look INTO the interior through the open hatch (right at the sill) — the walk-in read.
+        cam.position.set(px + hnx * 0.9, gy + 1.5, pz + hnz * 0.9);
+        cam.lookAt(px - hnx * 1.0, gy + 1.0, pz - hnz * 1.0);
+      } else if (ang === 'porthole') {
+        // Item 3 — frame the −Z FORWARD arc where the exterior porthole echo bezel sits (VP_AZ=π →
+        //   outward −Z). Stand off the −Z side + a touch high/oblique so the bezel is seen at the
+        //   grazing angle where it read warm/detached — it must now read flush cool band-metal.
+        cam.position.set(px - 1.6, gy + 2.0, pz - 4.2);
+        cam.lookAt(px, gy + 1.5, pz);
+      } else if (ang === 'chute') {
+        // CHUTE-POP read (Item 2): stand well back + a touch high so the whole pod crown + the
+        //   draped canopy frame together — the anchor must sit ON the crown, not float above it.
+        cam.position.set(px + 6.6, gy + 3.4, pz + 6.2);
+        cam.lookAt(px, gy + 2.4, pz);
+      } else if (ang === 'furrow') {
+        // CRASH-AFTERMATH (2026-07-03) — look DOWN the landing furrow from beyond its far end back
+        //   toward the pod, so the whole skid gouge + berms + scattered debris + scorch read as one
+        //   "this thing CRASHED here" story. The furrow trails the pod's back-left along the world
+        //   heading dir≈(-0.57,+0.82) (crashAftermath _FURROW_DIR); stand ~24 m out along +dir, a
+        //   little high + off-axis so the trench + both berms + the base scorch all read.
+        const fx = -0.57, fz = 0.82;                 // must match _FURROW_DIR in podScene.ts
+        cam.position.set(px + fx * 15 - 2.6, gy + 2.7, pz + fz * 15 + 1.0);   // closer + lower so the trench relief + berm shadows read (a high/far shot flattens them)
+        cam.lookAt(px + fx * 3, gy + 0.4, pz + fz * 3);
+      } else if (ang === 'furrow3q') {
+        // a 3/4 CROSS view of the furrow's mid-section — perpendicular-ish to the skid so the trench
+        //   BASIN + both proud berms + the shadow they rake read as real relief (the length view is
+        //   near-axial, which flattens the ridges). Stand off the furrow's side, low + raking.
+        const fx = -0.57, fz = 0.82;                 // furrow heading
+        const perpx = -fz, perpz = fx;               // perpendicular (across the furrow)
+        const midx = px + fx * 9, midz = pz + fz * 9;   // ~9 m down the furrow (its mid-section)
+        cam.position.set(midx + perpx * 7 + fx * 2, gy + 2.2, midz + perpz * 7 + fz * 2);
+        cam.lookAt(midx, gy - 0.1, midz);
+      } else { // 3q — a 3/4 of the whole standing silhouette (the exterior form)
+        cam.position.set(px + 4.2, gy + 2.4, pz + 4.0);
+        cam.lookAt(px, gy + 1.2, pz);
+      }
+      cam.updateMatrixWorld(true);
+      // FRONT-LIGHT prerequisite (visual-diagnostic-methodology.md): the intro's own midday sun is
+      //   set, but a paused frame may not have re-derived the lit exposure — set a modest exposure +
+      //   a front KEY from beside/above the camera so the camera-facing hull is LIT (not a backlit
+      //   silhouette). This is the harness front-light, NOT a substitute viewpoint (D165) — the
+      //   camera IS the real step-out-beside/approach/interior read.
+      ctx.three.renderer.toneMappingExposure = 1.3;
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      let key = ctx.three.scene.getObjectByName('__soKey');
+      if (!key && DirCtor) { key = new DirCtor(); key.name = '__soKey'; key.color.set(0xfff2e0); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (key) {
+        key.intensity = 3.0;
+        const toP = new V(px - cam.position.x, 0, pz - cam.position.z);
+        key.position.set(cam.position.x + toP.x * 0.2 + 2, cam.position.y + 4, cam.position.z + toP.z * 0.2 + 1);
+        key.target.position.set(px, gy + 1.0, pz); key.target.updateMatrixWorld(true);
+      }
+      let fill = ctx.three.scene.getObjectByName('__soFill');
+      if (!fill && HemiCtor) { fill = new HemiCtor(0xcfe0f0, 0x7a6848, 0); fill.name = '__soFill'; ctx.three.scene.add(fill); }
+      if (fill) fill.intensity = 1.1;
+      // report the pod's exposed height + mesh count + the current dayTime (light-consistency check).
+      let meshes = 0, maxY = -1e9;
+      if (pod) pod.traverse((o) => { if (o.isMesh && o.geometry) { meshes++; o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; const wv = new V(0, bb.max.y, 0); o.localToWorld(wv); maxY = Math.max(maxY, wv.y); } });
+      const introActive = !!(ctx.intro && ctx.intro.active);
+      const sunI = (() => { let s = 0; ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) s = o.intensity; }); return +s.toFixed(2); })();
+      // walkable-collider check: count STATIC boxes near the pod (floor + wall-ring segments). A
+      //   healthy walk-in pod has ~a dozen (the ring is gapped at the hatch, so not a full circle).
+      let podCols = 0;
+      ctx.physics.world.forEachCollider((c) => { const t = c.translation(); const d = Math.hypot(t.x - px, t.z - pz); if (d < 3.0 && Math.abs(t.y - gy) < 3.0) podCols++; });
+      // the tutorial chain: is the unified pod registered as a machete-salvageable (the first-salvage
+      //   target), and did the tutorial scatter scrap/cloth around it?
+      const podSalvageable = (ctx.salvageables && ctx.salvageables.list || []).some((s) => s.kind === 'escape_pod');
+      const scatter = (ctx.pickups && ctx.pickups.list || []).filter((p) => p.itemId === 'scrap' || p.itemId === 'cloth').length;
+      return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, podCols, podSalvageable, scatter, dayTime: +ctx.time.dayTime.toFixed(3), introActive, sunI, found: !!pod };
+    }, { ang: angle });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `scen-stepout-pod-${angle}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
+    console.log(`[stepout-pod] ${JSON.stringify(r)}`);
+  },
+
+  // LEVIATHAN-REVEAL (2026-07-01 midday consistency re-scope) — shoot the STEP-OUT reveal
+  // looking OUT toward the beached-leviathan horizon landmark at the NEW bright midday
+  // (was designed as a dawn-backlit silhouette; verify it still commands the horizon front-
+  // lit). Drives the REAL chain: startIntro → jumpToBeat('stepOut') → let stepOut's init tick
+  // run (teleport to the real desert spawn, setIntroMiddayClear, sky mode 0, atmosphere on),
+  // then face the leviathan world-bearing from the spawn eye and shoot with the GAME'S OWN
+  // midday sun (NO front-key override — the whole point is the natural front-lit read).
+  // REQUIRES the intro feature ON so the leviathan is placed at world build:
+  //   VITE_ESCAPE_POD_INTRO=1 node scripts/rig-shot.mjs --scenario=leviathan-reveal
+  // --fov to widen the horizon read (default 62). --exp exposure (default = leave the game's).
+  'leviathan-reveal': async (page) => {
+    const fov = argv.fov !== undefined ? Number(argv.fov) : 62;
+    const exp = argv.exp !== undefined ? Number(argv.exp) : 0;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      // Jump straight to stepOut: its init tick teleports to the real spawn + sets the bright
+      // clear midday + real desert sky/atmosphere (the exact handed-off world the player sees).
+      g.jumpToBeat('stepOut');
+    });
+    await page.waitForTimeout(1400);   // let tickStepOut's init run (teleport + midday + sky/atmosphere + unify)
+    // Force the HANDOFF to the real game (skipIntro → endEscapePodIntro) so the REAL midday sun/sky/
+    //   exposure/atmosphere take over — the throttled rig tab won't auto-tick the reveal-dwell to the
+    //   natural handoff, and we must judge the HANDED-OFF world (bright clear midday), not the mid-
+    //   intro suppressed-sky frame. The unified pod + leviathan persist (not disposed).
+    await page.evaluate(() => { window.__game.skipIntro(); });
+    await page.waitForTimeout(900);    // let several handed-off game frames run so the sky/sun/exposure settle to real midday
+    const r = await page.evaluate(({ fov, exp }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // The player capsule is at the real desert spawn (stepOut teleported it to intro.returnPos).
+      //   The enterable pod is UNIFIED at that same spot, so the raw spawn eye is INSIDE the cabin.
+      //   The real reveal is the player having STEPPED OUT — stand a few m out along the leviathan
+      //   bearing (clear of the hull), the honest step-out standpoint looking at the horizon.
+      const tr = ctx.player.body.body.translation();
+      // The leviathan's fixed world position (its own module reports it).
+      const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+      let lx = -403, lz = 106, foundLev = !!lev;
+      if (lev) lev.updateMatrixWorld(true);
+      // Bearing from spawn to the landmark.
+      const bx = lx - tr.x, bz = lz - tr.z;
+      const bl = Math.hypot(bx, bz);
+      const bnx = bx / bl, bnz = bz / bl;
+      // Step OUT ~5m along the bearing so the camera clears the unified pod hull.
+      const STEP = 5.0;
+      const ex = tr.x + bnx * STEP, ez = tr.z + bnz * STEP;
+      const egy = ctx.terrain.heightAt(ex, ez);
+      const ey = egy + 1.7;   // standing eye height on the sand
+      // Compute the bearing from THIS standpoint to the landmark; aim along it, pitched a hair up.
+      const dx = lx - ex, dz = lz - ez;
+      const dist = Math.hypot(dx, dz);
+      // Aim a touch above the horizon: the leviathan mass sits ~gy..gy+~30 at 340m; a small
+      //   upward pitch keeps the skyline centred without cropping the prow.
+      const aimY = ctx.terrain.heightAt(lx, lz) + 14;
+      if (cam.isPerspectiveCamera) { cam.fov = fov; cam.updateProjectionMatrix(); }
+      cam.position.set(ex, ey, ez);
+      cam.lookAt(lx, aimY, lz);
+      cam.updateMatrixWorld(true);
+      if (exp) ctx.three.renderer.toneMappingExposure = exp;
+      // Report the true bearing (unit dir) so we can confirm it matches (-0.949,+0.315), the
+      //   current dayTime (midday consistency), the sun direction/intensity (front-lit check),
+      //   and the leviathan's exposed silhouette height above its ground (does it clear the horizon).
+      const dir = [+(dx / dist).toFixed(3), +(dz / dist).toFixed(3)];
+      let sunDir = null, sunI = 0;
+      ctx.three.scene.traverse((o) => {
+        if (o.isDirectionalLight && o.castShadow) {
+          sunI = +o.intensity.toFixed(2);
+          const p = o.getWorldPosition(new V());
+          const t2 = o.target ? o.target.getWorldPosition(new V()) : new V();
+          const d = new V().subVectors(t2, p);
+          if (d.length() > 1e-4) { d.normalize(); sunDir = [+d.x.toFixed(2), +d.y.toFixed(2), +d.z.toFixed(2)]; }
+        }
+      });
+      // Leviathan silhouette extent above its ground (from its meshes).
+      let levMinY = 1e9, levMaxY = -1e9, levMeshes = 0;
+      if (lev) lev.traverse((o) => {
+        if (o.isMesh && o.geometry) {
+          levMeshes++;
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox;
+          for (const cy of [b.min.y, b.max.y]) { const w = new V(0, cy, 0); o.localToWorld(w); levMinY = Math.min(levMinY, w.y); levMaxY = Math.max(levMaxY, w.y); }
+        }
+      });
+      const levGy = ctx.terrain.heightAt(lx, lz);
+      return {
+        foundLev, levMeshes, dist: +dist.toFixed(1), bearing: dir,
+        exposedH: lev ? +(levMaxY - levGy).toFixed(1) : 0,
+        dayTime: +ctx.time.dayTime.toFixed(3),
+        exposure: +ctx.three.renderer.toneMappingExposure.toFixed(2),
+        sunDir, sunI, spawn: [+ex.toFixed(1), +ez.toFixed(1)],
+      };
+    }, { fov, exp });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-leviathan-reveal.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
+    console.log(`[leviathan-reveal] ${JSON.stringify(r)}`);
+  },
+
+  // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
+  // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
+  // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt
+  // fires, can the player SEE where to go / what to do?". --beat=checkEngines|corridor|
+  // enterPod|wake (default all four in one run). No camera override: reads camera.rotation
+  // as the game left it + reports yaw so direction is checkable.
+  'flow-clarity': async (page) => {
+    const which = argv.beat ? [String(argv.beat)] : ['checkEngines', 'corridor', 'enterPod', 'wake'];
+    const flowAngle = argv.angle || 'hatch';
+    await page.evaluate((a) => { window.__FLOW_ANGLE = a; }, flowAngle);
+    const results = [];
+    for (const beat of which) {
+      const meas = await page.evaluate(async (beat) => {
+        const g = window.__game;
+        const ctx = g.ctx;
+        const V = ctx.three.camera.position.constructor;
+        // clean render: no weather streaks, FP (hide rig/viewmodel), warm-ish exposure.
+        ctx.flags.thirdPerson = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+        try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+        try { ctx.three.renderer.toneMappingExposure = 1.1; } catch {}
+        ctx.three.renderer.setSize(1100, 760, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        ctx.flags.paused = false;           // UNPAUSE — the prior iteration paused to freeze for its shot;
+                                            //   the intro beat controllers only tick while unpaused.
+        ctx.input.controls.isLocked = true; // keep isPlaying()===true so updateEscapePodIntro ticks
+        try { g.skipIntro(); } catch {}     // FULL teardown of any prior iteration's intro (no state bleed)
+        await sleep(250);
+        // Helper: build the ship interior + seat at the bridge, waiting until getShipSpawn takes
+        //   (the cockpit tick reseats to y≈3000). Retries the jump if the async tick raced.
+        const seatInShip = async () => {
+          g.startIntro();
+          g.jumpToBeat('cockpit');
+          for (let i = 0; i < 20; i++) {
+            await sleep(120);
+            const t = ctx.player.body.body.translation();
+            if (t.y > 2900) return true;    // seated in the ship (SHIP_ORIGIN.y=3000)
+            g.jumpToBeat('cockpit');        // nudge the init again
+          }
+          return false;
+        };
+
+        if (beat === 'checkEngines') {
+          // Drive the REAL cockpit→checkEngines transition so the camera is EXACTLY where
+          // the game leaves it when "check the engines (aft)" fires (inherited from the
+          // cockpit's opening faceControl — the game does NOT reframe on checkEngines).
+          await seatInShip();
+          try { g.setSkyIntroMode(1); } catch {}   // in orbit — the window shows space
+          await sleep(300);                 // let the open framing settle
+          g.jumpToBeat('checkEngines');     // fires the prompt; mode→walk; NO faceControl
+          await sleep(250);                 // let the beat tick set the prompt/mode
+        } else if (beat === 'corridor') {
+          // Realistic pose at the disaster trigger: the player walked AFT to the dead-end
+          // (facing +Z, aft). Fire the disaster + shoot what they see when "GET TO THE
+          // ESCAPE POD" appears (they're facing the fire; the pod-bay is behind them fwd).
+          await seatInShip();
+          try { g.setSkyIntroMode(0); } catch {}   // interior beat — normal lighting, not the space skybox
+          await sleep(200);
+          const sp = ctx.player.body.body.translation();   // the FRESH cockpit spawn (bridge)
+          g.jumpToBeat('corridor');
+          try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {}
+          // The disaster erupts at the aft dead-end; the player TURNS AND FLEES FORWARD (−Z)
+          // toward the bridge/pod. --angle=fire → face aft at the blaze (the trigger view);
+          // default → the FLEE view: mid-corridor facing forward −Z (is the pod signposted
+          // ahead as they run for it?). The pod-bay is on the −X wall at z≈4.8.
+          cam.rotation.order = 'YXZ';
+          if ((window.__FLOW_ANGLE || '') === 'fire') {
+            ctx.player.body.body.setTranslation({ x: sp.x, y: sp.y, z: sp.z + 13.4 }, true);
+            cam.rotation.set(0, Math.PI, 0);   // face +Z (aft, toward the engine bay blaze)
+          } else {
+            ctx.player.body.body.setTranslation({ x: sp.x, y: sp.y, z: sp.z + 9.0 }, true);
+            cam.rotation.set(0, 0, 0);         // face −Z (forward, fleeing toward the bridge/pod)
+          }
+          ctx.player.cameraSnapNextFrame = true;
+          await sleep(150);
+        } else if (beat === 'enterPod') {
+          // Drive the REAL enterPod walkUp start: the player fled to the bridge; the docked
+          // pod-bay hatch is on the −X wall at world z≈4.8. Place the body a little aft of
+          // the bay facing the flee direction (−Z, forward toward the bridge) — the pose they
+          // arrive in — so the shot answers "is the open hatch obvious as they arrive?".
+          await seatInShip();
+          try { g.setSkyIntroMode(0); } catch {}   // interior beat — normal lighting, not the space skybox
+          await sleep(200);
+          const sp = ctx.player.body.body.translation();   // FRESH bridge spawn
+          g.jumpToBeat('enterPod');
+          await sleep(150);                  // let walkUp init (prompt "Get in the escape pod")
+          // --angle=flee: stand aft of the bay facing forward −Z (the arriving pose — is the
+          //   hatch visible as they run up?). --angle=hatch (default): at the threshold facing
+          //   the bay hatch (−X) — is the open lit entry obvious to walk into?
+          const ang = window.__FLOW_ANGLE || 'hatch';
+          cam.rotation.order = 'YXZ';
+          if (ang === 'flee') {
+            ctx.player.body.body.setTranslation({ x: sp.x + 0.4, y: sp.y, z: sp.z + 6.6 }, true);
+            cam.rotation.set(0, 0, 0);       // face −Z (forward, the flee direction); bay is ahead-left
+          } else {
+            // at the bay threshold (corridor-side of the hatch), facing −X into the aperture.
+            ctx.player.body.body.setTranslation({ x: sp.x - 0.45, y: sp.y, z: sp.z + 4.8 }, true);
+            cam.rotation.set(0, Math.PI / 2, 0);   // yaw +90° → face −X (into the docked-pod hatch)
+          }
+          ctx.player.cameraSnapNextFrame = true;
+          try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); } catch {}
+          await sleep(150);
+        } else if (beat === 'wake') {
+          // Drive the REAL wake: run through impact (settles the crashed cabin) then wake
+          // (seats inside it + faceControl(CABIN_HATCH_YAW) at the hatch), let the come-to
+          // black fade, and shoot the ACTUAL pose — do NOT override rotation.
+          g.setTime(0.32);
+          g.startIntro();
+          g.jumpToBeat('impact');
+          await sleep(2600);                 // impact settles the crashed cabin + fades
+          g.jumpToBeat('wake');
+          await sleep(4200);                 // come-to black fades naturally (mode seated ticking)
+        }
+
+        // Read the ACTUAL pose the game left (no override). Pin the camera to the body eye
+        // for position but KEEP the rotation the beat set.
+        ctx.flags.paused = true;
+        const tr = ctx.player.body.body.translation();
+        cam.position.set(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
+        cam.updateMatrixWorld(true);
+        const yaw = cam.rotation.y, pitch = cam.rotation.x;
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        let shipMeshes = 0; if (ship) ship.traverse((o) => { if (o.isMesh && o.visible) shipMeshes++; });
+        return {
+          beat,
+          mode: ctx.intro ? ctx.intro.mode : null,
+          eye: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+          yawDeg: +(yaw * 180 / Math.PI).toFixed(1),
+          pitchDeg: +(pitch * 180 / Math.PI).toFixed(1),
+          shipMeshes,
+        };
+      }, beat);
+      await page.waitForTimeout(250);
+      // only tag a suffix when an explicit --angle was passed that overrides the beat default.
+      const dfl = { enterPod: 'hatch', corridor: 'flee' };
+      const suffix = (argv.angle && dfl[beat] && argv.angle !== dfl[beat]) ? `-${argv.angle}` : '';
+      const path = join(OUT, `scen-flow-${beat}${suffix}.png`);
+      // wake sits over the full desert scene (heavy) — the clipped/animations-disabled grab
+      //   stalls there (known); use a plain grab for it. Interior beats use the clean clip.
+      if (beat === 'wake') await page.screenshot({ path, fullPage: false });
+      else await page.screenshot({ path, fullPage: false, clip: { x: 0, y: 0, width: 1100, height: 760 }, animations: 'disabled', timeout: 60000 });
+      results.push(meas);
+      console.log(`[flow-clarity] ${JSON.stringify(meas)} → scen-flow-${beat}${suffix}.png`);
+    }
+    console.log(`[flow-clarity] all: ${JSON.stringify(results)}`);
+  },
+
+  // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
+  // Escape-pod intro health GATE: drives the whole 12-beat chain headless + asserts
+  // {ok:true, beats:12}. THROWS on failure so `node rig-shot.mjs --scenario=smoke-intro`
+  // exits non-zero (main().catch → exit 1) — usable as `npm run verify:intro`. No screenshot.
+  'smoke-intro': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokeIntro());
+    console.log(`[smoke-intro] ${JSON.stringify(r)}`);
+    if (!r || !r.ok || r.beats !== 12) throw new Error(`smoke-intro GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
+  // B2 — THE PLAYER-GATED BOARDING WALK-IN PROOF (reuses the B1.f trapped-in-chair real-motion test
+  //   pattern: prove the walkable path with REAL KCC motion, not collider math). Drives the enterPod
+  //   beat LIVE: seats the player in the ship, jumps to enterPod, then (1) E-opens the closed door,
+  //   (2) drives real WASD → the KCC physically WALKS the player corridor → through the airlock
+  //   doorway → INTO the pod bore (sampling the body position each leg so we PROVE it traversed, not
+  //   teleported), (3) E-sits, and asserts the beat reached the sealed/eject phase. THROWS if the
+  //   walk-in path is blocked (the body never gets inside) so this gates like smoke-intro. No shot —
+  //   it's a motion proof; the console log reports the traversal. Every boarding phase is driven by
+  //   the FIXED-DT sim-budget loop (see below) so the proof is DETERMINISTIC under the ~1 fps
+  //   headless swiftshader tab — no wall-clock timing dependence.
+  'pod-walkin': async (page) => {
+    const log = await page.evaluate(async () => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const trace = [];
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;   // isPlaying()===true → updatePlayer processes real KCC motion
+      // ── DETERMINISTIC DRIVER (throttle-proof — the same fixed-dt sim-budget technique as
+      //    pod-walkout). The OLD driver gave each boarding phase a WALL-CLOCK iteration budget
+      //    (E-open 20×80 ms, E-sit 25×80 ms, …) — but the headless swiftshader tab renders this
+      //    heavy ship+bay scene at ~1 fps, so a whole phase budget could elapse with ZERO game
+      //    frames ticking (instrumented: 15 straight E-sit iterations with phase=atSeat, the gaze
+      //    near/look BOTH true and E pending, while ctx.time.elapsed sat frozen — the game-side
+      //    gate is healthy; the harness just raced a starved loop → "E-sit did not seat", flaky).
+      //    THE FIX: pin the loop's dt to FIXED_DT so every ticked frame advances a KNOWN sim-dt,
+      //    and drive each phase until its PHASE-FLIP CONDITION (or a sim-time budget) — never a
+      //    wall-clock count — re-asserting facing + input every yield. Assertions stay strict.
+      const FIXED_DT = 0.05;   // sim-seconds per frame (under the loop's 0.1 clamp → never clamped)
+      const cam = ctx.three.camera;
+      const faceNegX = () => { cam.rotation.order = 'YXZ'; cam.rotation.set(0, Math.PI / 2, 0); };   // face −X (toward the docked pod / the seat)
+      /** Drive the live loop until cond() is true or simBudget sim-seconds elapse. perTick
+       *  re-asserts input/facing every yield (so whenever a real frame lands, the inputs are
+       *  there). Stall-bail: ~10 s of yields with no ticked frame → the loop is wedged, bail
+       *  (never hangs; a long BLOCKING frame — e.g. a shader compile — can't false-trip it,
+       *  because these yields don't run while the main thread is blocked either). */
+      const drive = async (simBudget, cond, perTick) => {
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          if (cond()) return { ok: true, sim: +(nowSim - simStart).toFixed(2) };
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return { ok: cond(), sim: +(ctx.time.elapsed - simStart).toFixed(2) };
+      };
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      let walkedInX = 0, insideOk = false, seated = false, ejected = false;
+      try {
+        realClock.getDelta = () => FIXED_DT;             // pin the per-frame sim-dt (throttle-proof)
+        ctx.three.renderer.setSize(48, 48, false);       // tiny canvas → more REAL frames tick per second (this gate takes no screenshots)
+        try { g.skipIntro(); } catch {}
+        await drive(0.2, () => !ctx.intro || !ctx.intro.active);   // let the teardown tick run
+        // seat in the ship (retry the cockpit jump until the reseat to y≈3000 takes).
+        g.startIntro();
+        for (let a = 0; a < 20; a++) {
+          g.jumpToBeat('cockpit');
+          const r = await drive(0.3, () => ctx.player.body.body.translation().y > 2900);
+          if (r.ok) break;
+        }
+        try { g.setSkyIntroMode(0); } catch {}
+        const sp = ctx.player.body.body.translation();
+        // the bridge spawn sits at SEAT_Z = −0.30 off the ship origin → origin.z = sp.z + 0.30. Use
+        //   the ORIGIN frame so the walk line is centred on the bay door (local z = BAY_ZC = 4.8).
+        const SHIP = { x: sp.x, y: sp.y, z: sp.z + 0.30 };
+        // Position the player in the CORRIDOR, just fore of the bay opening (bay z-span ≈ +3.2..+6.4 on
+        //   the −X wall), on the +X side of the walkable tube, facing −X toward the docked pod door.
+        g.jumpToBeat('enterPod');
+        await drive(0.4, () => ctx.intro.beat === 'enterPod' && ctx.intro.scratch.phase === 'approach');   // the beat's init tick ran (mode=walk, door closed)
+        const startPos = { x: SHIP.x + 0.6, y: sp.y, z: SHIP.z + 4.8 };   // corridor, +X side, on the door centreline
+        ctx.player.body.body.setTranslation(startPos, true);
+        ctx.player.cameraSnapNextFrame = true;
+        faceNegX();
+        await drive(0.15, () => false, faceNegX);        // ≥2 ticked frames: the camera snap + anchor apply
+        const p0 = ctx.player.body.body.translation();
+        trace.push({ leg: 'start(corridor)', phase: ctx.intro.scratch.phase, x: +(p0.x - SHIP.x).toFixed(2), z: +(p0.z - SHIP.z).toFixed(2) });
+        // (1) E-OPEN the door — re-assert E + the −X facing every yield until the gaze-gated press
+        //     lands (phase flips approach→enter). Sim budget 2 s ≈ 40 fixed-dt frames.
+        const rOpen = await drive(2.0,
+          () => ctx.intro.scratch.phase === 'enter' || ctx.intro.scratch.phase === 'atSeat',
+          () => { faceNegX(); ctx.input.pressed.add('KeyE'); });
+        trace.push({ leg: 'after E-open', phase: ctx.intro.scratch.phase, doorOpened: rOpen.ok, sim: rOpen.sim });
+        // (2) WALK IN — hold W (real KCC) to walk −X through the doorway into the bore. The stop
+        //     condition is phase=atSeat AND a fixed DEPTH LINE (x < −1.8): the atSeat gate flips at
+        //     the 1.05 m stand radius (x ≈ −1.16), shy of the assertion's −1.2 walked-in-depth
+        //     proof, so we walk the deterministic 2-3 extra fixed-dt frames to −1.8 — well past the
+        //     −1.2 line, still 0.4 m fore of the stand-point (no seat overshoot; the CLUSTER D
+        //     halt-near-the-seat intent holds, now deterministic). The door swing (0.75 sim-s) runs
+        //     concurrently in this phase; budget 6 sim-s covers the swing + the ~2.8 m walk.
+        const rWalk = await drive(6.0,
+          () => ctx.intro.scratch.phase === 'atSeat' && (ctx.player.body.body.translation().x - SHIP.x) < -1.8,
+          () => { faceNegX(); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        insideOk = rWalk.ok;
+        // capture the REAL walked-in depth (the gate's proof of the KCC boarding) BEFORE any settle.
+        walkedInX = ctx.player.body.body.translation().x - SHIP.x;   // well into −X (past the −1.0 wall, toward the pod at −2.5)
+        // settle the body at the interior stand-point so the E-sit gaze/proximity is deterministic (a
+        //   real player stands by the seat before sitting). BAY_POD_X = −(COR_HW 1.0 + BAY_RECESS
+        //   2.9 · 0.52) = −2.508; stand = +0.30 fore. (Framing aid ONLY — walkedInX above already
+        //   proves the real walk reached the bore.)
+        if (insideOk) {
+          const stand = { x: SHIP.x - 2.508 + 0.30, y: ctx.player.body.body.translation().y, z: SHIP.z + 4.8 };
+          ctx.player.body.body.setTranslation(stand, true);
+          ctx.player.cameraSnapNextFrame = true;
+          await drive(0.15, () => false, faceNegX);      // ≥2 ticked frames: the snap + camera anchor land at the stand
+        }
+        const pIn = ctx.player.body.body.translation();
+        trace.push({ leg: 'inside?', phase: ctx.intro.scratch.phase, x: +walkedInX.toFixed(2), z: +(pIn.z - SHIP.z).toFixed(2), insideOk, walkSim: rWalk.sim });
+        // (3) E-SIT — re-assert E + the −X facing (the seat gaze target) every yield until the
+        //     edge-triggered sit lands (phase flips atSeat→sealing). Sim budget 2 s.
+        const rSit = await drive(2.0,
+          () => { const ph = ctx.intro.scratch.phase; return ph === 'sealing' || ph === 'eject' || ctx.intro.beat !== 'enterPod'; },
+          () => { faceNegX(); ctx.input.pressed.add('KeyE'); });
+        seated = rSit.ok;
+        trace.push({ leg: 'after E-sit', beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', seated, sim: rSit.sim });
+        // (4) E-EJECT — the auto-seal is 0.9 SIM-seconds (deterministic now: 18 fixed-dt frames),
+        //     then inject E at the eject gate until the beat ADVANCES to shipExplode (the lever is
+        //     purely player-gated — no fallback timer). Sim budget 5 s covers the seal + the press.
+        const rEject = await drive(5.0,
+          () => ctx.intro.beat !== 'enterPod',
+          () => { if (ctx.intro.beat === 'enterPod' && ctx.intro.scratch.phase === 'eject') ctx.input.pressed.add('KeyE'); });
+        ejected = rEject.ok;
+        trace.push({ leg: 'after E-eject', beat: ctx.intro.beat, ejected, sim: rEject.sim });
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;               // restore the real clock (leak-free)
+        ctx.three.renderer.setSize(origW, origH, false); // restore the canvas
+      }
+      return { trace, walkedInX, reachedInside: insideOk, seated, ejected };
+    });
+    console.log('[pod-walkin] ' + JSON.stringify(log.trace, null, 0));
+    console.log(`[pod-walkin] walkedInX=${log.walkedInX.toFixed(2)} reachedInside=${log.reachedInside} seated=${log.seated}`);
+    // GATE: the body must have physically walked PAST the −1.0 corridor-wall line into the bore
+    //   (x < −1.2 relative to SHIP_ORIGIN) via real KCC, reached the atSeat gate, and E-sit advanced it.
+    if (!log.reachedInside) throw new Error(`pod-walkin GATE FAILED: the player never walked INTO the pod (walkedInX=${log.walkedInX.toFixed(2)}, expected < −1.2). The walkable boarding path is blocked.`);
+    if (log.walkedInX > -1.2) throw new Error(`pod-walkin GATE FAILED: the body only reached x=${log.walkedInX.toFixed(2)} (expected < −1.2 inside the bore).`);
+    if (!log.seated) throw new Error(`pod-walkin GATE FAILED: E-sit did not seat/advance the beat.`);
+    if (!log.ejected) throw new Error(`pod-walkin GATE FAILED: E-eject did not fire/advance to shipExplode.`);
+    console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated → E-eject fired (real KCC motion + real input path).');
+  },
+
+  // W2b — THE AIRLOCK COLLIDER MOTION PROBE (Rule 9: collision matches the visible airlock, proven by
+  //   real motion). Independent of the sequence flow (the orchestrator rewires that later). Boots the
+  //   ship, seats the KCC body in the corridor on the airlock centreline (+X side), and proves:
+  //   (1) CLOSED sliding door BLOCKS — drive W(−X) into the closed door; the body stops at the wall
+  //       plane (can't cross past x ≈ AIRLOCK_WALL_X − a small margin). The seal collider works.
+  //   (2) OPEN sliding door PASSES — slide the leaves open (by name) + drop the seal (find + remove
+  //       the aperture static box), drive W(−X); the body walks THROUGH into the collar and reaches
+  //       near the pod-door threshold (x < COLLAR_FAR_X + margin). The collar floor/walls are walkable.
+  //   (3) NO FALL-THROUGH / NO GAP TO SPACE — y stays on the ship floor (≈3000) the whole way.
+  //   No screenshot — a motion assertion (like cockpit-motion / pod-walkin).
+  'airlock-motion': async (page) => {
+    const log = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const realClock = ctx.three.clock; const FIXED_DT = 0.05;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      realClock.getDelta = () => FIXED_DT;
+      ctx.three.renderer.setSize(48, 48, false);
+      const drive = async (simBudget, perTick) => {
+        const s0 = ctx.time.elapsed; let last = s0, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - s0 >= simBudget) break;
+        }
+      };
+      const result = { legs: [], closedBlocked: false, openedPassed: false, onFloor: true };
+      try {
+        try { g.skipIntro(); } catch {}
+        await drive(0.2);
+        g.startIntro();
+        for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); await drive(0.3); if (ctx.player.body.body.translation().y > 2900) break; }
+        try { g.setSkyIntroMode(0); } catch {}
+        ctx.flags.paused = false;
+        ctx.input.controls.isLocked = true;   // isPlaying() → real KCC motion processed
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }   // free-walk (the cockpit opens seated → locomotion gated otherwise)
+        const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+        // ORIGIN frame: the bridge spawn is at SEAT_Z = −0.30 → origin.z = spawn.z + 0.30. Airlock is
+        //   at local z = BAY_ZC = 4.8, wall plane at local x = AIRLOCK_WALL_X = −1.0, collar far = −1.92.
+        const sp = ctx.player.body.body.translation();
+        const OX = sp.x, OY = sp.y, OZ = sp.z + 0.30;   // ship-origin frame
+        const WALL_X = -1.0, COLLAR_FAR = -1.92, POD_X = -3.36, AHW = 0.72, TRAVEL = 0.82, BZ = 4.8;
+        const faceNegX = () => { cam.rotation.set(0, Math.PI / 2, 0); if (ctx.intro) ctx.intro.mode = 'walk'; };   // YXZ yaw +π/2 → forward = −X; keep walk mode
+        const floorY = OY;   // the KCC body-centre y at the corridor floor (spawn y ≈ ship floor)
+
+        // ── LEG 1: CLOSED door blocks. Place the body in the corridor on the airlock centreline, +X
+        //    side (x = −0.4 local, well corridor-side of the −1.0 wall), face −X, drive W into the door.
+        ctx.player.body.body.setTranslation({ x: OX - 0.4, y: OY, z: OZ + BZ }, true);
+        ctx.player.cameraSnapNextFrame = true;
+        await drive(0.15, faceNegX);
+        await drive(2.4, () => { faceNegX(); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        const p1 = ctx.player.body.body.translation();
+        const x1 = p1.x - OX;
+        // BLOCKED if the body did NOT cross meaningfully past the wall plane (allow the KCC skin ~0.1).
+        result.closedBlocked = x1 > (WALL_X - 0.15);
+        if (Math.abs(p1.y - floorY) > 0.6) result.onFloor = false;
+        result.legs.push({ leg: 'closed-block', xEnd: +x1.toFixed(2), wallX: WALL_X, blocked: result.closedBlocked, y: +p1.y.toFixed(1) });
+
+        // ── OPEN the door: slide the leaves into their pockets (by name) + DROP the seal collider. The
+        //    seal is the ONE static collider at the aperture centre (world x = OX+WALL_X, z = OZ+BZ,
+        //    y ≈ OY + AIRLOCK_TOP/2). Find + remove it from the rapier world.
+        const lL = ctx.three.scene.getObjectByName('airlockDoorLeafL');
+        const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
+        if (lL) lL.position.z = (BZ - AHW / 2) - TRAVEL;
+        if (lR) lR.position.z = (BZ + AHW / 2) + TRAVEL;
+        // remove the seal collider (search the rapier world for a collider at the aperture centre)
+        const world = ctx.physics.world;
+        const sealWX = OX + WALL_X, sealWZ = OZ + BZ;
+        let removed = 0;
+        world.forEachCollider((col) => {
+          const body = col.parent(); if (!body) return;
+          const t = body.translation();   // world position lives on the BODY (makeStaticBox sets it there)
+          let hz = 1; try { hz = col.halfExtents().z; } catch {}
+          // the seal is the box at the aperture centre (x/z) spanning the aperture width (hz≈AIRLOCK_HW 0.72).
+          if (Math.abs(t.x - sealWX) < 0.2 && Math.abs(t.z - sealWZ) < 0.25 && hz > 0.6 && hz < 0.85) {
+            world.removeRigidBody(body); removed++;
+          }
+        });
+        result.sealRemoved = removed;
+        // DIAGNOSTIC — dump every collider near the boarding lane (x −2.2..0, z BZ±1) so we can see
+        //   what blocks the walk-in. (After the seal removal, so it shows the remaining set.)
+        result.nearColliders = [];
+        world.forEachCollider((col) => {
+          const body = col.parent(); if (!body) return;
+          const t = body.translation();
+          const lx = t.x - OX, lz = t.z - OZ;
+          if (lx > -2.4 && lx < 0.2 && Math.abs(lz - BZ) < 1.0 && t.y > OY - 0.5 && t.y < OY + 2.6) {
+            let hx = 0, hy = 0, hz = 0;
+            try { const h = col.halfExtents(); hx = h.x; hy = h.y; hz = h.z; } catch {}
+            result.nearColliders.push({ lx: +lx.toFixed(2), lz: +lz.toFixed(2), ly: +(t.y - OY).toFixed(2), hx: +hx.toFixed(2), hy: +hy.toFixed(2), hz: +hz.toFixed(2) });
+          }
+        });
+
+        // ── LEG 2: OPEN door passes. Re-place in the corridor (+X side), face −X, drive W through the
+        //    open door + collar toward the pod door.
+        ctx.player.body.body.setTranslation({ x: OX - 0.4, y: OY, z: OZ + BZ }, true);
+        ctx.player.cameraSnapNextFrame = true;
+        await drive(0.15, faceNegX);
+        await drive(3.5, () => { faceNegX(); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        const p2 = ctx.player.body.body.translation();
+        const x2 = p2.x - OX;
+        // PASSED if the body walked past the wall into the collar, near the pod-door threshold.
+        result.openedPassed = x2 < (COLLAR_FAR + 0.35);
+        if (Math.abs(p2.y - floorY) > 0.6) result.onFloor = false;
+        result.legs.push({ leg: 'open-pass', xEnd: +x2.toFixed(2), collarFar: COLLAR_FAR, passed: result.openedPassed, y: +p2.y.toFixed(1) });
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+      }
+      return result;
+    });
+    console.log('[airlock-motion] ' + JSON.stringify(log.legs, null, 0));
+    console.log('[airlock-motion] nearColliders=' + JSON.stringify(log.nearColliders || []));
+    console.log(`[airlock-motion] closedBlocked=${log.closedBlocked} openedPassed=${log.openedPassed} onFloor=${log.onFloor} sealRemoved=${log.sealRemoved}`);
+    if (!log.closedBlocked) throw new Error('airlock-motion GATE FAILED: the CLOSED sliding door did NOT block the player (they crossed the wall plane) — the seal collider is missing/misplaced.');
+    if (!log.openedPassed) throw new Error('airlock-motion GATE FAILED: the OPEN sliding door did NOT let the player through to the pod threshold — the collar is not walkable (a blocking collider or a floor gap).');
+    if (!log.onFloor) throw new Error('airlock-motion GATE FAILED: the player fell through the floor / a gap to space along the boarding path.');
+    console.log('[airlock-motion] GATE PASS — closed door blocks, open door + collar are walkable to the pod threshold, no fall-through (real KCC motion).');
+  },
+
+  // CLUSTER D — the WALK-OUT gate (user spec: crash → wake → kick the FRONT door → walk out on your
+  //   OWN legs onto the real terrain, NO teleport; the exposure EASES like eye-adaptation, no snap).
+  //   Drives the REAL chain impact → wake → kick the door → real-KCC walk out the −Z door, and PROVES:
+  //   (1) the player physically walked OUT through the door onto the terrain (position moved −Z past
+  //   the pod radius via real KCC, not a teleport — sampled continuity), (2) the step-out did NOT
+  //   teleport (no discontinuous jump at the handoff), and (3) the renderer exposure EASED from the
+  //   wake lift toward the desert base over ~1.8s (monotone-ish descent, no single-frame snap).
+  //   The real-KCC walk is driven by a FIXED-DT sim-budget loop (see below) so the proof is
+  //   DETERMINISTIC under the ~2 fps headless swiftshader tab — no wall-clock timing dependence.
+  'pod-walkout': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // ── DETERMINISTIC DRIVER (throttle-proof). The OLD driver was wall-clock end to end: the
+      //    impact/wake setup slept 2600+600 ms and the walk loop held W for 90×70 ms, measuring
+      //    however far the KCC happened to travel — but the headless swiftshader tab renders this
+      //    heavy scene at ~1-2 fps, so BOTH legs raced a starved loop: (a) the wake beat's init tick
+      //    could MISS the 600 ms window, so forcing phase='climb' got undone by the late init
+      //    (blowCabinHatch(0) re-shut the door + mode='seated' → walkedOutZ≈0, flaky), and (b) the
+      //    walked distance swung run-to-run (~−5.6..−6.9 m; could dip under the −2.0 GATE-2 floor).
+      //    THE FIX (same technique as pod-walkin / smokeExposureEase): pin the loop's dt to FIXED_DT
+      //    so every ticked frame advances a KNOWN sim-dt, drive the impact→wake chain by its REAL
+      //    phase-flip conditions, and drive the walk until a SIM-TIME budget elapses — never a
+      //    wall-clock count. The assertions below are UNCHANGED and strict.
+      const FIXED_DT = 0.05;      // sim-seconds per frame (under the loop's 0.1 clamp → never clamped)
+      const SIM_BUDGET = 2.0;     // sim-seconds of walking: at WALK_SPEED 6 m/s → ~11 m out the door
+                                  //   (well past the −2.0 GATE-2 floor + the 2.2 m stepOut climb gate)
+      /** Drive the live loop until cond() or simBudget sim-seconds. Stall-bail: ~10 s of yields with
+       *  no ticked frame → the loop is wedged, bail (a long BLOCKING frame can't false-trip it —
+       *  these yields don't run while the main thread is blocked either). */
+      const drive = async (simBudget, cond, perTick) => {
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          if (cond()) return { ok: true, sim: +(nowSim - simStart).toFixed(2) };
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return { ok: cond(), sim: +(ctx.time.elapsed - simStart).toFixed(2) };
+      };
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const cam = ctx.three.camera;
+      let expoAtWake = 0, wakeInitOk = false;
+      let inside = { x: 0, y: 0, z: 0 };
+      let maxJump = 0;          // the largest single-tick position jump (a teleport would spike this)
+      let reachedStepOut = false;
+      let teleportAtHandoff = 0;
+      let framesTicked = 0, simElapsed = 0;
+      try {
+        realClock.getDelta = () => FIXED_DT;             // pin the per-frame sim-dt (throttle-proof)
+        ctx.three.renderer.setSize(48, 48, false);       // tiny canvas → more REAL frames tick per second (no screenshots in this gate)
+        g.startIntro();
+        // run through the crash → the REAL impact beat auto-advances → wake, whose init tick seats
+        //   the player inside the crashed cabin + lifts the exposure. Driven by the CHAIN's own
+        //   conditions (impact runs IMPACT_FADE+IMPACT_HOLD = 2.7 sim-s, then advanceBeat → wake).
+        g.jumpToBeat('impact');
+        const rWake = await drive(4.5, () => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true);
+        wakeInitOk = rWake.ok;
+        expoAtWake = ctx.three.renderer.toneMappingExposure;   // the lifted wake exposure (~1.62)
+        // FORCE the wake to its walk-out-ready state deterministically (the come-to fade phases are
+        //   proven by smokeIntro; this gate proves the WALK). Safe now: the wake init has PROVABLY
+        //   run (rWake cond), so no late init will undo this. Blow the FRONT door fully open + hand
+        //   control to WALK — the exact end-state of the wake 'blowing'→'climb' phases.
+        g.blowCabinHatch(1);                 // kick the −Z front door wide (the wake exit)
+        const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0';   // clear the come-to overlay
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        // record the spawn (inside the cabin) — the walk-out must MOVE the body from here, not teleport.
+        const p0 = ctx.player.body.body.translation();
+        inside = { x: p0.x, y: p0.y, z: p0.z };
+        // WALK OUT the −Z front door on real legs: face −Z, hold W (forward = −Z), sample the path
+        //   each yield (proves the motion is continuous). Terminated by the SIM budget.
+        cam.rotation.order = 'YXZ';
+        let prev = { x: inside.x, y: inside.y, z: inside.z };
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          cam.rotation.set(-0.05, 0, 0);   // face −Z (yaw 0) → W walks toward/through the −Z front door
+          ctx.input.keys['KeyW'] = true;   // re-assert each iteration (endInputFrame clears pressed; keys persist, belt-and-braces)
+          await sleep(16);                 // yield so real rAF frames tick between samples
+          const t = ctx.player.body.body.translation();
+          const jump = Math.hypot(t.x - prev.x, t.z - prev.z);
+          if (jump > maxJump) maxJump = jump;
+          prev = { x: t.x, y: t.y, z: t.z };
+          // the wake-climb advanced to stepOut (or handed off) — capture whether the body JUMPED at that
+          //   moment (a teleport-to-returnPos would spike jump exactly here; the real flow does NOT teleport).
+          if (!reachedStepOut && ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active)) {
+            reachedStepOut = true; teleportAtHandoff = jump;
+          }
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;   // ~10 s of yields with no ticked frame → loop wedged, bail
+          simElapsed = nowSim - simStart;
+          framesTicked = Math.round(simElapsed / FIXED_DT);
+          if (simElapsed >= SIM_BUDGET) break;
+        }
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;               // restore the real clock (leak-free)
+        ctx.three.renderer.setSize(origW, origH, false); // restore the canvas
+      }
+      const pOut = ctx.player.body.body.translation();
+      const walkedOutZ = pOut.z - inside.z;   // negative = walked −Z out the front door
+
+      // ── ZERO-SHIFT EXPOSURE PROOF (W6 item 5). The wake NO LONGER lifts the exposure — it stays at
+      //    the desert base (1.05) from the crash onward, so there is nothing to ease and no washed-out
+      //    exit. __game.smokeExposureConstant() drives the crash-pose settle 0→1 and asserts the
+      //    renderer exposure is CONSTANT at 1.05 across the whole settle (min==max==base).
+      const easeReport = g.smokeExposureConstant();
+      return {
+        walkExpoAtWake: +expoAtWake.toFixed(3), walkExpoFinal: +ctx.three.renderer.toneMappingExposure.toFixed(3),
+        ease: easeReport,
+        inside: [+inside.x.toFixed(2), +inside.z.toFixed(2)], walkedOutZ: +walkedOutZ.toFixed(2),
+        maxJump: +maxJump.toFixed(2), reachedStepOut, teleportAtHandoff: +teleportAtHandoff.toFixed(2),
+        driver: { simElapsed: +simElapsed.toFixed(2), framesTicked, wakeInitOk },   // deterministic-driver diagnostics
+      };
+    });
+    console.log('[pod-walkout] ' + JSON.stringify(log));
+    // GATE 0 — the SETUP proved itself: the real impact→wake chain advanced + the wake init tick ran
+    //   (seats the player inside the crashed cabin). Without this, a walk failure below would be a
+    //   confusing symptom of a broken setup, not a broken walk-out.
+    if (!log.driver.wakeInitOk) throw new Error(`pod-walkout GATE FAILED: the impact→wake chain never initialised the wake (driver=${JSON.stringify(log.driver)}) — the crash-chain setup is broken.`);
+    // GATE 1 — the player physically WALKED OUT (moved −Z out the front door onto the terrain).
+    if (log.walkedOutZ > -1.0) throw new Error(`pod-walkout GATE FAILED: the body only moved z=${log.walkedOutZ} out the door (expected < −1.0 — the walk-out path is blocked or the door didn't open).`);
+    // GATE 2 — NO TELEPORT: a stepOut teleport-to-returnPos would SNAP the body back near the spawn
+    //   (returnPos ≈ the inside/origin) — but the player ends where they WALKED (z well past the door),
+    //   proving no teleport. The definitive no-teleport signal is the END POSITION: a real teleport to
+    //   returnPos would land the body back at |Δz|≈0, not the ~−11 m the deterministic driver walks to.
+    if (Math.abs(log.walkedOutZ) < 2.0) throw new Error(`pod-walkout GATE FAILED: the body ended only ${log.walkedOutZ}m from the spawn — a teleport-back-to-returnPos would land here; the walk-out should leave the player where they WALKED (well out the door).`);
+    // a per-tick jump far beyond any walking step WOULD be a teleport. With the fixed-dt driver the KCC
+    //   step is a steady ~0.6 m (FIXED_DT 0.05 s × WALK_SPEED 6 m/s); the 3.0 m ceiling flags a real snap.
+    if (log.maxJump > 3.0) throw new Error(`pod-walkout GATE FAILED: a discontinuous ${log.maxJump}m jump (a teleport, not a KCC step) occurred during the walk-out.`);
+    // GATE 3 — the wake-climb advanced to stepOut (the walk-out → stepOut chain fired).
+    if (!log.reachedStepOut) throw new Error(`pod-walkout GATE FAILED: the walk-out never advanced to stepOut (the climb-out distance gate didn't fire).`);
+    // GATE 4 — ZERO-SHIFT EXPOSURE (W6 item 5): the exposure is CONSTANT at the desert base (1.05)
+    //   across the whole crash-pose settle — the wake never lifts it, so there's no washed-out exit
+    //   + nothing to ease. Both the settle-sweep (smokeExposureConstant) AND the live wake capture
+    //   must sit at the base.
+    if (!log.ease || !log.ease.ok || !log.ease.constant) throw new Error(`pod-walkout GATE FAILED: the exposure is NOT CONSTANT at the desert base across the crash settle — smokeExposureConstant=${JSON.stringify(log.ease)} (expected min==max==${log.ease ? log.ease.base : '1.05'}).`);
+    if (Math.abs(log.walkExpoAtWake - 1.05) > 1e-2) throw new Error(`pod-walkout GATE FAILED: the LIVE wake exposure lifted to ${log.walkExpoAtWake} (expected 1.05 — the wake must not lift the exposure; W6 item 5).`);
+    if (Math.abs(log.walkExpoFinal - 1.05) > 1e-2) throw new Error(`pod-walkout GATE FAILED: the exposure ended at ${log.walkExpoFinal} after the walk-out (expected 1.05 — bit-stable across the exit).`);
+    console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m over ${log.driver.simElapsed}s sim / ${log.driver.framesTicked} fixed-dt frames, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure held CONSTANT at ${log.ease.base} (wake=${log.walkExpoAtWake}, settle min/max=${log.ease.min}/${log.ease.max}) — zero-shift handoff.`);
+  },
+
+  // W6 item 4 GATE — the IMPACT VIEW NEVER LEAVES THE POD. Drives the real descent→parachute→impact
+  //   →wake chain with a FIXED sim-dt and, each ticked frame from the ground-approach through the
+  //   crash-settle + wake, probes whether the camera EYE is inside the (possibly-tilted) cabin shell
+  //   (probeEyeInCabin). Asserts the eye stays INSIDE the whole time — no frame where the view clips
+  //   outside the pod (the "seeing above the pod / the landscape" bug). The bug this catches: the
+  //   body left ~20 m up when the cabin grounded at impact → the eye hung above the pod for a few frames.
+  'impact-eye': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const FIXED_DT = 0.05;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const cam = ctx.three.camera;
+      let worstMargin = 999;        // the smallest radial margin seen (negative = clipped outside the wall)
+      let worstReport = null;
+      let anyOutside = false, framesProbed = 0, sawImpact = false, sawWake = false;
+      const beatsSeen = {};
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(48, 48, false);
+        g.startIntro();
+        // enter the descent LATE (near the ground) so we exercise the ground-approach → impact → wake
+        //   frames densely; then let the chain auto-advance through parachute → impact → wake.
+        g.jumpToBeat('descent');
+        // drive frames; sample the eye vs cabin each ticked frame once we're at/after the parachute
+        //   (the ground-approach) and all the way through wake's come-to.
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          await sleep(16);
+          const beat = ctx.intro ? ctx.intro.beat : 'done';
+          beatsSeen[beat] = (beatsSeen[beat] || 0) + 1;
+          if (beat === 'impact') sawImpact = true;
+          if (beat === 'wake') sawWake = true;
+          // probe from the parachute (ground-approach) through impact + wake — the window the bug lived in.
+          if (beat === 'parachute' || beat === 'impact' || beat === 'wake') {
+            const eye = { x: cam.position.x, y: cam.position.y, z: cam.position.z };
+            const r = g.probeEyeInCabin(eye);
+            if (r.built) {
+              framesProbed++;
+              if (!r.inside) anyOutside = true;
+              if (r.radialMargin < worstMargin) { worstMargin = r.radialMargin; worstReport = { beat, ...r }; }
+            }
+          }
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          // stop a couple seconds into wake (past the come-to fade) — the whole impact→wake window is covered.
+          if (sawWake && (beatsSeen['wake'] || 0) > 30) break;
+          if (nowSim - simStart > 40) break;   // hard sim-time cap
+        }
+      } finally {
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+        if (window.__game.ctx.intro && window.__game.ctx.intro.active) { try { window.__game.skipIntro(); } catch {} }
+      }
+      return { anyOutside, framesProbed, sawImpact, sawWake, worstMargin: +worstMargin.toFixed(3), worstReport, beatsSeen };
+    });
+    console.log('[impact-eye] ' + JSON.stringify(log));
+    if (!log.sawImpact) throw new Error(`impact-eye GATE FAILED: the chain never reached the impact beat (beatsSeen=${JSON.stringify(log.beatsSeen)}).`);
+    if (!log.sawWake) throw new Error(`impact-eye GATE FAILED: the chain never reached the wake beat (beatsSeen=${JSON.stringify(log.beatsSeen)}).`);
+    if (log.framesProbed < 10) throw new Error(`impact-eye GATE FAILED: too few eye probes (${log.framesProbed}) — the descent/impact window wasn't exercised.`);
+    if (log.anyOutside) throw new Error(`impact-eye GATE FAILED: the camera eye CLIPPED OUTSIDE the cabin on at least one frame (worst=${JSON.stringify(log.worstReport)}) — the view left the pod during impact/wake (the "seeing above the pod / the landscape" bug).`);
+    console.log(`[impact-eye] GATE PASS — the eye stayed INSIDE the cabin across ${log.framesProbed} probed frames through impact→wake (worst radial margin=${log.worstMargin}m, all inside). The view never leaves the pod.`);
+  },
+
+  // W6 item 5 GATE — THE ZERO-SHIFT HANDOFF. The visible world must be BIT-STABLE across the exit
+  //   threshold: exposure, fog density, sun intensity, and the diurnal clock must NOT snap at the
+  //   wake, at step-out, or after handoff — the wake IS the survival world; walking out is just a
+  //   door. Drives the real chain to wake, then to step-out + handoff + 5 s of gameplay, sampling
+  //   the world state at each point and asserting they match (within tight tolerances). The clock
+  //   ADVANCES continuously (that's fine — it must not SNAP BACKWARD); exposure/fog/sun hold.
+  'zero-shift-handoff': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      const FIXED_DT = 0.05;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const sample = () => ({
+        expo: +ctx.three.renderer.toneMappingExposure.toFixed(4),
+        fog: ctx.three.scene.fog && ctx.three.scene.fog.density != null ? +ctx.three.scene.fog.density.toFixed(6) : null,
+        sun: ctx.lights && ctx.lights.sun ? +ctx.lights.sun.intensity.toFixed(4) : null,
+        dayTime: +ctx.time.dayTime.toFixed(4),
+      });
+      const drive = async (cond, budget) => {
+        const start = ctx.time.elapsed; let last = start, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          await sleep(16);
+          if (cond()) return true;
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - start > budget) break;
+        }
+        return cond();
+      };
+      let atWake = null, atStepOut = null, afterHandoff = null, reachedWake = false, reachedStepOut = false, handedOff = false;
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(48, 48, false);
+        g.startIntro();
+        // run the REAL descent → crash → wake so the fog/exposure/time are set by the actual flow.
+        g.jumpToBeat('descent');
+        reachedWake = await drive(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 30);
+        atWake = sample();
+        // force the wake to walk-out-ready + walk out to trigger stepOut → endEscapePodIntro.
+        g.blowCabinHatch(1);
+        const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0';
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+        // capture the moment we enter stepOut (the unify has just run — the pod is now the persistent world object).
+        reachedStepOut = await drive(() => { cam.rotation.set(-0.05, 0, 0); ctx.input.keys['KeyW'] = true; return ctx.intro && ctx.intro.beat === 'stepOut'; }, 6);
+        atStepOut = sample();
+        ctx.input.keys['KeyW'] = false;
+        // let stepOut's REVEAL_DWELL elapse → endEscapePodIntro (handoff), then 5 s of gameplay.
+        handedOff = await drive(() => !ctx.intro || !ctx.intro.active, 8);
+        await drive(() => false, 5);   // 5 s of real gameplay ticks (the fog-ease window that USED to exist)
+        afterHandoff = sample();
+      } finally {
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+        if (ctx.intro && ctx.intro.active) { try { g.skipIntro(); } catch {} }
+      }
+      return { atWake, atStepOut, afterHandoff, reachedWake, reachedStepOut, handedOff };
+    });
+    console.log('[zero-shift-handoff] ' + JSON.stringify(log));
+    if (!log.reachedWake) throw new Error(`zero-shift-handoff GATE FAILED: never reached wake (${JSON.stringify(log)}).`);
+    if (!log.reachedStepOut) throw new Error(`zero-shift-handoff GATE FAILED: never reached stepOut (${JSON.stringify(log)}).`);
+    if (!log.handedOff) throw new Error(`zero-shift-handoff GATE FAILED: the intro never handed off (${JSON.stringify(log)}).`);
+    const w = log.atWake, s = log.atStepOut, a = log.afterHandoff;
+    // EXPOSURE — constant 1.05 at every point (no lift, no ease).
+    for (const [tag, p] of [['wake', w], ['stepOut', s], ['afterHandoff', a]]) {
+      if (Math.abs(p.expo - 1.05) > 1e-2) throw new Error(`zero-shift-handoff GATE FAILED: exposure at ${tag} was ${p.expo} (expected 1.05 — no lift/ease anywhere).`);
+    }
+    // FOG — bit-stable across the exit (already at survival by the crash; no clear pin, no ease). The
+    //   wake→stepOut→afterHandoff fog must not jump (tolerance covers float noise, not a visible shift).
+    if (Math.abs(w.fog - s.fog) > 2e-5 || Math.abs(s.fog - a.fog) > 2e-5) throw new Error(`zero-shift-handoff GATE FAILED: fog density shifted across the exit — wake=${w.fog} stepOut=${s.fog} afterHandoff=${a.fog} (must be bit-stable; the fog is already survival by the crash).`);
+    // SUN intensity — bit-stable (the midday sun the pod fell under continues; no relight at exit).
+    if (w.sun != null && (Math.abs(w.sun - s.sun) > 0.05 || Math.abs(s.sun - a.sun) > 0.1)) throw new Error(`zero-shift-handoff GATE FAILED: sun intensity shifted across the exit — wake=${w.sun} stepOut=${s.sun} afterHandoff=${a.sun}.`);
+    // CLOCK — must ADVANCE (or hold), never SNAP BACKWARD (the old setIntroMiddayClear re-set was a backward jump).
+    const wrap = (b, x) => x < b - 0.5 ? x + 1 : x;   // handle a midnight wrap (won't happen at midday, but be safe)
+    if (wrap(w.dayTime, s.dayTime) < w.dayTime - 1e-4 || wrap(s.dayTime, a.dayTime) < s.dayTime - 1e-4) throw new Error(`zero-shift-handoff GATE FAILED: the diurnal clock SNAPPED BACKWARD across the exit — wake=${w.dayTime} stepOut=${s.dayTime} afterHandoff=${a.dayTime} (the clock must continue, not reset).`);
+    console.log(`[zero-shift-handoff] GATE PASS — the world is bit-stable across the exit: exposure ${w.expo}/${s.expo}/${a.expo} (constant 1.05), fog ${w.fog}/${s.fog}/${a.fog} (stable), sun ${w.sun}/${s.sun}/${a.sun} (stable), clock ${w.dayTime}→${s.dayTime}→${a.dayTime} (continuous, no backward snap). The wake IS the survival world.`);
+  },
+
+  // B2 dev diagnostic — dump every physics collider whose AABB centre falls in the pod-bay boarding
+  //   region (relative to the bridge spawn) so a blocked walk-in path can be diagnosed exactly.
+  'bay-probe': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;
+      try { g.skipIntro(); } catch {}
+      await sleep(200);
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      for (let i = 0; i < 20; i++) { await sleep(120); if (ctx.player.body.body.translation().y > 2900) break; g.jumpToBeat('cockpit'); }
+      const sp = ctx.player.body.body.translation();
+      const SHIP = { x: sp.x, y: sp.y - 0.85, z: sp.z + 0.30 };   // bridge spawn → ship origin (seat at z −0.30; body centre ≈ +0.85)
+      const hits = [];
+      ctx.physics.world.forEachCollider((col) => {
+        const t = col.translation();
+        const lx = t.x - SHIP.x, lz = t.z - SHIP.z;
+        if (t.y < SHIP.y - 2 || t.y > SHIP.y + 6) return;      // ship-deck band only
+        const sh = col.shape;
+        // AABB-overlap the boarding region (a long wall's CENTRE can sit far outside it).
+        const hx = sh.halfExtents ? Math.max(sh.halfExtents.x, sh.halfExtents.z) : (sh.radius || 0.5);
+        const hz = hx;
+        if (lx + hx < -4.5 || lx - hx > 1.5 || lz + hz < 2.0 || lz - hz > 7.5) return;
+        const desc = { type: sh.type, x: +lx.toFixed(2), y: +(t.y - SHIP.y).toFixed(2), z: +lz.toFixed(2) };
+        if (sh.halfExtents) { desc.he = [+sh.halfExtents.x.toFixed(2), +sh.halfExtents.y.toFixed(2), +sh.halfExtents.z.toFixed(2)]; }
+        if (sh.radius != null) desc.r = +sh.radius.toFixed(2);
+        if (sh.halfHeight != null) desc.hh = +sh.halfHeight.toFixed(2);
+        const q = col.rotation();
+        const yaw = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+        if (Math.abs(yaw) > 0.01) desc.yawDeg = +(yaw * 180 / Math.PI).toFixed(0);
+        hits.push(desc);
+      });
+      hits.sort((a, b) => a.x - b.x);
+      // ── KCC blocker interrogation: park the capsule AT the stall point on the door centreline and
+      //    ask the character controller for a −X step; report exactly which collider(s) it hits.
+      ctx.flags.paused = true;   // freeze the sim so nothing re-moves the body under us
+      const pb = ctx.player.body;
+      pb.body.setTranslation({ x: SHIP.x - 0.7, y: sp.y, z: SHIP.z + 4.8 }, true);
+      pb.controller.computeColliderMovement(pb.collider, { x: -0.6, y: -0.05, z: 0 });
+      const mv = pb.controller.computedMovement();
+      const cols = [];
+      try {
+        const n = pb.controller.numComputedCollisions();
+        for (let i = 0; i < n; i++) {
+          const c = pb.controller.computedCollision(i);
+          if (!c || !c.collider) continue;
+          const ct = c.collider.translation();
+          const cs = c.collider.shape;
+          cols.push({
+            type: cs.type, x: +(ct.x - SHIP.x).toFixed(2), y: +(ct.y - SHIP.y).toFixed(2), z: +(ct.z - SHIP.z).toFixed(2),
+            he: cs.halfExtents ? [+cs.halfExtents.x.toFixed(2), +cs.halfExtents.y.toFixed(2), +cs.halfExtents.z.toFixed(2)] : undefined,
+            r: cs.radius != null ? +cs.radius.toFixed(2) : undefined,
+            n1: c.normal1 ? [+c.normal1.x.toFixed(2), +c.normal1.y.toFixed(2), +c.normal1.z.toFixed(2)] : undefined,
+          });
+        }
+      } catch (e) { cols.push({ err: String(e) }); }
+      ctx.flags.paused = false;
+      return { shipY: +SHIP.y.toFixed(1), n: hits.length, hits, kcc: { moved: [+mv.x.toFixed(3), +mv.y.toFixed(3), +mv.z.toFixed(3)], cols } };
+    });
+    console.log('[bay-probe] shipY=' + out.shipY + ' n=' + out.n);
+    for (const h of out.hits) console.log('[bay-probe] ' + JSON.stringify(h));
+    console.log('[bay-probe][kcc] ' + JSON.stringify(out.kcc));
+  },
+
+  // FLAG-OFF byte-identical GATE — a normal (no-intro) game save must write NO podCrash field, so
+  // the live game is unaffected by this feature. enterLive already ran enterGame (a normal dev game,
+  // NO intro/unify); we just save + assert the field is absent. THROWS on failure.
+  'pod-persistence-flagoff': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game;
+      const sv = g.saveGame();
+      const raw = localStorage.getItem('dustfall.save.v1');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return { saveOk: sv.ok, hasPodCrash: 'podCrash' in parsed };
+    });
+    console.log(`[pod-persistence-flagoff] ${JSON.stringify(r)}`);
+    if (!r.saveOk || r.hasPodCrash) throw new Error(`FLAG-OFF GATE FAILED — a no-pod save wrote podCrash: ${JSON.stringify(r)}`);
+    console.log('[pod-persistence-flagoff] PASS — no podCrash in a normal (no-pod) save.');
+  },
+
+  // Pod-tutorial GATE — the craft→salvage→chute-pop loop, headless. Mirrors smoke-intro's gate.
+  'smoke-pod-tutorial': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokePodTutorial());
+    console.log(`[smoke-pod-tutorial] ${JSON.stringify(r)}`);
+    if (!r || !r.ok) throw new Error(`smoke-pod-tutorial GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
+  // ── Y3 fix 8 — DOOR-FLUSH-AUDIT: the merged front door must read PERFECTLY FLUSH (pivot rotation
+  //    == 0 exactly) at EVERY sealed state (bay pre-open, post-seal, descent altitudes, impact, wake
+  //    pre-kick). Steps each state, reads probeCabinDoor()/the bay pivot, and GATES local rotation.y
+  //    == 0 (and local x/z == 0). THROWS on any drift. No screenshot — a hard assertion.
+  'door-flush-audit': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game; const ctx = g.ctx;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const rows = [];
+      const EPS = 1e-3;
+      const readRide = (label) => {
+        const p = g.probeCabinDoor();   // the RIDE/landed cabin's front-door pivot
+        rows.push({ label, kind: 'ride', built: p.built, localX: p.localX, localY: p.localY, localZ: p.localZ, ajarY: p.ajarY });
+        return p;
+      };
+      const readBay = (label) => {
+        const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod') || ctx.three.scene.getObjectByName('canonicalPod');
+        let localY = null, found = false;
+        if (pod) { pod.traverse((o) => { if (o.name === 'canonicalPodDoor') { found = true; localY = +o.rotation.y.toFixed(4); } }); }
+        rows.push({ label, kind: 'bay', built: found, localY });
+        return { found, localY };
+      };
+      try {
+        realClock.getDelta = () => 0.05;
+        ctx.three.renderer.setSize(48, 48, false);
+        // 1) BAY pre-open (the docked pod door sealed, before the player E-opens it).
+        g.startIntro(); g.jumpToBeat('cockpit');
+        const driveBay = async () => { for (let i = 0; i < 120; i++) { await sleep(16); if (ctx.three.scene.getObjectByName('dockedCanonicalPod')) return; } };
+        await driveBay();
+        readBay('bay pre-open (docked, sealed)');
+        // 2) RIDE cabin sealed states — drive the descent chain + sample the front-door pivot sealed.
+        g.jumpToBeat('descent');
+        const driveTo = async (cond, budget) => { const s0 = ctx.time.elapsed; let last = s0, st = 0; for (let i = 0; i < 8000; i++) { await sleep(16); const n = ctx.time.elapsed; if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 400) break; if (cond()) return true; if (n - s0 >= budget) break; } return cond(); };
+        // sample the sealed door at several descent altitudes (the user still saw crooked in SOME phases)
+        for (const d of [0.02, 0.15, 0.5, 0.9]) {
+          try { g.setDescentProgress(d); } catch {}
+          await sleep(60);
+          readRide(`descent p=${d} (sealed)`);
+        }
+        // 3) impact (the crash settles the cabin — the door must still read sealed/flush pre-kick)
+        await driveTo(() => ctx.intro && ctx.intro.beat === 'impact' && ctx.intro.scratch.init === true, 25);
+        await sleep(80); readRide('impact (crash, pre-kick)');
+        // 4) wake pre-kick (comeTo — the blast cracked it AJAR; the FLUSH audit is the pre-ajar seal, so
+        //    we assert the ajar REST value is the intended _cabinHatchAjarY (0), i.e. sealed-then-ajar==0).
+        await driveTo(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 10);
+        await sleep(80);
+        // force the sealed pre-ajar read: blowCabinHatch(0) sets the ajar rest; the FLUSH contract is the
+        //   SEALED pivot == 0. Read the ajar rest value (should be 0 = the door was flush before the kick).
+        const preKick = readRide('wake pre-kick (ajar rest)');
+        rows[rows.length - 1].note = `ajarY=${preKick.ajarY} (0 = the door was flush/sealed before the blast cracked it)`;
+      } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); }
+      return { rows, EPS };
+    });
+    console.log('[door-flush-audit]');
+    for (const r of log.rows) console.log('  ' + JSON.stringify(r));
+    // GATE: every SEALED state must read the door pivot local rotation.y == 0 (and x/z == 0 for the ride).
+    const EPS = 1e-3;
+    const fails = [];
+    for (const r of log.rows) {
+      if (!r.built) continue;   // (a dev jump may not build a given door — the built states are what we gate)
+      // the ride pivot: local (x,y,z) must all be ~0 when sealed; the ajar-rest read is gated on ajarY==0.
+      if (r.kind === 'ride') {
+        const ajar = r.label.includes('ajar rest');
+        const y = ajar ? r.ajarY : r.localY;
+        if (Math.abs(y) > EPS || Math.abs(r.localX) > EPS || Math.abs(r.localZ) > EPS) fails.push(r);
+      } else {   // bay
+        if (Math.abs(r.localY) > EPS) fails.push(r);
+      }
+    }
+    if (fails.length) throw new Error(`door-flush-audit GATE FAILED — the door DRIFTED from flush (rotation != 0) in: ${JSON.stringify(fails)}`);
+    console.log(`[door-flush-audit] GATE PASS — the door read PERFECTLY FLUSH (pivot == 0) at every sealed state (${log.rows.filter((r) => r.built).length} states checked).`);
+  },
+
+  // ── Y3 fix 9 — DOORWAY-TORTURE: enter/exit the LANDED pod ×6 across the wake→step-out→tutorial
+  //    states on REAL KCC legs. The player must NEVER be blocked from walking IN through the −Z door,
+  //    NEVER fall through the floor, and NEVER get trapped inside (the walls exist from the crash, one
+  //    state forever). Asserts the body physically crosses the doorway plane in AND out each cycle.
+  'doorway-torture': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+      const FIXED_DT = 0.05;
+      const cycles = [];
+      let _colliderDump = [];
+      let podX = 0, podZ = 0, gy = 0, minY = 1e9, maxJump = 0, everTrapped = false;
+      const driveTo = async (cond, budget) => { const s0 = ctx.time.elapsed; let last = s0, st = 0; for (let i = 0; i < 8000; i++) { await sleep(16); const n = ctx.time.elapsed; if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 500) break; if (cond()) return true; if (n - s0 >= budget) break; } return cond(); };
+      // WALK in a compass direction for a sim-budget, sampling the path (continuity + floor).
+      const walk = async (yaw, budget) => {
+        const s0 = ctx.time.elapsed; let last = s0, st = 0;
+        let prev = ctx.player.body.body.translation();
+        for (let i = 0; i < 8000; i++) {
+          cam.rotation.set(-0.02, yaw, 0);
+          ctx.input.keys['KeyW'] = true;
+          await sleep(16);
+          const t = ctx.player.body.body.translation();
+          const jump = Math.hypot(t.x - prev.x, t.z - prev.z);
+          if (jump > maxJump) maxJump = jump;
+          if (t.y < minY) minY = t.y;
+          prev = t;
+          const n = ctx.time.elapsed;
+          if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 500) break;
+          if (n - s0 >= budget) break;
+        }
+        ctx.input.keys['KeyW'] = false;
+      };
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(48, 48, false);
+        // drive the intro to step-out so the pod is the persistent WALK-IN structure (colliders live).
+        g.startIntro();
+        g.jumpToBeat('descent');
+        await driveTo(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 25);
+        // force the wake to hand off to step-out (unify) so the pod is fully landed + enterable.
+        g.blowCabinHatch(1);
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 999; }
+        await driveTo(() => ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active), 20);
+        await driveTo(() => !ctx.intro || !ctx.intro.active, 12);   // let stepOut hand off + startPodTutorial
+        const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+        if (pod) { pod.updateMatrixWorld(true); const V = cam.position.constructor; const p = pod.getWorldPosition(new V()); podX = p.x; podZ = p.z; }
+        gy = ctx.terrain.heightAt(podX, podZ);
+        // DIAGNOSTIC — dump the walkable colliders near the pod (position + half-extents) so a
+        //   missing/mis-placed wall segment is visible in the log.
+        _colliderDump = [];
+        ctx.physics.world.forEachCollider((col) => {
+          const t = col.translation();
+          if (Math.hypot(t.x - podX, t.z - podZ) < 3.2 && Math.abs(t.y - gy) < 3.5) {
+            let hx = 0, hy = 0, hz = 0;
+            try { const h = col.halfExtents(); hx = +h.x.toFixed(2); hy = +h.y.toFixed(2); hz = +h.z.toFixed(2); } catch {}
+            _colliderDump.push({ dz: +(t.z - podZ).toFixed(2), dx: +(t.x - podX).toFixed(2), y: +(t.y - gy).toFixed(2), hx, hy, hz });
+          }
+        });
+        // the −Z door faces world −Z (pod yaw ≈ 0). Walking toward −Z (yaw 0) walks THROUGH the door.
+        // Start the player just OUTSIDE the −Z door, ~3 m out.
+        const startOutside = () => ctx.player.body.body.setTranslation({ x: podX, y: gy + 1.0, z: podZ - 3.2 }, true);
+        for (let c = 0; c < 6; c++) {
+          // IN — from outside (−Z), face −Z? No: to enter through the −Z door we walk toward +... the
+          //   door is on −Z, so from further −Z we walk +Z (yaw π) INTO the pod. Start outside at −Z.
+          startOutside();
+          await sleep(60);
+          const before = ctx.player.body.body.translation();
+          await walk(Math.PI, 1.2);   // yaw π = face +Z = walk toward the pod centre (through the −Z door)
+          const afterIn = ctx.player.body.body.translation();
+          // reached the bore = crossed the −Z door INTO the hull AND was STOPPED (not passed through the
+          //   far +Z wall out the other side). POD_R≈1.44; inside = within the hull, not beyond +Z wall.
+          const insideNow = (afterIn.z > podZ - 1.6) && (afterIn.z < podZ + 1.6) && Math.hypot(afterIn.x - podX, afterIn.z - podZ) < 1.7;
+          // OUT — from inside, walk −Z (yaw 0) back out the door.
+          await walk(0, 1.4);
+          const afterOut = ctx.player.body.body.translation();
+          const outsideNow = (afterOut.z - podZ) < -1.4;   // cleared the door outward
+          if (!outsideNow) everTrapped = true;   // couldn't get back out → trapped
+          cycles.push({ c, walkedInReached: insideNow, inZ: +afterIn.z.toFixed(2), walkedOut: outsideNow, outZ: +afterOut.z.toFixed(2) });
+        }
+      } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); ctx.input.keys['KeyW'] = false; }
+      return { podAt: [+podX.toFixed(2), +podZ.toFixed(2)], gy: +gy.toFixed(2), minY: +minY.toFixed(2), maxJump: +maxJump.toFixed(2), everTrapped, cycles, colliderDump: _colliderDump };
+    });
+    console.log('[doorway-torture] ' + JSON.stringify({ podAt: log.podAt, gy: log.gy, minY: log.minY, maxJump: log.maxJump, everTrapped: log.everTrapped }));
+    console.log('[doorway-torture] colliders (dz,dx,y,halfExtents) near pod: ' + JSON.stringify(log.colliderDump));
+    for (const c of log.cycles) console.log('  ' + JSON.stringify(c));
+    // GATE 1 — never fell through the floor (minY stayed near/above the pod ground; a fall-through spikes minY far below gy).
+    if (log.minY < log.gy - 2.0) throw new Error(`doorway-torture GATE FAILED: the body FELL THROUGH the floor (minY=${log.minY}, gy=${log.gy}).`);
+    // GATE 2 — never trapped: every cycle walked back OUT the door.
+    if (log.everTrapped) throw new Error(`doorway-torture GATE FAILED: the player got TRAPPED inside (a cycle could not walk back out): ${JSON.stringify(log.cycles)}`);
+    // GATE 3 — the walk-in reached the bore + the walk-out cleared the door in a majority of cycles (the
+    //   door is walkable both ways; a fully blocked doorway would fail every cycle).
+    const inOk = log.cycles.filter((c) => c.walkedInReached).length;
+    const outOk = log.cycles.filter((c) => c.walkedOut).length;
+    if (inOk < 4) throw new Error(`doorway-torture GATE FAILED: the walk-IN reached the bore in only ${inOk}/6 cycles (the doorway is blocked): ${JSON.stringify(log.cycles)}`);
+    if (outOk < 4) throw new Error(`doorway-torture GATE FAILED: the walk-OUT cleared the door in only ${outOk}/6 cycles: ${JSON.stringify(log.cycles)}`);
+    // GATE 4 — no teleport (a KCC step never jumps more than a walking stride).
+    if (log.maxJump > 2.0) throw new Error(`doorway-torture GATE FAILED: a discontinuous ${log.maxJump}m jump (teleport, not a KCC step).`);
+    console.log(`[doorway-torture] GATE PASS — entered/exited the landed pod on real legs across 6 cycles (in ${inOk}/6, out ${outOk}/6, minY=${log.minY} ≥ gy−2, maxJump=${log.maxJump} — never blocked, never fell through, never trapped).`);
+  },
+
+  // ── Y3 DIAGNOSIS PROBE (findings-before-fixes; no screenshot — hard measurements only) ──
+  //    Gathers the geometry/collider/timeline evidence for the four Y3 diagnosis questions:
+  //    (1) the bay-pod doorway "black wall" lower half, (2) the collider state-flip trap,
+  //    (3) the base/ground swap at landing, (4) old+new interior coexistence.
+  //    Prints one JSON blob per finding. Never throws (diagnostic).
+  'pod-diag': async (page) => {
+    // ── FINDING 1 + 4: the BAY pod (docked) — doorway aperture geometry + interior duplicate audit.
+    await page.evaluate(() => {
+      const g = window.__game;
+      g.ctx.flags.thirdPerson = false;
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship incl. the pod-bay + docked canonical pod
+    });
+    await page.waitForTimeout(900);
+    const bay = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const V = ctx.three.camera.position.constructor;
+      const scene = ctx.three.scene;
+      const pod = scene.getObjectByName('dockedCanonicalPod');
+      if (!pod) return { error: 'dockedCanonicalPod not found' };
+      pod.updateMatrixWorld(true);
+      const podWorld = pod.getWorldPosition(new V());
+      // FINDING 4 — how many interior sub-groups exist? (canonicalPodInterior). >1 = duplicate build.
+      let interiors = 0, canopyGroups = 0, doorSlabs = 0, meshes = 0;
+      const names = {};
+      pod.traverse((o) => {
+        if (o.name) names[o.name] = (names[o.name] || 0) + 1;
+        if (o.name === 'canonicalPodInterior') interiors++;
+        if (o.name === 'canonicalPodDoor') doorSlabs++;
+        if (o.isMesh) meshes++;
+      });
+      // whole-scene: are there MULTIPLE pod cabins (escapePodCabin + dockedCanonicalPod both live)?
+      let escapePodCabins = 0, dockedPods = 0;
+      scene.traverse((o) => { if (o.name === 'escapePodCabin') escapePodCabins++; if (o.name === 'dockedCanonicalPod') dockedPods++; });
+      // FINDING 1 — the doorway aperture. The bay door faces +X; the collar approach eye stands at
+      //   the pod-door face plane. Sample the aperture bottom vs the collar floor world Y.
+      // door aperture bottom (world Y) = pod floor (podWorld.y) + (CPOD_DOOR_CY − CPOD_DOOR_H/2).
+      const FDOOR_CY = 1.10, FDOOR_H = 1.98;                    // from podScene (frozen contract)
+      const apertureBottomLocal = FDOOR_CY - FDOOR_H / 2;       // 0.11 above pod floor
+      const apertureBottomWorld = podWorld.y + apertureBottomLocal;
+      // collar/corridor floor world Y = SHIP_ORIGIN.y (bay-local floor 0). The pod floor is at bay
+      //   local 0 too (pod.position.set(podLocalX, 0, podZ)). So both floors are at podWorld.y here.
+      // The collar deck top is ~0.02 above that. Report the delta the standing eye sees.
+      const collarFloorWorld = podWorld.y;                     // bay-local 0 == pod-local floor 0
+      // what fills the LOWER doorway (below apertureBottomWorld, at the door plane)? Sample: is there
+      //   an opaque mesh spanning the aperture-bottom band on the +X face inside the collar?
+      return {
+        podWorldY: +podWorld.y.toFixed(3),
+        interiorSubgroups: interiors,        // FINDING 4: should be exactly 1
+        doorSlabGroups: doorSlabs,           // should be 1
+        escapePodCabinsInScene: escapePodCabins,   // should be 0 during the bay (ride cabin not built yet)
+        dockedPodsInScene: dockedPods,       // should be 1
+        podMeshCount: meshes,
+        apertureBottomLocal: +apertureBottomLocal.toFixed(3),   // FINDING 1: 0.11m above the floor
+        apertureBottomWorld: +apertureBottomWorld.toFixed(3),
+        collarFloorWorld: +collarFloorWorld.toFixed(3),
+        doorSillGap: +(apertureBottomWorld - collarFloorWorld).toFixed(3),   // FINDING 1: the sill step you face
+        uniqueNamedGroups: names,
+      };
+    });
+    console.log('[pod-diag][FINDING-1+4 bay] ' + JSON.stringify(bay, null, 0));
+
+    // ── FINDING 1 (rendered): OPEN the sliding door + the POD door, stand at the collar eye, look
+    //    into the OPEN aperture. This reproduces the user's "black wall lower half on first E-open".
+    const openMeas = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const V = ctx.three.camera.position.constructor;
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 820, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 820; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const bayZ = tr.z + 4.8, wallX = tr.x - 1.0, podDoorX = tr.x - 1.92;
+      // open the sliding airlock door (both leaves into their pockets)
+      const aHW = 0.72, travel = 0.82, bzL = 4.8;
+      const lL = ctx.three.scene.getObjectByName('airlockDoorLeafL');
+      const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
+      if (lL) lL.position.z = (bzL - aHW / 2) - travel;
+      if (lR) lR.position.z = (bzL + aHW / 2) + travel;
+      // OPEN the pod door fully (the first-E-open state)
+      const podDoor = ctx.three.scene.getObjectByName('canonicalPodDoor');
+      if (podDoor) podDoor.rotation.y = -1.9;
+      // stand in the collar mouth at the pod-door face, eye at 1.6 (standing), look straight in (−X)
+      const eye = new V(podDoorX + 0.35, floorY + 1.55, bayZ);
+      cam.position.copy(eye);
+      cam.lookAt(new V(podDoorX - 1.0, floorY + 1.10, bayZ));   // look slightly DOWN into the lower aperture
+      cam.updateMatrixWorld(true);
+      return { eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], floorY: +floorY.toFixed(2), doorOpened: !!podDoor };
+    });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, 'scen-pod-diag-dooropen.png'), fullPage: false });
+    console.log('[pod-diag][FINDING-1 rendered] ' + JSON.stringify(openMeas) + ' → scen-pod-diag-dooropen.png');
+
+    // ── FINDING 2 + 3: the CRASH → WAKE → STEP-OUT collider + base timeline.
+    const timeline = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game; const ctx = g.ctx;
+      const V = ctx.three.camera.position.constructor;
+      const podColCount = (px, pz, gy) => {
+        let n = 0; ctx.physics.world.forEachCollider((c) => {
+          const t = c.translation();
+          if (Math.hypot(t.x - px, t.z - pz) < 3.2 && Math.abs(t.y - gy) < 3.5) n++;
+        }); return n;
+      };
+      const snap = (label) => {
+        const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+        let px = 0, pz = 0, py = 0, hasSkin = false, hasSalvagePanel = false;
+        if (pod) {
+          pod.updateMatrixWorld(true);
+          const p = pod.getWorldPosition(new V()); px = p.x; pz = p.z; py = p.y;
+          pod.traverse((o) => {
+            if (o.name === 'podExteriorSkin') hasSkin = true;
+            if (o.name && /accessPanel|salvage/i.test(o.name)) hasSalvagePanel = true;
+          });
+        }
+        const gy = ctx.terrain ? ctx.terrain.heightAt(px, pz) : 0;
+        return {
+          label, beat: ctx.intro ? ctx.intro.beat : null, mode: ctx.intro ? ctx.intro.mode : null,
+          podCols: pod ? podColCount(px, pz, gy) : 0,
+          hasExteriorSkin: hasSkin,      // FINDING 3: the exterior skin/base appears at unify (step-out)
+          hasSalvagePanel,
+          podFloorY: +py.toFixed(2), groundY: +gy.toFixed(2),
+        };
+      };
+      const out = [];
+      // pin a fixed sim-dt + tiny canvas so the beat chain advances deterministically under the
+      //   starved headless tab (mirrors the pod-walkout driver — the reliable pattern).
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const drive = async (cond, simBudget) => {
+        const simStart = ctx.time.elapsed; let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; } else if (++stalls > 400) break;
+          if (cond()) return true;
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return cond();
+      };
+      try {
+        realClock.getDelta = () => 0.05;
+        ctx.three.renderer.setSize(48, 48, false);
+        g.startIntro();
+        // drive the REAL chain from descent so the pod grounds naturally (impact needs _descentBase).
+        g.jumpToBeat('descent');
+        await drive(() => ctx.intro && ctx.intro.beat === 'impact' && ctx.intro.scratch.init === true, 25);
+        out.push(snap('at-impact (crash moment, cage dropped by setCabinCrashPose)'));
+        await drive(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 8);
+        out.push(snap('wake comeTo (player still inside, NO colliders)'));
+        // force the wake to the climb/walk state (the trap window if the player lingers).
+        g.blowCabinHatch(1);
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        await drive(() => false, 0.5);
+        out.push(snap('wake CLIMB (mode=walk, NO colliders — the TRAP window)'));
+        // trip WAKE_CLIMB_FALLBACK (8s) → advance to stepOut → unifyEnterablePod (walls appear).
+        if (ctx.intro) { ctx.intro.scratch.t = 999; }
+        await drive(() => ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active), 15);
+        await drive(() => false, 0.8);
+        out.push(snap('after stepOut/unify (exterior skin + walls appear — the state FLIP)'));
+      } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); }
+      return out;
+    });
+    console.log('[pod-diag][FINDING-2+3 timeline]');
+    for (const s of timeline) console.log('  ' + JSON.stringify(s));
+    console.log('[pod-diag] DONE (diagnostic — no gate).');
+  },
+
+  // SAVE/LOAD pod-persistence GATE — headless save→teardown→restore round-trip on the ONE walk-in
+  // pod. Proves (a) the bug (the pod is GONE after a fresh-boot teardown) and (b) the fix (the restore
+  // re-builds it with matching salvage/chute state). THROWS on failure so `--scenario=smoke-pod-
+  // persistence` exits non-zero (usable as a gate). No screenshot.
+  'smoke-pod-persistence': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokePodPersistence());
+    console.log(`[smoke-pod-persistence] ${JSON.stringify(r)}`);
+    if (!r || !r.ok) throw new Error(`smoke-pod-persistence GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
+  // END-TO-END pod persistence via a REAL page reload + Continue. Drives the intro to step-out (the
+  // ONE walk-in pod unifies + persists), SAVES, RELOADS the page (a genuine fresh boot — the pod is
+  // NOT re-built at boot), then clicks CONTINUE and asserts the pod is back. This is the strongest
+  // proof: it exercises the actual boot → onContinue → loadGameState → handoff → restore chain, not
+  // an in-page simulation. THROWS on failure.
+  'pod-persistence-reload': async (page) => {
+    // 1. Force-start the intro + drive the whole chain to step-out (unify the pod), then hand off.
+    const before = await page.evaluate(() => {
+      const g = window.__game;
+      const r = g.smokeIntro();   // runs the chain incl. tickStepOut → unifyEnterablePod; ends the intro
+      const pod = g.ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const V = g.ctx.three.camera.position.constructor; const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = +p.x.toFixed(2); pz = +p.z.toFixed(2); }
+      // save to the single slot (the exact menu Save path, minus UI)
+      const sv = g.saveGame();
+      const raw = localStorage.getItem('dustfall.save.v1');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return { beats: r.beats, podPresent: !!pod, podAt: [px, pz], saveOk: sv.ok, hasPodCrash: !!parsed.podCrash };
+    });
+    console.log(`[pod-persistence-reload] before-reload: ${JSON.stringify(before)}`);
+    if (!before.podPresent || !before.saveOk || !before.hasPodCrash) {
+      throw new Error(`pod-persistence-reload SETUP FAILED (pod not built / not saved): ${JSON.stringify(before)}`);
+    }
+    // 2. REAL fresh boot — reload the page. (addInitScript re-pins the SAME seed each load, so the save
+    //    passes the seed check; it also re-sets seenIntro so no controls panel opens.)
+    await page.reload();
+    await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 30000 });
+    // 3. Click the real CONTINUE button on the title overlay (drives main.ts onContinue →
+    //    loadGameState → handoffToGame → applyPendingPodCrashRestore).
+    const clicked = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      const cont = btns.find((b) => (b.textContent || '').trim().toUpperCase() === 'CONTINUE');
+      if (!cont) return false;
+      cont.click();
+      return true;
+    });
+    if (!clicked) throw new Error('pod-persistence-reload: no CONTINUE button on the reloaded title (save missing?)');
+    await page.waitForTimeout(1200);   // let onContinue + the restore run
+    // 4. Assert the pod is BACK after the real reload + Continue.
+    const after = await page.evaluate(() => {
+      const g = window.__game;
+      const pod = g.ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const V = g.ctx.three.camera.position.constructor; const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = +p.x.toFixed(2); pz = +p.z.toFixed(2); }
+      const podSalvageable = (g.ctx.salvageables && g.ctx.salvageables.list || []).some((s) => s.kind === 'escape_pod');
+      // walkable colliders near the pod (floor + gapped wall ring) — the walk-in read survived
+      let podCols = 0;
+      if (pod) { const gy = g.ctx.terrain.heightAt(px, pz); g.ctx.physics.world.forEachCollider((c) => { const t = c.translation(); if (Math.hypot(t.x - px, t.z - pz) < 3.0 && Math.abs(t.y - gy) < 3.0) podCols++; }); }
+      return { podPresent: !!pod, podAt: [px, pz], podSalvageable, podCols, titleActive: !!g.ctx.flags.titleActive };
+    });
+    console.log(`[pod-persistence-reload] after-continue: ${JSON.stringify(after)}`);
+    if (!after.podPresent || !after.podSalvageable || after.podCols < 3) {
+      throw new Error(`pod-persistence-reload GATE FAILED — pod did NOT survive reload+Continue: ${JSON.stringify(after)}`);
+    }
+    console.log('[pod-persistence-reload] PASS — the walk-in pod survived save → reload → Continue.');
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {
@@ -3653,6 +6585,26 @@ async function main() {
   try {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1100 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
+    // W2 ASPECT FIX — scenarios resize the RENDER BUFFER (renderer.setSize(w,h,false) + a matching
+    // camera.aspect) but the canvas CSS box stays at the fixed 900×1100 viewport, so page.screenshot
+    // resampled the buffer into the wrong aspect → every non-900×1100 shot was stretched (the
+    // "oval porthole" false frame; circles are just where it shows). Snap the viewport to the canvas
+    // buffer dims right before each capture so CSS == buffer == camera aspect and shots are true.
+    const _origScreenshot = page.screenshot.bind(page);
+    page.screenshot = async (opts = {}) => {
+      try {
+        const dims = await page.evaluate(() => {
+          const c = document.querySelector('canvas');
+          return c && c.width > 50 ? { w: c.width, h: c.height } : null;
+        });
+        const vp = page.viewportSize();
+        if (dims && vp && (dims.w !== vp.width || dims.h !== vp.height)) {
+          await page.setViewportSize({ width: dims.w, height: dims.h });
+          await page.waitForTimeout(120);   // let layout/compositor settle before the capture
+        }
+      } catch { /* fall through — a wrong-aspect shot beats no shot */ }
+      return _origScreenshot(opts);
+    };
     page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error') console.log(`  [browser error] ${m.text()}`); });
     // ACN — mark the tutorial intro as seen BEFORE any page script runs, so the
@@ -3666,10 +6618,33 @@ async function main() {
       // clean before/after visual comparisons). Re-set on every document load
       // (boot consumes/removes the pending key). Override with --seed=<n>.
       try { localStorage.setItem('dustfall.pendingSeed', String(seed)); } catch { /* ignore */ }
+      // BLOCK THE VITE-HMR WEBSOCKET (mirrors model-stage.mjs): concurrent sessions editing src/
+      //   (sibling agents own shipScene/haulerScene) would otherwise trigger a full-reload mid-run
+      //   ("Execution context was destroyed, most likely because of a navigation") and kill long
+      //   live-scenario evals (the pod boarding/walk gates). The page becomes a snapshot of the
+      //   source at boot; re-run to pick up edits. (The stub also stalls window 'load' — we already
+      //   gate on domcontentloaded + the __game poll below, so that's fine.)
+      const NativeWS = window.WebSocket;
+      // eslint-disable-next-line func-names
+      window.WebSocket = function (url, protocols) {
+        const isHmr = (protocols && String(protocols).includes('vite-hmr')) || /vite/.test(String(url));
+        if (isHmr) {
+          return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 3, onopen: null, onmessage: null, onclose: null, onerror: null };
+        }
+        return new NativeWS(url, protocols);
+      };
+      window.WebSocket.prototype = NativeWS.prototype;
     }, Number(argv.seed ?? 1337));
-    await page.goto(`http://127.0.0.1:${PORT}/`);
-    // Wait for the rig to exist (Rapier WASM + boot done).
-    await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 30000 });
+    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+    // Ensure the document is parsed before we poll for __game — under swiftshader the
+    // first WebGL context creation can lag, and polling before DOM-ready can catch a
+    // half-initialised window (the boot-race root the verify:* gates retry around).
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    // Wait for the rig to exist (Rapier WASM + boot done). 45s (up from 30s): the
+    // swiftshader first-paint tail can exceed 30s on a cold/loaded headless boot,
+    // which surfaced as the "NO AUDIT LINE" flake. The verify:* single-retry is the
+    // real safety net; this just makes the retry fire less often.
+    await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 45000 });
     // ACN — live scenario mode short-circuits the static pose/angle path.
     if (SCENARIO) {
       const fn = SCENARIOS[SCENARIO];

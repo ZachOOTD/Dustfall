@@ -62,6 +62,39 @@ function makeWindNoiseBuffer(ctx: AudioContext, seconds = 5): AudioBuffer {
 
 let _state: SoundscapeState | null = null;
 
+// Escape-pod intro (C2, 2026-07-02) — the intro's ship/space beats supply their OWN
+// ambience (cockpit hum, klaxon, etc.); the normal DESERT soundscape (the procedural
+// wind bed + ambient life + the sample-music bus) must go SILENT while the intro owns
+// the scene — desert wind layered over an orbiting-ship view is wrong. While suppressed,
+// updateSoundscape ducks the audible wind (pwind body/whistle) + the music bus to 0 and
+// skips the per-frame modulation so nothing fights the duck. The graph keeps running
+// (looping noise source) behind silent gains — no teardown, so clearing suppression
+// resumes the live bed seamlessly (no muted-forever state, no pop). The intro's own
+// desert-wind cue (startDesertWind) hands off to this real bed at the desert handoff.
+let _soundscapeSuppressed = false;
+
+/** Suppress (silence) or restore the normal desert soundscape — called by the escape-pod
+ *  intro so the ship/space beats don't layer desert wind over orbit. Idempotent; the duck
+ *  is applied per-frame in updateSoundscape via smooth setTargetAtTime ramps (no pop). Safe
+ *  before startSoundscape (the flag is honored on the next update). */
+export function setSoundscapeSuppressed(suppressed: boolean): void {
+  _soundscapeSuppressed = suppressed;
+  if (!_state) return;
+  const s = _state;
+  const t0 = s.ctx.currentTime;
+  if (suppressed) {
+    // Duck the audible wind bed + the (silent) music bus to 0 immediately (smooth ramp).
+    if (s.pwind) {
+      s.pwind.bodyGain.gain.setTargetAtTime(0, t0, 0.2);
+      s.pwind.whistleGain.gain.setTargetAtTime(0, t0, 0.2);
+    }
+    rampParam(s.musicBus.gain, 0, s.ctx);
+  } else {
+    // Restore the music bus; the wind bed re-derives its live level on the next update tick.
+    rampParam(s.musicBus.gain, 1.0, s.ctx);
+  }
+}
+
 const MUSIC_FADE_IN_S = 4.0;
 const RAMP_TIME = 0.5;
 
@@ -200,6 +233,20 @@ export function startSoundscape(): void {
 export function updateSoundscape(ctx: GameContext, dt: number): void {
   if (!_state) return;
   const s = _state;
+
+  // C2 — while the escape-pod intro owns the scene, hold the desert bed SILENT: duck the
+  //   audible procedural wind (body + whistle) toward 0 each frame + leave the sample stems
+  //   at 0 (they're silent anyway), and skip the mood modulation below so nothing lifts the
+  //   wind back up. The intro supplies its own ambience; setSoundscapeSuppressed(false) at
+  //   the desert handoff resumes the live bed on the next tick.
+  if (_soundscapeSuppressed) {
+    if (s.pwind) {
+      const t0 = s.ctx.currentTime;
+      s.pwind.bodyGain.gain.setTargetAtTime(0, t0, 0.2);
+      s.pwind.whistleGain.gain.setTargetAtTime(0, t0, 0.2);
+    }
+    return;
+  }
 
   // Signals. Session ZZ — soundscape reads `perceivedIntensity` (D79),
   // so inside a large tent the wind + ambient-life suppression + tense

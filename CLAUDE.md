@@ -49,6 +49,7 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 6. **No `innerHTML` with concatenated strings** — the pre-tool hook flags it as XSS risk. Use `createElement` + `textContent`.
 7. **Exterior model decorations need real depth.** When adding boxy decorations to world entities (windows, panels, fragments, hull patches), use a depth of at least ~10cm for "thin" features and 15cm (matching `OPENING_WRECK_HULL_WALL_THICKNESS`) for hull-substantial features. 5cm reads paper-thin at oblique angles and breaks immersion. Cylinders, lathes, and torus-based geometry are inherently thick — this rule only applies to BoxGeometry-based decorations on the OUTSIDE of a hull/wall surface where the camera can view edge-on.
 8. **Iteration discipline for visual/feel work** (post-ABP — `shared-memory/iterative-polish-discipline.md`). `npm run verify` clean is NOT the success gate when shipping rig geometry, camera behavior, animation, material colors, UI layout, or anything visual. Per substantive element: build → screenshot → critique → iterate, **5-8 rounds for new visual elements, 3-5 for tuning**. A real long-overnight ships 1-2 fully-iterated tiers, not 4-5 shallow ones. ABP triggered this rule: a 41-minute "long overnight" shipped 4 tiers of visibly-rough work that required follow-up polish. **Never** mark a visual tier complete with `npm run verify` as the only verification. **Never** write >150 LOC of visual code in a single Edit without screenshotting in between. If a tier describes its outcome as "shipped, no save-schema changes, deferred polish to a follow-up" — that's the anti-pattern; loop back and iterate.
+9. **Collision always matches the models — update both together** (user rule, 2026-07-03). If you change, move, retire, or re-loft a model, you update its colliders IN THE SAME CHANGE; collision must match the visible geometry exactly unless the user explicitly states otherwise. Stale colliders from removed/old geometry are bugs (the escape-pod ship shipped with old-box collision under a re-lofted hull and an orphaned collider behind a reworked chair — the user walked into invisible walls). When touching a scene's geometry, sweep its collider list against what's actually visible; verify with a real-motion probe (walk the space), not clearance numbers alone.
 
 ## How to change the game
 
@@ -64,25 +65,31 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — M13 milestone (M11→M13 review-fix pass COMPLETE) — `campaign/2026-06-18`** (autonomous; user batch-validates each tier). Phase B (M6→M10) complete + reviewed.
-**The whole review-fix pass is shipped + validated per tier: M11 wreck/panel · M12 sand-worm · M13 weapon+vehicle audio.** Paused at the M13 milestone (`awaiting_approval`) for the user's
-final audio LISTEN — then the user sequences the next block (the in-loop review-fix work is done; what remains is dedicated solo sessions + human-attended items, below). Framework upgrade
-in force (C64): the visual gate renders the **PLAYER'S REAL in-game view** (not an isolated rig); hero geometry → the **procedural-modeler** agent (quality BAR); the **anti-punt** rule holds.
-Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note. **`/campaign-approve` is NOT auto-continue here** — the next block is the user's call.
+**⏸ CAMPAIGN PAUSED — Escape-Pod Intro — Phase 2 milestone (the descent showpiece COMPLETE) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero
+cylindrical pod, C9-C13) + Phase 2 (the descent showpiece, C14-C17) COMPLETE.** Phase 0+1 USER-APPROVED. **Phase 2 — the beautiful atmospheric descent — is whole:** **T2.1** the descentProgress orbit→atmosphere→desert
+vista through the pod viewport (curved Dune-desert planet + Fresnel atmosphere limb + starfield → cross-fade → barchan dune surface w/ raking dawn light + closing scale; gate-passed @ beauty 8) **+ the cabin
+interior-lit-by-exterior** · **T2.2** re-entry FX (plasma w/ white-hot core + slipstream + heat-shimmer + white flash + speed-coupled shake; gate-passed @ beauty 8) · **T2.3** the tumbling reveal (eject → blast → the pod
+tumbles + blast-floods, settling into the descent). **AWAITING the user's BEAUTIFUL-DESCENT WALK-TEST** (eject → tumble → re-entry → the calm fall → the parachute gag) → `/campaign-approve` releases **Phase 3 (the hauler
++ disaster)**. The vista built via the **procedural-modeler** + **adversarial visual gates** (4 gate rounds caught a z-occluder bug + a porthole-band mapping bug + flat-coin/lava/cloud reads — the lesson: builder
+self-critique + my own eyes miss real defects; the N-critic gate catches them — see [[hero-asset-adversarial-gate]]). **Deferred to Phase 3:** the hero ship explosion staged through the tumble frame. **ENRICH-NOT-CUT**
+· hero geometry/FX → the procedural-modeler + the adversarial gate (`preview_screenshot` works for the offset pod interior; hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior --descent=<0..1>`) ·
+anti-punt · behind `FEATURES.escapePodIntro` (default off) · no SAVE_VERSION bump. Remaining phases: **3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).
 
-**Review-fix pass (from the 2026-06-20 triage). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
-- **M11 — wreck/panel fixes** ✅ COMPLETE: ⓐ not-openable (culled panels hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure rework (root: `makeFormerRings`' hidden `0.84×` shrink; C61-C63) · stragglers (3 mega-wreck companion panels hidden; D265, C64).
-- **M12 — sand worm** ✅ COMPLETE (⏸ PAUSED at the milestone for the user's batch validation): ✅ ⓕ dorsal ridges removed (C65) · ✅ ⓖ attack = breach-and-dive, no high jump (C66/D266; **C68 smoothed the dive per review feedback — a natural bend, head leads down + tail curls under, tail tip never seen**) · ✅ ⓗ alert = quiet rumble + screen-shake buildup, roar removed from alert (C67/D267). **User: walk-test the worm-attack FEEL + LISTEN to the alert rumble → `/campaign-approve` → M13.**
-- **M13 — weapon & vehicle audio** ✅ COMPLETE (⏸ PAUSED at the milestone — ENDS the M11→M13 review-fix pass): ✅ ⓘ gunshot + reload SFX (C68/D268) · ✅ ⓙ lower-pitched, smoother speeder hum (C69 — triangle+lowpass not sawtooth; pitch 70-140→46-90 Hz). **User: LISTEN to the audio batch (gunshots/reload/speeder hum) → then sequence the next block.**
+**The intro (per the 2026-06-28 vision interview):** lone hauler pilot in orbit → ship disaster → flee to the escape pod → eject → watch the ship explode → a beautiful atmospheric descent → the
+parachute fails (3 pulls → snaps) → crash + blackout → wake → step into the dawn dunes → craft a machete + salvage your own pod (the first tutorial) → the chute comically pops out. Solo/clean;
+first-person throughout; pod identity = **vertical riveted aluminium capsule/torpedo** (D271 — revised from the originally-chosen "industrial modular box" after the user walk-tested it C10). References + decisions captured in the feature doc + `docs/research/escape-pod-*.md`.
 
-**NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
-research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
-Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
+**PRIOR (shipped, on `master` + deployed):** the M11→M13 review-fix pass (campaign `campaign/2026-06-18`, 69 cycles — wreck/panel · sand-worm · weapon+vehicle audio) COMPLETED + user-approved +
+merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
+hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Campaign **C69** (2026-06-22, cycle 69/75) — M13 ⓙ: the speeder engine hum is now a lower, smoother thrum (`verify:all` PASS; audio only, no rand, no save touch). Base oscillator
-sawtooth→**triangle** through a warm lowpass (the harsh whine gone); pitch 70-140→**46-90 Hz**; deeper noise rumble; the speed-coupling + start/stop lifecycle unchanged (`audio.ts startSpeederThrust`/
-`setSpeederThrustSpeed`). **✅ M13 COMPLETE (ⓘ gun SFX + ⓙ speeder hum) → ⏸ PAUSED at the M13 milestone, which ENDS the M11→M13 review-fix pass.** **Next (user-sequenced, NOT auto-loop):** LISTEN to
-the audio batch; then the deferred blocks — the **Skyfall hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C17** (2026-06-29, Phase 2 T2.3 — the **tumbling reveal** → **PHASE 2 COMPLETE**) — reworked the `shipExplode` beat into the cinematic (all main-loop camera/light staging): on eject the
+ship dies in a blast and the pod is flung **tumbling**, settling into the descent. The beat goes `mode='scripted'` + eases an intro `tumble` intensity (1→0); the controller's new **`applyIntroTumble`** rides it as a decaying
+tumbled camera pose (roll + pitch-up + yaw + jostle) post-multiplied onto the look (storm-sway pattern, undo-last-frame); a `faceControl(0,0)` base makes it settle seamlessly into the descent. New `podScene.setTumbleLight`
+floods the cabin hot blast-orange (porthole spill `0xff7a2e`@3.5 + brighter ambient) decaying to the orbital cool. `verify:all` PASS + smoke `{ok:true,beats:10}` + live preview (cabin rolls + blast-floods, settles level).
+Hero ship explosion through the frame = Phase 3; the tumble MOTION = walk-test (own-eyes verified — a still can't gate a spin). **⏸ Phase 2 milestone — the descent showpiece is whole (C14 vista + C15 cabin-light + C16
+re-entry FX + C17 tumble); awaiting the user's beautiful-descent walk-test.** **Next (after `/campaign-approve`)** = Phase 3 (the hauler + disaster staging). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

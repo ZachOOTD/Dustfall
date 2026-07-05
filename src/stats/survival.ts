@@ -7,9 +7,13 @@ import { Tuning } from '../config/tuning.ts';
 import { playDeath } from '../audio/audio.ts';
 import { updateDeathScreenButtons } from '../ui/menus.ts';
 import { crashHeatAt } from '../world/meteorCrash.ts';   // Tier 4 (C) — crash-wreck interior heat hazard
+import { introActive } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro (T0.2) — no survival drain during the intro
 
 export function updateStats(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
+  // Escape-pod intro (T0.2, D269) — survival is suspended during the scripted intro:
+  // no thirst/hunger/temperature drain, no death, while the player is in the ship/pod.
+  if (introActive(ctx)) return;
 
   const sprinting = isSprinting(ctx);
   const exposure = Math.max(0, ctx.time.sunHeight);

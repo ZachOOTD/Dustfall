@@ -10,6 +10,8 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
+- `[polish]` **Escape-pod INTERIOR detail/improvement pass** (C17 walk-test — user: "decent first model for now, tackle later"). The cabin (`buildPodScene`) reads as a solid first model but wants a craft pass — surface detail, wear, more lived-in tells, material refinement. Do after the intro's other phases land. (Sibling: the descent vista + re-entry FX already gate-passed @ beauty 8; this is the CABIN interior specifically.)
+
 ### A. Owed walk-tests + in-motion feel-tunes (need a human in `npm run dev` — the headless harness can't judge feel; the "D150" pile)
 
 - `[perf]` **⑰ pickup-instancing — MEASURED + planned (C59/D263), build human-attended.** Measured: **382 world-scatter pickups (239 scrap + 137 branch + 6 relic) = ~75% of 505 draw calls** — instancing → ~3 calls → ~126 total (a ~75% cut). High-value. **Build (per D263's plan):** one `InstancedMesh` per type (scrap/branch/relic); `bobPickups` writes per-instance matrices; take = swap-remove + an id↔instanceIndex map; the interaction raycast maps `intersection.instanceId` → pickupId on InstancedMesh hits (keep `userData.pickupId` for dropped/physics pickups via `spawnDroppedPickup`); leave the body-synced dropped path per-mesh. **It's a core item-collection-loop rewrite** — do it with a human watching the frame counter + confirming every pickup still collects. Verify: drawCalls before/after + an eval-simulated take loop. Files: `src/pickups/pickups.ts`, `src/player/interaction.ts` (the raycast resolver).
@@ -84,6 +86,7 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ### C. Perf + debt
 
+- `[note]` **PLATFORM DECISION BRIEF (2026-07-03)** — the "launcher / WebGPU / Godot?" question is worked up in [research/platform-decision-brief.md](research/platform-decision-brief.md) (facts: [research/platform-facts-2026.md](research/platform-facts-2026.md)). Top line: **stay web + finish the perf pass and measure first** (the browser ceiling isn't demonstrated); **add a Tauri wrapper for distribution regardless** (~days, NOT a perf fix — Electron only if full-Steamworks Steam is committed); WebGPU only if the profiler proves a CPU/draw-call bound (budget the 17 GLSL→TSL shader rewrites); Godot only on a measured native ceiling + console mandate (multi-month rewrite). Supersedes the two `[idea]` bullets below (desktop packaging + renderer exploration).
 - `[debt]` **Pickup InstancedMesh (deferred ACAS — attended).** ~340 branch+scrap pickups ≈ 340 draw calls. Each is individually takeable → needs an interaction-raycast (`instanceId`) rework; do it with a human to confirm pickups still take.
 ✓ **[debt] material-factory → uniforms — SHIPPED ACAT T3 (D207).** All 7 remaining factories (glass/bone/stone/paint/wood/fabric/skin) converted from `.toFixed()`-baked GLSL → uniforms + runtime branches; cache keys dropped (fabric/skin's `pbr` rides the base material class). perf-probe programs 105→67 (−36%), boot shader-compile 270→197ms.
 - ✓ **[debt] shared-noise helper — SHIPPED ACAU (D209).** The IQ hash/value-noise/fBm GLSL block duplicated across 11 factories lifted into NEW `world/shaderNoise.ts` `iqNoise2D(...)` (a generator parameterised by each factory's existing names + octave count → byte-identical, ~260 dup lines gone, perf-probe programs still 67).
@@ -227,3 +230,5 @@ detail + the "consciously NOT chasing" list in [iteration-plan.md](iteration-pla
 [feat] gunshot + reload SFX for all guns (scrap_gun / energy_pistol / amban_rifle / scrap-bolt etc.)
 [polish] speeder engine sound too loud/abrasive — lower-pitched, smoother engine hum
 [feat] cave rework — currently a recessed box in the sand, not a real cave; rethink (DEDICATED session, user direction pending)
+
+- [infra] **Preview hosting — Netlify usage limit reached (2026-06-30)** — ✅ LOCAL solution shipped (cycle 48, 2026-07-01): **`npm run preview:intro`** = an env-gated production build (intro ON, base /) served at http://localhost:4173/ — a one-command local replacement for the dead preview link (`.env.intro` + `--mode intro`; the master GitHub-Pages build verified untouched: flag OFF, /Dustfall/ base). REMAINING (user side, optional): a new REMOTE host (another Netlify account / Cloudflare Pages) if a shareable link is still wanted — the netlify.toml env approach ports as-is.

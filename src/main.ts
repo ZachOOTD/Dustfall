@@ -19,6 +19,7 @@ import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
+import { placeLeviathanLandmark } from './world/leviathanLandmark.ts';   // horizon-hook: the beached-leviathan wreck ~360m out on the intro reveal gaze
 import { placeWordlessScenes } from './world/wordlessScenes.ts';   // M5b (C32) — environmental-storytelling tableaux
 import { addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — registers tall wrecks as sun occluders (billboards removed ACBD)
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
@@ -52,6 +53,12 @@ import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
+import { updateEscapePodIntro, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
+import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
+import { updateChutePop, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
+import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick, showIntroLoading, setIntroLoadingBackdrop } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix) + Y6 the frozen-menu backdrop (kills the desert flash)
+import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF — build every intro scene + compile every shader UP FRONT behind the loading screen (kills the beat-entry freezes)
+import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
 import { startMusic, updateMusic } from './audio/music.ts';
@@ -215,6 +222,15 @@ placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvagea
 // read as navigation cues from across the map (FogExp2 blends the real models into the
 // sky past ~0.5km). The hero-landmark wrecks get theirs inline in placeHeroLandmarks.
 addHorizonSilhouettesByName(three.scene, ['megaShip', 'megaWreck', 'satelliteDish', 'crashedHull']);
+// Horizon-hook landmark (2026-07-01) — the BEACHED LEVIATHAN: a colossal broken
+// capital-ship wreck breaching the dunes ~360m out on the escape-pod-intro step-out
+// gaze, a bigger echo of the player's own crashed pod ("go there"). Hand-placed at a
+// fixed world position (deterministic), silhouette-only, additive.
+// SCOPE: gated behind FEATURES.escapePodIntro so it ships with the intro arc and does
+// NOT silently alter the live master desert world. It reads great as a permanent
+// normal-play nav monument too — if the user wants that, promote it to always-on by
+// dropping this guard (a one-line change).
+if (FEATURES.escapePodIntro) placeLeviathanLandmark(three.scene, physics.world, terrain);
 // ACAQ (Cycle 8) — the wreck-yard's ribcages join the ecology: vultures wheel over
 // the graveyard ("something died here" approach telegraph) + prey gathers at them.
 carcasses.push(...getWreckYardCarcasses());
@@ -489,8 +505,15 @@ ctx.player.rig = buildPlayerRig(ctx);
 // has no way to bootstrap any crafting (scrap is a near-universal
 // recipe input). Machete is now found-only (could be added as wreck
 // loot or quest reward in a future session).
-addItem(ctx.inventory, 'scrap_bar');
-addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
+// SHIP-FIX (2026-07-03, user): NO starter loadout on the escape-pod-intro path —
+// the crash story starts you with empty pockets; the T4.3 tutorial's scattered
+// scrap/cloth (→ craft the machete, the pry tool) + your own pod's salvage kit
+// are the bootstrap. The non-intro path keeps the ABL loadout (its balance
+// rationale above still holds there).
+if (!FEATURES.escapePodIntro) {
+  addItem(ctx.inventory, 'scrap_bar');
+  addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
+}
 ctx.inventory.selectedIdx = 0;
 
 // AAX — dev loadout extracted into a helper so it can be invoked from
@@ -714,6 +737,9 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
   inGameEls.forEach((el) => { el.style.visibility = ''; });
+  // Escape-pod intro — if a new game started the intro before this handoff, re-hide the
+  // in-game HUD we just un-hid (the intro owns a clean view; endEscapePodIntro restores it).
+  if (introActive(ctx)) setGameHudHidden(true);
   // M8 ⑩ (C52) — reconcile companion vs. cave egg. Boot always spawns the companion +
   // builds the egg; resolve the final state per flags.companionAcquired (false on a NEW
   // game, set from the save on Continue, true on DEV): acquired → remove the egg; NOT
@@ -806,6 +832,70 @@ const titleOverlay = createTitleOverlay(ctx, {
       return;
     }
     // Fresh-boot, no override: this world was auto-rolled; play it.
+    // Escape-pod intro (FEATURES.escapePodIntro) — a NEW game plays the intro before
+    // gameplay; DEV MODE + Continue use the normal spawn (they call handoffToGame from
+    // their own branches, never reach here). No-op when the flag is off (today's
+    // behaviour, byte-identical).
+    if (FEATURES.escapePodIntro && !ctx.flags.devMode) {
+      // PERF (the user's #1 intro complaint — freezes/stutters between beats): pay the
+      //   whole intro's build + shader-compile cost UP FRONT behind an honest loading
+      //   screen, so no beat cold-builds the ship (~1400 meshes) / hauler / pod / plasma
+      //   mid-play. handoffToGame FIRST (hide the title, un-hide then re-hide the HUD as
+      //   the intro owns a clean view) so the loading screen sits over the game canvas the
+      //   warm-up renders into; THEN preload; THEN start the cockpit beat — by which point
+      //   every scene is prebuilt + every shader compiled (the beats just reuse them).
+      //
+      // Y6 (kill the desert flash): handoffToGame flips titleActive, so the very next
+      //   painted frame is the in-game DESERT SPAWN — which used to flash before the
+      //   loading overlay's 0.35s fade-in covered it. Freeze the menu's last frame
+      //   instead: render the title vista once explicitly (preserveDrawingBuffer is
+      //   false, so toDataURL is only valid in the same task as a render) and mount it
+      //   as the loading screen's opaque backdrop, shown INSTANTLY before the handoff.
+      //   The menu visual then persists under the loading bar for the whole preload
+      //   (the warm-up frames render behind it, invisible), stays up through the
+      //   READY — CLICK TO LAUNCH recovery state if that triggers, and the overlay
+      //   fades out (~350ms) directly onto the cockpit's first frame. A capture failure
+      //   falls back to the overlay's own fully-opaque gradient — no desert either way.
+      try {
+        three.renderer.render(title.scene, title.camera);
+        setIntroLoadingBackdrop(three.renderer.domElement.toDataURL('image/jpeg', 0.85));
+      } catch (e) {
+        console.warn('[introLoading] menu freeze-frame capture failed — plain backdrop:', e);
+        setIntroLoadingBackdrop(null);
+      }
+      showIntroLoading({ instant: true });   // cover the canvas BEFORE titleActive flips
+      handoffToGame({ skipLock: true });   // skipLock: we lock EXPLICITLY on the next line instead
+      // BUGFIX (the "loading finishes, game never starts" freeze): acquire the pointer lock
+      //   NOW, while the New-Game click's user gesture is still fresh. The old flow locked
+      //   AFTER the multi-second preload — by then the gesture had EXPIRED, the browser
+      //   silently refused the lock, flags.paused stayed true, and the intro sat frozen
+      //   behind a finished loading bar (the documented pointer-lock freeze mode). Locking
+      //   here is harmless: the loading overlay covers the canvas and swallows input.
+      {
+        const c0 = three.renderer.domElement;
+        if (!pointerLockSuppressed(c0)) ctx.input.controls.lock();
+      }
+      void preloadIntro(ctx)
+        .catch((e) => {
+          // A preload failure must NEVER brick the New Game — the beats all keep their
+          //   build-on-entry fallbacks, so we just cold-start (the old pre-preload behavior).
+          console.error('[introPreload] failed — cold-starting the intro:', e);
+        })
+        .then(async () => {
+          // If the lock didn't take (or the player Esc'd during loading), a post-preload
+          //   lock() would be refused (stale gesture) → recover via a FRESH gesture: the
+          //   loading screen flips to "READY — CLICK TO LAUNCH" and we lock inside that click.
+          const c = three.renderer.domElement;
+          if (!document.pointerLockElement && !pointerLockSuppressed(c)) {
+            await introLoadingAwaitLaunchClick();
+            ctx.input.controls.lock();
+          }
+          hideIntroLoading();
+          startEscapePodIntro(ctx);            // start the cockpit beat — everything is warm now
+          setGameHudHidden(true);              // re-hide (handoffToGame un-hid; the intro owns a clean view)
+        });
+      return;
+    }
     handoffToGame();
   },
   onContinue: hadSaveAtBoot ? () => {
@@ -827,6 +917,12 @@ const titleOverlay = createTitleOverlay(ctx, {
     ctx.flags.devMode = false;
     handoffToGame();
     applyPendingCrashRestore(ctx);   // ACBE (D1) — re-spawn saved crash sites AFTER handoff's reset cleared in-session ones
+    // escape-pod intro — re-build the ONE walk-in pod AFTER handoff (it's built only by the intro,
+    //   never at boot; no-op with an empty stash → flag-off/pre-feature saves unaffected). If the
+    //   comic chute hadn't yet popped, resume the tutorial driver so it still fires on the first
+    //   post-reload pry (a fresh boot leaves the driver idle, which would silently kill the payoff).
+    const podRestore = applyPendingPodCrashRestore(ctx);
+    if (podRestore && !podRestore.chutePopped) resumePodTutorialAfterRestore(podRestore.x, podRestore.z);
   } : undefined,
   // AAX — DEV MODE button. Pre-AAX this set a localStorage flag + cleared
   // the save + reloaded; the boot-time loadout block then fired from the
@@ -891,6 +987,10 @@ startLoop(ctx, (c, dt) => {
   updateOpeningWreckGodRay(c);   // AAB — skylight beam opacity tracks sun height + storm intensity
   updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
+  updateEscapePodIntro(c, dt);   // escape-pod intro sequence (FEATURES.escapePodIntro) — no-op unless ctx.intro.active; runs BEFORE updatePlayer so it can set the capsule + drive the camera first
+  // W6 item 5 — the post-handoff fog ease-back is GONE: the intro now normalizes the fog to the
+  //   game's survival density DURING the fall (blendDescentFog), so the world is already at plain
+  //   game fog at the crash/exit — nothing to ease. (updateIntroFogEase was removed with the pin.)
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateCameraShake(c, dt);      // ACBE (D1) — trauma shake (stacks on the anchored camera, like stamina wobble)
@@ -929,6 +1029,11 @@ startLoop(ctx, (c, dt) => {
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateSledRiders(c);           // ACC P2 — drive any pickup riding a sled + promote settled pickups (must run AFTER updateSleds so sled.group transforms reflect this-frame's tow correction)
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
+  updatePodTutorial(c, dt);      // T4.3 — the escape-pod first-salvage tutorial + chute-pop (no-op unless running; after interaction so the pry is seen this frame)
+  updateChutePop(c, dt);         // T4.3 — advance the chute-pop inflate one-shot (no-op unless popping); D5 — also fires the pry→pop gag robustly (tutorial-phase-independent), so it always ticks / sees the pry
+  // W6 item 5 — the step-out exposure ease is GONE (the wake no longer lifts the exposure; it stays
+  //   at the desert base 1.05 from the crash onward, so there's nothing to ease). The old
+  //   updatePodExposureEase tick was removed with it.
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
   updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.
   updateReload(c);               // ABE — R-key scrap_gun reload (drains scrap_bullet → slot.meta.ammoRemaining)

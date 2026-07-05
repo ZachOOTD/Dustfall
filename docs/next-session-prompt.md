@@ -1,30 +1,83 @@
-# ⏸ PAUSED — M11→M13 review-fix pass COMPLETE — `campaign/2026-06-18`
+# Next session — PAUSED PRE-WALK-TEST (2026-07-04 evening); dist BUILT from 0cef120
 
-**The campaign is paused at the M13 milestone** (`status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`). The entire **M11→M13 review-fix pass is shipped + validated per tier** — there is no more in-loop review-fix work. The next block is the **user's call** (the remaining items are dedicated solo sessions + human-attended work, NOT loop cycles). Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` if resuming.
+**RESUME POINT:** the user paused to take a break BEFORE the final walk-test. ALL Y-queue +
+round-2 work is committed/pushed through `0cef120` (…+ Y8 one-door-construction w/ sealed
+bore + two-face hardware + lamp parity + quadratic blast ramp; Y9 cockpit dome round 2
+[8 wide panes, two-tone machined members, sill/floor base channel, junction tabs fixed] +
+the bay doorway bands gapped). `npm run build:intro` RAN on this exact state — dist is
+CURRENT (never let the user test a stale dist again; that caused two false bug reports).
+Final bench: PRELOAD Σ-entry 31.6ms, 0 stutters >50ms, 0 freezes. The user SKIPPED the
+final redundant gate re-run (each unit gated individually). ON RESUME: (1) start the
+`dustfall-intro-preview` server (port 4173) — it serves the already-built dist; (2) the
+user walk-tests; (3) on their confirmation run the RELEASE steps below (flag flip → default-
+build re-gate → merge --no-ff to master → push → watch deploy.yml → probe the live link).
 
-## What the user validates at THIS pause (the final audio LISTEN)
-Run `npm run dev` and listen:
-- **Gunshots** (C68/D268): each gun has a distinct muzzle report — scrap_gun (ballistic crack+boom), amban_rifle (heavier + sub thump), pulse_rifle (rapid short zappy pew), energy_pistol (meatier charged zap). Reload SFX on scrap_gun + amban (R key). Levers: the synth params in `audio.ts` (`ballisticShot`/`energyShot`/`playReloadGun`).
-- **Speeder hum** (C69): a lower, smoother thrum (was a harsh sawtooth whine). Levers: `startSpeederThrust`/`setSpeederThrustSpeed` in `audio.ts` (the triangle osc + lowpass + the 46-90 Hz range).
-- (Already approved earlier this pass: M11 wreck/panel fixes; M12 sand-worm — the breach-dive attack + the smoothed dive + the quiet alert rumble/shake.)
+**THE RELEASE IS STAGED.** The full Y-queue shipped through `b6ade67` (cockpit Mk-III glazed
+dome w/ user review round; the ONE-pod consistency + interior Mk-II; pivoting levers at
+seated reach; rotate-then-eject 180° beat; visible eject pull; real-glass hallway windows +
+densified real starfield; z-fights root-caused; menu freeze-frame loading; Model Stage +
+Geometry Lint tooling; E-to-sit + no-emoji fixes). Full suite green incl. the new permanent
+gates (door-flush-audit 7 states · doorway-torture 6/6). The 4173 server serves the release
+build. ON THE USER'S CONFIRMATION: (1) flip `FEATURES.escapePodIntro` default ON w/ env
+kill-switch (`!== '0'`), (2) re-gate the DEFAULT build (plain `npm run build` + smoke) + the
+Continue-with-old-save path, (3) `git merge --no-ff` → master + push, (4) watch deploy.yml →
+verify the LIVE Pages link (New Game → cockpit; old-save Continue skips the intro), (5) docs
++ campaign-state to RELEASED. If the user reports issues instead: fold into a new queue,
+re-verify, THEN release.
 
-## The M11→M13 review-fix pass — what shipped (all from the 2026-06-20 triage)
-- **M11 — wreck/panel fixes** ✅ (C61-C64): not-openable panels hide (D264); floating panels seated; tank/husk rib/structure rework (the `makeFormerRings` 0.84× root cause); the 3 mega-wreck companion straggler panels hidden (D265). User-validated.
-- **M12 — sand worm** ✅ (C65-C67 + the b7b6a52 dive-smoothing): dorsal ridges removed; attack = breach-and-dive not a high jump (D266) + the natural-bend dive (tail curls under, tip never seen); quiet alert rumble + screen-shake buildup, roar removed from alert (D267). User-approved.
-- **M13 — weapon & vehicle audio** ✅ (C68-C69): per-weapon gunshot + reload SFX (D268); lower/smoother speeder hum. ← this pause.
+--- (superseded prior state below) ---
+# X-queue COMPLETE (overnight 2026-07-04); awaiting the user's walk-test
 
-## The next block — USER-SEQUENCED (NOT auto-loop)
-`/campaign-approve` does NOT auto-continue here (the planned in-loop work is done). When the user is ready they pick the next thing; these are NOT loop cycles:
-- **Skyfall crashed-ship** — a NEW researched extremely-high-quality enterable HERO wreck (its own `/feature-slice`: research → model → iterate WITH the user; no floating pieces / one-sided textures) + its fire-from-the-wreck fix. `docs/backlog.md` §A. **Dedicated solo session.**
-- **CAVE rework** — the user is planning the direction. `docs/backlog.md` §A. **Dedicated solo session.**
-- **⑯ drop-pod-intro-cutscene** — deferred XL feature; bring back via `/feature-slice` when ready.
-- **⑰ pickup-instancing** — measured (75% of draw calls; D263) + planned; build is **human-attended** (a core item-collection-loop rewrite).
-- **§A owed walk-tests / flag-flips** — the M9/M10 flag-gated systems (realRope/realCloth/rideableSled/repairableSpeeder), diegetic-HUD, survival curve.
-- **Housekeeping:** 1 post-mortem draft pending (`hide-mesh-when-unregistering`, C64) → `/consolidate-shared-memory` whenever convenient.
+The full overnight batch from the user's W2 walk-test feedback SHIPPED (9 commits,
+`bab0cd9..a97a3de`, all pushed). Boot from this file + `docs/campaign/steering-archive.md`
+(2026-07-04 entries). Branch `campaign/escape-pod-intro`. The intro preview build + local
+server (port 4173, `dustfall-intro-preview`) were rebuilt at close-out.
 
-## Campaign status
-- **69/75 cycles** (~6 headroom remain, but the planned roadmap work is complete). If the user wants the loop to do MORE (e.g. self-author a new roadmap from the GDD), that needs an explicit steer — `self_author: propose` would draft a proposal at the next idle cycle, but the user said the next block is dedicated solo sessions, so the loop should stay paused until steered.
-- Branch `campaign/2026-06-18`, working tree clean, `verify:all` green. SAVE_VERSION untouched across the whole pass (no D81 bumps).
+## What shipped (all gates green; per-unit detail in the git log)
+- ✅ **X1+X1p COCKPIT FULL REBUILD** — 8-pane faceted panoramic canopy (research-grounded),
+  side walls cleaned, bolts root-caused (_stud axis), rib strips re-seated, hauler nose
+  matched + made legible; polish: uniform pane clarity (Fresnel overdrive), slim A-posts,
+  rooted beacon, sill fascia. Adversarial gate PASS.
+- ✅ **X2a THE ONE POD** — the bay pod IS the real cabin (one interior path, sealed shell,
+  no space visible inside), console/eject detail redesign, flush door (hinge root cause),
+  pale-at-eject killed, landed pod on plain terrain w/ clear plumb door + walk-back-in.
+- ✅ **X3 FLOW** — board straight from the engine check (bay-reach arming); red-alert strobes
+  through the whole boarding + release; BAY-UNTIL-EJECT (the frame swap rides the eject
+  blast; same door in view before/after).
+- ✅ **X4 CORRIDOR** — walkable lived-in crew quarters (sliding door, CREW placard, bunk/
+  locker/desk/props); the starboard viewport strip; bay-entrance hull seams root-caused +
+  sealed; bay-pod collision ring verified; airlock detail; pipe ends in manifolds; engine
+  detail.
+- ✅ **X6 WRAP** — combined 3-lens adversarial gate (11 agents) → 3 confirmed SEV1s + SEV2s
+  ALL fixed + own-eyes re-verified (viewport = real starfield window [root cause: an opaque
+  reveal panel COVERED the glass], quarters doorway conduits split + capped, airlock leaves
+  matched + aligned seal lamps, plumb open pod door [swing sag + over-rotation], sealed ring
+  seams, capped conduits, seated hauler brow). SHIP-WIDE COLLISION AUDIT: rule-9 PASS, zero
+  stale colliders, zero uncovered walkables. Suite: verify:all · smoke-intro beats:12 ·
+  pod-walkin · pod-walkout · airlock-motion · smoke-pod-persistence · bench:intro (PRELOAD
+  Σ-entry 21.3ms, 0 frames >50ms — no hitch regression; bench takes ~30min wall-clock under
+  swiftshader, that is NORMAL).
 
-## Verify protocol
-`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). Audio = the user's LISTEN; visuals = the real in-game view / the rig.
+## WALK-TEST FLAGS for the user (stills can't gate these — their eyes decide)
+1. The cockpit seated WOW + head-turn parallax through the wrap panes (+ the planet framing).
+2. The boarding rhythm end-to-end: engine check → straight to the airlock → E-opens → sit →
+   red-alert flashing throughout → eject WITH the bay visible until the blast.
+3. The collar depth read in motion (a critic still counts the door jamb as a "nested frame").
+4. The viewport strip on the corridor walk (star backdrop; largest stars read faintly square).
+5. The quarters peek (lived-in read; furniture is intentionally walk-through decoration).
+6. The landed pod: plumb open door, walk-back-in, plain terrain (sand dressing removed —
+   re-enable lever: ENABLE_CRASH_GROUND_DRESSING in podScene.ts).
+7. Audio mix balance (standing flag).
+
+## Known non-blocking residuals
+- ship-explode rig scenario shows a false-pale cabin (live-loop noon stomp — documented in
+  steering-archive; judge the eject cabin in-game or via pod-interior scenarios).
+- The bench COLD path rose 124→181ms with the new geometry; the shipped PRELOAD path is
+  the gate and held (~21ms). If COLD ever matters, extend the preload warm list.
+- Star quads: texture point-sprites would be crisper (deferred by draw-call discipline).
+
+## Next after the walk-test
+Fold the user's feedback (steering → a new queue); then the remaining campaign phases
+(the CLAUDE.md note: Phase 3 hauler/disaster polish → 4 crash/tutorial → 5 audio) per
+`docs/campaign/campaign-state.json`. Rule 9 stands: collision matches models, same change,
+motion-proven.

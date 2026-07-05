@@ -15,6 +15,7 @@ import { setMasterVolume, playUiHover, playUiClick } from '../audio/audio.ts';
 import { hasSave, saveGameState, loadGameState, clearSave } from '../persistence/save.ts';
 import { resetMeteorCrash, applyPendingCrashRestore } from '../world/meteorCrash.ts';   // ACBE (D1) — death-continue crash reset+restore
 import { FEATURES } from '../config/features.ts';            // M6 ④ (C40) — diegeticSurvival master flag
+import { introActive } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro (T0.1) — block Save mid-intro (R1)
 import { setStatsBarsVisible } from './hud.ts';              // M6 ④ (C40) — hide the stat bars in diegetic mode
 import { setDiegeticActive } from './diegeticMode.ts';       // M6 ④ (C40) — broadcast the effective mode to statVignette
 
@@ -223,6 +224,14 @@ export function createMenus(ctx: GameContext): void {
       if (action === 'resume') resumeFromPause();
       else if (action === 'save') {
         if (!_ctx) return;
+        // R1 (escape-pod intro) — never save mid-sequence; the first real save is the
+        // desert handoff. Block + feedback if the menu is opened during the intro.
+        if (introActive(_ctx)) {
+          _ctx.ui.showToast('no saving during the intro');
+          b.textContent = 'no saving yet';
+          window.setTimeout(() => { b.textContent = 'save'; }, 1600);
+          return;
+        }
         const result = saveGameState(_ctx);
         // Toast is z:20, pause overlay is z:100 — flip the button text in
         // place so the feedback is visible WITH the pause menu still up.
