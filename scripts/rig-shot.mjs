@@ -2969,6 +2969,29 @@ const SCENARIOS = {
       } else if (angle === 'engineroom') {
         eye = new V(tr.x, floorY + 1.55, tr.z + 12.4);             // close to the dead-end glass door
         look = new V(tr.x, floorY + 1.35, tr.z + 17.0);           // aft THROUGH the glass into the engine room
+      } else if (angle === 'entrance') {
+        // stood a few m INTO the corridor, looking back FORE at the cockpit archway + the mouth-flank
+        //   junction-manifold hardware on BOTH walls (the "very messy entranceway" the user flagged)
+        eye = new V(tr.x, floorY + 1.55, tr.z + 5.0);
+        look = new V(tr.x, floorY + 1.35, tr.z + 2.4);
+      } else if (angle === 'entrance-left') {
+        // angled at the −X (left) flank of the entranceway (the manifold + low-pipe elbow + conduit run)
+        eye = new V(tr.x + 0.6, floorY + 1.55, tr.z + 4.6);
+        look = new V(tr.x - 1.0, floorY + 1.3, tr.z + 2.8);
+      } else if (angle === 'entrance-right') {
+        // angled at the +X (right) flank of the entranceway (the fore manifold + breaker/placards)
+        eye = new V(tr.x - 0.6, floorY + 1.55, tr.z + 4.6);
+        look = new V(tr.x + 1.0, floorY + 1.3, tr.z + 2.8);
+      } else if (angle === 'quarters') {
+        // face the −X crew-quarters door + jamb (the z-fighting jamb sides the user flagged), from
+        //   mid-corridor a touch aft so both jamb posts are in frame
+        eye = new V(tr.x + 0.85, floorY + 1.5, tr.z + 9.6);
+        look = new V(tr.x - 3.0, floorY + 1.35, tr.z + 9.6);
+      } else if (angle === 'quarters-graze') {
+        // a GRAZING oblique down the −X wall past the quarters jamb (where coplanar jamb/wall faces
+        //   shimmer worst — the near-parallel view that exposes z-fighting)
+        eye = new V(tr.x + 0.4, floorY + 1.45, tr.z + 7.4);
+        look = new V(tr.x - 0.9, floorY + 1.3, tr.z + 10.8);
       } else {
         eye = new V(tr.x, floorY + 1.5, tr.z + 7.0);               // mid-corridor
         look = new V(tr.x, floorY + 1.1, tr.z + 14.5);            // aft at the engine-bay blaze

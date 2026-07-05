@@ -508,9 +508,12 @@ function _cyl(rt: number, rb: number, h: number, seg: number, mat: THREE.Materia
 }
 
 // ── Round-cabin build helpers ────────────────────────────────────────────────
-/** A LatheGeometry mesh (tracked for disposal). */
-function _lathe(prof: THREE.Vector2[], seg: number, mat: THREE.Material): THREE.Mesh {
-  const g = new THREE.LatheGeometry(prof, seg);
+/** A LatheGeometry mesh (tracked for disposal). `phiStart`/`phiLength` (default a full revolve)
+ *  gap the revolve over an azimuth window — same sin/cos convention as _tube/CylinderGeometry, so a
+ *  gap at `CPOD_DOOR_AZ + dAzHalf` for `2π − 2·dAzHalf` clears the front-door arc (round-1f fix:
+ *  the full-revolve scorch fade + flared foot were NOT gapped, so they walled the lower doorway). */
+function _lathe(prof: THREE.Vector2[], seg: number, mat: THREE.Material, phiStart = 0, phiLength = Math.PI * 2): THREE.Mesh {
+  const g = new THREE.LatheGeometry(prof, seg, phiStart, phiLength);
   g.computeVertexNormals();
   _cabinDisposables.push(g);
   return new THREE.Mesh(g, mat);
@@ -804,7 +807,11 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
   //    behind the seated head-turn-forward read); (c) THINNER (a slim batten, not a wide
   //    plate+spine slab) so even when a head-turn catches one it doesn't chord the arc.
   //    The horizontal RING-FRAMES (§2) now carry the structure read instead.
-  const ribAzs = [0.0, 2.25];   // rear + far-side only; nothing on the forward arc (the −2.25 rib is dropped — the escape HATCH §10 lives on that rear-left arc)
+  // ROUND-1f: rib-a moved 0.0 → 4.15 (the thin grey CENTRE rod the user saw through the bay door —
+  //   az=0.0 sits dead-centre in the +X-door collar sightline behind the seat). At 4.15 it's hidden
+  //   behind the pod body in the bay AND behind the ride player, and it rides alongside the relocated
+  //   conduit (az=4.30) so the two read as a clamped utility spine. rib-b (2.25) stays (bay-hidden).
+  const ribAzs = [4.15, 2.25];   // rear-right + far-side; nothing on the forward arc or the bay-door sightline
   const ribY = WALL_H / 2 - 0.02, ribH = WALL_H - 0.30;
   for (const az of ribAzs) {
     // a SLIM batten hugging the wall (band-metal so it reads welded-on, but narrow → no chord)
@@ -1209,9 +1216,15 @@ function buildConduitAndLight(group: THREE.Group): void {
   // Y3 Interior Mk-II — MINIMAL conduit, and it lives INSIDE THE WALL LINE (the user saw pipes
   //   clipping THROUGH the wall). Conduit hugs the wall at CAB_R−0.055 (≈5.5cm proud — the pipe
   //   radius 0.045 clears the rivet hoops but never pokes out through the shell). ONE clean vertical
-  //   run on the REAR arc (θ≈0.7, behind the seat, clear of the forward door AND the −X eject / +X
-  //   console), capped top + bottom into structure (junction box + foot clamp) so no open-cut ends.
-  const az = 0.7;                     // rear arc, behind/beside the seat — off every control + the door
+  //   run on the REAR arc, capped top + bottom into structure (junction box + foot clamp) so no
+  //   open-cut ends.
+  // ROUND-1f FIX (the two top-left pipes in the bay doorway sightline): az=0.7 was authored to clear
+  //   the RIDE cabin's −Z door, but in the BAY pod the whole interior is yawed −π/2, so az=0.7 landed
+  //   in the +X-door collar SIGHTLINE (the thick pipe with the junction box, upper-left). Moved to
+  //   az=4.30 (rear-RIGHT arc): hidden BEHIND the pod body from the bay-collar eye (bayX≈+0.4) AND out
+  //   of the ride-forward view (|az−π|>1.0), clear of the −X eject (4.71) + the +X console (2.0). The
+  //   companion rib-a (§3) rides the same arc so the run reads clamped to a structural batten.
+  const az = 4.30;
   const condH = WALL_H - 0.55, condY = WALL_H / 2 - 0.05;
   const condTop = condY + condH / 2;
   const RC = CAB_R - 0.055;           // conduit centre radius — tight to the wall (inside the wall line)
@@ -1434,6 +1447,43 @@ function buildUnifiedDoorSlab(door: THREE.Group, doorTh: number, W: number, H: n
   }
 }
 
+/** ROUND-1f (AIRTIGHT SEAL) — a STATIC pressure-door STOP LIP built on the aperture FRAME (NOT the
+ *  swinging door), inboard of the closed slab. The slab is sized EXACTLY to the aperture (W×H) and
+ *  is a FLAT plate closing a CURVED-shell opening, so at the side edges the curved shell recedes
+ *  behind the flat slab, opening a thin wedge — a "star-gap" crack to space (the user's sealed-eye
+ *  screenshot). This is what a real pressure door seats against: a picture-frame flange whose INNER
+ *  edge sits at the aperture opening line and that extends OUTWARD past the slab edge, positioned a
+ *  hair INBOARD of the closed slab's inner face so it backs the entire perimeter clearance with
+ *  opaque metal (no line-of-sight to space) from BOTH the seated interior eye AND an exterior graze.
+ *  `host` = the frame group (bay: local +Z outward; ride hatch: local +Z inward); `inZ` = the sign of
+ *  the CABIN-inboard direction in the host's local Z (bay: −1; ride: +1); `slabInnerZ` = the closed
+ *  slab's inner-face plane in host-local Z. The lip sits just inboard of that plane. It never blocks
+ *  the OUTWARD door swing (opposite side) nor the walk-in (its inner opening = the full aperture,
+ *  and the collider aperture is already wider than the visual). */
+function _addDoorStopLip(host: THREE.Group, W: number, H: number, inZ: number, slabInnerZ: number): void {
+  const lapIn = 0.075;                       // how far the flange laps INWARD over the opening edge
+  const lapOut = 0.075;                      // how far it reaches OUTWARD past the aperture edge (backs the shell wedge)
+  const lipDepth = 0.05;                     // flange plate thickness (along Z)
+  const zc = slabInnerZ + inZ * (lipDepth / 2 + 0.004);   // a hair inboard of the closed slab's inner face
+  // Perimeter band extents: inner opening = W−2·lapIn (clear walk-through), outer = W+2·lapOut.
+  const bandW = lapIn + lapOut;              // radial width of each frame plate
+  // The band CENTRE line sits on the aperture edge (±W/2 or ±H/2), so the plate laps lapIn inward + lapOut outward.
+  const cW = W / 2, cH = H / 2;              // aperture half-extents (the edge line the band straddles)
+  // top + bottom bars — full outer width (span the corners)
+  for (const sy of [1, -1]) {
+    const bar = _box(W + 2 * lapOut, bandW, lipDepth, _podSteel);
+    bar.position.set(0, sy * cH, zc);
+    host.add(bar);
+  }
+  // left + right jamb bars — the SIDE flanges that back the user's side star-gaps (between the top/bottom bars)
+  const sideH = H - 2 * lapIn;               // fit between the top/bottom bands (no double-stack at corners)
+  for (const sx of [1, -1]) {
+    const bar = _box(bandW, sideH, lipDepth, _podSteel);
+    bar.position.set(sx * cW, 0, zc);
+    host.add(bar);
+  }
+}
+
 /** CLUSTER D — the MERGED FRONT DOOR on the hero cabin (−Z, FDOOR_AZ): the ONE aperture the player
  *  faces for everything. A curve-seated channel-steel FRAME bordering the −Z wall opening (cut in
  *  §1.a/§2), a dark recessed jamb WELL (opening depth), and the swinging DOOR on a hinge pivot with
@@ -1517,6 +1567,10 @@ function buildCabinHatch(group: THREE.Group): void {
   _cabinHatchAjarY = 0;       // sealed shut at rest
   pivot.rotation.y = _cabinHatchAjarY;
   hatch.add(pivot);
+  // ROUND-1f AIRTIGHT SEAL — the same static STOP LIP as the bay door (buildCanonicalPodExterior), so
+  //   the ride cabin's front door is airtight from the seated eye too. hatch local +Z = INWARD (toward
+  //   centre), so cabin-inboard = +Z (inZ=+1). Closed slab inner face: pivot z=0.04 + doorTh/2 = 0.09.
+  _addDoorStopLip(hatch, HATCH_W, HATCH_H, +1, 0.04 + doorTh / 2);
   cabinHatchPivot = pivot;
 }
 
@@ -1839,10 +1893,14 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
       t.position.y = mid; root.add(t);
     }
   }
-  // flared FOOT (below the door)
-  root.add(_lathe([
+  // flared FOOT — GAPPED at the front-door arc (round-1f: it's a full revolve up to y=0.28, so it
+  //   crested the door sill at 0.11 and walled the bottom of the aperture). The foot spans y 0→0.28
+  //   which crosses the sill, so gap it over the door azimuth (same arc as the body bands) → the
+  //   doorway is clear from the sill down; the flare still reads as a welded ring everywhere else.
+  const footProf = [
     new THREE.Vector2(R * 0.90, 0.0), new THREE.Vector2(R * 1.02, 0.16), new THREE.Vector2(R, 0.28),
-  ], POD_SEG, _podPaint));
+  ];
+  root.add(_lathe(footProf, POD_SEG, _podPaint, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2));
   // SHOULDER + tucked OGIVE NOSE (above the body)
   const noseProf: THREE.Vector2[] = [new THREE.Vector2(R, straightY1), new THREE.Vector2(SHOULDER_R, bodyTop + 0.04)];
   for (let i = 1; i <= 8; i++) {
@@ -1856,11 +1914,18 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   baseCap.position.y = 0.11; root.add(baseCap);
 
   // ── 2. REENTRY SCORCH — a char fade up the lower body (the shared identity weathering).
+  //    ROUND-1f FIX (the "curved grey sheet walling the lower half of the doorway"): this scorch
+  //    fade was a FULL 360° revolve at R+0.01 up to scorchTopY=1.15 — so on the +X door arc it stood
+  //    a curved grey plate right in the door plane across the whole lower doorway (the raycast fan
+  //    from the collar eye hit it at localX≈1.44 for every sill→mid ray). GAP it over the door arc
+  //    (same window as the body bands / flared foot) so the aperture is clear from the sill up; the
+  //    scorch still wraps the rest of the lower body. The az-derived vertex-colour fade is unchanged
+  //    (atan2 still resolves the correct azimuth within the surviving arc).
   const scorchTopY = POD_BODY_H * 0.45;
   const scorchGeo = new THREE.LatheGeometry([
     new THREE.Vector2(R * 0.90 + 0.008, 0.0), new THREE.Vector2(R * 1.03, 0.16),
     new THREE.Vector2(R + 0.012, 0.28), new THREE.Vector2(R + 0.010, scorchTopY),
-  ], POD_SEG);
+  ], POD_SEG, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2);
   scorchGeo.computeVertexNormals();
   {
     const pos = scorchGeo.attributes.position;
@@ -1999,6 +2064,11 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   doorPivot.add(door);
   // door state: closed = flush over the aperture (sealed); open = swung ~110° outward (into +X).
   doorPivot.rotation.y = state === 'open' ? -1.9 : 0;
+  // ROUND-1f AIRTIGHT SEAL — a static STOP LIP inboard of the closed slab so the flat slab's edge
+  //   clearance against the CURVED shell aperture reads as backed metal, not a star-gap crack to
+  //   space. Frame local +Z = OUTWARD (+X), so cabin-inboard = −Z (inZ=−1). Closed slab inner face:
+  //   doorPivot z=0.06 + slab centre 0 − doorTh/2 (0.05) → frame z=0.01.
+  _addDoorStopLip(frame, CPOD_DOOR_W, CPOD_DOOR_H, -1, 0.06 - doorTh / 2);
 
   return { root, doorPivot };
 }
