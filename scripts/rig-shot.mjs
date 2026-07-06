@@ -5645,6 +5645,7 @@ const SCENARIOS = {
       const cycles = [];
       let _colliderDump = [];
       let podX = 0, podZ = 0, gy = 0, minY = 1e9, maxJump = 0, everTrapped = false;
+      let _diag = null;
       const driveTo = async (cond, budget) => { const s0 = ctx.time.elapsed; let last = s0, st = 0; for (let i = 0; i < 8000; i++) { await sleep(16); const n = ctx.time.elapsed; if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 500) break; if (cond()) return true; if (n - s0 >= budget) break; } return cond(); };
       // WALK in a compass direction for a sim-budget, sampling the path (continuity + floor).
       const walk = async (yaw, budget) => {
@@ -5670,13 +5671,31 @@ const SCENARIOS = {
         ctx.three.renderer.setSize(48, 48, false);
         // drive the intro to step-out so the pod is the persistent WALK-IN structure (colliders live).
         g.startIntro();
-        g.jumpToBeat('descent');
+        g.jumpToBeat('impact');   // mirror pod-walkout: impact→wake is the deterministic landed path
         await driveTo(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 25);
-        // force the wake to hand off to step-out (unify) so the pod is fully landed + enterable.
+        // Hand off to step-out (unify) so the pod is the fully-landed + enterable structure.
+        //   Z7 made the wake climb→stepOut advance MOVEMENT-gated (the WAKE_BLOW_FALLBACK time
+        //   fallback was removed → progression is player-gated, per the user's "nothing on a timer"
+        //   rule). Forcing scratch.t no longer advances it; the player must WALK OUT to trigger the
+        //   handoff — so mirror pod-walkout: kick the door, enable walk, and hold W toward −Z until
+        //   stepOut hands off. (The 6× cycle below re-spawns the body outside, so walking out here
+        //   only serves to complete the handoff.)
         g.blowCabinHatch(1);
-        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 999; }
-        await driveTo(() => ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active), 20);
+        const _fade = document.getElementById('intro-fade'); if (_fade) _fade.style.opacity = '0';
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        const _pPreWalk = ctx.player.body.body.translation();
+        for (let i = 0; i < 12 && !(ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active)); i++) {
+          await walk(0, 1.0);   // yaw 0 = face −Z = walk OUT (movement advances the climb gate)
+        }
         await driveTo(() => !ctx.intro || !ctx.intro.active, 12);   // let stepOut hand off + startPodTutorial
+        const _pPostWalk = ctx.player.body.body.translation();
+        _diag = {
+          introExists: !!ctx.intro, introActive: !!(ctx.intro && ctx.intro.active),
+          beat: ctx.intro ? ctx.intro.beat : '(none)', mode: ctx.intro ? ctx.intro.mode : '(none)',
+          phase: ctx.intro && ctx.intro.scratch ? ctx.intro.scratch.phase : '(none)',
+          movedInHandoff: +Math.hypot(_pPostWalk.x - _pPreWalk.x, _pPostWalk.z - _pPreWalk.z).toFixed(2),
+          playerY: +_pPostWalk.y.toFixed(2),
+        };
         const pod = ctx.three.scene.getObjectByName('escapePodCabin');
         if (pod) { pod.updateMatrixWorld(true); const V = cam.position.constructor; const p = pod.getWorldPosition(new V()); podX = p.x; podZ = p.z; }
         gy = ctx.terrain.heightAt(podX, podZ);
@@ -5713,9 +5732,10 @@ const SCENARIOS = {
           cycles.push({ c, walkedInReached: insideNow, inZ: +afterIn.z.toFixed(2), walkedOut: outsideNow, outZ: +afterOut.z.toFixed(2) });
         }
       } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); ctx.input.keys['KeyW'] = false; }
-      return { podAt: [+podX.toFixed(2), +podZ.toFixed(2)], gy: +gy.toFixed(2), minY: +minY.toFixed(2), maxJump: +maxJump.toFixed(2), everTrapped, cycles, colliderDump: _colliderDump };
+      return { podAt: [+podX.toFixed(2), +podZ.toFixed(2)], gy: +gy.toFixed(2), minY: +minY.toFixed(2), maxJump: +maxJump.toFixed(2), everTrapped, cycles, colliderDump: _colliderDump, diag: _diag };
     });
     console.log('[doorway-torture] ' + JSON.stringify({ podAt: log.podAt, gy: log.gy, minY: log.minY, maxJump: log.maxJump, everTrapped: log.everTrapped }));
+    console.log('[doorway-torture] handoff diag: ' + JSON.stringify(log.diag));
     console.log('[doorway-torture] colliders (dz,dx,y,halfExtents) near pod: ' + JSON.stringify(log.colliderDump));
     for (const c of log.cycles) console.log('  ' + JSON.stringify(c));
     // GATE 1 — never fell through the floor (minY stayed near/above the pod ground; a fall-through spikes minY far below gy).
