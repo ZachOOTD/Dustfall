@@ -3470,10 +3470,10 @@ const CHUTE_DROOP_SAG = 0.14;                 // extra vertical squash the dome 
 //   a barely-there hem stir. All time-parameterised off chutePopT (seconds since the pop), so the
 //   restore path can fast-forward straight to the settled drape (no flutter replay). Phase edges:
 const CHUTE_FLUTTER_START = CHUTE_POP_DUR;              // 1.55s — flutter begins as the pop settles
-const CHUTE_FLUTTER_DUR   = 10.0;                       // ~10s of wind-flutter before the chute gives up
-const CHUTE_DEFLATE_START = CHUTE_FLUTTER_START + CHUTE_FLUTTER_DUR;   // 11.55s
-const CHUTE_DEFLATE_DUR   = 2.6;                        // ~2.6s to lose form + slump into the drape
-const CHUTE_SETTLED_AT    = CHUTE_DEFLATE_START + CHUTE_DEFLATE_DUR;   // 14.15s — settled scenery from here on
+const CHUTE_FLUTTER_DUR   = 1.6;                        // round-3 (user): ~1.5-2s of PROUD flutter, then it gives up (was 10s — far too long)
+const CHUTE_DEFLATE_START = CHUTE_FLUTTER_START + CHUTE_FLUTTER_DUR;   // ≈3.15s — deflate begins ~1.6s after full deploy
+const CHUTE_DEFLATE_DUR   = 2.5;                        // ~2.5s to lose form + slump into the gravity drape
+const CHUTE_SETTLED_AT    = CHUTE_DEFLATE_START + CHUTE_DEFLATE_DUR;   // ≈5.65s — settled scenery from here on (pop→settle ≈5.7s total)
 // Flutter amplitude/frequency band — layered noise, all scaled by the live wind (0=calm..1=storm).
 const CHUTE_BILLOW_AMP    = 0.16;   // low-freq whole-canopy breathing (m of radial swell at calm), grows w/ wind
 const CHUTE_BILLOW_FREQ   = 0.55;   // rad/s — the slow breath
@@ -3483,6 +3483,7 @@ const CHUTE_HEM_AMP       = 0.14;   // high-freq edge flutter on the skirt hem (
 const CHUTE_HEM_FREQ      = 5.2;    // rad/s — the fast hem chatter
 const CHUTE_WIND_LEAN     = 0.22;   // rad — max whole-canopy downwind lean at full storm
 const CHUTE_SETTLED_STIR  = 0.06;   // residual hem-stir amplitude fraction once settled (barely-there cloth read)
+const CHUTE_GROUP_DROP    = 0.55;   // round-3 — m the whole assembly lowers during deflate so local-y 0 lands at the pod crown (the drape then falls DOWN the hull to the ground pool)
 // Comic canopy material — faded orange-white ripstop (reads as a real chute; a bit worn).
 const _chuteCanopyMat = new THREE.MeshLambertMaterial({ color: 0xd8894a, flatShading: true, side: THREE.DoubleSide });
 const _chuteGoreMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true, side: THREE.DoubleSide });   // the alternating pale gores
@@ -3500,10 +3501,12 @@ interface ChuteFlutterGore {
 // Per-shroud-line data so the deflate re-lays each line into a slack catenary droop.
 interface ChuteLine {
   mesh: THREE.Mesh;
-  skirt: THREE.Vector3;   // upper attach (canopy brim), rest
+  skirt: THREE.Vector3;   // upper attach (canopy brim), rest — EMBEDDED past the fabric skin (round-3)
   riser: THREE.Vector3;   // lower attach (riser knot)
   restLen: number;
   up: THREE.Vector3;
+  brimTgt: THREE.Vector3; // round-3 — where the line TOP follows the fabric brim as it drapes onto the hull flank
+  contact: number;        // 0..1 FALL weight (1 = +X flank, the line follows the curtain to the ground pool)
 }
 let _chuteLines: ChuteLine[] = [];
 const _CHUTE_UP = new THREE.Vector3(0, 1, 0);   // shared scratch axis for line orientation
@@ -3552,6 +3555,11 @@ function buildChuteCanopy(crownY: number): THREE.Group {
   const CANOPY_R = 3.3;             // was 2.3 — a proper POOF that overwhelms the ~1.4m-radius pod
   const SQUASH = 0.74;              // flatten the dome vertically → a wide billow, not a tall balloon
   const GORES = 14;
+  // round-3 GRAVITY-DRAPE frame: canopy-grp origin sits at world (apex + 0.55); the deflate driver drops
+  //   it by CHUTE_GROUP_DROP so local-y 0 lands ~at the pod crown. The terrain/ground is therefore at
+  //   canopy-local y ≈ −(crown world height) = −(apex + 0.55 − CHUTE_GROUP_DROP). The +X-flank fabric
+  //   falls to this ground and POOLS. Host-correct (apex differs: unified pod vs standalone wreck crown).
+  const CHUTE_GROUND_LOCAL = -(apex + 0.55 - CHUTE_GROUP_DROP) + 0.10;   // +0.10 so the pool hem rests just above the sand, not under it
   const dome = new THREE.Group();   // the billowing canopy (droops as a unit in the settle)
   // ── FLUTTER/DRAPE data: per-gore rest positions + precomputed per-vertex params (polar 0..1
   //    from apex, azimuth) + an authored CRUMPLE target the deflate morphs into. Captured once
@@ -3582,28 +3590,54 @@ function buildChuteCanopy(crownY: number): THREE.Group {
       polar[i] = p;
       const az = Math.atan2(rz, rx);
       azim[i] = az;
-      // CRUMPLE TARGET — the AUTHORED DRAPE. The deflated canopy loses ALL internal form and collapses
-      //   into a LOW rumpled heap slumped over the pod's +X shoulder (away from the −Z front doorway so
-      //   the drape never blocks it). Not a shrunk balloon: the fabric flattens hard (little vertical
-      //   rise), the whole mass shifts toward +X + sags down the flank, and uneven azimuthal + radial
-      //   fold creases read as slack crumpled cloth. The driver ALSO drops the whole group onto the
-      //   shoulder, so this target is authored LOW + flat relative to the canopy origin.
-      const nx = rXZ > 1e-4 ? rx / rXZ : 0;                 // radial unit dir (for the slump bias)
+      // CRUMPLE TARGET — the GRAVITY DRAPE (round-3, user). The deflated canopy is a CURTAIN of cloth that
+      //   has POURED down the pod's +X flank under gravity and WRAPS the cylindrical hull (radius POD_R≈
+      //   1.44), contact-conforming, pooling on the sand at the foot — never a tent-lump hovering off the
+      //   shoulder, never a tight sock on the crown. Authored in canopy-grp-LOCAL coords; the driver eases
+      //   dome.scale.y→1 during deflate so these Y values are HONEST hull-conforming heights. Group origin
+      //   sits at world (apex+0.55); the driver drops it by CHUTE_GROUP_DROP so local-y 0 lands ~at the pod
+      //   crown, and the curtain descends to the ground pool. The hull axis is canopy-local x=z=0.
+      const nx = rXZ > 1e-4 ? rx / rXZ : 0;                 // radial unit dir
       const nz = rXZ > 1e-4 ? rz / rXZ : 0;
-      const slumpSide = nx;                                 // +1 on the +X slump side, −1 on the far side
-      // radius: collapse inward toward a chunky bunched mound that still COVERS the crown (not a thin
-      //   rag). The +X slump side spills a touch WIDER + lower (fabric flops down that flank); the far
-      //   side stays tucked in. Small X shift only — the heap stays centred OVER the pod, draping one side.
-      const fold = 0.62 - 0.10 * p + 0.12 * slumpSide;      // keeps real width → a mounded drape
-      const crease = 1 + 0.20 * Math.sin(az * 5 + p * 3.2) + 0.10 * Math.sin(p * 9); // rumpled folds
-      const cXZ = rXZ * Math.max(0.25, fold * crease);
-      const cx = nx * cXZ + 0.28;                           // gentle +X bias (drapes toward that shoulder, stays on the pod)
-      const cz = nz * cXZ;
-      // height: a low BUNCHED mound — keeps ~30% of the rise (volume, not a flat rag); the +X slump
-      //   side sags lower (draping down the flank), the far side sits higher. Fold ripples add crumple.
-      const mound = ry * 0.30;
-      const sag = 0.15 + 0.55 * slumpSide;                  // slump side droops down the flank
-      const cy = mound - sag - 0.25 * p + 0.16 * Math.sin(az * 4 + p * 6);
+      const azC = Math.atan2(nz, nx);                       // vertex azimuth (−π..π); 0 = +X (the flank it pours down)
+      // FALL WEIGHT — a BROAD arc of the canopy pours down the +X flank (not just the meridian), smooth so
+      //   the sheet doesn't tear open a gap between the falling + crown zones (the round-2 rip). Widened so
+      //   ~the +X 3/4 falls; the −X sliver drapes over the crown.
+      const fall = Math.max(0, Math.cos(azC * 0.6));        // 1 at +X, →0 by az≈±(π·0.83) — a WIDE, gap-free curtain
+      const overCrown = Math.max(0, -Math.cos(azC * 0.9));  // the far sliver: drapes over + a bit down the back
+      // FALL COORDINATE — walk the fabric DOWN the hull as p (apex→brim) grows. CURVED (s^0.72) so the MID
+      //   fabric already hangs low + the brim reaches the sand (a linear fall left the mid at mid-hull → the
+      //   round-2 "stops halfway" read). p maxes ~0.96, so renormalise to hit a true 1 at the brim.
+      const pn = Math.min(1, p / 0.96);
+      const s = Math.pow(pn, 0.72);
+      // WRAP RADIUS — the cloth hugs the hull (POD_R) with a loose stand-off; the far side pulls IN over the
+      //   crown; the pooled hem bulges WIDER (fabric puddling outward on the sand). Smooth fall→crown blend.
+      const HULL_R = POD_R;                                 // 1.44
+      const hemBulge = 0.34 * Math.max(0, s - 0.6) * fall;  // the pool spreads past the hull only near the foot
+      // wrapEnv floors NEAR the hull radius across the whole wrapped arc so the fabric always sits ON the
+      //   skin (never tucks INSIDE it → the round-3 gap where the flank sucked to r≈0.56 and vanished). The
+      //   contact flank stands off a touch MORE (loose cloth); the crown side hugs tighter.
+      const wrapEnv = 0.82 + 0.18 * Math.max(fall, overCrown * 0.6);   // 0.82..1.0 → wrapR ≈ hull..hull+
+      // CROWN GATHER — the apex verts (s→0) pull IN toward the crown so the fabric closes over the nose in a
+      //   gathered crest (where the vent + shroud knot sit), instead of forming an open ring that flaps up.
+      const crownPull = Math.max(0, 0.34 - s) / 0.34;                 // 1 at apex → 0 by s=0.34
+      const wrapR = (HULL_R * wrapEnv + 0.09 + hemBulge) * (1 - 0.55 * crownPull * crownPull);
+      // AZIMUTH — keep the vertex meridian (the curtain wraps the cylinder around its OWN azimuth); only a
+      //   tiny gather toward +X so folds bunch without tearing the sheet open.
+      const azWrap = azC - 0.07 * fall * Math.sin(azC);
+      const foldR = 1 + 0.08 * Math.sin(azC * 5 + s * 3.4) + 0.05 * Math.sin(s * 9);   // rumpled radial fold creases
+      const cXZ = wrapR * foldR;
+      const cx = Math.cos(azWrap) * cXZ;
+      const cz = Math.sin(azWrap) * cXZ;
+      // HEIGHT — the falling flank DESCENDS from the crown gather (y≈0) down the FULL hull to the GROUND POOL
+      //   (CHUTE_GROUND_LOCAL) and puddles. The far sliver stays high (over the crown). Catenary belly + fold
+      //   stagger read as slack cloth; the lowest verts FLATTEN into a ground pool (clamped at the sand).
+      const rawFall = CHUTE_GROUND_LOCAL * s * fall;               // curved fall → mid hangs low, brim to the sand
+      const groundFall = Math.max(rawFall, CHUTE_GROUND_LOCAL);    // clamp: never dip below the sand (pool flattens)
+      const crownDrape = (-0.10 - 0.55 * s) * overCrown;          // far sliver sags over + a bit down the back crown
+      const catenary = -0.24 * Math.sin(Math.PI * s) * fall;      // cloth bellies out between crown ridge + ground contact
+      const foldY = (0.11 * Math.sin(azC * 4 + s * 6) + 0.06 * Math.sin(azC * 9)) * (0.4 + 0.6 * s);   // slack fold stagger
+      const cy = groundFall + crownDrape + catenary + foldY;
       crumple[i * 3] = cx; crumple[i * 3 + 1] = cy; crumple[i * 3 + 2] = cz;
     }
     flutter.push({ pos, rest, crumple, polar, azim, n });
@@ -3622,20 +3656,43 @@ function buildChuteCanopy(crownY: number): THREE.Group {
   dome.add(vent);
   dome.name = 'chuteDome';
   grp.add(dome);
-  // ── SHROUD LINES — from the canopy skirt gathering down to a riser knot near the crown.
-  //    Kept SHORT (the skirt sits low + close) so the chute drapes ONTO the wreck rather
-  //    than hanging taut above it like a balloon.
-  // the draping brim is low (the gores sweep down past the equator), so pin the shroud
-  //   lines to that low outer edge and gather them to the riser knot at the crown.
+  // ── SHROUD LINES — from the canopy BRIM gathering down to a riser knot near the crown.
+  //    round-3 (user): every line must terminate INSIDE the fabric at the brim — no air gap.
+  //    Root-cause of the old gap: the skirt anchor's Y used the SQUASH build-constant (0.74),
+  //    but the runtime dome carries dome.scale.y = 0.72·(1−DROOP_SAG) ≈ 0.62, so the fabric brim
+  //    renders HIGHER than the line reached → a visible gap above each line. Fix: pin the skirt
+  //    anchor to the ACTUAL runtime brim (radius + the real dome.scale.y) and EMBED it — pull the
+  //    radius slightly IN and lift the Y slightly UP so the cylinder end sits PAST the fabric skin,
+  //    buried in the gore, not merely tangent to it.
+  const DOME_RUN_Y = 0.72 * (1 - CHUTE_DROOP_SAG);       // the dome.scale.y the driver applies post-pop (must match _advanceChuteLifecycle)
   const brimA = Math.PI * 0.575;                         // just inside the gore bottom edge (sweep 0.58π)
-  const skirtR = CANOPY_R * Math.sin(brimA) * 0.99;
-  const skirtY = CANOPY_R * Math.cos(brimA) * SQUASH;    // slightly negative — the brim hangs a touch low
+  const brimR = CANOPY_R * Math.sin(brimA);              // true fabric-brim radius (dome-local, pre-squash — XZ unaffected by scale.y)
+  const brimYrun = CANOPY_R * Math.cos(brimA) * DOME_RUN_Y;   // fabric-brim Y as it RENDERS (runtime squash applied)
+  const EMBED_R = 0.22;                                  // pull the anchor radius IN past the fabric skin (buries the line end inside the gore)
+  const EMBED_Y = 0.14;                                  // lift the anchor UP into the fabric so the top is under the brim, never below it
+  const skirtR = brimR - EMBED_R;
+  const skirtY = brimYrun + EMBED_Y;                     // embedded: sits ABOVE (inside) the brim edge, not short of it
   const riserY = -1.85;                       // the riser gather well below the brim → LONG shroud lines that bridge to the crown
   _chuteLines = [];
   for (let i = 0; i < GORES; i++) {
     const a = (i / GORES) * Math.PI * 2 + Math.PI / GORES;
     const skirt = new THREE.Vector3(Math.cos(a) * skirtR, skirtY, Math.sin(a) * skirtR);
     const riser = new THREE.Vector3(0, riserY, 0);
+    // DRAPE brim target — where this line's TOP follows the fabric as it POURS down the hull flank.
+    //   Mirror the crumple math AT THE POOLED HEM (s=p=1) so the line stays embedded in the draped brim as
+    //   it falls to the ground pool, then gathers to the flank knot. Kept in canopy-grp-local coords.
+    const azC = a;
+    const fall = Math.max(0, Math.cos(azC * 0.6));
+    const overCrown = Math.max(0, -Math.cos(azC * 0.9));
+    const wrapEnv = 0.82 + 0.18 * Math.max(fall, overCrown * 0.6);
+    const wrapR = POD_R * wrapEnv + 0.09 + 0.136 * fall;   // crumple wrapR at s=1 (pooled hem)
+    const azWrap = azC - 0.07 * fall * Math.sin(azC);
+    const groundLocal = -(apex + 0.55 - CHUTE_GROUP_DROP) + 0.10;
+    const brimTgt = new THREE.Vector3(
+      Math.cos(azWrap) * wrapR,
+      Math.max(groundLocal * fall, groundLocal) + (-0.10 - 0.55) * overCrown,   // crumple cy at s=1 (falling flank → pool)
+      Math.sin(azWrap) * wrapR,
+    );
     const mid = skirt.clone().lerp(riser, 0.5);
     const len = skirt.distanceTo(riser);
     // Unit-length cylinder (scaled per-frame in Y to the current segment length) so the deflate can
@@ -3648,7 +3705,7 @@ function buildChuteCanopy(crownY: number): THREE.Group {
     line.quaternion.setFromUnitVectors(_CHUTE_UP, riser.clone().sub(skirt).normalize());
     line.userData.noCollider = true;
     grp.add(line);
-    _chuteLines.push({ mesh: line, skirt: skirt.clone(), riser: riser.clone(), restLen: len, up: _CHUTE_UP });
+    _chuteLines.push({ mesh: line, skirt: skirt.clone(), riser: riser.clone(), restLen: len, up: _CHUTE_UP, brimTgt, contact: fall });
   }
   // a chunky riser strap/knot at the gather (where it "attaches" to the pod crown)
   const knotGeo = new THREE.CylinderGeometry(0.13, 0.17, 0.36, 8);
@@ -3663,6 +3720,7 @@ function buildChuteCanopy(crownY: number): THREE.Group {
   //   nose — the wide dome drapes down around the pod's upper body, not floating overhead.
   grp.position.set(0, apex + 0.55, 0);
   grp.userData.baseY = apex + 0.55;   // the driver drops the group DOWN from here onto the shoulder as it deflates
+  grp.userData.apexLocal = apex;      // round-3 — the host crown height, so the driver can place the ground pool for the shroud lines
   grp.scale.setScalar(0.001);   // folded/hidden until the pop
   grp.visible = false;
   return grp;
@@ -3851,6 +3909,7 @@ function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void
   const t = chutePopT;
   const dome = chuteCanopy.getObjectByName('chuteDome');
   const flutter = dome?.userData.flutter as ChuteFlutterGore[] | undefined;
+  const apexLocal = (chuteCanopy.userData.apexLocal as number | undefined) ?? 3.5;   // host crown height (for the ground-pool math)
 
   if (t < CHUTE_POP_DUR) {
     // ── PHASE 0 — the springy inflate POOF (unchanged; the gag's pop spring + timing are frozen).
@@ -3867,30 +3926,31 @@ function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void
     return;
   }
 
-  // Past the pop the assembly is at full scale; the dome carries the settled vertical squash.
-  chuteCanopy.scale.setScalar(1);
-  if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG);
-
   // deflateK: 0 through the flutter, ramps 0→1 across the deflate window, holds at 1 when settled.
   const deflateK = t <= CHUTE_DEFLATE_START ? 0
     : Math.min(1, (t - CHUTE_DEFLATE_START) / CHUTE_DEFLATE_DUR);
   const deflateE = deflateK * deflateK * (3 - 2 * deflateK);   // smoothstep
   const settled = t >= CHUTE_SETTLED_AT;
 
-  // ── GROUP DROP — as the canopy deflates, lower the WHOLE assembly onto the pod's shoulder + nudge
-  //    it toward +X so the rumpled heap sits ON the hull flank, not perched high on the crown.
-  const baseY = (chuteCanopy.userData.baseY as number | undefined) ?? chuteCanopy.position.y;
-  chuteCanopy.position.set(0.18 * deflateE, baseY - 0.75 * deflateE, 0);
+  // Past the pop the assembly is at full scale. The dome carries the flutter squash, but round-3 eases
+  //   it BACK toward 1 as it deflates so the gravity-drape crumple heights (authored honest, un-squashed)
+  //   land the fabric ON the hull flank + ground pool instead of being crushed by a 0.62 y-scale.
+  chuteCanopy.scale.setScalar(1);
+  if (dome) dome.scale.y = (0.72 * (1 - CHUTE_DROOP_SAG)) * (1 - deflateE) + 1.0 * deflateE;
 
-  // ── VENT CAP — track the crown vent to the COLLAPSED heap top as the canopy deflates (else it
-  //    floats detached above the drape). Ease it down onto the fabric + toward the +X slump + shrink
-  //    it so it nestles into the folds instead of reading as a hard disc perched overhead.
+  // ── GROUP DROP — as the canopy deflates, lower the WHOLE assembly so canopy-local y 0 lands at the pod
+  //    crown; the wrap-crumple then falls DOWN the hull flank to the ground pool (authored in that frame).
+  const baseY = (chuteCanopy.userData.baseY as number | undefined) ?? chuteCanopy.position.y;
+  chuteCanopy.position.set(0, baseY - CHUTE_GROUP_DROP * deflateE, 0);
+
+  // ── VENT CAP — track the crown vent DOWN onto the wrapped drape's crown gather as the canopy deflates
+  //    (else it floats detached above the drape). It nestles just over the hull crown, shrunk into the folds.
   const vent = dome?.getObjectByName('chuteVent');
   if (vent) {
     const restY = (vent.userData.ventRestY as number) ?? vent.position.y;
-    // the collapsed heap top ≈ crumple(p≈0) ≈ cy ~0.7 (mound retains volume; dome-local, pre-squash).
-    vent.position.set(0.28 * deflateE, restY + (0.7 - restY) * deflateE, 0);
-    vent.scale.setScalar(1 - 0.4 * deflateE);
+    // the collapsed crown-gather top ≈ crumple(p→0) ≈ cy ~0 (fabric wraps to the crown); nestle just above it.
+    vent.position.set(0, restY + (0.12 - restY) * deflateE, 0);
+    vent.scale.setScalar(1 - 0.5 * deflateE);
   }
 
   // ── FLUTTER envelope: full during the flutter phase, eased OUT across the deflate (the cloth
@@ -3898,15 +3958,17 @@ function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void
   //    stir once settled so it still reads as cloth (never a rigid shell).
   const flutterEnv = settled ? CHUTE_SETTLED_STIR : (1 - deflateE) * (0.35 + 0.65 * wind) + CHUTE_SETTLED_STIR * deflateE;
 
-  // ── WHOLE-CANOPY LEAN: the settled droop lean + a downwind lean that grows with wind, then the
-  //    deflate slumps it further over the pod's shoulder (a limp collapse, not a tidy fold).
-  const windLean = CHUTE_WIND_LEAN * wind * (1 - 0.6 * deflateE);   // flutter leans downwind; the slump takes over on deflate
+  // ── WHOLE-CANOPY LEAN: a downwind flutter lean while proud, EASED TO ZERO as it deflates — the drape's
+  //    hull-conforming shape is authored per-vertex in the wrap-crumple, so a group tilt during the settle
+  //    would only lift the wrapped cloth OFF the hull. The lean lives entirely in the flutter phase.
+  const leanFade = 1 - deflateE;
+  const windLean = CHUTE_WIND_LEAN * wind * leanFade;
   // world downwind dir → canopy-local (pod yaw≈0, so world XZ ≈ local XZ). rotation.z leans about
   //   local +X (toward ±Z world); rotation.x leans about local +Z (toward ±X world). Map the wind
   //   vector onto both so the lean actually points downwind.
-  const breathLean = Math.sin(elapsed * CHUTE_BILLOW_FREQ * 0.6) * 0.03 * flutterEnv;   // gentle sway
-  chuteCanopy.rotation.z = CHUTE_DROOP_LEAN + windLean * _windDirX * -1 + breathLean + CHUTE_DROOP_LEAN * 0.9 * deflateE;
-  chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30 + windLean * _windDirZ + CHUTE_DROOP_LEAN * 0.5 * deflateE;
+  const breathLean = Math.sin(elapsed * CHUTE_BILLOW_FREQ * 0.6) * 0.03 * flutterEnv;
+  chuteCanopy.rotation.z = (CHUTE_DROOP_LEAN + breathLean) * leanFade + windLean * _windDirX * -1;
+  chuteCanopy.rotation.x = (CHUTE_DROOP_LEAN * 0.30) * leanFade + windLean * _windDirZ;
 
   // ── VERTEX FIELD — layered wind cloth blended toward the authored crumple as it deflates.
   if (flutter) {
@@ -3942,34 +4004,40 @@ function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void
     }
   }
 
-  // ── SHROUD LINES — tension/slacken with the billow during flutter; as the canopy DEFLATES they go
-  //    fully limp: BOTH ends converge near the collapsed heap (the skirt to the rumpled brim, the riser
-  //    gather UP right under the heap) so each line becomes a SHORT slack thread bunched into the fabric
-  //    fold — no rigid rods radiating out. Each bellies into a catenary sag.
+  // ── SHROUD LINES (round-3) — the TOP end stays EMBEDDED in the fabric brim throughout: during flutter
+  //    it sits at the embedded skirt anchor (inside the gore), and as the canopy DEFLATES it follows the
+  //    fabric to its draped brim target (brimTgt — the same wrap-crumple the fabric morphs to), so no line
+  //    ever detaches from the canopy. The BOTTOM (riser) gathers from the crown knot down to the ground-
+  //    flank pool, so on the contact side the lines run DOWN the hull with the falling cloth. Each bellies
+  //    into a catenary sag. The dome carries dome.scale.y; the lines are grp-children, so the skirt anchor
+  //    was pre-multiplied by the runtime squash at build (skirtY) — during deflate we blend to brimTgt
+  //    which is authored in the un-squashed drape frame (dome.scale.y→1), keeping top+fabric coincident.
   const billowSlack = 0.06 * flutterEnv * Math.sin(elapsed * CHUTE_BILLOW_FREQ + 1.3);
   for (const ln of _chuteLines) {
-    // skirt end → pulled HARD in toward a tight gather right under the mound (a small radius) so the
-    //   lines collapse into a short tucked bunch, NOT rods radiating out. A per-line azimuth keeps them
-    //   from all coinciding (reads as a few slack threads at the fabric base).
+    // TOP end — embedded skirt anchor → the draped brim target (follows the collapsing fabric brim).
     const sk = _chuteScratchA.copy(ln.skirt);
-    if (deflateE > 0) sk.lerp(_chuteScratchB.set(ln.skirt.x * 0.14 + 0.28, -0.85, ln.skirt.z * 0.14), deflateE);
-    // riser gather → RISES from its low knot to just under the heap so the lines are SHORT (no spikes).
-    const rY = ln.riser.y + (-1.05 - ln.riser.y) * deflateE;   // −1.85 → ~−1.05 (tucked under the drape brim)
-    const rx = ln.riser.x + 0.28 * deflateE, rz = ln.riser.z;
+    if (deflateE > 0) sk.lerp(ln.brimTgt, deflateE);
+    // BOTTOM (riser) — from the crown knot down toward the GROUND-FLANK gather on the contact side, so a
+    //   contact-flank line runs the full flank (top at the draped brim high, bottom pooled low); a far-side
+    //   line stays short + tucked. gY is the ground pool height in canopy-local (matches the crumple pool).
+    const gY = -(apexLocal + 0.55 - CHUTE_GROUP_DROP) + 0.14;   // ground pool, canopy-local (apexLocal captured on the canopy)
+    const knotBaseY = ln.riser.y;                               // −1.85 rest
+    const rY = knotBaseY + ((gY - 0.15) - knotBaseY) * deflateE * ln.contact + (-1.05 - knotBaseY) * deflateE * (1 - ln.contact);
+    const rx = ln.brimTgt.x * 0.35 * deflateE, rz = ln.brimTgt.z * 0.35 * deflateE;
     const dir = _chuteScratchB.set(rx - sk.x, rY - sk.y, rz - sk.z);
     const chord = dir.length();
-    const slack = billowSlack + 0.22 * deflateE;               // slack grows as it deflates
-    const len = chord * (1 - slack * 0.25);
-    const sag = ln.restLen * (billowSlack * 0.5 + 0.10 * deflateE);   // a small belly (short lines can't sag far)
+    const slack = billowSlack + 0.14 * deflateE;
+    const len = chord * (1 - slack * 0.20);
+    const sag = ln.restLen * (billowSlack * 0.5 + 0.06 * deflateE);   // a small catenary belly
     ln.mesh.position.set((sk.x + rx) * 0.5, (sk.y + rY) * 0.5 - sag, (sk.z + rz) * 0.5);
     ln.mesh.scale.y = Math.max(0.05, len);
     ln.mesh.quaternion.setFromUnitVectors(ln.up, dir.normalize());
   }
-  // the riser knot rides up with the gather so the lines terminate in it (not floating below).
+  // the riser knot rides down with the gather so the lines terminate in it (not floating).
   const knot = chuteCanopy.getObjectByName('chuteKnot');
   if (knot) {
     const kRest = (knot.userData.knotRestY as number) ?? knot.position.y;
-    knot.position.set(0.28 * deflateE, kRest + (-1.05 - kRest) * deflateE, 0);
+    knot.position.set(0, kRest + (-1.15 - kRest) * deflateE, 0);
   }
 }
 const _chuteScratchA = new THREE.Vector3();
