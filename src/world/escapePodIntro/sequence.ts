@@ -102,6 +102,10 @@ const SHIP_BLAST_AT = 1.6;        // seconds into the recession the ship detonat
  *  the whole fall stays a serene ~22 s without dragging. All progress-keyed timings (handoff 0.55,
  *  ground 0.98) are unchanged — only the wall-clock lengthens. */
 const DESCENT_DURATION = 22.0;
+// Z9 — the time-rate of the descent clock through the FAR-SPACE leg (progress < 0.20, blending
+// to 1.0 by 0.28): 0.55 stretches the planet-approach drift ~1.8× without touching any
+// progress-keyed timing (plasma 0.24, handoff 0.55, ground 0.98 all unchanged).
+const DESCENT_SPACE_RATE = 0.55;
 
 /** W6 item 3 — THE PLANET-APPROACH CURVE (progress 0..1 → approach 0..1). Slower + TWO PHASES, so
  *  the planet reads as APPROACH PHYSICS (slow when far, faster as the atmosphere nears), not a
@@ -154,8 +158,8 @@ const PARACHUTE_SNAP_FALL = 1.6;
 const IMPACT_FADE = 0.7;
 const IMPACT_HOLD = 2.0;
 /** Wake: seconds to fade FROM black (come to), then hold, before the blow-hatch prompt. */
-const WAKE_FADE = 2.5;
-const WAKE_HOLD = 1.2;
+const WAKE_FADE = 1.8;   // Z10: was 2.5 — the come-to fade-in, trimmed to keep attention
+const WAKE_HOLD = 0.8;   // Z10: was 1.2
 /** T4.1 — wake-inside-the-pod → blow-the-hatch → climb-out (the C18 req). Door blow duration,
  *  how far you walk to "climb out", and anti-softlock fallbacks (auto-blow / auto-step-out). */
 const WAKE_BLOW_DUR = 0.6;
@@ -253,8 +257,8 @@ function groundedDescentBase(ctx: GameContext): { x: number; y: number; z: numbe
  *  flash). `_phaseFade` counts DOWN from (HOLD+DUR): while > DUR it's the hold (clamp to 1=full
  *  black); from DUR→0 it's the linear fade-in (value/DUR). */
 let _phaseFade = 0;
-const PHASE_FADE_HOLD = 1.2;   // seconds held at FULL black before the fade-in begins
-const PHASE_FADE_DUR = 1.1;    // seconds to fade the black back out (1→0)
+const PHASE_FADE_HOLD = 0.8;   // seconds held at FULL black before the fade-in begins (Z10: was 1.2 — "blackouts a bit too long")
+const PHASE_FADE_DUR = 0.8;    // seconds to fade the black back out (Z10: was 1.1 — total ~1.6s per transition, was ~2.3s)
 const PHASE_FADE_TOTAL = PHASE_FADE_HOLD + PHASE_FADE_DUR;
 /** The black overlay opacity for the current _phaseFade countdown: full black through the hold,
  *  then a linear fade-out over the last PHASE_FADE_DUR seconds. */
@@ -1011,7 +1015,17 @@ function tickDescent(ctx: GameContext, dt: number): void {
     intro.scratch.reFlash = false;       // T2.2 — the one-shot re-entry flash hasn't fired yet
     intro.scratch.init = true;
   }
-  intro.scratch.t = (intro.scratch.t as number) + dt;
+  // Z9 (user, round 3): the FAR-SPACE approach ran "way too fast". The descent clock now runs
+  // at a reduced rate through the space leg (a slow majestic drift toward the planet, ~9.5s of
+  // wall-clock, was ~5.3s) and blends smoothly back to full rate as the plasma window nears —
+  // the atmosphere + ground legs keep their proven pace (no progress-keyed timing changes).
+  {
+    const pNow = Math.min(1, (intro.scratch.t as number) / DESCENT_DURATION);
+    const rate = pNow < 0.20 ? DESCENT_SPACE_RATE
+      : pNow < 0.28 ? DESCENT_SPACE_RATE + (1 - DESCENT_SPACE_RATE) * ((pNow - 0.20) / 0.08)
+      : 1;
+    intro.scratch.t = (intro.scratch.t as number) + dt * rate;
+  }
   // R4 — ride the descent clock only to the MID-FALL hand-off; the parachute beat resumes the
   //   SAME clock from here down to the ground (so the fall rate is seamless across the hand-off).
   const progress = Math.min(DESCENT_HANDOFF_PROGRESS, (intro.scratch.t as number) / DESCENT_DURATION);
