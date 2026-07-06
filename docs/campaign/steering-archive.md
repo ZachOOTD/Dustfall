@@ -219,3 +219,5 @@ POD ONE-MODEL (Z6, the standing #1): (a) at the ship-explosion phase the pod rea
 DOOR KICK (Z7): the wake door kicked open AUTOMATICALLY after waiting — make it PLAYER-GATED (the player kicks it themselves; nothing automatic on a timer).
 PARACHUTE round 2 (Z8): (a) the shroud lines don't connect cleanly to the canopy; (b) the deployed hover is too long — deflate ~1-2s after full deploy; (c) the settled drape floats on top unrealistically — it must read gravity-affected: fall down the pod's SIDE and WRAP/drape around the hull like real cloth (or onto the desert); push the authored drape much further (real cloth sim still rejected; a limited verlet settle for the drape moment is acceptable if stable).
 PROCESS: plan + document first; execute overnight; extreme verification (multi-angle, machine checks where possible); morning summary.
+
+## 2026-07-06 — round 3 additions (verbal): (Z9) the FAR-SPACE PLANET APPROACH moves WAY TOO FAST/unrealistic — slower; possibly split: a slow majestic drift from far away, then a bit faster near the planet; (Z10) the BLACKOUTS between phases are a bit TOO LONG — slightly shorter across the board to keep attention.
