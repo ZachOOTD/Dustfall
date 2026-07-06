@@ -241,16 +241,24 @@ const _cabDoorSlab = createRustedHullMaterial({
   oxStrength: 0.12, oxHex: 0x54585c, oxDeepStrength: 0.18, seamRustStrength: 0.22,   // cool grime, no warm oxide
   localSpace: true,   // the door rides the descent SEALED then swings at the wake — pin the grime (see hullMaterial.ts)
 });
-// Porthole GLASS — a faint cool tint, glossy so a small spec catch reads (a window, not an
-// open hole). Slightly emissive so it never goes fully black against the void.
+// Porthole GLASS — the ONE circular FLAT pane (user, 2026-07-06). Was a DOMED SphereGeometry bulge
+// mirrored on both door faces; the user found the dome occluded the re-entry fire ("not seeing the
+// fire across the viewport... looks like the domed window may be blocking it") and asked for one flat
+// circular pane. Now a single flat disc seated at the door-slab midplane (buildUnifiedDoorSlab).
+// A faint cool tint, glossy so a small spec catch reads (a window, not an open hole); slightly
+// emissive so it never goes fully black against the void.
+// CRITICAL: depthWrite:false + DoubleSide. The domed glass WROTE depth at z≈−1.2 in front of the
+// re-entry plasma/shimmer (world z≈−3.9/−5.4) → the glass depth killed the additive FX behind it (the
+// fire read "missing"). This is the SAME depth-write fix that made the ship explosion read through the
+// cockpit glass: a transparent glass pane that WRITES depth occludes additive FX behind it. depthWrite
+// off → the pane still tints/spec-catches (reads as glass) but the fire + vista composite through.
+// DoubleSide → one pane reads from BOTH the cabin and the world face.
 const _cabGlass = new THREE.MeshStandardMaterial({
-  // SEV1 — lifted the tint a touch cooler/lighter + dropped opacity so the whole disc reads
-  // see-through in BOTH states: the DESCENT view (sky/planet through it) AND the OPEN door on the
-  // desert (the upper half no longer darkens toward the old void read). Still glazed enough that a
-  // spec catch + faint tint sell it as a real pane, not an open hole.
   color: 0x36434e, roughness: 0.16, metalness: 0.28,
-  emissive: 0x0c1620, emissiveIntensity: 0.45,
-  transparent: true, opacity: 0.24,   // see the planet/desert through it, but a glazed pane reads
+  emissive: 0x0c1620, emissiveIntensity: 0.42,
+  transparent: true, opacity: 0.22,   // glazed pane tell, but the re-entry fire + vista read through
+  depthWrite: false,                  // DO NOT occlude the additive re-entry FX behind the glass
+  side: THREE.DoubleSide,             // one flat pane read from BOTH the cabin + the world face
 });
 // A faint bright spec highlight on the porthole glass (a glazed-pane tell). A SOFT
 // radial-falloff additive blob (NOT a hard-edged plane — the old PlaneGeometry quad read
@@ -1427,18 +1435,17 @@ function buildUnifiedDoorSlab(door: THREE.Group, doorTh: number, W: number, H: n
     well.position.set(0, portY, zPlane - face * (wellH / 2 + 0.005));   // hug this face's lip behind the glass
     well.renderOrder = -1;
     door.add(well);
-    // (c) the DOMED glass disc bulging OUT of this face (see-through → the view reads through it)
-    const glassGeo = new THREE.SphereGeometry(VP_R, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.32);
-    _cabinDisposables.push(glassGeo);
-    const glass = new THREE.Mesh(glassGeo, _cabGlass);
-    glass.rotation.x = face > 0 ? -Math.PI / 2 : Math.PI / 2;   // bulge toward this face's outward normal
-    glass.position.set(0, portY, zPlane + face * 0.02);
-    door.add(glass);
-    // a faint spec crescent on the glass (glazed-pane tell; module-shared additive mat)
+    // (c) the GLASS is NO LONGER built per-face (was a domed SphereGeometry bulge, one per face). The
+    //     user (2026-07-06) asked for ONE circular FLAT pane in the window (the dome occluded the fire);
+    //     it's built ONCE below, after both faces, seated flat in the aperture. Only the framing
+    //     hardware (cap/well/bezel/bolts/spec) mirrors per-face here.
+    // a faint spec crescent on the glass (glazed-pane tell; module-shared additive mat). Seated JUST
+    //   proud of this face now (was + face·0.14 — the old dome-apex offset; with the flat pane the
+    //   crescent hugs the face so it reads ON the glass, not floating in the aperture).
     const specGeo = new THREE.PlaneGeometry(VP_R * 0.62, VP_R * 0.30);
     _cabinDisposables.push(specGeo);
     const spec = new THREE.Mesh(specGeo, _cabGlassSpec);
-    spec.position.set(-VP_R * 0.20 * face, portY + VP_R * 0.40, zPlane + face * 0.14);
+    spec.position.set(-VP_R * 0.20 * face, portY + VP_R * 0.40, zPlane + face * 0.035);
     spec.rotation.z = -0.6 * face;
     door.add(spec);
     // (d) ONE integral proud BEZEL ring (channel-steel torus) framing the porthole on this face
@@ -1461,6 +1468,20 @@ function buildUnifiedDoorSlab(door: THREE.Group, doorTh: number, W: number, H: n
   };
   addPorthole(1);    // inner (cabin) face
   addPorthole(-1);   // outer (world) face
+  // ── the ONE FLAT circular glass PANE (user, 2026-07-06). A thin flat disc seated at the door-slab
+  //    MIDPLANE (z=0, centred in the sealed bore) radius VP_R, replacing the two domed bulges. It's
+  //    DoubleSide (one pane read from the cabin AND the world) + depthWrite:false (does NOT occlude the
+  //    additive re-entry plasma/shimmer behind it — the fire reads THROUGH the window at entry). A
+  //    CircleGeometry, not a sphere cap → no bulge. renderOrder 1 so it draws after the opaque slab but
+  //    before the re-entry FX (renderOrder 4/5), which then composite over the vista through the pane.
+  {
+    const paneGeo = new THREE.CircleGeometry(VP_R, 40);
+    _cabinDisposables.push(paneGeo);
+    const pane = new THREE.Mesh(paneGeo, _cabGlass);
+    pane.position.set(0, portY, 0);   // door-slab midplane, centred in the bore (flush, no bulge)
+    pane.renderOrder = 1;             // after the opaque slab, before the additive re-entry FX
+    door.add(pane);
+  }
   // ── a grab-bar LATCH near the free edge, low on the door, MIRRORED on both faces (a real hatch
   //    has an external grab/latch too). Mount plate + a vertical grab bar on two stubs.
   {
@@ -2777,9 +2798,13 @@ const PLASMA_FS = /* glsl */ `
     // Z6 delta #2 (the descent "light textures moving super fast + scattering inside") — the streak
     //   scroll + flicker rates were aggressive (t*3.4..5.0 scroll, t*34 flicker), reading as textures
     //   RACING/scattering through the porthole rather than a heavy incandescent roar. Rates pulled ~40%
-    //   slower here + in the flicker/shimmer below so the plasma rolls past with weight, not a fast blur.
-    float s1 = fbm(vec2(q*9.0, s*1.7 - t*2.0));
-    float s2 = fbm(vec2(q*17.0 + 4.0, s*2.8 - t*3.0));
+    //   slower there. 2026-07-06 (user, re-entry streak returned): with the domed glass GONE (flat pane
+    //   + depthWrite off) the fire reads FAR brighter/clearer, so the residual scroll now reads as the
+    //   "streaks moving really fast" again. Rates pulled a FURTHER ~40% (t*2.0→1.2, t*3.0→1.8) so the
+    //   plasma convects past with WEIGHT — a heavy incandescent roar, not fast threads. The coherent
+    //   white-hot core (below) does the "this is re-entry" work; the threads are slow texture on it.
+    float s1 = fbm(vec2(q*9.0, s*1.7 - t*1.2));
+    float s2 = fbm(vec2(q*17.0 + 4.0, s*2.8 - t*1.8));
     float streak = s1*0.62 + s2*0.5;
     // Sharpen HARD into distinct threads with dark lanes between (the vista shows through the
     // lanes at EVERY altitude including peak — air on fire, not a curtain).
@@ -2791,7 +2816,7 @@ const PLASMA_FS = /* glsl */ `
     //    rides the slipstream axis s and its threshold is warped by turbulence + angled, then
     //    feathered — convected plasma, not a decal seam. Reach scales with uRe (peak climbs the
     //    window; fade retreats to a thin lower veil → the arc reads build→peak→ease).
-    float warp = (fbm(vec2(q*5.0, s*2.2 - t*1.5)) - 0.5) * 0.42;   // ragged, turbulent boundary (Z6 #2: t*2.6→1.5, slower)
+    float warp = (fbm(vec2(q*5.0, s*2.2 - t*0.9)) - 0.5) * 0.42;   // ragged, turbulent boundary (2026-07-06: t*1.5→0.9, slower still)
     float reach = mix(-0.30, 0.66, uRe);                          // how far up the slipstream the fire climbs
     float lead = smoothstep(reach, -0.46, s + warp + (streak-0.6)*0.22);   // feathered, warped edge (no straight line)
     float rim = length(vec2(p.x*1.0, p.y*0.95));
@@ -2800,7 +2825,7 @@ const PLASMA_FS = /* glsl */ `
 
     // ── Flicker — a shimmer + per-thread twinkle so the plasma roars/breathes (Z6 #2: t*34→20,
     //    t*7→4.2 — a slower, heavier flicker; the fast strobe read as "scattering super fast").
-    float flick = 0.80 + 0.20*sin(t*20.0 + q*11.0) + 0.16*(vn(vec2(q*24.0, t*4.2))-0.5);
+    float flick = 0.86 + 0.14*sin(t*12.0 + q*11.0) + 0.12*(vn(vec2(q*24.0, t*2.6))-0.5);   // 2026-07-06: slower + shallower flicker (t*20→12, t*4.2→2.6, amp 0.20/0.16→0.14/0.12) — a heavy breath, not a strobe
 
     // ── COOLER TRAILING WAKE — red/orange only, downstream of the stagnation edge (fix 2: the
     //    wake stays cooler; the white-hot core lives at the leading edge below).
@@ -2854,11 +2879,11 @@ const SHIMMER_FS = /* glsl */ `
     // the glass). The DIFFERENCE of two vertically-offset samples gives thin shimmering ripple
     // EDGES (a refraction-like wobble) rather than a flat tint — reads as air boiling, a
     // shimmer not a smear. Two scales layered (broad heat columns + fine quiver).
-    float w1 = vn(vec2(p.x*4.5, p.y*3.2 - t*1.0));     // Z6 #2: t*1.6→1.0 (slower heat convection)
-    float w2 = vn(vec2(p.x*4.5, p.y*3.2 + 0.16 - t*1.0));
+    float w1 = vn(vec2(p.x*4.5, p.y*3.2 - t*0.6));     // 2026-07-06: t*1.0→0.6 (slower heat convection; the fire reads brighter now, so slow the wobble)
+    float w2 = vn(vec2(p.x*4.5, p.y*3.2 + 0.16 - t*0.6));
     float ripple = abs(w1 - w2) * 9.0;                 // thin bright ripple edges (refraction-like wobble)
-    float f1 = vn(vec2(p.x*11.0, p.y*8.0 - t*1.7));    // Z6 #2: t*2.8→1.7 (slower quiver)
-    float f2 = vn(vec2(p.x*11.0, p.y*8.0 + 0.11 - t*1.7));
+    float f1 = vn(vec2(p.x*11.0, p.y*8.0 - t*1.0));    // 2026-07-06: t*1.7→1.0 (slower quiver)
+    float f2 = vn(vec2(p.x*11.0, p.y*8.0 + 0.11 - t*1.0));
     float quiver = abs(f1 - f2) * 6.0;                 // fine high-freq quiver
     float v = ripple * 0.7 + quiver * 0.3;
     // Bias the haze toward the UPPER window — where the vista (planet/sky) still shows past the

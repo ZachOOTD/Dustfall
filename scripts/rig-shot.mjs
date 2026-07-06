@@ -1674,6 +1674,22 @@ const SCENARIOS = {
         // The +Z back flank (away from the −Z door) — the real salvage panel + riveted flank.
         cam.position.set(px - hnx * 4.2 + 0.6, gy + 1.9, pz - hnz * 4.2 - 0.4);
         cam.lookAt(px, aimY, pz);
+      } else if (ang === 'flankx') {
+        // ADDITIVE (chute r3) — the +X flank 3/4 where the drape POURS down the side. This is the vantage
+        //   the user's screenshot showed the striped canopy INTERSECTING the hull, so it's the primary
+        //   standoff-clip read. Camera out on +X, biased so the falling curtain + hull edge both frame.
+        cam.position.set(px + 4.3, gy + 1.85, pz + 1.6);
+        cam.lookAt(px, gy + 1.0, pz);
+      } else if (ang === 'flankx-low') {
+        // ADDITIVE (chute r3) — a LOWER, closer +X flank read grazing the hull edge-on, so any fabric that
+        //   phases THROUGH the riveted skin is caught in profile (the standoff gap must read here).
+        cam.position.set(px + 3.4, gy + 1.15, pz + 0.9);
+        cam.lookAt(px - 0.2, gy + 1.1, pz + 0.1);
+      } else if (ang === 'topdown') {
+        // ADDITIVE (chute r3) — a near-top-down looking DOWN the pod axis: the draped cloth should ring the
+        //   hull as an annulus a few cm PROUD of the riveted skin, never crossing inside the circle.
+        cam.position.set(px + 1.2, gy + 5.6, pz + 1.2);
+        cam.lookAt(px, gy + 1.4, pz);
       } else { // close — tight detail of the upper hull (porthole / rivets / nose)
         cam.position.set(px + hnx * 2.6 + 1.2, gy + 2.0, pz + hnz * 2.6 + 0.8);
         cam.lookAt(px, gy + 1.3, pz);
@@ -1983,6 +1999,145 @@ const SCENARIOS = {
     const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // DESCENT-FIX DIAGNOSTIC (additive) — reproduce the re-entry streak/fire read from the SEATED
+  //   porthole eye with the FX ANIMATING LIVE (not a paused static frame — the streaks scroll, so a
+  //   still can miss the bleed). Un-pauses on a keepalive, drives setDescentProgress into the re-entry
+  //   window (default p=0.24 peak), and captures N frames. Also reports the world-Z depth ordering of
+  //   the porthole GLASS vs the reentry PLASMA/SHIMMER meshes + their material flags (the occlusion
+  //   diagnosis). --descent=<p> re-entry sample point · --frames=<n> · --out=<basename>.
+  'descent-fx-probe': async (page) => {
+    const descent = argv.descent !== undefined ? Number(argv.descent) : 0.24;
+    const frames = argv.frames !== undefined ? Number(argv.frames) : 3;
+    const live = !!argv.live;   // --live: let the real beat tick advance through re-entry (no pause/pin) + camera-follow the falling pod
+    const base = argv.out || `scen-descent-fix-fxprobe-d${String(descent).replace('.', '')}`;
+    if (live) {
+      // TRUE-LIVE reproduction — jump to descent, keep the sim RUNNING, let tickDescent drive the fall
+      //   naturally through the re-entry window while we camera-follow the falling pod + capture. This
+      //   is the faithful render-loop path (transparent sort, per-frame FX drive) the streak bug lives
+      //   in; the paused pin can't reproduce a sort/depth instability. The keepalive forces paused=false
+      //   (rig-shot pauses by default) so the RAF beat controller runs.
+      await page.evaluate(() => {
+        const g = window.__game; const ctx = g.ctx;
+        ctx.flags.thirdPerson = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+        g.startIntro(); g.jumpToBeat('descent');
+        ctx.three.renderer.setSize(1000, 760, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+        // Camera-follow: each RAF re-seat the eye on the falling pod + aim forward at the porthole.
+        //   updatePlayer would re-pin the camera to the body; we override AFTER by patching the eye in
+        //   a rAF hook. Simpler: a fast interval that un-pauses + re-aims the camera at the pod.
+        window.__fxLive = setInterval(() => {
+          ctx.flags.paused = false;
+          const V = ctx.three.camera.position.constructor;
+          const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+          if (!pod) return;
+          pod.updateMatrixWorld(true);
+          const o = pod.getWorldPosition(new V());
+          const pb = ctx.player.body;
+          const bodyY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3);
+          const cam2 = ctx.three.camera;
+          cam2.position.set(o.x, bodyY + (ctx.player.eyeOffset || 0.5), o.z + 0.35);
+          // FREE-LOOK PAN: slowly sweep the yaw across ±0.5 rad (the player glancing around the cabin
+          //   during the fall) so a plasma plane that bleeds when the porthole is OFF-CENTRE is caught.
+          const yaw = 0.5 * Math.sin(performance.now() / 900);
+          const tgt = new V(o.x - Math.sin(yaw) * 3, cam2.position.y - 0.12, o.z - Math.cos(yaw) * 3);
+          cam2.lookAt(tgt);
+          cam2.updateMatrixWorld(true);
+        }, 30);
+      });
+      // Capture a burst as the fall runs through the re-entry window (~p0.1→0.4).
+      for (let i = 0; i < frames; i++) {
+        await page.waitForTimeout(350);
+        const st = await page.evaluate(() => {
+          const g = window.__game; const ctx = g.ctx;
+          const p = ctx.intro && ctx.intro.scratch ? +(((ctx.intro.scratch.t || 0) / 5.6)).toFixed(3) : null;
+          return { p };
+        });
+        await page.screenshot({ path: join(OUT, `${base}-live-f${i}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
+        console.log(`[descent-fx-probe LIVE] frame ${i} (p≈${st.p}) → ${base}-live-f${i}.png`);
+      }
+      await page.evaluate(() => { if (window.__fxLive) clearInterval(window.__fxLive); });
+      return;
+    }
+    // Build + seat exactly like pod-interior's descent angle, but keep the sim LIVE.
+    await page.evaluate((descent) => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      g.startIntro(); g.jumpToBeat('descent');
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+    }, descent);
+    await page.waitForTimeout(700);
+    // PAUSE the sim so the live beat controller can't override the descent progress back to p≈0 (it
+    //   runs its own tickDescent each RAF). With paused=true nothing re-drives the FX, so WE pin the
+    //   re-entry window by re-calling setDescentProgress(descent) right before each capture — uTime
+    //   reads performance.now() so the streaks still SCROLL between captures (real time advances even
+    //   while paused). This is the faithful re-entry-peak seated read the streak bug lives in.
+    const depthInfo = await page.evaluate((descent) => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.paused = true;
+      try { g.setDescentProgress(descent); } catch {}
+      // Re-anchor the seated eye from the pod group (same as pod-interior).
+      const cam = ctx.three.camera; const V = cam.position.constructor;
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let report = { found: !!pod };
+      if (pod) {
+        pod.updateMatrixWorld(true);
+        const o = pod.getWorldPosition(new V());
+        const pb = ctx.player.body;
+        const bodyY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3);
+        const eye = new V(o.x, bodyY + (ctx.player.eyeOffset || 0.5), o.z + 0.35);
+        pb.body.setTranslation({ x: o.x, y: bodyY, z: o.z + 0.35 }, true);
+        cam.position.copy(eye);
+        const pitch = -0.12 - 0.28 * (descent * descent);
+        cam.lookAt(new V(eye.x, eye.y + Math.tan(pitch), eye.z - 1));
+        cam.updateMatrixWorld(true);
+        // Depth-ordering diagnosis: find the porthole glass (inner + outer domes), the reentry plasma
+        //   + shimmer meshes; report their world-Z + material flags relative to the seated eye.
+        const meshInfo = [];
+        pod.traverse((m) => {
+          if (!m.isMesh || !m.material) return;
+          const mat = m.material;
+          const isGlass = mat.transparent && mat.emissive && mat.metalness !== undefined && mat.opacity !== undefined && mat.opacity < 0.5 && !mat.isShaderMaterial;
+          if (isGlass) {
+            const wp = m.getWorldPosition(new V());
+            meshInfo.push({ kind: 'glass', z: +wp.z.toFixed(3), depthWrite: mat.depthWrite, depthTest: mat.depthTest, opacity: mat.opacity, renderOrder: m.renderOrder });
+          }
+        });
+        // The reentry FX live at scene/group level under the pod group; scan by shader uniforms.
+        pod.traverse((m) => {
+          if (!m.isMesh || !m.material || !m.material.isShaderMaterial) return;
+          const u = m.material.uniforms;
+          if (u && u.uRe !== undefined) {
+            const wp = m.getWorldPosition(new V());
+            meshInfo.push({ kind: u.uRe ? 'reentryFX' : 'fx', z: +wp.z.toFixed(3), uRe: u.uRe.value, depthWrite: m.material.depthWrite, depthTest: m.material.depthTest, side: m.material.side, renderOrder: m.renderOrder, visible: m.visible });
+          }
+        });
+        report.eye = [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)];
+        report.meshInfo = meshInfo;
+      }
+      return report;
+    }, descent);
+    console.log('[descent-fx-probe] depth/mat report: ' + JSON.stringify(depthInfo, null, 0));
+    // Capture N frames — re-pin the re-entry window each frame (paused, so nothing else drives it) +
+    //   force one render so the FX composite; uTime advances in real time so the streaks scroll.
+    for (let i = 0; i < frames; i++) {
+      await page.waitForTimeout(260);
+      await page.evaluate((descent) => {
+        const g = window.__game; const ctx = g.ctx;
+        try { g.setDescentProgress(descent); } catch {}
+        ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+      }, descent);
+      await page.screenshot({ path: join(OUT, `${base}-f${i}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
+      console.log(`[descent-fx-probe] frame ${i} → ${base}-f${i}.png`);
+    }
   },
 
   // W6 item 6 — THE SEALED CABIN DOOR must sit FLUSH (not slanted) at every sealed stage. Probes the
@@ -8149,6 +8304,83 @@ const SCENARIOS = {
     await page.waitForTimeout(300);
     const dWalkB = await walk('walk-B (post-dismount)', 1600);
     console.log(`[footprints] VERDICT: pre-mount Δstep=${dWalkA}, post-dismount Δstep=${dWalkB} → ${dWalkB > 0 ? 'footprints RESUME (no bug here)' : 'footprints WEDGED (bug confirmed)'}`);
+  },
+
+  // ROUND-4 glaze-body probe (ADDITIVE — the cockpit-glass-luma/-cells isolation probes read a
+  //   pinned constant in this build: with everything else hidden + space env active, the glass sheet
+  //   fills the frame and its body reads the ENV-IBL reflection floor, which swamps the emissive glaze
+  //   floor knob → the probe can't see a glaze change. This probe measures the REAL shipped forward view
+  //   (all geometry + space sky) and reads pane-BODY luma over three FIXED star-sparse rectangles (upper-
+  //   left pane, upper-right pane, crown-band) so a glaze change IS visible + front/side/top PARITY is
+  //   read where the player actually sees it. Prints the three body-luma values + their max deviation.
+  //     node scripts/rig-shot.mjs --scenario=cockpit-glaze-body --port=5193
+  'cockpit-glaze-body': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      try { ctx.three.renderer.toneMappingExposure = 1.08; } catch {}
+      g.startIntro(); g.jumpToBeat('cockpit'); g.setSkyIntroMode(1);
+      try { if (ctx.dustMotes) ctx.dustMotes.particles.visible = false; } catch {}
+      try { if (ctx.ambientDust) ctx.ambientDust.particles.visible = false; } catch {}
+    });
+    await page.waitForTimeout(700);
+    const out = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera; const V = cam.position.constructor;
+      const W = 1100, H = 760; ctx.three.renderer.setSize(W, H, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = W / H; cam.updateProjectionMatrix(); }
+      // the REAL seated forward gaze (mirror the cockpit scenario 'forward' path exactly).
+      const tr = ctx.player.body.body.translation();
+      const eyeY = tr.y + (ctx.player.eyeOffset || 0.5);
+      cam.position.set(tr.x, eyeY, tr.z + 0.1);
+      cam.rotation.order = 'YXZ';
+      cam.rotation.set(-0.03, -0.09, 0);
+      cam.updateMatrixWorld(true);
+      const gl = ctx.three.renderer.getContext();
+      // Three FIXED rects over the BRIGHT galaxy band (where the faint glaze is actually perceived —
+      //   over pure black the glaze is correctly near-invisible). One per region for front/side/top
+      //   PARITY. Sampled glass-ON then glass-OFF → the delta IS the haze the glaze floor adds.
+      const rects = {
+        frontBand: [430, 70, 560, 150],   // galaxy band through the front-centre panes
+        leftBand:  [180, 80, 330, 170],   // galaxy band through a left pane
+        crownBand: [560, 30, 700, 100],   // galaxy band through the crown/top band
+      };
+      const readRects = () => {
+        ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+        const px = new Uint8Array(W * H * 4);
+        gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const r = {};
+        for (const [name, [x0, y0, x1, y1]] of Object.entries(rects)) {
+          let s = 0, n = 0;
+          for (let py = y0; py < y1; py++) { const gy = H - 1 - py;
+            for (let x = x0; x < x1; x++) { const i = (gy * W + x) * 4;
+              const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+              if (l < 80) { s += l; n++; } } }   // exclude stars/border glint (>80)
+          r[name] = n ? +(s / n).toFixed(3) : 0;
+        }
+        return r;
+      };
+      const on = readRects();
+      // hide the glass sheet, re-render, read the same rects (the raw sky behind the panes).
+      let glass = null;
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.material && o.material.transparent && o.renderOrder === 2) { glass = o; o.visible = false; } });
+      const off = readRects();
+      if (glass) glass.visible = true;
+      return { on, off };
+    });
+    const delta = {}; for (const k of Object.keys(out.on)) delta[k] = +(out.on[k] - out.off[k]).toFixed(3);
+    const dvals = Object.values(delta);
+    const dm = dvals.reduce((a, b) => a + b, 0) / dvals.length;
+    const ddev = dm !== 0 ? Math.max(...dvals.map((v) => Math.abs(v - dm) / Math.abs(dm))) : 0;
+    console.log('[glaze-body] glass-ON  luma over galaxy band: ' + JSON.stringify(out.on));
+    console.log('[glaze-body] glass-OFF luma over galaxy band: ' + JSON.stringify(out.off));
+    console.log('[glaze-body] HAZE DELTA (on-off): front=' + delta.frontBand + '  left=' + delta.leftBand +
+      '  crown=' + delta.crownBand + '  | meanΔ=' + dm.toFixed(3) + '  parity maxDev=' + (ddev * 100).toFixed(1) + '% ' +
+      (ddev <= 0.12 ? 'PARITY-OK' : 'MISMATCH'));
   },
 };
 
