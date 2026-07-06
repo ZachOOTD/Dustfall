@@ -279,20 +279,6 @@ export function setIntroLoadingBackdrop(dataUrl: string | null): void {
   }
 }
 
-/** LIVE-MENU mode (user: "make the main menu animation still run while loading"). Instead of a
- *  frozen menu capture, the loading panel goes TRANSPARENT so the still-rendering title scene
- *  (titleActive stays true through the preload) shows through, ANIMATED, behind the bar. The
- *  scrim (vignette) stays on so the readouts keep contrast over the moving menu. The New-Game
- *  path holds titleActive until the preload finishes, then hands off straight to the cockpit —
- *  so there's still no desert flash (the menu, not the desert, is what's under the overlay). */
-export function setIntroLoadingLiveMenu(): void {
-  const r = ensureLoading();
-  r.root.style.background = 'transparent';   // reveal the live animated title behind the panel
-  r.backdrop.removeAttribute('src');
-  r.backdrop.style.display = 'none';         // no frozen capture — the real menu renders live
-  r.scrim.style.display = '';                // keep the vignette for readout legibility
-}
-
 /** Show the loading screen. Default = fade in (the pre-Y6 behavior, used by the preload's
  *  re-assert). `instant` = cover the canvas at FULL opacity within the calling task — the
  *  New-Game path needs this because handoffToGame flips the very next painted frame to the
