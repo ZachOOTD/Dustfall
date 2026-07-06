@@ -160,8 +160,9 @@ const WAKE_HOLD = 1.2;
  *  how far you walk to "climb out", and anti-softlock fallbacks (auto-blow / auto-step-out). */
 const WAKE_BLOW_DUR = 0.6;
 const WAKE_CLIMB_DIST = 2.2;
-const WAKE_BLOW_FALLBACK = 5.0;
-const WAKE_CLIMB_FALLBACK = 8.0;
+// (WAKE_BLOW_FALLBACK / WAKE_CLIMB_FALLBACK removed — Z7, round 3: the wake is PURELY
+//  player-gated. The kick fires on the player's click only; the climb advances only when
+//  the player actually walks out (a movement trigger, so no softlock is possible).)
 /** T4.2 — the desert reveal: seconds of held aftermath-silence (E7) as you stand in the dawn
  *  (your pod beside you, the horizon hook ahead, no HUD/objectives) before the game takes over. */
 const REVEAL_DWELL = 4.0;
@@ -625,7 +626,13 @@ function tickCorridor(ctx: GameContext, dt: number): void {
 //    ejectPull (the handle VISIBLY drags down ~0.35s, then the bolts fire).
 const ENTER_DOOR_OPEN_DUR = 0.75;    // seconds the door swings open on E (0→1)
 const ENTER_SEAL_DUR = 0.9;          // seconds the seal dim + model swap + door auto-close play over
-const ENTER_ROTATE_DUR = 3.4;        // seconds the sealed pod grinds 180° in its cradle (porthole → space)
+const ENTER_ROTATE_DUR = 2.6;        // seconds the sealed pod grinds through its launch rotation
+// Z5a (user, round 3): NOT 180° — rotate 90° so the porthole lands looking ALONG THE SHIP'S
+// FLANK toward the nose: the hull slides past on the right, the PLANET (azimuth ~17° off
+// -Z) sits just clear of it, open space left — the "planet + the side of the ship" view the
+// user asked for. (73° was probe-tested first: at that angle the porthole stares INTO the
+// hull — the planet's azimuth is occluded by the ship from the pod's docked position.)
+const ENTER_ROTATE_YAW = Math.PI / 2;
 const EJECT_PULL_DUR = 0.35;         // seconds the eject handle visibly drags down before the bolts fire
 const ENTER_DOOR_GAZE_DIST = 3.2;    // within this (planar, m) of the door + looking at it → the E-open prompt
 const ENTER_DOOR_GAZE_FACING = 0.55; // camera-forward · dir-to-door ≥ this (≈57°) counts as "looking at the door"
@@ -780,7 +787,7 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (phase === 'rotate') {
     const k = Math.min(1, (intro.scratch.t as number) / ENTER_ROTATE_DUR);
     const e = k * k * (3 - 2 * k);                      // smoothstep — heavy machinery ease
-    const yaw = e * Math.PI;
+    const yaw = e * ENTER_ROTATE_YAW;                   // Z5a — ~73°: the porthole sweeps to the PLANET
     const delta = yaw - (intro.scratch.rotPrev as number);
     intro.scratch.rotPrev = yaw;
     setBayPodYaw(yaw);
@@ -1261,7 +1268,9 @@ function tickWake(ctx: GameContext, dt: number): void {
     return;
   }
   if (phase === 'prompt') {
-    if (pulledLever(ctx) || t > WAKE_BLOW_FALLBACK) {
+    // Z7 (user, round 3): the kick is PURELY PLAYER-GATED — the auto-fire fallback removed
+    // ("don't just do things automatically when we wait"). The player kicks when THEY kick.
+    if (pulledLever(ctx)) {
       flashScreen(0xfff0d8, 0.4);
       addTrauma(0.5);                 // a ONE-TIME kick as the hatch blows off (not per-frame)
       playDoorBlow();                 // T5.1 — the hatch kicks off (metal bang + debris)
@@ -1287,8 +1296,8 @@ function tickWake(ctx: GameContext, dt: number): void {
   const rp = intro.returnPos;
   const tr = ctx.player.body.body.translation();
   const dx = tr.x - rp.x, dz = tr.z - rp.z;
-  if (dx * dx + dz * dz > WAKE_CLIMB_DIST * WAKE_CLIMB_DIST || t > WAKE_CLIMB_FALLBACK) {
-    advanceBeat(ctx);   // → stepOut (finalize the desert handoff)
+  if (dx * dx + dz * dz > WAKE_CLIMB_DIST * WAKE_CLIMB_DIST) {
+    advanceBeat(ctx);   // → stepOut (finalize the desert handoff) — fires on REAL movement only (Z7)
   }
 }
 
