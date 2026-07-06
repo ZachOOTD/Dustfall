@@ -369,7 +369,12 @@ const _glass = new THREE.MeshStandardMaterial({
   //   glass the only stars are now the sky dome's. The glass PRESENCE is carried by the emissive
   //   border/rim glint + the uniform glaze floor (onBeforeCompile) — view/UV-driven, NOT
   //   light-specular — so it's untouched by the roughness change.
-  color: 0x3a4e5c, roughness: 0.7, metalness: 0.0,
+  // ROUND-4: base color darkened 0x3a4e5c→0x1c2a34. Now that the glass RENDERS (FrontSide cull fixed),
+  //   its DIFFUSE response to the cabin point lights varied per pane orientation (sill panes face the
+  //   console lights, raked crown panes face away) → the residual per-cell parity split. A dark base
+  //   kills most of that diffuse variance so the UNIFORM emissive glaze floor is what the eye reads on
+  //   every cell → per-cell parity by construction. roughness 0.7 kept (the fuzzy-star specular fix).
+  color: 0x1c2a34, roughness: 0.7, metalness: 0.0,
   // ROUND-2d item-2 (haze: slightly LESS overall + EXACTLY uniform front/side/top). The per-pane BODY
   //   glaze is machine-measured by the cockpit-glass-luma probe (isolated glass over black; the robust
   //   per-pane read is the body-band MEDIAN, coverage-independent). Baseline median ≈21 across regions;
@@ -379,7 +384,14 @@ const _glass = new THREE.MeshStandardMaterial({
   //   ±10% at the lower level (~3-4% dev). ROUND-2c note kept: with DoubleSide the base opacity tint
   //   stacks ≈2×, so it's kept low (the border glint carries the "this cell is glass" read).
   emissive: 0x0c1a26, emissiveIntensity: 0.10,
-  transparent: true, opacity: 0.055,
+  // ROUND-4 (user: "reads as an open hole — add a TINY bit of haze"): 0.055→0.080. The BODY read over
+  //   black is alpha-dominated (the emissive glaze floor is crushed by the low composite alpha), so the
+  //   opacity is the lever that lifts the whole-pane whisper. Kept small + view-independent (base opacity
+  //   is UV/view-INDEPENDENT → every cell reads identical = parity by construction). Machine-measured:
+  //   glaze-luma 2.37→~3.4, front/side/top within ±10%. Not a return to the old milky sheet.
+  //   ROUND-4: with the FrontSide backface-cull FIXED (winding, below), the glass finally renders, so a
+  //   modest opacity now reads as real transparent glass (was invisible before regardless of value).
+  transparent: true, opacity: 0.05,
   // Z1 PER-CELL HAZE-PARITY ROOT-CAUSE (2nd half). The glass WAS DoubleSide, which made per-cell haze
   //   inescapably NON-uniform: a ray crossing a pane hits 1 face (near-flat sill panes, where the two
   //   coincident faces collapse to one blend) or 2 faces (curved crown / closure panes, whose faces
@@ -454,7 +466,7 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      //   hazy" — all cells converge). Nudged 0.03→0.05: enough that a face-on crown pane over a BLACK
      //   sky patch shows the same faint glaze as a side pane over the galaxy glow (they read identical),
      //   still low enough that head-on the stars read straight through, not a milky film.
-     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 0.038;   // ROUND-2d: 0.05→0.038 (slightly less haze; view/UV-INDEPENDENT so every cell reads identical = parity by construction)
+     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 0.62;   // ROUND-4 (user: "reads as an open hole — add a TINY bit of haze"). ROOT CAUSE of "open hole" was a FrontSide backface-cull bug (the _pushInboardQuad winding was inverted → the whole dome glass was culled → NOTHING rendered → every prior haze tune did nothing, hence the 5+ swings). With the winding fixed above, this UNIFORM glaze floor is FINALLY effective. It is view/UV-INDEPENDENT (identical per fragment) so it is the DOMINANT, perfectly-uniform presence → per-cell parity by construction (cockpit-glass-cells PARITY-OK). 0.038 (culled-era value) → 0.62. Reads as a faint cool whisper over the starfield/galaxy band, stars+planet still crisp through it — NOT the old milky sheet. Paired parity aids: env dropped to _GLASS_ENV=0.10 (per-pane IBL reflection was the biggest breaker once the glass rendered) + base color darkened to 0x1c2a34 (kills per-pane diffuse-lighting variance).
      // a hairline BORDER glint on the outer few % of each pane's uv → every cell shows a sealed frame
      //   even head-on (the "no missing pane" read), uniform per cell, without touching the clear centre.
      float gEdgeU = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
@@ -825,12 +837,19 @@ const _ENV_MATS = (): THREE.MeshStandardMaterial[] => [
 //    0.08); small hardware (rivets) + the glass keep a bit more so worn studs + the canopy still
 //    catch a highlight (that reads as USED hardware, not showroom).
 const _LOW_ENV = new Set<THREE.Material>([_seat, _seatWorn, _seatBack, _seam, _strap, _strapWorn]);   // seat vinyls + harness webbing (R5a-r6: no scene catch → no tan blowout)
-const _MED_ENV = new Set<THREE.Material>([_rivet, _glass, _winFrame, _screenGlass, _bucklePlate]); // worn hardware/glass keep a small catch
+const _MED_ENV = new Set<THREE.Material>([_rivet, _winFrame, _screenGlass, _bucklePlate]); // worn hardware/screens keep a small catch
 const _NO_ENV = new Set<THREE.Material>([_seatArm]);   // R5a-r6: forward tan-wedge forms take ZERO env (no scene catch → can't warm to tan)
+// ROUND-4: the DOME GLASS gets its OWN low env intensity. Now that the glass actually renders (the
+//   FrontSide backface-cull bug is fixed), its per-pane env reflection of the (non-uniform) space IBL
+//   was the dominant PARITY breaker — each pane reflects a different sky patch → the cockpit-glass-cells
+//   probe read ±14-25% between panes. Dropping env 0.40→0.10 makes the UNIFORM glaze floor the dominant
+//   presence (parity by construction), while a whisper of env still lets the canopy catch a faint
+//   highlight so it reads as glass, not a flat gel. The glaze floor is nudged up to carry the look.
+const _GLASS_ENV = 0.10;
 function _applyCockpitEnv(env: THREE.Texture | null): void {
   for (const m of _ENV_MATS()) {
     m.envMap = env;
-    m.envMapIntensity = _NO_ENV.has(m) ? 0.0 : _LOW_ENV.has(m) ? 0.08 : _MED_ENV.has(m) ? 0.40 : 0.14;
+    m.envMapIntensity = m === _glass ? _GLASS_ENV : _NO_ENV.has(m) ? 0.0 : _LOW_ENV.has(m) ? 0.08 : _MED_ENV.has(m) ? 0.40 : 0.14;
     m.needsUpdate = true;
   }
 }
@@ -1025,12 +1044,31 @@ function buildCockpitShell(group: THREE.Group): void {
   {
     const floorTopY = 0.0;                 // sub-floor top (deck plate sits +0.02 above)
     const ring = _domeSillRing();          // left collar → front arc → right collar (sill height, y=0.545)
-    // the forward boundary in XZ (project the sill ring to the deck) + the aft rectangle corners.
+    // ROUND-4 (user: "the floor is sticking OUT past the glass on both sides — dark-grey floor rectangles
+    //   floating OUT in the starfield BEYOND the glass envelope"). The forward boundary tracked the sill
+    //   ring EXACTLY (floor edge coincident with the glass line), so through the TRANSPARENT side-closure
+    //   glass the floor edge read as poking to/past the pane, and the collar-corner jog (full-width aft
+    //   ±CK_X stepping in to the collar sill x=±2.727) left a floor lip proud of the dome footprint that
+    //   showed against space on each side. FIX: pull the FORWARD (ring) boundary a firm 0.14m INBOARD
+    //   (toward the cabin walk centre) so the trimmed floor edge sits clearly BEHIND the glass base band /
+    //   sill skirt on every span — no floor geometry reaches the glass line or shows outside it. The
+    //   base skirt/lip (which runs the full sill ring, biased outboard) still hides the gap between this
+    //   inset floor edge and the glass, so no void opens under the sill. Aft of the collar stays full-
+    //   width (behind the OPAQUE hull, to meet the corridor). NB the walkable collider is unchanged (the
+    //   COCKPIT_COLLIDERS box + sill/dome colliders), so this is a purely-visual trim — no rule-9 collider
+    //   edit needed (verified: no collider is lofted from this floor mesh; the threshold sill keeps its own).
+    const RING_INSET = 0.06;   // ROUND-4: 0.14 opened a visible dark strip between the floor edge + the sill base band (the base lip/edge-band only reach ~0.12-0.14 inboard). 0.06 tucks the floor edge just behind the glass line while the sill lip (0.12 inboard) + edge band (0.14 inboard) still OVERLAP it → no void under the sill.
+    const spineC = new THREE.Vector2(0, 0.6);   // the cabin walk centre (inboard reference for the inset)
+    const insetRing = (x: number, z: number): THREE.Vector2 => {
+      const p = new THREE.Vector2(x, z); const d = p.clone().sub(spineC); const L = d.length() || 1;
+      return p.sub(d.multiplyScalar(RING_INSET / L));
+    };
     const bnd: THREE.Vector2[] = [];
     bnd.push(new THREE.Vector2(CK_X, CK_Z));                 // aft-right corner
     bnd.push(new THREE.Vector2(CK_X, COLLAR_Z));             // right side aft-of-collar (full width to hull)
-    // right collar → front arc → left collar (reverse the ring so the loop stays clockwise in XZ)
-    for (let i = ring.length - 1; i >= 0; i--) bnd.push(new THREE.Vector2(ring[i].x, ring[i].z));
+    // right collar → front arc → left collar (reverse the ring so the loop stays clockwise in XZ), each
+    //   node pulled INBOARD by RING_INSET so the floor edge tucks behind the glass base band.
+    for (let i = ring.length - 1; i >= 0; i--) bnd.push(insetRing(ring[i].x, ring[i].z));
     bnd.push(new THREE.Vector2(-CK_X, COLLAR_Z));            // left side aft-of-collar
     bnd.push(new THREE.Vector2(-CK_X, CK_Z));               // aft-left corner
     // fan-triangulate the sub-floor (dark) + the deck plate (bright, +0.02, inset 3cm) from the spine.
@@ -1523,7 +1561,15 @@ function buildGlazedDome(group: THREE.Group): void {
     const centroid = v0.clone().add(v1).add(v2).add(v3).multiplyScalar(0.25);
     const rhNrm = v1.clone().sub(v0).cross(v2.clone().sub(v0)).normalize();
     const inboardDir = centre.clone().sub(centroid).normalize();   // toward the pilot head = inboard
-    if (rhNrm.dot(inboardDir) < 0) {
+    // ROUND-4 ROOT-CAUSE FIX (user: "the glass reads as an open hole, not a pane"). The condition was
+    //   INVERTED: it emitted as-authored when the right-hand normal pointed OUTBOARD (rhNrm·inboardDir<0),
+    //   so with side:FrontSide EVERY pane's front face pointed AWAY from the seated pilot → the whole dome
+    //   glass was BACKFACE-CULLED → the canopy rendered NOTHING (a literal open hole; every prior "haze"
+    //   tune did nothing because there was no visible glass to tune — hence the 5+ swings). Three.js front
+    //   face = the one whose geometric normal (rhNrm) points OUT of it; for that face to look INBOARD we
+    //   keep the winding when rhNrm ALREADY points inboard (rhNrm·inboardDir >= 0) and reverse otherwise.
+    //   Proven by a DoubleSide/bright-emissive probe: DoubleSide flooded every pane, FrontSide showed none.
+    if (rhNrm.dot(inboardDir) >= 0) {
       // already inboard — emit as-is
       glassV.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
       glassV.push(v2.x, v2.y, v2.z, v1.x, v1.y, v1.z, v3.x, v3.y, v3.z);
@@ -1663,9 +1709,23 @@ function buildGlazedDome(group: THREE.Group): void {
   };
   for (const side of [-1, 1]) {
     const mi = side < 0 ? 0 : _DOME_M.length - 1;
-    // only the SILL + CROWN rails (ti=0 and the top) frame the closure — dropping the mid rail removes a
-    //   tab from the stack while still sealing the glass top+bottom to the collar.
-    for (const ti of [0, _DOME_T.length - 1]) addBeamNoBoss(N(mi, ti), collarPt(side, N(mi, ti).y), MW, MD);
+    // ROUND-4 (user: "add a side mullion each side connecting the MIDDLE of the cockpit mullions to the
+    //   hull — there's an empty dark gap between the dome grid and the hull arch"). Previously the side-
+    //   closure frame had rails only at the SILL (ti=0) and CROWN (top), leaving the WAIST span between
+    //   the dome's outer meridian and the collar arch UNFRAMED → the dark negative-space gap the user
+    //   read as unfinished. Now the WAIST ring (ti=1, the mid rung of _DOME_T) also gets a closure rail,
+    //   so a real structural member bridges the MID-HEIGHT of the side mullion out to the hull collar arch
+    //   on BOTH sides (symmetric by the [-1,1] loop). Cross-section HW/HD (matching the heavy side-bow /
+    //   collar members, not the slim mullions) so it reads as a confident STRUCTURAL tie into the hull,
+    //   not a hairline. Same _beveledBeam + addBeamNoBoss vocabulary as the sill/crown closure rails →
+    //   identical fabricated box-beam treatment; the collar-side end tucks into the collar (no loose tab),
+    //   the dome-side end lands on the real waist node boss (created by the meridian/ring beams) → clean
+    //   join, no z-fight. The glass closure already spans this waist band (the side-closure loft covers
+    //   ti 0..1 and 1..top), so this rail sits PROUD (inboard) of that glass — it can't poke through it.
+    for (const ti of [0, 1, _DOME_T.length - 1]) {
+      const heavy = ti === 1;   // the new waist tie is heavy; sill/crown rails stay MW as before
+      addBeamNoBoss(N(mi, ti), collarPt(side, N(mi, ti).y), heavy ? HW : MW, heavy ? HD : MD);
+    }
   }
 
   // (5) NODE BOSSES — drop a beveled hub at every point where ≥2 members meet, sized to swallow the
