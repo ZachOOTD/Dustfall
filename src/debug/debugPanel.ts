@@ -24,7 +24,7 @@ import { setTumbleLight as setPodTumble } from '../world/escapePodIntro/podScene
 import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setEjectLeverPull as setPodEject, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, chuteLifecyclePhase, advanceChuteLifecycle as advanceChuteDbg, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureConstant, smokeWakeFlicker, probeEyeInCabin, probeCabinDoor } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; W6 item 5 — smokeExposureConstant (the zero-shift constant-exposure proof); W6 item 4 — probeEyeInCabin (the impact eye-inside gate); W6 item 6 — probeCabinDoor (the slanted-door diagnostic)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
-import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire, setBayAirlockDoor as setBayAirlockDoorDbg, setBayPodDoorOpen as setBayPodDoorOpenDbg } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
+import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire, setBayAirlockDoor as setBayAirlockDoorDbg, setBayPodDoorOpen as setBayPodDoorOpenDbg, setBayPodYaw as setBayPodYawDbg, getBayPodCenter as getBayPodCenterDbg } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot); Z4 — setBayPodYaw / getBayPodCenter (the pod-rotation-clearance sweep gate)
 import { setSkyIntroMode, setPlanetApproach } from '../world/sky.ts';   // REBUILD v2 R1a — __game.setSkyIntroMode (space mode for the orbit/cockpit beats); C3 — setPlanetApproach (the descent planet-approach arc)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
@@ -148,6 +148,12 @@ interface DebugApi {
   /** Escape-pod W2b — drive the pod-bay AIRLOCK sliding door (0 = sealed → 1 = open; the seal
    *  collider clears past ~0.62). For the boarding flow + the airlock rig-shots. */
   setBayAirlockDoor: (t: number) => void;
+  /** Escape-pod Y3.4 — rotate the docked bay pod about its own vertical axis (0 = docked/door-to-
+   *  collar → π/2 the rotate-then-eject sweep). For the pod-rotation-clearance sweep gate. */
+  setBayPodYaw: (rad: number) => void;
+  /** Escape-pod Y3.4 — the docked bay pod's vertical-axis centre in WORLD coords (the clearance
+   *  sweep tests fixed bay meshes against a cylinder about this axis). */
+  getBayPodCenter: () => { x: number; y: number; z: number };
   /** 1i — one-paste LIVE lighting readout (exposure/clock/sun/ambient/weather/intro state). If
    *  "world lighting broken" is ever seen again, run this and paste the result — it names the
    *  stuck value (the headless probes prove the code paths restore; this catches live-only state). */
@@ -495,6 +501,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       if (ctx.intro) ctx.intro.mode = 'seated';
     },
     setBayAirlockDoor: (t) => { setBayAirlockDoorDbg(t); },
+    setBayPodYaw: (rad) => { setBayPodYawDbg(rad); },
+    getBayPodCenter: () => { const c = getBayPodCenterDbg(); return { x: c.x, y: c.y, z: c.z }; },
     lightDebug: () => {
       const r = ctx.three.renderer;
       const fog = ctx.three.scene.fog as THREE.Fog | null;

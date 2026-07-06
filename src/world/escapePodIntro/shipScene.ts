@@ -3593,30 +3593,46 @@ function buildPodBay(group: THREE.Group): void {
   const frameProud = wallX + 0.14;            // frame face stands into the corridor off the wall line
   const jambHW = aHW;                         // the aperture half-width (matches AIRLOCK_HW)
   const top = AIRLOCK_TOP;
-  //  side JAMBS — worn channel-steel posts framing the sliding-door opening (corridor-facing)
+  //  side JAMBS — worn channel-steel posts framing the sliding-door opening (corridor-facing). Z4
+  //   item-2 FIX (airlock-jamb-aft z-fight, 0.44%): the post was 0.22 DEEP centred at frameProud →
+  //   its back face reached x −0.97, poking back into the plane where the OPEN sliding leaf slides
+  //   (leaf front −0.95, into the flanking-wall pocket) → the leaf edge clipped/ z-fought the jamb
+  //   post when the door was open (the user's "doorway edge clipping"). Slimmed to 0.14 deep with the
+  //   SAME proud +X front face (−0.75): the post back (−0.89) now clears the open-leaf front (−0.95),
+  //   so nothing interpenetrates the leaf's slide path. The corridor read of the frame is unchanged.
   for (const sz of [-1, 1]) {
-    const post = _box(0.22, top + 0.14, 0.22, _steel);
-    post.position.set(frameProud, (top + 0.14) / 2, zc + sz * (jambHW + 0.11));
+    const post = _box(0.14, top + 0.14, 0.22, _steel);
+    post.position.set(frameProud + 0.04, (top + 0.14) / 2, zc + sz * (jambHW + 0.11));
     bay.add(post);
     for (let y = 0.4; y < top; y += 0.42) bay.add(_stud(frameProud + 0.12, y, zc + sz * (jambHW + 0.11), new THREE.Vector3(1, 0, 0), _rivet, 0.016));
-    // a SLIM hazard accent down the leading edge (yellow = accent, not the wall)
+    // a SLIM hazard accent down the leading edge (yellow = accent, not the wall). Z4 item-2 FIX
+    //   (airlock-jamb-aft z-fight): the strip centre sat AT frameProud+0.11 = the post's FRONT-face
+    //   plane, so its back half was buried in the post + its mid-plane was coplanar with the steel post
+    //   face → the yellow strips fringed with winner-flip (the flip-mask lit them up). Stand the strip
+    //   fully PROUD of the post face (back face ahead of frameProud+0.11) — no shared plane.
     const haz = _box(0.03, top - 0.4, 0.08, _bayHazardAccent);
-    haz.position.set(frameProud + 0.11, top / 2, zc + sz * (jambHW + 0.11));
+    haz.position.set(frameProud + 0.135, top / 2, zc + sz * (jambHW + 0.11));
     bay.add(haz);
   }
-  //  HEADER lintel across the top + a slim hazard band + a stencilled placard
-  const lintel = _box(0.22, 0.24, jambHW * 2 + 0.66, _steel);
-  lintel.position.set(frameProud, top + 0.12, zc);
+  //  HEADER lintel across the top + a slim hazard band + a stencilled placard. Z4 item-2 FIX: the
+  //   lintel was 0.22 DEEP centred at frameProud → its back face reached x −0.97, interpenetrating the
+  //   sliding-door HEADER RAIL (front −0.92, y-overlapping) → a lit coplanar seam that hard-flipped
+  //   under the aft-jamb graze. Slimmed to 0.14 deep with the SAME proud front face (−0.75), so its back
+  //   (−0.89) now clears the rail front (−0.92) — the lintel reads identical, no shared plane with the rail.
+  const lintel = _box(0.14, 0.24, jambHW * 2 + 0.66, _steel);
+  lintel.position.set(frameProud + 0.04, top + 0.12, zc);
   bay.add(lintel);
   const lintelHaz = _box(0.03, 0.08, jambHW * 2 + 0.3, _bayHazardAccent);
-  lintelHaz.position.set(frameProud + 0.11, top + 0.02, zc);
+  //  Z4 — proud of the lintel front (was coplanar at +0.11) AND dropped to the header's LOWER lip so it
+  //   clears the placard band above it (the moved-proud band had begun interpenetrating the placard).
+  lintelHaz.position.set(frameProud + 0.135, top - 0.03, zc);
   bay.add(lintelHaz);
   for (let z = zc - jambHW; z <= zc + jambHW; z += 0.40) bay.add(_stud(frameProud + 0.07, top + 0.02, z, up, _rivet, 0.014));
   const placBack = _box(0.02, 0.18, 1.0, _decal);
-  placBack.position.set(frameProud + 0.13, top + 0.13, zc);
+  placBack.position.set(frameProud + 0.14, top + 0.13, zc);   // Z4 — proud of the lintel front (+0.11)
   bay.add(placBack);
   const placFace = _box(0.01, 0.11, 0.82, _corrPlacard);
-  placFace.position.set(frameProud + 0.14, top + 0.13, zc);
+  placFace.position.set(frameProud + 0.165, top + 0.13, zc);  // Z4 — proud of the placard backing (no coplanar layer)
   bay.add(placFace);
   //  THRESHOLD sill plate on the deck at the door + a slim hazard tread
   const sill = _box(0.34, 0.05, jambHW * 2, _steel);
@@ -3632,28 +3648,37 @@ function buildPodBay(group: THREE.Group): void {
   //    All corridor-facing (proud of the wall) so the arriving player reads it as an operable airlock.
   //  (a) a CONTROL PANEL on the corridor wall, aft side of the door (a recessed console with a readout
   //      + a green/amber status stack + a couple of buttons) — the "operate the airlock" station.
+  //  Z4 item-2 FIX (airlock-jamb-aft z-fight, hardPct 0.183%): the readout/LEDs/buttons were placed at
+  //  frameProud−0.04..−0.055 — i.e. BEHIND the panel box (deeper into the −X wall), so the screen's
+  //  FRONT face (x≈−0.89) was coplanar with the panel's BACK face (x≈−0.89) → the winner-flip flicker,
+  //  and the detail was buried out of sight anyway. The panel's CORRIDOR-facing side is +X (the arriving
+  //  player faces −X at the door). All detail now sits PROUD of the panel's +X front face (−0.79), a
+  //  real recessed-readout console with no shared plane.
   const panZ = zc + jambHW + 0.42;
   const panel = _box(0.10, 0.62, 0.42, _steel);
   panel.position.set(frameProud + 0.02, 1.42, panZ);
   bay.add(panel);
-  const panScreen = _box(0.02, 0.22, 0.30, _screenGlass);   // a dark readout face
-  panScreen.position.set(frameProud - 0.04, 1.58, panZ);
+  const panFront = frameProud + 0.07;                       // the panel's +X (corridor-facing) front face
+  // the readout is a bezel + a dark face STANDING PROUD of the panel (a raised console screen), so no
+  //   face is coplanar with the panel's front plane (a flush/recessed screen z-fought it — Z4 item-2).
+  const panScreen = _box(0.03, 0.22, 0.30, _screenGlass);   // a dark readout face raised off the panel
+  panScreen.position.set(panFront + 0.02, 1.58, panZ);      // back face at +0.005 proud of the panel face
   bay.add(panScreen);
-  for (let i = 0; i < 3; i++) {   // green readout bars (unlit glow)
+  for (let i = 0; i < 3; i++) {   // green readout bars (unlit glow) — proud of the screen
     const bar = _box(0.01, 0.02, 0.16 - i * 0.03, _ledGreen);
-    bar.position.set(frameProud - 0.055, 1.64 - i * 0.05, panZ - 0.04);
+    bar.position.set(panFront + 0.05, 1.64 - i * 0.05, panZ - 0.04);
     bay.add(bar);
   }
   for (const [by, mat] of [[1.30, _ledGreen], [1.24, _ledAmber], [1.18, _ledAmber]] as const) {   // a status LED stack
     const led = _cyl(0.018, 0.018, 0.02, 8, mat);
     led.rotation.z = Math.PI / 2;
-    led.position.set(frameProud - 0.045, by, panZ + 0.12);
+    led.position.set(panFront + 0.02, by, panZ + 0.12);
     bay.add(led);
   }
-  for (const bz of [-0.08, 0.0, 0.08]) {   // a row of push-buttons
+  for (const bz of [-0.08, 0.0, 0.08]) {   // a row of push-buttons — proud of the panel face
     const btn = _cyl(0.02, 0.02, 0.02, 8, _corrRail);
     btn.rotation.z = Math.PI / 2;
-    btn.position.set(frameProud - 0.045, 1.24, panZ + bz - 0.14);
+    btn.position.set(panFront + 0.02, 1.24, panZ + bz - 0.14);
     bay.add(btn);
   }
   //  (b) SEAL-INDICATOR lamps — a REGULAR ALIGNED COLUMN up each jamb (the airlock status telltales).
@@ -3666,17 +3691,24 @@ function buildPodBay(group: THREE.Group): void {
   //      the same size + aligned to the jamb centreline so they read as an instrument column, not nubs.
   const _sealYs = [0.55, 0.90, 1.25, 1.60, 1.95];        // even pitch up the jamb (identical units)
   for (const sz of [-1, 1]) {
-    const jz = zc + sz * (jambHW + 0.11);                // on the jamb centreline (matches the post)
+    const jz = zc + sz * (jambHW + 0.11);                // the jamb centreline (matches the post)
+    // Z4 item-2 FIX (airlock-jamb-aft z-fight, hardPct 0.183%→): the seal-lamp housings sat at the SAME
+    //   x-centre (frameProud+0.11) AND z (jz) as the leading-edge HAZARD STRIP (haz, 0.08 wide in z on
+    //   the jamb centreline) — their side/front faces were coplanar + interpenetrating with the strip
+    //   (the flicker the user saw). Separate them with REAL geometry: shift the whole column INBOARD
+    //   (toward the aperture) so it clears the strip's ±0.04 z-span, and stand it clearly PROUD of the
+    //   strip face in x (no shared plane). Now the column reads on the clean door-facing jamb face.
+    const colZ = jz - sz * 0.10;                         // inboard of the strip (strip z-half = 0.04; 0.10 clears it)
     for (let i = 0; i < _sealYs.length; i++) {
-      // a small dark housing recessed into the jamb face
+      // a small dark housing standing PROUD of the jamb face (front at x≈−0.71, ahead of the strip −0.735)
       const housing = _box(0.04, 0.05, 0.05, _channel);
-      housing.position.set(frameProud + 0.11, _sealYs[i], jz);
+      housing.position.set(frameProud + 0.15, _sealYs[i], colZ);
       bay.add(housing);
       // the emissive lens facing the corridor (+X). Green = sealed for the column; the single base
       //   unit is amber ("cycle/unsealed" telltale) so the stack reads as a real status column.
       //   Kept small + identical so the column reads as an instrument stack, not chunky green squares.
       const lens = _box(0.02, 0.026, 0.026, i === 0 ? _ledAmber : _ledGreen);
-      lens.position.set(frameProud + 0.135, _sealYs[i], jz);
+      lens.position.set(frameProud + 0.175, _sealYs[i], colZ);
       bay.add(lens);
     }
   }
@@ -3725,12 +3757,17 @@ function buildPodBay(group: THREE.Group): void {
     //  lower end, MIRRORED opposite on each leaf so the two didn't match. Replaced with a symmetric,
     //  SLIDE-SAFE pair of flush horizontal stiffener ribs (no tilt, fully inside the leaf face,
     //  identical on both leaves) — the leaf reads clean + fabricated + slides without clipping.
+    // Z4 item-2 FIX (airlock-jamb-aft z-fight, 0.44%, byte-stable across every frame edit → it was the
+    //   noMerge LEAF): the recessed-panel `inset` centred at leaf-local x 0.06 (half 0.015 → 0.045..0.075)
+    //   STRADDLED the slab's front face (leaf-local +0.05) → its back half was coplanar with the slab
+    //   front (channel vs door-leaf material = a high-contrast winner-flip). Stand it fully PROUD (back
+    //   face ahead of the slab front) so it reads as a raised blast-door panel with no shared plane.
     const inset = _box(0.03, top - 0.44, aHW - 0.20, _channel);
-    inset.position.set(0.06, top / 2, 0);
+    inset.position.set(0.075, top / 2, 0);
     leaf.add(inset);
     for (const ry of [top * 0.62, top * 0.38]) {
       const rib = _box(0.045, 0.075, aHW - 0.20, _steel);
-      rib.position.set(0.078, ry, 0);
+      rib.position.set(0.10, ry, 0);   // proud of the inset panel (was 0.078 — near-coplanar with it)
       leaf.add(rib);
     }
     // a vertical grab handle on the meeting stile + rivet studs down the outer edge
@@ -3808,10 +3845,16 @@ function buildPodBay(group: THREE.Group): void {
     }
   }
   // the round rubber SEAL GASKET where the bellows mates the pod hull (a soft dark compression ring
-  //   pressed against the pod door face) — a fatter dark band at the pod end.
-  const seal = _ring(belBoreR + 0.06, 0.14, 26, _baySeal);
+  //   pressed against the pod door face) — a fatter dark band at the pod end. Z4 FIX: the gasket is a
+  //   band whose AXIS is along X (rot.z=π/2), so its pod-FACING face sits at (centerX − halfDepth). The
+  //   old center collarFar+0.04 with depth 0.14 put that face at worldX −1.95 — 0.03 m PAST the pod hull
+  //   face (collarFar −1.92) → a 2.6 cm graze of the barrel that the rotating pod swept through (the
+  //   Z4 sweep's last violator). Thinner (0.10) + pulled outboard (collarFar+0.10) so the pod-facing
+  //   face lands at worldX −1.87, a ~5 cm clean mate GAP off the −1.92 hull — the barrel clears it at
+  //   every yaw (a docked pod isn't fused to its collar; a small compression standoff reads correct).
+  const seal = _ring(belBoreR + 0.06, 0.10, 26, _baySeal);
   seal.rotation.z = Math.PI / 2;
-  seal.position.set(collarFar + 0.04, belCY, zc);
+  seal.position.set(collarFar + 0.10, belCY, zc);
   bay.add(seal);
 
   // ═══ 4. THE DOCKED CANONICAL POD — the ONE pod (buildCanonicalPodExterior), its merged glass FRONT
@@ -3896,18 +3939,35 @@ function buildPodBay(group: THREE.Group): void {
     pad.position.set(podArcX - 0.05, 1.10, armZ);
     bay.add(pad);
   }
-  //  two tidy umbilicals from the collar wall to a coupling plate on the pod shoulder (−Z side)
+  //  two tidy umbilicals routed along the COLLAR's −Z exterior flank (Z4 FIX). PREVIOUSLY the coupling
+  //  plate + hose ends terminated on the pod SHOULDER at pod-local (0.43, −0.89) — radial ~0.99 m from
+  //  the pod axis, i.e. ~0.45 m INSIDE the 1.44 m hull. At yaw 0 that hid behind the open door; the
+  //  moment the pod rotates in its cradle the solid barrel sweeps over that spot and the plate + hoses
+  //  punched straight through the interior shell (the user's screenshot; probe-rotate-{73,90}). A pod
+  //  that turns freely can't have fixed hardware plugged INTO its skin, so the umbilicals now live wholly
+  //  on the COLLAR — a coupling plate bolted to the collar's −Z side wall and hoses draping between two
+  //  collar sockets, terminating in a capped stub SHORT of the pod (a ~8 cm mate gap). Every vertex stays
+  //  at radial distance > POD_R from the pod axis (verified by pod-rotation-clearance), so the barrel
+  //  clears them at all sweep angles. The −Z-flank read is unchanged from the corridor eye.
   const umbY = 1.72;
+  const umbWallZ = zc - aHW - COR_WALL_T / 2;               // ON the collar's −Z side-wall inner face
+  // coupling plate bolted flat to the collar −Z wall, near the pod-door (outboard) end of the collar
   const umbPlate = _box(0.10, 0.36, 0.30, _channel);
-  umbPlate.position.set(podLocalX + BAY_POD_R * 0.30, umbY, podZ - BAY_POD_R * 0.62);
+  umbPlate.position.set(collarFar + 0.34, umbY, umbWallZ + 0.06);
   bay.add(umbPlate);
-  for (const [hy, sag] of [[umbY + 0.06, 0.14], [umbY - 0.14, 0.18]] as const) {
-    const x0 = collarFar - 0.02, x1 = podLocalX + BAY_POD_R * 0.30 - 0.02;
-    const z0 = zc - aHW + 0.1, z1 = podZ - BAY_POD_R * 0.62;
+  for (const [hy, sag] of [[umbY + 0.06, 0.12], [umbY - 0.14, 0.16]] as const) {
+    // both ends on the collar −Z flank: an inboard socket at the wall plane → a capped stub just SHORT
+    //   of the pod-door face (the mate point), draping along the collar (never entering the pod cylinder).
+    const x0 = wallX - 0.10, x1 = collarFar + 0.14;          // inboard (ship end) → outboard (pod-door end)
+    const z0 = umbWallZ + 0.05, z1 = umbWallZ + 0.05;        // hug the −Z wall the whole run
     const socket = _cyl(0.05, 0.05, 0.16, 10, _bayCoupling);
     socket.rotation.z = Math.PI / 2; socket.position.set(x0, hy, z0);
     bay.add(socket);
-    // a single sagging hose spanning collar → pod shoulder (diagonal in x/z, sagging in y)
+    // the capped mate stub at the outboard end (reads as the connector that would plug the pod, held clear)
+    const stub = _cyl(0.045, 0.05, 0.12, 10, _bayCoupling);
+    stub.rotation.z = Math.PI / 2; stub.position.set(x1, hy, z1);
+    bay.add(stub);
+    // a single sagging hose spanning the two collar-flank points (sagging in y; runs along −X)
     const midX = (x0 + x1) / 2, midZ = (z0 + z1) / 2;
     const len = Math.hypot(x1 - x0, z1 - z0);
     const hose = _cyl(0.04, 0.04, len, 8, _bayHose);
