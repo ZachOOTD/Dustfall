@@ -61,7 +61,7 @@ import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
-import { startMusic, updateMusic } from './audio/music.ts';
+import { startMusic, updateMusic, setMusicSuppressed } from './audio/music.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DESERT SHREW
@@ -103,7 +103,7 @@ import { installDebugPanel } from './debug/debugPanel.ts';
 import { createTitleScene } from './world/titleScene.ts';
 import { createTitleOverlay } from './ui/titleOverlay.ts';
 import { ensureAudioStarted, stopWormRumble } from './audio/audio.ts';
-import { startSoundscape } from './audio/soundscape.ts';
+import { startSoundscape, setSoundscapeSuppressed } from './audio/soundscape.ts';
 // AAP — startMusic imported above (alongside updateMusic).
 import { clearSave, loadGameState, peekSavedSeed } from './persistence/save.ts';
 import { ALL_RECIPE_IDS } from './inventory/recipeDiscovery.ts';
@@ -856,6 +856,15 @@ const titleOverlay = createTitleOverlay(ctx, {
       //   READY — CLICK TO LAUNCH recovery state if that triggers, and the overlay
       //   fades out (~350ms) directly onto the cockpit's first frame. A capture failure
       //   falls back to the overlay's own fully-opaque gradient — no desert either way.
+      // AUDIO (user: "no audio until we start on the ship") — handoffToGame below starts the
+      //   desert soundscape (wind) + music, but the intro's OWN suppression only lands after the
+      //   multi-second preload (startEscapePodIntro → setSoundscapeSuppressed/setMusicSuppressed),
+      //   so wind+music leaked audibly across the whole New-Game load. Suppress them HERE, before
+      //   handoffToGame's startSoundscape()/startMusic() — the flag is honored at start, so they
+      //   never fade in. The ship beats play their OWN audio; endEscapePodIntro restores wind+music
+      //   at the desert handoff.
+      setSoundscapeSuppressed(true);
+      setMusicSuppressed(true);
       try {
         three.renderer.render(title.scene, title.camera);
         setIntroLoadingBackdrop(three.renderer.domElement.toDataURL('image/jpeg', 0.85));
