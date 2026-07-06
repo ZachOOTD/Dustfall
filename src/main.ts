@@ -56,7 +56,7 @@ import { updatePlayer } from './player/controller.ts';
 import { updateEscapePodIntro, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
 import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
 import { updateChutePop, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
-import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick, showIntroLoading, setIntroLoadingBackdrop } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix) + Y6 the frozen-menu backdrop (kills the desert flash)
+import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick, showIntroLoading, setIntroLoadingLiveMenu } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix) + the live-menu loading backdrop (the animation keeps running under the bar)
 import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF — build every intro scene + compile every shader UP FRONT behind the loading screen (kills the beat-entry freezes)
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
@@ -865,21 +865,24 @@ const titleOverlay = createTitleOverlay(ctx, {
       //   at the desert handoff.
       setSoundscapeSuppressed(true);
       setMusicSuppressed(true);
-      try {
-        three.renderer.render(title.scene, title.camera);
-        setIntroLoadingBackdrop(three.renderer.domElement.toDataURL('image/jpeg', 0.85));
-      } catch (e) {
-        console.warn('[introLoading] menu freeze-frame capture failed — plain backdrop:', e);
-        setIntroLoadingBackdrop(null);
-      }
-      showIntroLoading({ instant: true });   // cover the canvas BEFORE titleActive flips
-      handoffToGame({ skipLock: true });   // skipLock: we lock EXPLICITLY on the next line instead
+      // LIVE MENU (user: "make the main menu animation still run in the background while
+      //   loading"): instead of freezing the menu to a static capture and handing off
+      //   (titleActive → false) BEFORE the preload, KEEP titleActive TRUE so the frame loop
+      //   keeps updating + rendering the title scene — the menu animates live. The loading
+      //   panel goes TRANSPARENT (setIntroLoadingLiveMenu) so it shows through under the bar.
+      //   The preload's warm draws are 1×1 scissored with autoClear off, so they never disturb
+      //   the full-frame title render; the loop pins the title exposure (TITLE_EXPOSURE) so the
+      //   warm-up's exposure pokes can't flicker the menu. The handoff to the cockpit happens
+      //   ONLY after the preload (below): the MENU — never the desert — is what sits under the
+      //   overlay during the load, so the desert-flash stays killed without a static capture.
+      setIntroLoadingLiveMenu();
+      showIntroLoading({ instant: true });
       // BUGFIX (the "loading finishes, game never starts" freeze): acquire the pointer lock
       //   NOW, while the New-Game click's user gesture is still fresh. The old flow locked
       //   AFTER the multi-second preload — by then the gesture had EXPIRED, the browser
-      //   silently refused the lock, flags.paused stayed true, and the intro sat frozen
-      //   behind a finished loading bar (the documented pointer-lock freeze mode). Locking
-      //   here is harmless: the loading overlay covers the canvas and swallows input.
+      //   silently refused the lock, flags.paused stayed true, and the intro sat frozen behind
+      //   a finished loading bar. The lock's own handler hides the start-overlay DOM (buttons)
+      //   but leaves titleActive true, so the 3D title keeps animating under the bar.
       {
         const c0 = three.renderer.domElement;
         if (!pointerLockSuppressed(c0)) ctx.input.controls.lock();
@@ -900,8 +903,9 @@ const titleOverlay = createTitleOverlay(ctx, {
             ctx.input.controls.lock();
           }
           hideIntroLoading();
-          startEscapePodIntro(ctx);            // start the cockpit beat — everything is warm now
-          setGameHudHidden(true);              // re-hide (handoffToGame un-hid; the intro owns a clean view)
+          startEscapePodIntro(ctx);            // set up the cockpit beat FIRST (titleActive still true → not shown yet)
+          handoffToGame({ skipLock: true });   // NOW flip titleActive → false so the cockpit renders (deferred from pre-preload; the menu animated through the whole load). The intro is active, so handoffToGame re-hides the HUD.
+          setGameHudHidden(true);              // belt-and-braces re-hide (the intro owns a clean view)
         });
       return;
     }
@@ -953,12 +957,20 @@ const titleOverlay = createTitleOverlay(ctx, {
   },
 });
 
+// The renderer exposure the title scene is authored at. Captured once at boot so the
+//   title always renders at its own exposure — during the New-Game preload the warm-up
+//   pokes renderer.toneMappingExposure (for the intro scenes), and the title keeps
+//   animating live under the loading bar; re-asserting this each title frame keeps the
+//   menu's brightness rock-steady regardless of what the warm-up left the exposure at.
+const TITLE_EXPOSURE = three.renderer.toneMappingExposure;
+
 // --- Per-frame tick: order matters ---
 startLoop(ctx, (c, dt) => {
   // Title screen owns the frame until NEW GAME is pressed. Game systems
   // stay frozen behind the title — `paused` is set true during title — and
   // the render-target getter below routes to the title scene + camera.
   if (c.flags.titleActive) {
+    c.three.renderer.toneMappingExposure = TITLE_EXPOSURE;   // pin: the preload warm-up must not flicker the live menu
     title.update(dt);
     endInputFrame(c.input);
     return;
