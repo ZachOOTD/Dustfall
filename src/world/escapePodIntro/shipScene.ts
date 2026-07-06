@@ -295,16 +295,49 @@ const _winFrame = _metal(0x3a4047, 0.85, 0.36, { flat: true });
 //    read through it but it clearly reads as a sealed window. Its emissive lifts hot-orange with
 //    the fire (setEngineFire) so the blaze GLOWS through the glass. Cloned per-leaf (2 leaves).
 function _makeEngineGlass(): THREE.MeshStandardMaterial {
+  // Z3 — opacity dropped 0.42→0.30 + a cooler-clearer tint so the reactor CORE reads SHARP through the
+  //   pane (the old milky 0.42 diffused the whole room into an indistinct wash — the user's "reads
+  //   cheap"). Still transparent glass (not a hole): the glossy surface catches ceiling reflections +
+  //   its emissive lifts hot-orange on failure, so it stays a sealed window, just a cleaner one.
   return new THREE.MeshStandardMaterial({
-    color: 0x2b3840, roughness: 0.14, metalness: 0.0,
+    color: 0x30404a, roughness: 0.12, metalness: 0.0,
     emissive: 0x000000, emissiveIntensity: 1.0,
-    transparent: true, opacity: 0.42, side: THREE.DoubleSide,
+    transparent: true, opacity: 0.30, side: THREE.DoubleSide,
   });
 }
 // Engine-room machinery accent — a hot pipe / reactor casing (mid steel, takes the fire glow).
 const _engMachine = _metal(0x54585e, 0.5, 0.6, { flat: true, grime: true });
 // Engine-room deep steel (the reactor block / engine mass) — dark, heavy.
 const _engBlock = _metal(0x33373d, 0.55, 0.55, { flat: true, grime: true });
+// ── Z3 — REACTOR HALL materials. The reactor core is the room's hero through the glass, so it gets
+//    a richer palette than the old "blocky cylinders": brushed containment shielding, dark ribbed
+//    segments, copper coil windings, a pale ceramic insulator, and hazard-yellow railing paint.
+// Containment shielding — a cool brushed steel casing (the segmented outer skin of the core column).
+const _reactShield = _metal(0x646b74, 0.62, 0.42, { flat: true, grime: true });
+// Ribbed shielding / dark structural segments (the interspersed dark bands giving the column relief).
+const _reactRib = _metal(0x2c3037, 0.5, 0.7, { flat: true, grime: true });
+// Copper coil winding — the toroidal containment coils (a warm oxidised copper, reads distinct from steel).
+const _reactCoil = _metal(0x8a5a38, 0.72, 0.44, { flat: true, grime: true });
+// Ceramic insulator collar — pale off-white porcelain (breaks the all-metal read; hardware texture).
+const _reactCeramic = _metal(0xb8b3a6, 0.05, 0.55, { flat: true });
+// The CORE CHANNEL — an emissive central plasma channel. Unlit-ish: standard w/ a strong emissive so
+//   it reads as a self-lit hot channel in calm (cool) and critical (hot). Driven per-state via .emissive.
+//   Z3-r6 (FINDING 1): the calm core read as flat unlit grey (warm ceiling-bounce, cyanPx=0). The
+//   constructor default is now a bright SATURATED cyan (#2fd8e0) at a blooming intensity so the channel
+//   is genuinely self-lit BEFORE setEngineFire ever runs (the calm state never calls setEngineFire in
+//   the live sequence — only the eruption does — so the constructor value IS the calm look). setEngineFire
+//   cross-fades this to hot-orange on critical.
+const _reactCore = new THREE.MeshStandardMaterial({
+  color: 0x0a1418, roughness: 0.25, metalness: 0.0,
+  emissive: 0x22c8ec, emissiveIntensity: 8.5,   // calm cyan self-illumination (blooms through the glass);
+                                                //   b>g so it reads a saturated cyan, not white; setEngineFire
+                                                //   drives it hot-orange + brighter on critical
+});
+// Warning-stripe hazard paint on the reactor railing/guard (safety-yellow worn matte, takes room light).
+const _reactHazard = _metal(0xb89224, 0.30, 0.72, { flat: true, grime: true });
+// Reactor back-wall readout panel face — a dark instrument face; its emissive content is an unlit basic
+//   overlay (below). This is just the recessed bezel body.
+const _reactPanel = _metal(0x14181d, 0.3, 0.5, { flat: true });
 // Window GLASS — a real transmissive cool-tinted CANOPY pane: faint blue tint, very glossy, low
 //   base opacity so the orbit reads through, but with a real SURFACE that catches a Fresnel rim +
 //   a curved-glass sheen so the eye reads a BUBBLE of glass, not a void.
@@ -826,6 +859,12 @@ let _engineSpillLight: THREE.PointLight | null = null;  // the orange spill leak
 const _engineGlassMats: THREE.MeshStandardMaterial[] = [];   // the sliding-door panes (emissive lifts with the fire)
 let _engineDoorJudderL: THREE.Group | null = null;      // the two sliding-door leaves (judder on fire)
 let _engineDoorJudderR: THREE.Group | null = null;
+// ── Z3 — REACTOR HALL refs. The core has a CALM state (cool containment glow, running nominally) and a
+//    CRITICAL state (setEngineFire ramps it hot orange + erupts the breach). Captured at build so
+//    setEngineFire can cross-fade calm→critical without breaking the existing fire-quad hooks.
+const _reactCoreMats: THREE.MeshStandardMaterial[] = []; // the emissive core-channel segments (cool→hot)
+let _reactCoreLight: THREE.PointLight | null = null;     // the core's own glow (lights the column; cool→hot)
+const _reactReadoutMats: THREE.MeshBasicMaterial[] = []; // back-wall readout content (green nominal → red critical)
 
 /** Is the ship currently built? */
 export function shipBuilt(): boolean {
@@ -4763,129 +4802,250 @@ function buildEngineBay(group: THREE.Group): void {
   frontTop.position.set(0, (eDoorTop + roomH + 0.2) / 2, doorZ - 0.06);
   room.add(frontTop);
 
-  // ── 2. THE ENGINE / REACTOR MASS — the room's centrepiece: a big cylindrical reactor drum on the
-  //    back wall + a boxy engine block, ringed with pipes + housings (readable machinery, not deep
-  //    detail). The fire will glow off these from within.
-  const reactor = _cyl(0.7, 0.8, roomH - 0.6, 20, _engBlock);
-  reactor.position.set(0.0, (roomH - 0.6) / 2 + 0.1, roomZ1 - 0.9);
-  room.add(reactor);
-  // reactor bands + a hot core vent (a dark recess where the fire seats)
-  for (const by of [0.7, 1.5, 2.2]) {
-    const band = _cyl(0.74, 0.74, 0.12, 20, _engMachine);
-    band.position.set(0.0, by, roomZ1 - 0.9);
-    room.add(band);
+  // ── 2. THE REACTOR CORE — the hero of the through-glass frame. A tall VERTICAL CONTAINMENT COLUMN
+  //    dead-centre in the doorway, floor→ceiling, built from stacked segments: dark ribbed shielding
+  //    bands alternating with brushed containment casing, a bright EMISSIVE CORE CHANNEL glowing up
+  //    the centre (cool cyan in calm, hot orange on failure), copper toroidal coils gripping the
+  //    column, a ceramic insulator collar, coolant manifold rings, and a CORE-BREACH VENT where the
+  //    fire seats. This is a real reactor silhouette, not a plain drum. Centred at (0, ·, coreZ).
+  const coreZ = roomZ1 - 1.15;               // the core sits deep, dead-centre in the doorway frame
+  const coreR = 0.46;                         // containment casing radius (slimmer → reads TALL through the door)
+  const chanR = 0.30;                         // the inner glowing channel radius (shows in the gaps)
+  const coreTopY = roomH - 0.06;              // rises to the ceiling
+  const coreBaseY = 0.06;                     // sits on the deck
+  // (a) the BASE PLINTH — a cast pedestal the column rises from (grounds it on the deck).
+  const plinth = _cyl(0.66, 0.80, 0.36, 16, _reactRib);
+  plinth.position.set(0, coreBaseY + 0.18, coreZ);
+  room.add(plinth);
+  const plinthCap = _cyl(0.58, 0.66, 0.08, 16, _reactShield);
+  plinthCap.position.set(0, coreBaseY + 0.40, coreZ);
+  room.add(plinthCap);
+  // (b) THE GLOWING CORE CHANNEL — a TALL continuous emissive column up the centre, the reactor's
+  //     beating heart. It is EXPOSED down the corridor-facing front (the shield wraps the back/sides
+  //     only) so the camera reads a strong vertical glowing strip, not a thin slot behind rings.
+  //     Split into stacked segments so the glow can flicker per-segment on failure.
+  const colBaseY = coreBaseY + 0.40;
+  const colTopY = coreTopY - 0.08;
+  const NCH = 7;
+  for (let ci = 0; ci < NCH; ci++) {
+    const chMat = _reactCore.clone();
+    _reactCoreMats.push(chMat); _buildMats.push(chMat);
+    const chH = (colTopY - colBaseY) / NCH;
+    const ch = _cyl(chanR, chanR, chH * 0.99, 14, chMat);
+    ch.position.set(0, colBaseY + chH * (ci + 0.5), coreZ);
+    room.add(ch);
   }
-  const coreVent = _box(0.7, 1.0, 0.3, _channel);   // the ruptured core the fire pours from
-  coreVent.position.set(0.0, 1.1, roomZ1 - 1.35);
-  room.add(coreVent);
-  // a boxy engine block to one side + a turbine housing to the other (machine-hall silhouettes)
-  const block = _box(1.0, 1.4, 1.3, _engBlock);
-  block.position.set(-roomHW + 0.7, 0.7, roomZc + 0.3);
-  room.add(block);
-  const turbine = _cyl(0.55, 0.55, 1.5, 16, _engMachine);
-  turbine.rotation.z = Math.PI / 2;
-  turbine.position.set(roomHW - 0.7, 1.0, roomZc + 0.2);
-  room.add(turbine);
-  // PIPES running the room (ceiling + wall runs) + valve wheels — the machinery read
-  for (const [px, py] of [[-1.4, roomH - 0.35], [1.4, roomH - 0.35], [-1.5, 1.2], [1.5, 1.2]] as const) {
-    const pipe = _cyl(0.08, 0.08, roomZ1 - roomZ0 - 0.3, 10, _engMachine);
-    pipe.rotation.x = Math.PI / 2;
-    pipe.position.set(px, py, roomZc);
-    room.add(pipe);
+  // Z3-r6 (FINDING 1): the recessed cylinder channel only showed a NARROW front sliver behind the shield
+  //   gap + breach, so through the tinted glass the core read as a dark column, not a self-lit channel.
+  //   Add EXPOSED CORE-FACE PLATES — flat emissive slabs standing PROUD in the arc-gap on the corridor
+  //   face (z in front of the shield), giving an unbroken bright vertical CYAN bar the camera reads
+  //   clearly through the glass. Split per-segment (same _reactCoreMats list) so they cross-fade
+  //   cool-cyan → hot-orange on setEngineFire with the rest of the channel. Depth 8cm (>5cm, rule 7).
+  const faceZ = coreZ - coreR - 0.14;            // clearly PROUD of the shield ribs + breach (they don't occlude it)
+  const NFACE = 6;
+  const faceBaseY = colBaseY + 0.10, faceTopY = colTopY - 0.06;
+  for (let fi = 0; fi < NFACE; fi++) {
+    const fMat = _reactCore.clone();
+    _reactCoreMats.push(fMat); _buildMats.push(fMat);
+    const fH = (faceTopY - faceBaseY) / NFACE;
+    const plate = _box(0.34, fH * 0.9, 0.08, fMat);   // a tall thin glowing plate segment (unbroken vertical bar)
+    plate.position.set(0, faceBaseY + fH * (fi + 0.5), faceZ);
+    room.add(plate);
   }
-  for (const [wx, wy, wz] of [[-1.1, 1.4, doorZ + 0.6], [1.2, 0.9, doorZ + 1.0]] as const) {
-    const wheel = _cyl(0.18, 0.18, 0.06, 12, _corrRail);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, wy, wz);
-    room.add(wheel);
+  // thin dark mullions BETWEEN the face-plate segments (structural intercostals) so the bar reads as a
+  //   segmented reactor window, not one flat light — a couple of slim ribs across the glowing strip.
+  for (let fi = 1; fi < NFACE; fi++) {
+    const fH = (faceTopY - faceBaseY) / NFACE;
+    const rib = _box(0.40, 0.045, 0.10, _reactRib);
+    rib.position.set(0, faceBaseY + fH * fi, faceZ);
+    room.add(rib);
   }
-  // a floor grate + a couple of deck plates (the room reads as a real machine deck)
-  const grate = _box(roomHW * 1.4, 0.04, roomZ1 - roomZ0 - 0.6, _deck);
-  grate.position.set(0, 0.03, roomZc);
-  room.add(grate);
+  // (c) THE SHIELD — tall ARC-BAND sleeves that wrap the column's BACK + SIDES but leave a wedge OPEN
+  //     toward the corridor (−Z, θ=π in three's cyl-theta) so the glowing channel shows down the
+  //     front. Two tall segments (a break gives the silhouette a seam) in brushed casing.
+  //     _arcBand(r, h, seg, mat, gapCenterTheta, gapHalf): gap centred at θ=π (−Z, facing the door).
+  const GAP_C = Math.PI;                      // the open wedge faces −Z (the corridor / camera)
+  const GAP_H = 0.62;                          // ~36° open slot down the front
+  const shieldSegs = [
+    [colBaseY + 0.05, 1.15],                   // lower shield sleeve  [bottomY, height]
+    [colBaseY + 1.28, 1.15],                   // upper shield sleeve
+  ] as const;
+  for (const [by, h] of shieldSegs) {
+    const sleeve = _arcBand(coreR, h, 24, _reactShield, GAP_C, GAP_H);
+    sleeve.position.set(0, by + h / 2, coreZ);
+    room.add(sleeve);
+  }
+  // (d) STRUCTURAL RIB RINGS — a few FULL dark flanges crossing the whole column at intervals (they
+  //     read as banding + break the tall channel into lit sections; thin so they don't hide the glow).
+  for (const ry of [colBaseY + 0.02, colBaseY + 1.20, colBaseY + 2.36, colTopY - 0.06]) {
+    const rib = _cyl(coreR + 0.06, coreR + 0.06, 0.11, 24, _reactRib);
+    rib.position.set(0, ry, coreZ);
+    room.add(rib);
+  }
+  // (e) the COPPER CONTAINMENT COILS — toroidal windings gripping the column at two heights (the
+  //     "energised reactor" read). Copper against the steel casing = clear material break. Kept to the
+  //     SIDES/back (an arc, gap facing the corridor) so they don't hide the front glowing channel.
+  for (const cy of [colBaseY + 0.62, colBaseY + 2.00]) {
+    for (let k = 0; k < 2; k++) {   // a twin-wound coil pack per height
+      const coilGeo = new THREE.TorusGeometry(coreR + 0.06, 0.055, 8, 24, Math.PI * 1.35);
+      _disposables.push(coilGeo);
+      const coil = new THREE.Mesh(coilGeo, _reactCoil);
+      coil.rotation.x = Math.PI / 2;
+      coil.rotation.z = Math.PI * 0.32;   // rotate the arc gap toward the corridor so the front stays open
+      coil.position.set(0, cy + (k - 0.5) * 0.13, coreZ);
+      room.add(coil);
+    }
+  }
+  // (e) a CERAMIC INSULATOR COLLAR (pale porcelain rings — the HV standoff read), placed in the
+  //     VISIBLE band (upper-mid, well below the cropping door head) so it reads through the glass.
+  for (const iy of [1.72, 1.60]) {
+    const ins = _cyl(coreR + 0.13, coreR + 0.13, 0.055, 20, _reactCeramic);
+    ins.position.set(0, iy, coreZ);
+    room.add(ins);
+  }
+  // (f) the CORE-BREACH VENT — a dark recessed maw in the column face (corridor side) where the fire
+  //     pours out on failure. Flanked by two blast-shield doors (hinged open) so it reads as a
+  //     ruptured containment hatch, not a painted box.
+  const breach = _box(0.5, 0.66, 0.16, _channel);
+  breach.position.set(0, 1.18, coreZ - coreR + 0.04);
+  room.add(breach);
+  for (const sx of [-1, 1]) {
+    const shield = _box(0.12, 0.7, 0.1, _reactRib);   // a swung-open blast shield leaf
+    shield.position.set(sx * 0.34, 1.18, coreZ - coreR - 0.02);
+    shield.rotation.y = sx * 0.5;
+    room.add(shield);
+  }
+  // (g) COOLANT MANIFOLD RINGS at the top of the column feeding into overhead pipes (plumbing that
+  //     connects — the loop leaves the core to the ceiling header).
+  const topManifold = _cyl(coreR + 0.06, coreR + 0.06, 0.12, 16, _engMachine);
+  topManifold.position.set(0, colTopY + 0.02, coreZ);
+  room.add(topManifold);
 
-  // ── 2b. X4 item-6c — MORE MECHANICAL DETAIL that CONNECTS (manifolds + coil banks + piping that
-  //    ties the reactor to the block/turbine, not floating masses). Kept to the SIDES + BACK so the
-  //    fire at the core (roomZ1−1.2, centre) still reads clearly through the glass door.
-  //  (a) a PIPE MANIFOLD HEADER across the back wall linking the reactor to the side machines — a fat
-  //      horizontal drum with take-off pipes dropping to the block + turbine (the plumbing that binds
-  //      the machinery into one plant).
-  const header = _cyl(0.16, 0.16, roomHW * 1.7, 14, _engMachine);
+  // ── 2b. SUPPORTING MACHINERY composed for DEPTH behind + beside the core (so the room reads deep
+  //    through the glass, not a shallow backdrop). Side coolant towers, a back-wall control station,
+  //    overhead pipe runs, cable conduit, and a foreground guard rail framing the pit.
+  //  (a) TWO COOLANT TOWERS flanking the core (−X / +X), set BACK so the core stays the hero. Each is
+  //      a ribbed vertical cylinder capped with a dome + a coil wrap — receding machinery for depth.
+  for (const sx of [-1, 1]) {
+    const tx = sx * (roomHW - 0.55);
+    const towerH = roomH - 0.7;
+    const towerBaseY = 0.06;                                  // tower spans y: 0.06 → 0.06+towerH (=2.26)
+    const towerRb = 0.34, towerRt = 0.38;                     // bottom / top radius (tapers wider upward)
+    const tower = _cyl(towerRb, towerRt, towerH, 16, _reactShield);
+    tower.position.set(tx, towerH / 2 + towerBaseY, roomZ1 - 0.7);
+    room.add(tower);
+    // Z3-r6 (FINDING 3): the ribbed bands / cap collar were radius 0.40 — WIDER than the tower (max
+    //   0.38 at the top), so the collar rim overhung and ended in a downward-curling lip in empty space
+    //   (mirrored on both towers). Fix: each band radius is now FLUSH-INSET to the tower's local taper
+    //   radius at its height (minus 3mm) so it reads as a recessed rib groove, no overhang / no drip lip.
+    for (const bandY of [0.7, 1.5, 2.2]) {
+      const towerRatBand = towerRb + (towerRt - towerRb) * ((bandY - towerBaseY) / towerH);
+      const bandR = towerRatBand - 0.003;                    // flush-inset (<= tower surface)
+      const band = _cyl(bandR, bandR, 0.09, 16, _reactRib);
+      band.position.set(tx, bandY, roomZ1 - 0.7);
+      room.add(band);
+    }
+    // the tapered cap dome — base radius matches the tower TOP (0.38) so it seats flush on the tower rim
+    //   (was 0.34, leaving a small step; now the cone caps the cylinder cleanly).
+    const dome = _cyl(0.001, towerRt, 0.30, 16, _engMachine);
+    dome.position.set(tx, towerBaseY + towerH + 0.14, roomZ1 - 0.7);
+    room.add(dome);
+    // a feed pipe arcing from the tower toward the core-top manifold (the coolant loop connects)
+    const feed = _cyl(0.07, 0.07, roomHW - 0.6, 8, _engMachine);
+    feed.rotation.z = Math.PI / 2;
+    feed.position.set(sx * (roomHW - 0.55) / 2, colTopY + 0.02, roomZ1 - 0.7);
+    room.add(feed);
+  }
+  //  (b) THE BACK-WALL PIPE MANIFOLD HEADER + take-off drops (the deep-plane plumbing that fills the
+  //      space behind the core — reads as the plant continuing past the hero).
+  const header = _cyl(0.15, 0.15, roomHW * 1.8, 12, _engMachine);
   header.rotation.z = Math.PI / 2;
-  header.position.set(0, roomH - 0.5, roomZ1 - 0.35);
+  header.position.set(0, roomH - 0.35, roomZ1 - 0.14);
   room.add(header);
-  for (const tx of [-roomHW + 0.7, -0.4, 0.4, roomHW - 0.7]) {   // take-off drops from the header
-    const drop = _cyl(0.06, 0.06, 1.4, 8, _engMachine);
-    drop.position.set(tx, roomH - 1.2, roomZ1 - 0.35);
+  for (const tx of [-roomHW + 0.5, -roomHW + 1.1, roomHW - 1.1, roomHW - 0.5]) {
+    const drop = _cyl(0.055, 0.055, 1.3, 8, _engMachine);
+    drop.position.set(tx, roomH - 1.0, roomZ1 - 0.14);
     room.add(drop);
-    const flange = _cyl(0.1, 0.1, 0.05, 10, _engBlock);
-    flange.position.set(tx, roomH - 0.5, roomZ1 - 0.35);
+    const flange = _cyl(0.09, 0.09, 0.05, 10, _engBlock);
+    flange.position.set(tx, roomH - 0.35, roomZ1 - 0.14);
     room.add(flange);
   }
-  //  (b) COIL BANKS on the engine block (−X) — a stack of ring coils (toroidal windings) reading as an
-  //      induction/cooling coil bank; a real machine texture, connected by a bus bar.
-  const blockX = -roomHW + 0.7;
-  for (let ci = 0; ci < 4; ci++) {
-    const coilGeo = new THREE.TorusGeometry(0.22, 0.06, 8, 16);
-    _disposables.push(coilGeo);
-    const coil = new THREE.Mesh(coilGeo, _engMachine);
-    coil.rotation.y = Math.PI / 2;
-    coil.position.set(blockX + 0.6, 0.45 + ci * 0.34, roomZc + 0.3);
-    room.add(coil);
+  //  (c) OVERHEAD PIPE RUNS spanning door→back along the ceiling corners (leading the eye deep).
+  for (const px of [-1.55, 1.55]) {
+    const pipe = _cyl(0.09, 0.09, roomZ1 - roomZ0 - 0.2, 10, _engMachine);
+    pipe.rotation.x = Math.PI / 2;
+    pipe.position.set(px, roomH - 0.28, roomZc);
+    room.add(pipe);
   }
-  const bus = _box(0.06, 1.4, 0.06, _corrRail);   // a copper-ish bus bar up the coil stack
-  //   ROUND-1e FLOATER FIX: was at blockX+0.82 (x=−0.38), just PAST the coils' outer radius (blockX+0.6
-  //   ±0.22 → −0.38) → a near-miss island. Moved ONTO the coil stack (x=blockX+0.6) so the bar rides the
-  //   coils (touching), tying the bank together. (Engine room is behind glass, but the lint stays clean.)
-  bus.position.set(blockX + 0.6, 0.9, roomZc + 0.3);
-  room.add(bus);
-  //  (c) a CONNECTING PIPE ARC from the reactor mid to the turbine (+X) — the coolant loop tying the
-  //      core to the turbine (a bent pipe run, not two islands).
-  for (const [x0, x1, py] of [[-0.55, blockX + 0.6, 1.6], [0.55, roomHW - 0.75, 1.35]] as const) {
-    const run = _cyl(0.07, 0.07, Math.abs(x1 - x0), 8, _engMachine);
-    run.rotation.z = Math.PI / 2;
-    run.position.set((x0 + x1) / 2, py, roomZ1 - 0.7);
-    room.add(run);
-    const knee = _cyl(0.08, 0.08, 0.3, 8, _engMachine);   // a vertical knee where it turns down
-    knee.position.set(x1, py - 0.15, roomZ1 - 0.7);
-    room.add(knee);
+  //  (d) THE BACK-WALL CONTROL STATION — a bank of readout panels + gauges on the deep wall, LEFT of
+  //      the core (a manned-station read + a spot of instrument colour deep in the frame). Its content
+  //      glows green in calm, red on critical (setEngineFire).
+  const stationX = -roomHW + 0.75;
+  const console_ = _box(1.1, 1.5, 0.28, _engBlock);
+  console_.position.set(stationX, 0.9, roomZ1 - 0.16);
+  room.add(console_);
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {   // a 2×3 grid of readout panels
+    const bezel = _box(0.28, 0.34, 0.06, _reactPanel);
+    const bx = stationX + (c - 1) * 0.34, by = 1.15 + (r === 0 ? 0.42 : 0.02);
+    bezel.position.set(bx, by, roomZ1 - 0.32);
+    room.add(bezel);
+    // clone the LED basic so each readout owns its colour (the shared _ledGreen/_ledBlue must not be
+    //   mutated by the alert flip — it's used on the cockpit dash too). Store its nominal hex to restore.
+    const ledMat = ((r + c) % 2 === 0 ? _ledGreen : _ledBlue).clone();
+    ledMat.userData.nominalHex = ledMat.color.getHex();
+    _buildMats.push(ledMat);
+    const face = _box(0.2, 0.14, 0.02, ledMat);
+    _reactReadoutMats.push(ledMat);
+    face.position.set(bx, by + 0.06, roomZ1 - 0.36);
+    room.add(face);
   }
-  //  (d) a CABLE TRAY down one wall + conduits into a small control cabinet by the door (a manned
-  //      station read) — cabling that ROUTES somewhere, not decoration.
-  // ROUND-1e FLOATER FIX: the cable tray + rungs sat at x=roomHW−0.14 (1.76), 14cm off the +X wall
-  //   (1.9) → the tray/rung island didn't touch the wall (a pre-existing floater). Widened + shifted so
-  //   the tray back meets the wall (x=roomHW−0.07 → back face at the wall plane) — it now mounts to the
-  //   wall it routes along.
-  const tray = _box(0.18, 0.06, roomZ1 - roomZ0 - 0.5, _channel);
-  tray.position.set(roomHW - 0.07, roomH - 0.7, roomZc);
-  room.add(tray);
-  for (let z = roomZ0 + 0.4; z < roomZ1; z += 0.5) {
-    const rung = _box(0.20, 0.02, 0.04, _corrRail);
-    rung.position.set(roomHW - 0.07, roomH - 0.7, z);
-    room.add(rung);
-  }
-  const cabinet = _box(0.4, 1.3, 0.4, _engBlock);   // a control cabinet by the door
-  cabinet.position.set(roomHW - 0.5, 0.65, doorZ + 0.7);
-  room.add(cabinet);
-  const cabFace = _box(0.02, 0.5, 0.32, _screenGlass);   // a dark readout face
-  cabFace.position.set(roomHW - 0.71, 1.0, doorZ + 0.7);
-  room.add(cabFace);
-  for (const cy of [0.55, 0.7]) {   // a couple of status LEDs on the cabinet (unlit glow)
-    const led = _box(0.02, 0.03, 0.03, _ledAmber);
-    led.position.set(roomHW - 0.71, cy, doorZ + 0.56);
-    room.add(led);
-  }
-  //  (e) a couple of PRESSURE GAUGES + valve wheels clustered on the manifold (worked hardware)
-  for (const [gx, gz] of [[-0.7, roomZ1 - 0.55], [0.7, roomZ1 - 0.55]] as const) {
-    const gauge = _cyl(0.09, 0.09, 0.05, 12, _steel);
+  //  (e) THE COOLANT PUMP + gauge cluster deep RIGHT (balances the station, fills the +X deep plane).
+  const pump = _cyl(0.42, 0.46, 0.9, 14, _engBlock);
+  pump.position.set(roomHW - 0.7, 0.5, roomZ1 - 0.5);
+  room.add(pump);
+  const pumpHousing = _cyl(0.24, 0.24, 0.5, 12, _engMachine);   // the motor housing atop the pump
+  pumpHousing.rotation.z = Math.PI / 2;
+  pumpHousing.position.set(roomHW - 0.7, 1.05, roomZ1 - 0.5);
+  room.add(pumpHousing);
+  for (const [gx, gy] of [[roomHW - 0.95, 1.2], [roomHW - 0.5, 1.2]] as const) {
+    const gauge = _cyl(0.1, 0.1, 0.05, 12, _steel);
     gauge.rotation.x = Math.PI / 2;
-    gauge.position.set(gx, roomH - 0.5, gz + 0.16);
+    gauge.position.set(gx, gy, roomZ1 - 0.72);
     room.add(gauge);
-    const gface = _cyl(0.06, 0.06, 0.02, 12, _dialFace);
+    const gface = _cyl(0.07, 0.07, 0.02, 12, _dialFace);
     gface.rotation.x = Math.PI / 2;
-    gface.position.set(gx, roomH - 0.5, gz + 0.19);
+    gface.position.set(gx, gy, roomZ1 - 0.75);
     room.add(gface);
   }
+  //  (f) CABLE CONDUIT — thick bundles running from the station up the wall + across to the core base
+  //      (the power feed; cabling that ROUTES, per the connect rule).
+  const conduit = _box(0.14, 1.6, 0.1, _cable);
+  conduit.position.set(-roomHW + 0.14, 1.4, roomZ1 - 0.5);
+  room.add(conduit);
+  const conduitRun = _cyl(0.06, 0.06, roomHW - 0.6, 8, _cable);
+  conduitRun.rotation.z = Math.PI / 2;
+  conduitRun.position.set((-roomHW + 0.14 + 0) / 2, 0.5, coreZ);
+  room.add(conduitRun);
+  //  (g) THE FOREGROUND GUARD RAIL — a hazard-striped safety rail across the pit just inside the door
+  //      (frames the reactor + gives NEAR-plane depth so the frame isn't flat). Two posts + a top rail
+  //      + a mid rail, in worn safety-yellow.
+  const railZ = doorZ + 0.55;
+  const railTopY = 1.02, railMidY = 0.6;
+  for (const rY of [railTopY, railMidY]) {
+    const rail = _cyl(0.045, 0.045, roomHW * 1.5, 8, _reactHazard);
+    rail.rotation.z = Math.PI / 2;
+    rail.position.set(0, rY, railZ);
+    room.add(rail);
+  }
+  for (const sx of [-1, 1]) {
+    const post = _cyl(0.05, 0.05, railTopY + 0.05, 8, _reactHazard);
+    post.position.set(sx * roomHW * 0.72, (railTopY + 0.05) / 2, railZ);
+    room.add(post);
+  }
+  //  (h) a FLOOR GRATE + deck plate under the pit (the room reads as a real machine deck, not a void).
+  const grate = _box(roomHW * 1.5, 0.04, roomZ1 - roomZ0 - 0.5, _deck);
+  grate.position.set(0, 0.03, roomZc + 0.1);
+  room.add(grate);
 
   // ── 3. THE GLASS SLIDING DOOR — two leaves meeting in the centre of the doorway, CLOSED. Heavy
   //    scuffed safety glass in steel frames, riding a header rail + a floor track (a real sliding
@@ -4896,43 +5056,52 @@ function buildEngineBay(group: THREE.Group): void {
   const doorTrack = _box(eDoorHW * 2 + 0.3, 0.08, 0.2, _channel);    // floor track
   doorTrack.position.set(0, 0.04, doorZ);
   room.add(doorTrack);
+  // ── Z3-r6 (FINDING 2): the center MULLION ran down the vertical centerline, splitting the hero core
+  //    channel top-to-bottom in every shot. Fix: the two leaves now meet as a SEAMLESS continuous glass
+  //    span — the center MEETING STILES are removed and each pane widened to butt on the centerline, so
+  //    the glowing core reads UNBROKEN through the glass. The frame is now top/bottom rails + the two
+  //    OUTER stiles only; the pull handles moved to the outer edge (off the hero centerline). Two leaf
+  //    groups are kept for the setEngineFire judder animation (they still separate on the rattle).
   for (const [sx, leafRef] of [[-1, 'L'], [1, 'R']] as const) {
     const leaf = new THREE.Group();
     leaf.position.set(sx * (eDoorHW / 2), 0, doorZ);   // each leaf covers half the doorway (closed)
     room.add(leaf);
     if (leafRef === 'L') _engineDoorJudderL = leaf; else _engineDoorJudderR = leaf;
-    // the glass pane
+    // the glass pane — widened to the FULL half-width (butts on the centerline; no meeting-stile gap)
     const glassMat = _makeEngineGlass();
     _engineGlassMats.push(glassMat); _buildMats.push(glassMat);
-    const pane = _box(eDoorHW - 0.06, eDoorTop - 0.24, 0.03, glassMat);
+    const pane = _box(eDoorHW - 0.005, eDoorTop - 0.20, 0.03, glassMat);
     pane.position.set(0, eDoorTop / 2 + 0.02, 0);
     leaf.add(pane);
-    // a steel frame border around the leaf (top/bottom rail + stile on the meeting + outer edge)
+    // a steel frame border around the leaf — top/bottom rails + the OUTER (jamb-side) stile only. The
+    //   CENTRE meeting stile is removed: for leaf L (group at −eDoorHW/2) the jamb edge is at leaf-local
+    //   sx*(eDoorHW/2−0.035) (world ≈ −eDoorHW), and −sx*(…) is the CENTRELINE — so we keep sx*(…) and
+    //   drop −sx*(…). This clears the mullion off the hero core centerline.
     for (const [w, h, ox, oy] of [
       [eDoorHW, 0.10, 0, eDoorTop - 0.06] as const,
       [eDoorHW, 0.14, 0, 0.09] as const,
-      [0.07, eDoorTop, sx * (eDoorHW / 2 - 0.035), eDoorTop / 2] as const,   // meeting stile (centre)
-      [0.07, eDoorTop, -sx * (eDoorHW / 2 - 0.035), eDoorTop / 2] as const,  // outer stile
+      [0.07, eDoorTop, sx * (eDoorHW / 2 - 0.035), eDoorTop / 2] as const,  // outer stile (jamb side)
     ]) {
       const bar = _box(w, h, 0.06, _winFrame);
       bar.position.set(ox, oy, 0.02);
       leaf.add(bar);
     }
-    // a pull handle on the meeting stile
+    // a pull handle on the OUTER (jamb-side) stile — off the hero centerline so it doesn't re-split the core.
     const handle = _box(0.05, 0.4, 0.06, _corrRail);
     handle.position.set(sx * (eDoorHW / 2 - 0.06), eDoorTop * 0.5, 0.05);
     leaf.add(handle);
   }
 
-  // ── 4. THE FIRE (inside the room, at the reactor core) — additive incandescent flame quads that
-  //    read THROUGH the glass. Hidden until setEngineFire erupts it; flickers each frame. Two
-  //    real lights: the room-glow (lights the machinery from within) + a small corridor-side spill
-  //    (leaks through the glass so the door glows into the corridor).
+  // ── 4. THE FIRE (inside the room, at the CORE-BREACH VENT) — additive incandescent flame quads that
+  //    pour out of the breach and up the core, reading THROUGH the glass. Hidden until setEngineFire
+  //    erupts it; flickers each frame. Seated at the breach (coreZ, y≈1.18, corridor face).
   const fire = new THREE.Group();
-  fire.position.set(0.0, 0.9, roomZ1 - 1.2);
+  fire.position.set(0.0, 0.9, coreZ - coreR + 0.02);
   const cols = [0xff2c0c, 0xff7a1e, 0xffc23a];
-  for (let i = 0; i < 14; i++) {
-    const w = 0.5 + (i % 3) * 0.30, h = 1.0 + (i % 2) * 0.8;
+  for (let i = 0; i < 13; i++) {
+    // tighter licks concentrated at the breach mouth (not an all-over blob) — they climb the column
+    //   front but stay narrow so the hot CORE CHANNEL carries the upper silhouette.
+    const w = 0.34 + (i % 3) * 0.18, h = 0.7 + (i % 2) * 0.6;
     const g = new THREE.PlaneGeometry(w, h);
     _disposables.push(g);
     const m = new THREE.MeshBasicMaterial({
@@ -4941,28 +5110,48 @@ function buildEngineBay(group: THREE.Group): void {
     });
     _fireMats.push(m); _buildMats.push(m);
     const q = new THREE.Mesh(g, m);
-    q.position.set(Math.sin(i * 1.7) * 0.6, (i % 3) * 0.36, -0.2 + 0.06 * i);
+    // cluster at the breach (y≈0.3..1.1 local), narrowing as they climb
+    q.position.set(Math.sin(i * 1.7) * 0.28, 0.2 + (i % 4) * 0.28, 0.02 + 0.05 * (i % 4));
     fire.add(q);
   }
   fire.visible = false;
   room.add(fire);
   _engineFire = fire;
-  // the room-glow (lights the machinery from within so the room reads lit by the blaze) — off until erupt.
-  const glow = new THREE.PointLight(0xff5a1e, 0.0, 7.0, 1.7);
-  glow.position.set(0, 1.4, roomZ1 - 1.3);
+
+  // ── 5. LIGHTING (all LOCAL PointLights — NEVER Hemisphere/Directional; those bleed into the desert).
+  //    (a) THE CORE GLOW — the reactor's own light, motivated by the emissive core channel. CALM: a
+  //    cool cyan-white running-nominal glow that lifts the column + coils. CRITICAL: setEngineFire
+  //    cross-fades it hot-orange + ramps it far brighter. Seated at the core mid-height.
+  //    Z3-r6 (FINDING 1): calm brightness raised (2.4→4.6) + a more saturated cyan (0x3fdcea) so the
+  //    coils/towers/manifolds catch a clear cyan rim and the core out-competes the ceiling downlights.
+  const coreGlow = new THREE.PointLight(0x3fdcea, 4.6, 7.4, 1.6);
+  coreGlow.position.set(0, 1.35, coreZ - coreR + 0.10);   // pushed toward the corridor face (the exposed channel)
+  room.add(coreGlow);
+  _reactCoreLight = coreGlow;
+  //    Z3-r6: a SECOND cool fill just in front of the core, low + wide, so the guard rail + near
+  //    machinery pick up a cyan wash and the calm room reads "cool contained energy" (not dark metal).
+  const coreFrontGlow = new THREE.PointLight(0x39c8e0, 1.5, 4.4, 1.9);
+  coreFrontGlow.position.set(0, 1.1, coreZ - coreR - 0.35);
+  room.add(coreFrontGlow);
+  // (b) the fire's room-glow (lights the machinery hot from within on failure) — off until erupt.
+  const glow = new THREE.PointLight(0xff5a1e, 0.0, 7.5, 1.7);
+  glow.position.set(0, 1.3, coreZ - 0.2);
   room.add(glow);
   _engineGlowLight = glow;
-  // the corridor-side spill (leaks through the glass so the door glows into the corridor) — off until erupt.
+  // (c) the corridor-side spill (leaks through the glass so the door glows into the corridor) — off until erupt.
   const spill = new THREE.PointLight(0xff6a24, 0.0, 6.5, 1.9);
   spill.position.set(0, 1.4, doorZ - 0.4);
   room.add(spill);
   _engineSpillLight = spill;
-
-  // a faint cool ambient in the room so the machinery reads a little even before the fire (so the
-  //   room isn't a black void through the glass at first) — dim.
-  const roomFill = new THREE.PointLight(0x6a7684, 0.35, 6.0, 1.8);
-  roomFill.position.set(0, roomH - 0.5, roomZc);
+  // (d) a faint cool ambient fill so the machinery + towers read even in calm (the room is never a
+  //    black void through the glass) — dim, cool.
+  const roomFill = new THREE.PointLight(0x7c93a8, 0.55, 7.0, 1.8);
+  roomFill.position.set(0, roomH - 0.4, roomZc + 0.2);
   room.add(roomFill);
+  // (e) a low back-fill behind the core so its silhouette reads against a lit deep plane (depth read).
+  const backFill = new THREE.PointLight(0x5a6f86, 0.4, 5.0, 2.0);
+  backFill.position.set(0, 1.2, roomZ1 - 0.2);
+  room.add(backFill);
 }
 
 /** Drive the ENGINE-ROOM FIRE (B1.e). `intensity` 0 = out, 1 = full blaze; `t` = a time
@@ -4978,6 +5167,38 @@ export function setEngineFire(intensity: number, t = 0): void {
   const gflick = 0.7 + 0.3 * Math.sin(t * 9.3 + 0.6) + 0.12 * Math.sin(t * 21.0);
   if (_engineGlowLight) _engineGlowLight.intensity = intensity * 4.5 * gflick;
   if (_engineSpillLight) _engineSpillLight.intensity = intensity * 2.2 * gflick;
+  // ── Z3 — the REACTOR CORE goes CRITICAL: cross-fade the core channel + its light from the calm
+  //    cool-cyan running state to a hot, over-driven orange, and ramp it FAR brighter (a raging core,
+  //    not a contained one). `intensity` 0 = calm nominal, 1 = full critical blaze.
+  const critFlick = 0.72 + 0.28 * Math.sin(t * 11.0 + 1.3) + 0.1 * Math.sin(t * 26.0);
+  // core channel emissive: lerp cyan(0.184,0.847,0.878 = #2fd8e0) → hot(1.0,0.34,0.06), over-drive the
+  //   hot glow. Z3-r6 (FINDING 1): the calm start now matches the brighter constructor cyan so the
+  //   channel reads as an ENERGISED humming core through the glass (cyan-dominant, not a warm-bounce
+  //   slot); failure ramps it hot orange + far brighter. Keep the calm intensity floor DIMMER than the
+  //   critical peak (cool contained < runaway breach) but bright enough to out-glow the ceiling downlights.
+  for (let i = 0; i < _reactCoreMats.length; i++) {
+    const seg = 0.88 + 0.12 * Math.sin(t * (7 + i * 0.9) + i);   // per-segment shimmer
+    const r = THREE.MathUtils.lerp(0.133, 1.0, intensity) * (1 + intensity * 0.6 * critFlick) * seg;
+    const g = THREE.MathUtils.lerp(0.784, 0.34, intensity) * seg;
+    const b = THREE.MathUtils.lerp(0.925, 0.06, intensity) * seg;
+    _reactCoreMats[i].emissive.setRGB(r, g, b);
+    // calm floor 8.5 (matches the constructor; saturated cyan through the glass) → over-driven on failure.
+    _reactCoreMats[i].emissiveIntensity = 8.5 + intensity * 6.0 * critFlick;
+  }
+  // the core's own light: calm cool cyan ~4.6 → critical hot ~10, colour cyan(#3fdcea) → orange.
+  if (_reactCoreLight) {
+    _reactCoreLight.intensity = THREE.MathUtils.lerp(4.6, 10.0, intensity) * (0.85 + 0.15 * critFlick);
+    _reactCoreLight.color.setRGB(
+      THREE.MathUtils.lerp(0.247, 1.0, intensity),
+      THREE.MathUtils.lerp(0.863, 0.4, intensity),
+      THREE.MathUtils.lerp(0.918, 0.12, intensity),
+    );
+  }
+  // back-wall readouts flip from nominal green/blue to a strobing critical red (and back on calm).
+  for (const m of _reactReadoutMats) {
+    if (intensity > 0.5) m.color.setRGB(0.9 + 0.1 * critFlick, 0.06, 0.04);
+    else m.color.setHex((m.userData.nominalHex as number) ?? 0x66d877);
+  }
   // the GLASS glows hot-orange with the fire (its emissive lifts) so the blaze reads through the door.
   for (const m of _engineGlassMats) {
     m.emissive.setRGB(intensity * 0.55 * gflick, intensity * 0.22 * gflick, intensity * 0.05 * gflick);
@@ -5066,6 +5287,9 @@ export function disposeShipScene(ctx: GameContext): void {
   _engineGlassMats.length = 0;
   _engineDoorJudderL = null;
   _engineDoorJudderR = null;
+  _reactCoreMats.length = 0;      // Z3 — reactor-hall refs (geometry/mats freed via _disposables + _buildMats)
+  _reactCoreLight = null;
+  _reactReadoutMats.length = 0;
   _corrNormalLights.length = 0;
   _corrLensMats.length = 0;
   _corrRedStripMats.length = 0;
