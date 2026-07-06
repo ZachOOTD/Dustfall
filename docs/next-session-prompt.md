@@ -1,53 +1,46 @@
-# Next session — OVERNIGHT LIVE-FIX MARATHON COMPLETE (2026-07-05); the released game hardened
+# Next session — the Z-QUEUE round-3 playtest-fix batch SHIPPED (2026-07-06, overnight autonomous)
 
-The game RELEASED to master + GitHub Pages yesterday; the user's first live playthrough filed
-9 defect rounds (steering-archive 2026-07-05, rounds 1a-1j) + granted overnight autonomy.
-ALL of it shipped tonight, plus proactive work. Live at https://zachootd.github.io/Dustfall/.
+The released escape-pod intro got the user's round-3 playtest (5 screenshots + verbal
+notes); the whole 10-unit "Z-queue" shipped overnight across parallel podScene/shipScene
+modeler agents, per-unit commits, all pushed to master + auto-deployed. Live at
+https://zachootd.github.io/Dustfall/.
 
-## What shipped overnight (all pushed to master; per-unit detail in git log 8bfaf2b..15c2c58)
-- **The dome base/perimeter unified** (one _domeSillRing drives glass/base/floor/colliders):
-  closure gaps sealed, GLASS COLLISION at every azimuth (new cockpit-glass-seal gate — the
-  old 3-direction probe passed while a hole existed), floor re-lofted to the dome footprint,
-  the cockpit↔corridor threshold star-slots sealed, two-sided glaze tuned transparent.
-- **The pod doorway truth**: the "sheet of metal" = the scorch-fade + foot lathes never gapped
-  at the door (raycast-proven 42→0); sightline pipes relocated; the AIRTIGHT door rebate
-  (36/36 edge rays sealed) on both builds.
-- **The sequence-break watchdog**: escaping the hull during ship beats now rescues to the
-  spawn (the user's "world lighting broken" = they fell 3000m with the intro active — the
-  state-restore code was proven clean by 3 converging probes). + __game.lightDebug().
-- **THE HERO SHIP EXPLOSION IS VISIBLE FOR THE FIRST TIME**: the FX planes were never
-  billboarded + the porthole glass depth-write killed every additive pass — the pillar beat
-  showed a black window since it was authored (studio-vantage false-passes). Now a staged
-  reactor detonation (flash → aft fireball → spine secondaries → recognizable hull pieces →
-  shockwave → ember husk) through the glass.
-- **Flanks + the ship-wide z-fight sweep**: one service spine per flank; the archway reveal
-  was the biggest real z-fighter (1.082%→0.001% flicker); 444 pairs triaged; 18 pre-merge
-  floaters→1 (unreachable); new zfight-probe rig scenario.
-- **Perf**: the full profile (docs/research/perf-profile-2026-07-05.md) — verdict: NOT at the
-  browser's limit (~580 steady draws; worst 2323 = unmerged POI with scoped fixes); Leviathan
-  merged 16→5; +66 shader variants prewarmed (detonation compile hitch gone; PRELOAD entry
-  20.4ms, 0 stutters).
-- **The full-journey adversarial gate**: PASS (0 confirmed SEV1); its real SEV2s fixed (cabin
-  dangle→clamped conduit + the DEAD wake-spark toggle restored; floor tread taper; can-light/
-  brace clash; the planet depth-occluder shell + anchor truth stamp). TWO more rig-truth
-  repairs: the crashed-pod scenario drove the DEV-ONLY wreck (4 phantom findings); the cockpit
-  mirror placed the planet at a stale anchor (the "stars through the planet" read).
+## What shipped (per-unit detail in git log 8ff11a8..af5c51e + docs/changelog.md 2026-07-06)
+- **Cockpit** — glass haze per-cell parity (Z1); **eject** rotation 180°→90° + wake kick
+  now PLAYER-GATED (Z5a/Z7); far-space approach time-warped 0.55× + blackouts trimmed (Z9/Z10).
+- **Pod** — ONE-model parity: explosion blast-flare, plasma/shimmer ~40% slower, local
+  deck-fill (Z6); the sealed-door edge gaps ended STRUCTURALLY (`_addDoorSeal` box-section
+  jamb returns, both doors — 4th report; new pod-seal-sweep gate) (Z5b).
+- **Bay** — the umbilical hardware that was authored INSIDE the pod hull relocated to the
+  collar flank (new pod-rotation-clearance gate); the airlock readout un-buried (Z4).
+- **Crew quarters** — full sci-fi overhaul, HERO (Z2): built-in berth / lockers / fold-down
+  desk / base cabinet / panels; the back-wall overlap killed; scene-global HemisphereLight
+  removed; 4 rule-9 colliders. Passed an adversarial gate (0 SEV1) + a 3-SEV2 fix pass.
+- **Reactor** — the engine "blocky cylinders" → a real reactor hall, HERO (Z3): containment
+  core + emissive channel, coolant towers, control station; CALM cyan / CRITICAL orange via
+  setEngineFire. Passed an adversarial gate + a 2-SEV1 fix pass (dead-grey calm core → cyan
+  glow; the glass mullion bisecting the core → seamless pane).
+- **Parachute** — round 2 (Z8): lines EMBED into the brim, flutter 10s→~2s, a per-vertex
+  gravity drape wrapping the hull to a ground pool.
+- **Test infra** — a stale doorway-torture harness (broken by Z7's movement-gated wake, NOT
+  a game bug — bisected + cross-confirmed by pod-walkin/out) fixed to reach step-out by walking.
 
-## For the user's next playthrough
-Everything from rounds 1a-1j is fixed + live. Flags for their eyes: the glaze transparency
-balance (tuned per their note — final say is theirs), the felt eject rhythm (lever pull →
-rotate → blast), the explosion staging timing (SHIP_BLAST_AT in sequence.ts if they want it
-earlier/later), the collar depth in motion.
+## Verification (all PASS on the merged tree)
+Full intro gate suite: smoke-intro `{ok:true,beats:12}`, door-flush-audit (9), pod-seal-sweep
+(0 cracks), pod-rotation-clearance (0 violations), airlock-motion, quarters-walk, engine-glass
+z-fight (0), cockpit-glass-cells (0.0% dev), pod-walkin, pod-walkout (foreignGlobals=[]),
+doorway-torture (6/6), verify:colliders, `build:intro`. Two hero adversarial gates + a
+cross-area adversarial JOURNEY gate (0 confirmed) passed. Bench: see the morning summary.
 
-## Standing next steps (documented, not started)
-Pickup instancing (perf candidate 1 — HUMAN-ATTENDED per D263) · light-pool trim (candidate 4,
-needs real-GPU measurement) · the audio mix listen-pass · Skyfall wreck + CAVE rework
-(attended sessions). Rule 9 + the model-stage/lint/adversarial-gate discipline stand.
+## For the user's next playthrough — walk-test / feel items (their domain; stills can't judge motion)
+- The felt eject rhythm: lever pull → the 90° rotate (planet swings into the porthole) → blast.
+- The reactor flicker cadence (calm cyan hum vs the critical breach) at run pace through the glass.
+- The parachute flutter→collapse FEEL and the drape read on approach.
+- The far-space approach pacing (now 0.55×) and the trimmed blackouts.
+- The crew-quarters at walk pace (the warm berth spill, the viewport framing).
 
-## ⏸ PAUSE POINT (2026-07-05, mid-day) — RESUME HERE
-The user paused; the in-flight round-2d agent COMPLETED after the pause and its finished,
-fully-gated work is COMMITTED (the fuzzy-star specular fix + measured haze parity + the
-single ceiling fixture) — dist rebuilt from it. EVERYTHING is committed/pushed/deployed;
-the tree is clean; nothing is in flight or reverted. ON RESUME: start the 4173 server and
-the user walk-tests — open verdicts: the glass in head-turning motion, the chute
-flutter/collapse FEEL, the eject rhythm, the explosion timing (SHIP_BLAST_AT).
+## Standing (documented, not started)
+The deferred campaign phases (the hero ship-explosion polish through the eject frame · the
+audio mix listen-pass) + the out-of-loop queue (Skyfall hero wreck · CAVE rework ·
+pickup-instancing · §A walk-tests) remain in [docs/roadmap.md](roadmap.md). Rule 9 + the
+model-stage/lint/adversarial-gate discipline stand.

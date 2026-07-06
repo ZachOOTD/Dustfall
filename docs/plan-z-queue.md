@@ -1,6 +1,14 @@
 # Z-queue plan — overnight round 3 (2026-07-06)
 
 ## LIVE STATE (update as waves land — compaction-safe checkpoint)
+- ✅✅ ALL 10 UNITS SHIPPED + PUSHED + the wave-4 wrap complete (2026-07-06). Full gate suite
+  PASS on the merged tree (smoke-intro, door-flush-audit, pod-seal-sweep, pod-rotation-clearance,
+  airlock-motion, quarters-walk, engine-glass zfight, cockpit-glass-cells, pod-walkin, pod-walkout,
+  doorway-torture 6/6 [after the harness fix], verify:colliders, build:intro). Two hero adversarial
+  gates (Z2 quarters, Z3 reactor) + a cross-area journey gate (0 confirmed) passed. Commits
+  8ff11a8..af5c51e. Morning summary: docs/campaign/morning-summary-2026-07-06.md. Bench: separate.
+  NOTHING LEFT IN THIS QUEUE — boot the next session from docs/next-session-prompt.md.
+
 - ⚠ USAGE-LIMIT CONTINGENCY (2026-07-06 ~night): the user may hit their 5-hour limit; it resets
   at 5AM. IF A NEW SESSION BOOTS FROM THIS FILE: (1) git status — if uncommitted partial edits
   exist in podScene/shipScene they are DEAD agents mid-work: run tsc + the owning unit gates;
