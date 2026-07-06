@@ -1,27 +1,9 @@
 # Z-queue plan — overnight round 3 (2026-07-06)
 
 ## LIVE STATE (update as waves land — compaction-safe checkpoint)
-- ✅ Z5a+Z7 DONE, pushed `7b1ec69`: 90° rotation (73° probe-rejected: hull-occluded; the
-  probe frames verification/probe-rotate-{73,90}-porthole.png also REPRODUCED the Z4
-  intrusion — ship geometry through the pod shell at mid-rotation — use as Z4 evidence);
-  wake kick + climb both purely player-gated (auto-timers removed).
-- 🔨 WAVE 1 IN FLIGHT: Z1 (shipScene cockpit: per-CELL glass parity incl. closures/crown +
-  the symmetric centre crown connector, port 5192) · Z6 (podScene: explosion-phase bright
-  read + descent light-streak glitch + landed floor texture + the phase-parity strip,
-  port 5191). On landing: own-eyes → commit each → launch wave 2.
-- ⏳ WAVE 2: Z4 (shipScene bay: airlock edge clipping + THE INTRUSION SWEEP — machine-check
-  setBayPodYaw 0→π/2 stepwise, no ship mesh inside the pod volume; keep as a rig gate) ·
-  Z5b (podScene: sealed-door edge gaps in the ROTATED state) · then Z8 (podScene: chute
-  lines into the brim + flutter 10s→2-3s + the gravity drape down the flank).
-- ⏳ WAVE 3 (shipScene serial): Z2 quarters overhaul (hero + adversarial gate) · Z3 engine
-  reactor room. WAVE 4: full wrap (suite+bench+journey gate+build+deploy+live probes+docs+
-  the morning summary).
-- NOTE: the porthole-view visual confirm at 90° deferred to the wrap (the hand probe pauses
-  mid-space-blend and shows a false tan sky — use the rig's space-mirror pattern instead).
-
-Source: steering-archive 2026-07-06 (5 screenshots). Full overnight autonomy; morning summary.
-Discipline: diagnose-before-fix · machine checks wherever possible · multi-angle own-eyes ·
-adversarial gates on hero visuals · per-unit commits+pushes (each auto-deploys) · rule 9.
+- ✅ DONE+PUSHED: Z5a+Z7 `7b1ec69` (90° rotation, player-gated wake) · Z9+Z10 `67fd140` (0.55x far-space time-rate warp; blackouts trimmed: phase 2.3s->1.6s, wake 2.5/1.2->1.8/0.8) · Z1 `9d594fa` (per-cell glass parity — winding/DoubleSide root cause, all 12 cells 0.0% dev; the crown keel centred).
+- 🔨 IN FLIGHT: Z6 (podScene: explosion-bright + descent light-streak + landed floor + parity strip, port 5191) · Z4 (shipScene bay: the intrusion sweep w/ a NEW pod-rotation-clearance rig gate [evidence: verification/probe-rotate-{73,90}-porthole.png] + airlock edge flicker, port 5192).
+- ⏳ NEXT: Z5b (podScene: sealed-door edge gaps in the ROTATED state — after Z6) · Z8 (podScene: chute lines/2-3s flutter/gravity drape — after Z5b) · Z2 quarters overhaul + Z3 reactor room (shipScene serial, after Z4) · wave-4 wrap (suite+bench+journey gate+build+deploy+live probes+docs+morning summary).
 
 ## Units × file ownership (shipScene units run SERIALLY, one agent at a time; podScene in parallel)
 
