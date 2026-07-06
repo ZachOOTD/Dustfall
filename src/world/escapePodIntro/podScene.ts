@@ -3484,6 +3484,19 @@ const CHUTE_HEM_FREQ      = 5.2;    // rad/s — the fast hem chatter
 const CHUTE_WIND_LEAN     = 0.22;   // rad — max whole-canopy downwind lean at full storm
 const CHUTE_SETTLED_STIR  = 0.06;   // residual hem-stir amplitude fraction once settled (barely-there cloth read)
 const CHUTE_GROUP_DROP    = 0.55;   // round-3 — m the whole assembly lowers during deflate so local-y 0 lands at the pod crown (the drape then falls DOWN the hull to the ground pool)
+// round-3 STANDOFF (user: "sits just slightly OFF the side… so it doesn't PHASE THROUGH the walls").
+//   The draped canopy must rest JUST OUTSIDE the pod's OUTERMOST skin, not on/inside POD_R. The hull is
+//   not a bare cylinder: proud seam hoops sit at POD_R+0.05 (=1.49) and the vertical-batten rivet studs
+//   reach ~POD_R+0.07 (=1.51). CHUTE_HULL_SKIN_R is that outermost proud skin; CHUTE_WRAP_GAP is the cloth
+//   air-gap beyond it. Every draped XZ radius is CLAMPED to ≥ (skin+gap) so no fabric vertex penetrates the
+//   riveted hull from any azimuth (the mid-fall arc used to suck in to r≈1.40, 4cm inside POD_R + 11cm
+//   inside the rivets → the phase-through the user saw). Small enough that the cloth still reads lying
+//   against the pod, not floating off it. Applied to the crumple XZ + mirrored in the shroud-line brimTgt.
+//   NB literals, not `POD_R + …`: POD_R (1.44, a stated CONTRACT literal) is declared far BELOW this line,
+//   so referencing it here would hit the temporal dead zone at module load. Kept as explicit numbers.
+const CHUTE_HULL_SKIN_R   = 1.51;   // = POD_R(1.44) + 0.07 — outermost proud hull feature (batten rivet studs)
+const CHUTE_WRAP_GAP      = 0.06;   // 6cm cloth standoff beyond the skin → draped flank rests at ≈1.57 (≈+13cm past POD_R)
+const CHUTE_STANDOFF_R    = CHUTE_HULL_SKIN_R + CHUTE_WRAP_GAP;   // 1.57 — the minimum wrapped-cloth XZ radius
 // Comic canopy material — faded orange-white ripstop (reads as a real chute; a bit worn).
 const _chuteCanopyMat = new THREE.MeshLambertMaterial({ color: 0xd8894a, flatShading: true, side: THREE.DoubleSide });
 const _chuteGoreMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true, side: THREE.DoubleSide });   // the alternating pale gores
@@ -3626,7 +3639,14 @@ function buildChuteCanopy(crownY: number): THREE.Group {
       //   tiny gather toward +X so folds bunch without tearing the sheet open.
       const azWrap = azC - 0.07 * fall * Math.sin(azC);
       const foldR = 1 + 0.08 * Math.sin(azC * 5 + s * 3.4) + 0.05 * Math.sin(s * 9);   // rumpled radial fold creases
-      const cXZ = wrapR * foldR;
+      // STANDOFF CLAMP (round-3, user "sits just slightly OFF the side… doesn't PHASE THROUGH the walls").
+      //   Floor the wrapped-flank XZ radius at CHUTE_STANDOFF_R (1.57) so no vertex — nor an inward fold
+      //   crease — tucks inside the outermost riveted skin. Applied AFTER foldR so a fold can't dip under.
+      //   flankMask fades the floor to 0 over the CROWN GATHER (crownPull→1): there the fabric legitimately
+      //   closes over the NOSE APEX (well above the flank), so forcing it out to 1.57 would float it off the
+      //   crown. Everywhere the cloth actually lies against the cylindrical flank, the floor is in full force.
+      const flankMask = 1 - crownPull;                     // 0 at the nose gather → 1 down the flank
+      const cXZ = Math.max(wrapR * foldR, CHUTE_STANDOFF_R * flankMask);
       const cx = Math.cos(azWrap) * cXZ;
       const cz = Math.sin(azWrap) * cXZ;
       // HEIGHT — the falling flank DESCENDS from the crown gather (y≈0) down the FULL hull to the GROUND POOL
@@ -3685,7 +3705,10 @@ function buildChuteCanopy(crownY: number): THREE.Group {
     const fall = Math.max(0, Math.cos(azC * 0.6));
     const overCrown = Math.max(0, -Math.cos(azC * 0.9));
     const wrapEnv = 0.82 + 0.18 * Math.max(fall, overCrown * 0.6);
-    const wrapR = POD_R * wrapEnv + 0.09 + 0.136 * fall;   // crumple wrapR at s=1 (pooled hem)
+    // round-3 STANDOFF: floor at CHUTE_STANDOFF_R so the line TOP stays embedded in the draped brim as it
+    //   follows the fabric off the flank (mirrors the crumple clamp; matters only mid-deflate — the lines are
+    //   hidden once settled). At s=1 the hem is a flank/pool vert (crownPull=0) so the full floor applies.
+    const wrapR = Math.max(POD_R * wrapEnv + 0.09 + 0.136 * fall, CHUTE_STANDOFF_R);   // crumple wrapR at s=1 (pooled hem)
     const azWrap = azC - 0.07 * fall * Math.sin(azC);
     const groundLocal = -(apex + 0.55 - CHUTE_GROUP_DROP) + 0.10;
     const brimTgt = new THREE.Vector3(
@@ -4012,8 +4035,18 @@ function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void
   //    into a catenary sag. The dome carries dome.scale.y; the lines are grp-children, so the skirt anchor
   //    was pre-multiplied by the runtime squash at build (skirtY) — during deflate we blend to brimTgt
   //    which is authored in the un-squashed drape frame (dome.scale.y→1), keeping top+fabric coincident.
+  // ── SHROUD-LINE REMOVAL (round-3, user "can remove the ropes once it deflates"). The lines read as a
+  //    real chute during deploy + flutter, but the SETTLED result is bare draped fabric on the hull — no
+  //    ropes. Hide the line meshes once the canopy has essentially finished collapsing (deflateE ≥ 0.92,
+  //    the lines have already gathered tight to the flank/knot by then, so they wink out unobtrusively) and
+  //    keep them hidden through settled. `visible=false` is idempotent + leak-free (the geometries are
+  //    disposed in disarmChutePop, never here — the pod persists into the game + can be re-entered). A
+  //    Continue/load that fast-forwards straight to the settled state runs this same branch → no lines.
+  const hideLines = settled || deflateE >= 0.92;
   const billowSlack = 0.06 * flutterEnv * Math.sin(elapsed * CHUTE_BILLOW_FREQ + 1.3);
   for (const ln of _chuteLines) {
+    if (hideLines) { if (ln.mesh.visible) ln.mesh.visible = false; continue; }
+    if (!ln.mesh.visible) ln.mesh.visible = true;   // re-show if a re-armed lifecycle rewinds before collapse
     // TOP end — embedded skirt anchor → the draped brim target (follows the collapsing fabric brim).
     const sk = _chuteScratchA.copy(ln.skirt);
     if (deflateE > 0) sk.lerp(ln.brimTgt, deflateE);
@@ -4034,10 +4067,16 @@ function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void
     ln.mesh.quaternion.setFromUnitVectors(ln.up, dir.normalize());
   }
   // the riser knot rides down with the gather so the lines terminate in it (not floating).
+  //   It's the ropes' gather strap → hide it WITH the lines once removed, else a dark cylinder floats at the
+  //   gather with no ropes attached. Same idempotent visible-flag treatment as the lines.
   const knot = chuteCanopy.getObjectByName('chuteKnot');
   if (knot) {
-    const kRest = (knot.userData.knotRestY as number) ?? knot.position.y;
-    knot.position.set(0, kRest + (-1.15 - kRest) * deflateE, 0);
+    if (hideLines) { if (knot.visible) knot.visible = false; }
+    else {
+      if (!knot.visible) knot.visible = true;
+      const kRest = (knot.userData.knotRestY as number) ?? knot.position.y;
+      knot.position.set(0, kRest + (-1.15 - kRest) * deflateE, 0);
+    }
   }
 }
 const _chuteScratchA = new THREE.Vector3();
