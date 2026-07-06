@@ -45,12 +45,9 @@ needs real-GPU measurement) · the audio mix listen-pass · Skyfall wreck + CAVE
 (attended sessions). Rule 9 + the model-stage/lint/adversarial-gate discipline stand.
 
 ## ⏸ PAUSE POINT (2026-07-05, mid-day) — RESUME HERE
-The user paused mid-round-2d. Everything through `12de55b` is committed/pushed/deployed
-(the world-lighting root fix + doorway skin + glass round 3 + the chute life-cycle — dist
-built + live). ONE ITEM IN FLIGHT WAS REVERTED to keep the tree clean: **round 2d (glass:
-remove the fuzzy-star speckles through the glass · slightly-less haze with MACHINE-MEASURED
-per-region parity ±10% · consolidate to ONE ceiling light)** — spec verbatim in
-steering-archive round 2d; re-dispatch a modeler agent on the shipScene cockpit region with
-diagnose-by-elimination for the fuzzy stars + pixel-luminance parity verification. Also
-still open from the night's flags: the chute flutter/collapse FEEL (walk-test), the eject
-rhythm, the explosion timing (SHIP_BLAST_AT).
+The user paused; the in-flight round-2d agent COMPLETED after the pause and its finished,
+fully-gated work is COMMITTED (the fuzzy-star specular fix + measured haze parity + the
+single ceiling fixture) — dist rebuilt from it. EVERYTHING is committed/pushed/deployed;
+the tree is clean; nothing is in flight or reverted. ON RESUME: start the 4173 server and
+the user walk-tests — open verdicts: the glass in head-turning motion, the chute
+flutter/collapse FEEL, the eject rhythm, the explosion timing (SHIP_BLAST_AT).
