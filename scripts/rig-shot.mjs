@@ -3482,11 +3482,14 @@ const SCENARIOS = {
     });
     await page.waitForTimeout(700);
     const which = argv.junction || 'all';
-    const out = await page.evaluate((which) => {
+    const out = await page.evaluate(({ which, shot, hideBehind, doorClosed }) => {
       const g = window.__game; const ctx = g.ctx;
+      window.__zfShot = !!shot;
+      window.__zfHideBehind = !!hideBehind;
       try { g.setEngineFire(0, 0); g.setShipAlert(0, 0); g.setCockpitAlert(0); } catch {}
       // OPEN the sliding airlock door + quarters door so the apertures + jambs read (not sealed).
-      try { g.setBayAirlockDoor?.(1); } catch {}
+      //   (--doorclosed keeps the airlock SEALED — used to isolate whether a jamb flip is the open leaf.)
+      try { g.setBayAirlockDoor?.(doorClosed ? 0 : 1); } catch {}
       try { g.setQuartersDoor?.(0); } catch {}
       ctx.flags.paused = true;
       const W = 300, H = 300;
@@ -3496,6 +3499,16 @@ const SCENARIOS = {
       const tr = ctx.player.body.body.translation();
       const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
       const V = cam.position.constructor;
+      // DIAGNOSTIC (--hidebehind): hide meshes whose world centre is OUTBOARD of the −X corridor wall
+      //   (x < wallX−0.02) — the collar/bellows/pod behind the open door — to isolate the corridor-side
+      //   airlock FRAME z-fight from anything visible THROUGH the aperture.
+      if (window.__zfHideBehind) {
+        const wallXW = tr.x - 1.02;
+        const wp = new V();
+        (ctx.three.scene.getObjectByName('escapePodShipCockpit') || ctx.three.scene).traverse((o) => {
+          if (o.isMesh) { o.getWorldPosition(wp); if (wp.x < wallXW) o.visible = false; }
+        });
+      }
       // Each junction: an eye + a look target; the pan sweeps the eye a small arc laterally.
       // pan = a TINY lateral jitter (≈1cm total) so real-geometry silhouette reprojection stays sub-pixel
       //   (near-zero AA churn on a clean scene) while a z-fight depth-winner still flips across the whole
@@ -3505,6 +3518,18 @@ const SCENARIOS = {
         'quarters-fore': { eye: [tr.x + 0.7, floorY + 1.45, tr.z + 8.6], look: [tr.x - 2.0, floorY + 1.3, tr.z + 8.98], pan: [0, 0, 0.01] },
         'quarters-aft':  { eye: [tr.x + 0.7, floorY + 1.45, tr.z + 10.6], look: [tr.x - 2.0, floorY + 1.3, tr.z + 10.22], pan: [0, 0, 0.01] },
         'airlock':       { eye: [tr.x + 0.7, floorY + 1.5, tr.z + 4.8], look: [tr.x - 2.0, floorY + 1.3, tr.z + 4.8], pan: [0, 0, 0.01] },
+        // Z4 item-2 — the AIRLOCK DOORWAY EDGES (the user's clipping/overlap report). Head-on-ish looks
+        //   at the proud FRAME FACES (jamb posts, hazard strips, the aft control panel, the lintel band)
+        //   so a COPLANAR winner-flip fills a face. GATE THESE WITH --doorclosed (the RESTING doorway the
+        //   report is about — all clean, hardPct≈0). With the door OPEN, airlock-jamb-aft reads ~0.38%
+        //   hardPct, but that is the moving LEAF's greeble SILHOUETTE (the flip-centroid raycast pins a
+        //   _channel edge 6 cm IN FRONT of the _steel behind it — a parallax edge, NOT a <1 cm coplanar
+        //   z-fight); the real doorway overlaps (hazard-strip-on-post, buried panel readout, leaf-inset-
+        //   on-slab) were the closed-state coplanars and are FIXED. So the item-2 gate is --doorclosed.
+        'airlock-jamb-fore': { eye: [tr.x + 0.5, floorY + 1.15, tr.z + 3.9], look: [tr.x - 0.75, floorY + 1.1, tr.z + 4.05], pan: [0.006, 0, 0.004] },
+        'airlock-jamb-aft':  { eye: [tr.x + 0.5, floorY + 1.15, tr.z + 5.7], look: [tr.x - 0.75, floorY + 1.1, tr.z + 5.55], pan: [0.006, 0, 0.004] },
+        'airlock-lintel':    { eye: [tr.x + 0.5, floorY + 1.55, tr.z + 4.4], look: [tr.x - 0.75, floorY + 2.25, tr.z + 4.8], pan: [0.005, 0, 0.005] },
+        'airlock-panel':     { eye: [tr.x + 0.6, floorY + 1.42, tr.z + 5.3], look: [tr.x - 0.75, floorY + 1.45, tr.z + 5.94], pan: [0.005, 0, 0.004] },
         'engine-glass':  { eye: [tr.x, floorY + 1.55, tr.z + 12.4], look: [tr.x, floorY + 1.35, tr.z + 16.5], pan: [0.008, 0, 0] },
         'viewport':      { eye: [tr.x - 0.7, floorY + 1.5, tr.z + 9.7], look: [tr.x + 2.0, floorY + 1.35, tr.z + 9.7], pan: [0, 0, 0.008] },
       };
@@ -3544,10 +3569,54 @@ const SCENARIOS = {
           prev = buf;
         }
         results[nm] = { meanPct: +(churnSum / Math.max(1, frames)).toFixed(3), hardPct: +(hardSum / Math.max(1, frames)).toFixed(3), peakPct: +churnPeak.toFixed(3), floorPct: +floor.toFixed(3) };
+        // DIAGNOSTIC (--shot): for the probed junction, blit the CENTRE frame + a HARD-FLIP MASK (pixels
+        //   that winner-flip under the dolly, painted magenta on a dim base) so the z-fighting REGION is
+        //   visible. Returned as data-URLs; the node side writes them out.
+        if (window.__zfShot) {
+          const base = readFrame(j.eye[0], j.eye[1], j.eye[2], j.look[0], j.look[1], j.look[2]);
+          const a = readFrame(j.eye[0] - u[0] * DOLLY / 2, j.eye[1] - u[1] * DOLLY / 2, j.eye[2] - u[2] * DOLLY / 2, j.look[0], j.look[1], j.look[2]);
+          const b = readFrame(j.eye[0] + u[0] * DOLLY / 2, j.eye[1] + u[1] * DOLLY / 2, j.eye[2] + u[2] * DOLLY / 2, j.look[0], j.look[1], j.look[2]);
+          const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+          const c2 = cv.getContext('2d'); const img = c2.createImageData(W, H);
+          for (let y = 0; y < H; y++) { const sy = H - 1 - y; for (let x = 0; x < W; x++) { const s = (sy * W + x) * 4, d = (y * W + x) * 4;
+            const flip = Math.abs(a[s] - b[s]) + Math.abs(a[s + 1] - b[s + 1]) + Math.abs(a[s + 2] - b[s + 2]) > HARD;
+            if (flip) { img.data[d] = 255; img.data[d + 1] = 0; img.data[d + 2] = 255; }
+            else { img.data[d] = base[s] >> 1; img.data[d + 1] = base[s + 1] >> 1; img.data[d + 2] = base[s + 2] >> 1; }
+            img.data[d + 3] = 255; } }
+          c2.putImageData(img, 0, 0);
+          (window.__zfShots = window.__zfShots || {})[nm] = cv.toDataURL('image/png');
+          // RAYCAST the flip centroid → name the hit mesh (path + material) so the coplanar pair is pinned.
+          let fx = 0, fy = 0, fn = 0;
+          for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const s = ((H - 1 - y) * W + x) * 4; if (Math.abs(a[s] - b[s]) + Math.abs(a[s + 1] - b[s + 1]) + Math.abs(a[s + 2] - b[s + 2]) > HARD) { fx += x; fy += y; fn++; } }
+          if (fn) {
+            fx /= fn; fy /= fn;
+            const ndc = { x: (fx / W) * 2 - 1, y: -((fy / H) * 2 - 1) };
+            cam.position.set(j.eye[0], j.eye[1], j.eye[2]); cam.lookAt(j.look[0], j.look[1], j.look[2]); cam.updateMatrixWorld(true);
+            const THREE = g.THREE; const rc = new THREE.Raycaster();
+            rc.setFromCamera(ndc, cam);
+            const hits = rc.intersectObjects(ctx.three.scene.children, true).filter((h) => h.object.visible && h.object.isMesh).slice(0, 3);
+            const desc = hits.map((h) => { let p = h.object, path = ''; for (let k = 0; k < 5 && p; k++) { path = (p.name || p.type) + (path ? '>' : '') + path; p = p.parent; } const m = h.object.material; return { path, mat: (m && m.name) || (m && m.color && m.color.getHexString && m.color.getHexString()) || '?', d: +h.distance.toFixed(2) }; });
+            (window.__zfRay = window.__zfRay || {})[nm] = { centroidPx: [Math.round(fx), Math.round(fy)], nFlip: fn, hits: desc };
+          }
+        }
       }
       return results;
-    }, which);
+    }, { which, shot: !!argv.shot, hideBehind: !!argv.hidebehind, doorClosed: !!argv.doorclosed });
     console.log('[zfight-probe] ' + JSON.stringify(out));
+    if (argv.shot) {
+      const shots = await page.evaluate(() => window.__zfShots || {});
+      const { writeFileSync } = await import('node:fs');
+      for (const [nm, durl] of Object.entries(shots)) {
+        const p = join(OUT, `scen-zfight-${nm}.png`);
+        writeFileSync(p, Buffer.from(durl.replace(/^data:image\/png;base64,/, ''), 'base64'));
+        console.log(`[zfight-probe] flip-mask ${nm} → scen-zfight-${nm}.png`);
+      }
+      const rays = await page.evaluate(() => window.__zfRay || {});
+      for (const [nm, r] of Object.entries(rays)) {
+        console.log(`[zfight-probe] flip-centroid ${nm} px=${JSON.stringify(r.centroidPx)} nFlip=${r.nFlip} hits=` +
+          r.hits.map((h) => `${h.path}[${h.mat}]@${h.d}m`).join(' | '));
+      }
+    }
     // gate on hardPct (Δ>150 under an axial dolly = a different-material coplanar winner-flip = a real
     //   z-fight; meanPct still carries residual silhouette AA in dense views). Target: hardPct < 0.1%.
     const fails = Object.entries(out).filter(([, v]) => v.hardPct >= 0.1);
@@ -3649,6 +3718,173 @@ const SCENARIOS = {
     const tag = `pod-bay-${angle}${disaster ? '-red' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
     console.log(`[pod-bay] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // ── Z5b — POD-SEAL-SWEEP: the sealed +X bay-pod door must read AIRTIGHT (zero see-through cracks)
+  //    from the SEATED eye at EVERY rotation angle. The user sees star-gaps down the door edges only
+  //    in the ROTATED state (post setBayPodYaw). This probe drives the bay, seals the door, and for
+  //    each yaw in {0, π/4, π/2} fires a RAYCAST FAN from the seated eye through a dense sample of the
+  //    door PERIMETER (both side jambs + top arc + bottom), and classifies each ray: does it (a) hit
+  //    opaque pod geometry near the door plane (SEALED — good), or (b) pass the door plane into the
+  //    bore/void with no near opaque backing (a SEE-THROUGH CRACK — the defect)? Reports the worst
+  //    (largest) open sliver + the pod-local exit coords per edge. Renders a seated-eye shot at yaw 0
+  //    and yaw π/2 (backdrop differs: airlock-lit vs starfield) so the human read matches the machine.
+  //    Machine gate: `--gate` throws if any perimeter ray shows a see-through crack.
+  'pod-seal-sweep': async (page) => {
+    await page.evaluate((noseal) => {
+      const g = window.__game; const ctx = g.ctx;
+      if (noseal) globalThis.__NOSEAL__ = true;   // dev-only probe-sensitivity toggle: build WITHOUT the seal
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship (incl. the pod-bay + docked pod)
+    }, !!argv.noseal);
+    await page.waitForTimeout(800);
+    const gate = !!argv.gate;
+    const results = await page.evaluate(async ({ yaws }) => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      let pod = null;
+      for (let i = 0; i < 120; i++) { pod = ctx.three.scene.getObjectByName('dockedCanonicalPod'); if (pod) break; await sleep(16); }
+      if (!pod) return { error: 'dockedCanonicalPod not found' };
+      try { g.setBayPodDoorOpen(0); } catch {}   // seal the door
+      const W = 1.02, H = 1.98, CY = 1.10, R = 1.44;
+      // opaque POD meshes (skip glass/spec/transparent) — the seal must be POD metal.
+      const podMeshes = [];
+      pod.traverse((o) => {
+        if (!o.isMesh) return;
+        const m = o.material;
+        const transp = (m && m.transparent && m.opacity < 0.9) || (m && m.name && /glass|spec/i.test(m.name));
+        if (transp) return;
+        podMeshes.push(o);
+      });
+      // whole-scene opaque set (to name what a crack ray ULTIMATELY exits through).
+      const sceneMeshes = [];
+      ctx.three.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        const m = o.material;
+        if ((m && m.transparent && m.opacity < 0.9) || (m && m.name && /glass|spec/i.test(m.name))) return;
+        sceneMeshes.push(o);
+      });
+      const ray = new THREE.Raycaster(); ray.far = 400;
+      const out = { byYaw: [] };
+      // The seal test: fan a DENSE grid of rays from the seated eye across the door aperture + a thin
+      //   MARGIN ring just OUTSIDE each aperture edge (that ring is where the slab-edge↔shell-cut sliver
+      //   lives). For each ray, the nearest OPAQUE POD hit must sit at the near door face (≈ R−CAB_R…R+slab
+      //   in pod-radius); if the nearest pod hit is FAR (past the door, e.g. the opposite shell) or the
+      //   ray reaches SPACE with no pod metal in the door band, that ray SEES THROUGH the seal = a crack.
+      //   We express the door surface as a pod-RADIUS test: a sealed hit lands at pod-radius ≈ R (1.44)
+      //   ± the slab/lip depth (~0.15). A crack ray's first pod hit is either absent or at radius ≪ R−0.3
+      //   (it slipped inside toward the far wall) — or the scene-exit is void.
+      // The crack is a GRAZING sightline — a seated player free-looking from a LOW/off-axis eye whose
+      //   ray skims the door edge and threads the slab↔shell wedge to space. So sweep a SET of eyes
+      //   (low, high, left, right, centre — all within the seated head's reach) and, for each door-edge
+      //   sample, test whether the eye→edge ray reaches VOID/far-scene WITHOUT hitting pod-opaque metal
+      //   in the door band. That is the definitive see-through test (radius-at-aim missed the grazing case).
+      const eyeLocals = [
+        new THREE.Vector3(0.30, 1.05, -0.42),  // LOW + shifted −Z (grazes the LEFT jamb — the user's read)
+        new THREE.Vector3(0.30, 1.05, 0.42),   // LOW + shifted +Z (grazes the RIGHT jamb)
+        new THREE.Vector3(0.30, 1.30, 0.00),   // centre seated
+      ];
+      for (const yaw of yaws) {
+        try { g.setBayPodYaw(yaw); } catch {}
+        pod.updateMatrixWorld(true);
+        ctx.three.scene.updateMatrixWorld(true);
+        const podInv = new THREE.Matrix4().copy(pod.matrixWorld).invert();
+        // aim points span the aperture + a 0.10m margin ring (so the edge slivers are sampled).
+        const MARG = 0.10;
+        const NX = 28, NY = 40;
+        let crackCount = 0, sealCount = 0, total = 0;
+        const crackRays = [];
+        const edgeTally = { 'left-jamb': 0, 'right-jamb': 0, top: 0, bottom: 0, field: 0 };
+        for (const eyeLocal of eyeLocals) {
+        const eyeWorld = eyeLocal.clone().applyMatrix4(pod.matrixWorld);
+        for (let iy = 0; iy <= NY; iy++) {
+          for (let ix = 0; ix <= NX; ix++) {
+            const fx = -(W / 2 + MARG) + (ix / NX) * (W + 2 * MARG);
+            const fy = -(H / 2 + MARG) + (iy / NY) * (H + 2 * MARG);
+            const inAperture = Math.abs(fx) < W / 2 - 0.02 && Math.abs(fy) < H / 2 - 0.02;
+            const portR = 0.33 + 0.06;   // porthole open radius + rim
+            const inPort = (fx * fx + (fy - 0.28) * (fy - 0.28)) < portR * portR;   // porthole centre door-local fy 0.28
+            if (inAperture && inPort) continue;   // skip the glass disc (legit see-through)
+            total++;
+            // aim through a shallow SPREAD around this edge point at the WEDGE depths (behind the frame
+            //   plane) — the grazing crack threads BEHIND the proud frame bar, so aim at several radial
+            //   depths from the slab outer face back to the shell surface. A crack = ANY of these rays
+            //   whose NEAREST opaque hit (pod OR ship, either side of the slab) is FAR/void — meaning
+            //   you can see PAST the near hull through the door edge to something distant or to space.
+            //   (A truly sealed edge: every such ray's first opaque hit is near pod/frame metal <~2.2m.)
+            // SEAL TEST (fast): raycast ONLY the POD-opaque meshes (a small set). A sealed edge blocks
+            //   the ray with NEAR pod metal (< NEARLIMIT). A crack ray has NO near pod hit → it threads
+            //   the wedge; the eye then sees PAST the pod. Aim at several wedge depths behind the frame.
+            const NEARLIMIT = 2.2;   // m — a pod hit nearer than this seals the ray
+            let sealedAll = true, crackDir = null;
+            for (const fz of [0.11, 0.02, -0.06, -0.14]) {   // slab outer face → into the shell wedge
+              const aimLocal = new THREE.Vector3(R + fz, CY + fy, -fx).applyMatrix4(pod.matrixWorld);
+              const dir = aimLocal.clone().sub(eyeWorld).normalize();
+              ray.set(eyeWorld, dir);
+              const hits = ray.intersectObjects(podMeshes, true);
+              if (!hits[0] || hits[0].distance > NEARLIMIT) { sealedAll = false; crackDir = dir; break; }
+            }
+            if (sealedAll) { sealCount++; continue; }
+            // a crack candidate — ONE scene-wide raycast to classify what the eye sees THROUGH the gap.
+            ray.set(eyeWorld, crackDir);
+            const sceneHits = ray.intersectObjects(sceneMeshes, true);
+            const first = sceneHits[0];
+            const exit = !first ? 'SPACE (void)' : (first.object.name || (first.object.parent && first.object.parent.name) || 'unnamed');
+            const firstR = first ? +first.distance.toFixed(2) : 999, firstName = exit;
+            crackCount++;
+            // which edge region?
+            let region = 'field';
+            if (fx <= -W / 2) region = 'left-jamb';
+            else if (fx >= W / 2) region = 'right-jamb';
+            else if (fy >= H / 2) region = 'top';
+            else if (fy <= -H / 2) region = 'bottom';
+            edgeTally[region]++;
+            if (crackRays.length < 14) crackRays.push({ region, fx: +fx.toFixed(3), fy: +fy.toFixed(3), seenDist: firstR, seenObj: firstName, exit });
+          }
+        }
+        }   // eyeLocals
+        out.byYaw.push({ yaw: +yaw.toFixed(4), yawDeg: +(yaw * 180 / Math.PI).toFixed(1), eyes: eyeLocals.length, total, sealCount, crackCount, edgeTally, sampleCracks: crackRays });
+      }
+      try { g.setBayPodYaw(0); } catch {}
+      return out;
+    }, { yaws: [0, Math.PI / 4, Math.PI / 2] });
+    console.log('[pod-seal-sweep] ' + JSON.stringify(results, null, 2));
+    const shotYaws = String(argv.yaws || '0,90').split(',').map((s) => Number(s.trim()) * Math.PI / 180);
+    for (const yaw of shotYaws) {
+      const dataUrl = await page.evaluate(({ yaw, zc, dolly }) => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        try { g.setBayPodDoorOpen(0); } catch {}
+        try { g.setBayPodYaw(yaw); } catch {}
+        ctx.flags.paused = true;
+        ctx.three.renderer.setSize(1100, 760, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+        const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod');
+        pod.updateMatrixWorld(true);
+        const eye = new THREE.Vector3(0.25 + (dolly || 0), 1.30, zc || 0).applyMatrix4(pod.matrixWorld);
+        const look = new THREE.Vector3(1.44, 1.12, zc || 0).applyMatrix4(pod.matrixWorld);
+        cam.position.copy(eye);
+        cam.lookAt(look);
+        cam.updateMatrixWorld(true);
+        // render + grab the pixels directly (bypasses Playwright's screenshot font/viewport wait that
+        //   stalls on the space backdrop). One explicit draw of the paused scene, then toDataURL.
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        return ctx.three.renderer.domElement.toDataURL('image/png');
+      }, { yaw, zc: Number(argv.zc || 0), dolly: Number(argv.dolly || 0) });
+      const tag = `yaw${Math.round(yaw * 180 / Math.PI)}${argv.zc ? `-z${argv.zc}` : ''}${argv.tag ? `-${argv.tag}` : ''}`;
+      const b64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+      writeFileSync(join(OUT, `scen-seal-sweep-${tag}.png`), Buffer.from(b64, 'base64'));
+      console.log(`[pod-seal-sweep] → scen-seal-sweep-${tag}.png`);
+    }
+    if (gate) {
+      const bad = results.byYaw.filter((y) => y.crackCount > 0);
+      if (bad.length) throw new Error(`pod-seal-sweep GATE FAILED — see-through cracks at yaw(s): ${JSON.stringify(bad.map((b) => ({ yawDeg: b.yawDeg, crackCount: b.crackCount, byEdge: b.byEdge })))}`);
+      console.log('[pod-seal-sweep] GATE PASS — zero see-through cracks at all rotation angles.');
+    }
   },
 
   // Wake interior (T4.1): the REAL first-person view as you COME TO inside the crashed pod in
@@ -4270,6 +4506,207 @@ const SCENARIOS = {
     if (!log.seated) throw new Error(`pod-walkin GATE FAILED: E-sit did not seat/advance the beat.`);
     if (!log.ejected) throw new Error(`pod-walkin GATE FAILED: E-eject did not fire/advance to shipExplode.`);
     console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated → E-eject fired (real KCC motion + real input path).');
+  },
+
+  // Z4 — THE POD-ROTATION-CLEARANCE SWEEP (the machine gate for "ship geometry intrudes into the pod").
+  //   The docked bay pod rotates 0→π/2 in its cradle (setBayPodYaw). NOTHING fixed in the bay (collar,
+  //   umbilicals, clamp arms, mate bands, airlock frame, ship box) may enter the pod's interior VOLUME —
+  //   a cylinder of radius BAY_POD_R (1.44, the outer hull) about the pod's own vertical axis, spanning
+  //   the pod's y-range (floor→shoulder). The pod's OWN meshes yaw WITH it (excluded from the test). The
+  //   fixed bay meshes don't move, so a mesh's minimum radius from the pod axis is yaw-independent — BUT
+  //   the door aperture only excuses an intruder at yaw 0 (the door faces the collar); at any other yaw
+  //   the SOLID hull sweeps over that spot and the intruder pokes through the shell (the user's screenshot
+  //   + probe-rotate-{73,90}-porthole.png). So the gate is: no fixed bay mesh may reach r < POD_R inside
+  //   the pod y-range, ANYWHERE (the legitimate mate interface stops AT the +X door face, r≈1.44). Drives
+  //   the sweep stepwise (visual-truth: the pod really rotates), enumerates every violating mesh by name,
+  //   and FAILS with the worst penetration depth. No screenshot — a geometry assertion.
+  //     node scripts/rig-shot.mjs --scenario=pod-rotation-clearance --port=5192
+  'pod-rotation-clearance': async (page) => {
+    const wantShots = !!argv.shots;
+    if (wantShots) await page.evaluate(() => { window.__CLEARANCE_SHOTS = true; });
+    const out = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      // DIAGNOSTIC BUILD — disable the static merge so INDIVIDUAL named greeble meshes survive (else
+      //   the collar/frame/umbilical bits are baked into a few anonymous per-material merged meshes and
+      //   we can't name the intruder). This is the same __stageNoMerge hook the geometry-lint stage uses.
+      window.__stageNoMerge = true;
+      window.__clearanceShots = !!(window.__CLEARANCE_SHOTS);   // --shots → also render the seated-eye confirm frames
+      // Build the ship+bay+docked pod: start the intro + jump to cockpit (retry until the reseat takes).
+      try { g.skipIntro(); } catch {}
+      await sleep(120);
+      g.startIntro();
+      for (let a = 0; a < 30; a++) {
+        g.jumpToBeat('cockpit');
+        await sleep(120);
+        if (ctx.player.body.body.translation().y > 2900) break;
+      }
+      const scene = ctx.three.scene;
+      // NOTE: buildShipScene STATIC-MERGES shared-material greebles (mergeStaticByMaterial) at the SHIP
+      //   ROOT — so the individual collar/frame/umbilical meshes no longer live under 'escapePodBay';
+      //   they're baked into a few per-material merged BufferGeometries parented at the ship root. So we
+      //   scan the WHOLE ship group (escapePodShipCockpit) and exclude ONLY the pod subtree (which is
+      //   noMerge-protected → still a real transformable subtree that yaws with the pod).
+      const ship = scene.getObjectByName('escapePodShipCockpit');
+      const pod = scene.getObjectByName('dockedCanonicalPod');   // _bayGroup — the yawing pod root
+      if (!ship || !pod) return { error: `ship/pod not built (ship=${!!ship} pod=${!!pod})` };
+      // The pod's vertical axis (world) + geometry envelope.
+      const centre = g.getBayPodCenter();   // {x,y,z} — deck-plane centre of the pod axis
+      const POD_R = 1.44;         // BAY_POD_R — outer hull radius (the test cylinder)
+      const INNER_R = 1.28;       // CAB_R — the interior bore (deep-inside = a worse intrusion class)
+      const Y_LO = centre.y + 0.06, Y_HI = centre.y + 3.10;   // floor (a hair up) → shoulder/dome spring
+      const MARGIN = 0.02;        // the legit mate interface stops AT r≈POD_R; only r < POD_R−MARGIN penetrates
+      // Collect the set of Object3Ds that ARE the pod (yaw WITH it → excluded from the fixed-mesh test).
+      const podSet = new Set(); pod.traverse((o) => podSet.add(o));
+      // Gather the fixed ship meshes (anywhere in the ship, NOT in the pod subtree, real geometry). The
+      //   post-merge scene has ~a dozen big merged meshes + the protected dynamics; that's what we test.
+      const fixed = [];
+      ship.traverse((o) => {
+        if (!o.isMesh || !o.geometry || podSet.has(o)) return;
+        fixed.push(o);
+      });
+      // Per fixed mesh: the MIN radial distance from the pod axis over its world-space vertices that lie
+      //   within the pod y-range. Sample the geometry's position attribute (transformed to world).
+      const _v = new THREE.Vector3();
+      const measure = () => {
+        pod.updateMatrixWorld(true); ship.updateMatrixWorld(true);
+        const hits = [];
+        for (const m of fixed) {
+          const pos = m.geometry.getAttribute('position');
+          if (!pos) continue;
+          m.updateWorldMatrix(true, false);
+          let minR = Infinity, atY = 0;
+          const N = pos.count;
+          // sample every vertex (these greeble meshes are small — few hundred verts each at most)
+          for (let i = 0; i < N; i++) {
+            _v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+            if (_v.y < Y_LO || _v.y > Y_HI) continue;
+            const dx = _v.x - centre.x, dz = _v.z - centre.z;
+            const r = Math.hypot(dx, dz);
+            if (r < minR) { minR = r; atY = _v.y; }
+          }
+          if (minR < POD_R - MARGIN) {
+            // report the mesh's WORLD origin (local to the ship: subtract centre) + a geometry hint so an
+            //   unnamed _box/_cyl greeble can be traced to its builder line.
+            const wp = new THREE.Vector3(); m.getWorldPosition(wp);
+            const gt = m.geometry.type.replace('Geometry', '');
+            const bb = m.geometry.boundingBox || (m.geometry.computeBoundingBox(), m.geometry.boundingBox);
+            const sz = bb ? { x: +(bb.max.x - bb.min.x).toFixed(2), y: +(bb.max.y - bb.min.y).toFixed(2), z: +(bb.max.z - bb.min.z).toFixed(2) } : null;
+            // the min-radius vertex in WORLD, + the mesh's ancestry path (names) to pin the builder
+            const minV = new THREE.Vector3();
+            for (let i2 = 0; i2 < N; i2++) { _v.fromBufferAttribute(pos, i2).applyMatrix4(m.matrixWorld); if (_v.y < Y_LO || _v.y > Y_HI) continue; const dx2 = _v.x - centre.x, dz2 = _v.z - centre.z; if (Math.hypot(dx2, dz2) === minR) { minV.copy(_v); break; } }
+            let path = ''; { let p = m; for (let k = 0; k < 6 && p; k++) { path = (p.name || p.type) + (path ? '>' : '') + path; p = p.parent; } }
+            const rot = { x: +m.rotation.x.toFixed(2), y: +m.rotation.y.toFixed(2), z: +m.rotation.z.toFixed(2) };
+            const minVW = { x: +(minV.x - centre.x).toFixed(2), y: +(minV.y - centre.y).toFixed(2), z: +(minV.z - centre.z).toFixed(2) };
+            hits.push({ name: m.name || `(${gt})`, minR: +minR.toFixed(3), atY: +(atY - centre.y).toFixed(2),
+              depth: +(POD_R - minR).toFixed(3), interior: minR < INNER_R,
+              // ship-local origin (x relative to pod centre, absolute y-off-floor, z relative to pod centre)
+              pos: { x: +(wp.x - centre.x).toFixed(2), y: +(wp.y - centre.y).toFixed(2), z: +(wp.z - centre.z).toFixed(2) },
+              geom: gt, size: sz, rot, path, minVert: minVW });
+          }
+        }
+        // de-dupe & rank by worst penetration
+        return hits.sort((a, b) => a.minR - b.minR);
+      };
+      // Sweep 0→π/2 in 11 steps (visual-truth: the pod really turns). Union the violations across steps.
+      const STEPS = 11;
+      const worst = new Map();   // key: name+atY bucket → the deepest hit seen
+      const perStep = [];
+      for (let s = 0; s < STEPS; s++) {
+        const yaw = (s / (STEPS - 1)) * (Math.PI / 2);
+        g.setBayPodYaw(yaw);
+        await sleep(24);   // let a frame tick so the matrices settle (also drives the real rotation)
+        const hits = measure();
+        perStep.push({ yaw: +yaw.toFixed(3), nViol: hits.length });
+        for (const h of hits) {
+          const key = h.name + '@' + JSON.stringify(h.pos);
+          const prev = worst.get(key);
+          if (!prev || h.depth > prev.depth) worst.set(key, h);
+        }
+      }
+      const violations = [...worst.values()].sort((a, b) => b.depth - a.depth);
+      // OWN-EYES CONFIRM (with --shots): pose the SEATED interior eye, orbited about the pod axis in
+      //   lockstep with the yaw (the sequence.ts rotate-phase pose), looking at the porthole/door — the
+      //   REAL view the player has mid-rotation. Matches the Z4 repro frames probe-rotate-{73,90}. Expose
+      //   a poser so the harness can screenshot per angle; else just leave the pod docked.
+      if (window.__clearanceShots) {
+        // Own-eyes: pause the loop + drive the camera manually (the seated eye, orbited with the yaw).
+        //   Renders straight to the canvas; the harness reads it via gl.readPixels (page.screenshot
+        //   can race a paused paint, so we blit the framebuffer to a data-URL the node side writes out).
+        ctx.flags.paused = true;
+        const SW = 1100, SH = 800;
+        ctx.three.renderer.setSize(SW, SH, false);
+        const cam0 = ctx.three.camera; cam0.aspect = SW / SH; cam0.updateProjectionMatrix();
+        window.__clearancePose = (yawDeg) => {
+          const yaw = (yawDeg * Math.PI) / 180;
+          g.setBayPodYaw(yaw);
+          const cam = ctx.three.camera;
+          const V = cam.position.constructor;
+          const cos = Math.cos(yaw), sin = Math.sin(yaw);
+          // The BAY pod's interior is yawed so its DOOR/porthole faces pod-local +X (θ=π/2) — the seated
+          //   eye looks +X at the door (NOT −Z like the ride cabin). Eye sits a touch −X of centre so the
+          //   whole door/porthole frames. Orbit both about +Y by the yaw.
+          const ex = -0.15 * cos, ez = 0.15 * sin;   // eye pod-local (−0.15, +1.70, 0) rotated
+          const eye = new V(centre.x + ex, centre.y + 1.70, centre.z + ez);
+          const fx = cos, fz = -sin;   // pod-local +X (forward, toward the door) rotated by yaw
+          cam.rotation.order = 'YXZ';
+          cam.position.copy(eye);
+          cam.lookAt(eye.x + fx, eye.y - 0.28, eye.z + fz);   // dip to frame the porthole (door centre ~1.3)
+          cam.updateMatrixWorld(true);
+          const r = ctx.three.renderer;
+          r.render(ctx.three.scene, ctx.three.camera);
+          // blit the WebGL framebuffer → a 2D canvas (flip Y) → PNG data URL (node writes it to disk)
+          const gl = r.getContext();
+          const px = new Uint8Array(SW * SH * 4);
+          gl.readPixels(0, 0, SW, SH, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          const cv = document.createElement('canvas'); cv.width = SW; cv.height = SH;
+          const c2 = cv.getContext('2d'); const img = c2.createImageData(SW, SH);
+          for (let y = 0; y < SH; y++) { const sy = SH - 1 - y; for (let x = 0; x < SW; x++) { const s = (sy * SW + x) * 4, d = (y * SW + x) * 4; img.data[d] = px[s]; img.data[d + 1] = px[s + 1]; img.data[d + 2] = px[s + 2]; img.data[d + 3] = 255; } }
+          c2.putImageData(img, 0, 0);
+          return cv.toDataURL('image/png');
+        };
+      } else {
+        g.setBayPodYaw(0);   // leave it docked
+      }
+      return {
+        nFixedMeshes: fixed.length,
+        centre, podR: POD_R, yRange: [+(Y_LO - centre.y).toFixed(2), +(Y_HI - centre.y).toFixed(2)],
+        perStep,
+        violations,
+      };
+    });
+    if (out.error) throw new Error('[pod-rotation-clearance] ' + out.error);
+    console.log('[pod-rotation-clearance] fixed bay meshes tested=' + out.nFixedMeshes +
+      ' | pod y-range(local)=' + JSON.stringify(out.yRange) + ' | test radius=' + out.podR);
+    console.log('[pod-rotation-clearance] per-step violation counts: ' + JSON.stringify(out.perStep));
+    if (out.violations.length) {
+      console.log('[pod-rotation-clearance] INTRUDING MESHES (worst penetration across the sweep):');
+      for (const v of out.violations) {
+        console.log(`   • ${v.name} [${v.geom} ${JSON.stringify(v.size)} rot${JSON.stringify(v.rot)}]  minR=${v.minR}m (POD_R−${v.depth}m past the hull` +
+          (v.interior ? ', INSIDE the bore' : '') + `)  mesh-origin(pod-local)=${JSON.stringify(v.pos)}  minVert(pod-local)=${JSON.stringify(v.minVert)}  path=${v.path}`);
+      }
+    }
+    const fails = out.violations.length;
+    console.log('[pod-rotation-clearance] ' + (fails
+      ? `FAIL — ${fails} fixed bay mesh(es) penetrate the pod's interior volume during the 0→π/2 sweep.`
+      : 'PASS — no fixed bay/collar/ship mesh enters the pod interior volume at any sweep angle (the pod rotates freely with clearance).'));
+    // OWN-EYES confirm frames (matches the Z4 repro probe-rotate-{73,90}-porthole.png): the seated
+    //   interior eye at 73° + 90° yaw — the barrel around the porthole must be clean.
+    if (wantShots) {
+      const { writeFileSync } = await import('node:fs');
+      for (const deg of [73, 90]) {
+        const durl = await page.evaluate((d) => (window.__clearancePose ? window.__clearancePose(d) : null), deg);
+        if (durl) {
+          const b64 = durl.replace(/^data:image\/png;base64,/, '');
+          const p = join(OUT, `scen-pod-clearance-${deg}.png`);
+          writeFileSync(p, Buffer.from(b64, 'base64'));
+          console.log(`[pod-rotation-clearance] seated-eye confirm @ ${deg}° → scen-pod-clearance-${deg}.png`);
+        }
+      }
+    }
+    if (fails) throw new Error(`pod-rotation-clearance GATE FAILED: ${fails} intruding mesh(es).`);
   },
 
   // W2b — THE AIRLOCK COLLIDER MOTION PROBE (Rule 9: collision matches the visible airlock, proven by

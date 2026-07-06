@@ -1503,41 +1503,79 @@ function buildUnifiedDoorSlab(door: THREE.Group, doorTh: number, W: number, H: n
   }
 }
 
-/** ROUND-1f (AIRTIGHT SEAL) — a STATIC pressure-door STOP LIP built on the aperture FRAME (NOT the
- *  swinging door), inboard of the closed slab. The slab is sized EXACTLY to the aperture (W×H) and
- *  is a FLAT plate closing a CURVED-shell opening, so at the side edges the curved shell recedes
- *  behind the flat slab, opening a thin wedge — a "star-gap" crack to space (the user's sealed-eye
- *  screenshot). This is what a real pressure door seats against: a picture-frame flange whose INNER
- *  edge sits at the aperture opening line and that extends OUTWARD past the slab edge, positioned a
- *  hair INBOARD of the closed slab's inner face so it backs the entire perimeter clearance with
- *  opaque metal (no line-of-sight to space) from BOTH the seated interior eye AND an exterior graze.
- *  `host` = the frame group (bay: local +Z outward; ride hatch: local +Z inward); `inZ` = the sign of
- *  the CABIN-inboard direction in the host's local Z (bay: −1; ride: +1); `slabInnerZ` = the closed
- *  slab's inner-face plane in host-local Z. The lip sits just inboard of that plane. It never blocks
- *  the OUTWARD door swing (opposite side) nor the walk-in (its inner opening = the full aperture,
- *  and the collider aperture is already wider than the visual). */
-function _addDoorStopLip(host: THREE.Group, W: number, H: number, inZ: number, slabInnerZ: number): void {
-  const lapIn = 0.075;                       // how far the flange laps INWARD over the opening edge
-  const lapOut = 0.075;                      // how far it reaches OUTWARD past the aperture edge (backs the shell wedge)
-  const lipDepth = 0.05;                     // flange plate thickness (along Z)
-  const zc = slabInnerZ + inZ * (lipDepth / 2 + 0.004);   // a hair inboard of the closed slab's inner face
-  // Perimeter band extents: inner opening = W−2·lapIn (clear walk-through), outer = W+2·lapOut.
-  const bandW = lapIn + lapOut;              // radial width of each frame plate
-  // The band CENTRE line sits on the aperture edge (±W/2 or ±H/2), so the plate laps lapIn inward + lapOut outward.
-  const cW = W / 2, cH = H / 2;              // aperture half-extents (the edge line the band straddles)
-  // top + bottom bars — full outer width (span the corners)
-  for (const sy of [1, -1]) {
-    const bar = _box(W + 2 * lapOut, bandW, lipDepth, _podSteel);
-    bar.position.set(0, sy * cH, zc);
+/** Z5b (STRUCTURAL AIRTIGHT SEAL — ends the 4-report door-seal family) — a real BOX-SECTION JAMB
+ *  RETURN ringing the aperture, replacing the earlier thin picture-frame STOP LIP.
+ *
+ *  THE DEFECT (measured): the FLAT door slab spans the aperture (±W/2 tangential), but the CURVED
+ *  shell is CUT WIDER — the door-gap arc `dAzHalf` opens the shell to ±R·sin(dAzHalf), a few cm
+ *  past the slab edge. Between the slab's straight side edge and where the curved shell resumes,
+ *  the shell surface curves BACK (deeper in −radial) — leaving an open WEDGE. The old flat stop
+ *  lip sat a hair inboard of the slab's inner face and did NOT fill that wedge across its full
+ *  DEPTH, so a grazing seated sightline threaded between the lip's back edge and the receding
+ *  shell straight to space (the "star-gaps down the door sides", visible only when the pod is
+ *  ROTATED so space — not the lit ship — backs the wedge).
+ *
+ *  THE FIX: on each of the 4 sides build a SOLID jamb-return box that laps from just INSIDE the
+ *  slab edge OUTWARD to (and slightly into) the shell cut, and spans the FULL depth from the
+ *  slab's OUTER face all the way back PAST the shell surface — a closed reveal the slab seats
+ *  into, like a real pressure-hatch frame. There is then no line-of-sight through the aperture
+ *  edge at ANY grazing angle: every ray that would thread the wedge hits solid jamb metal.
+ *
+ *  `host` = the door-LOCAL frame group (local +Z = the OUTWARD radial at the door). `R` = the
+ *  shell/outer radius at the door (the cylinder the aperture is cut from). `slabOuterZ` = the
+ *  closed slab's OUTER (world-outward) face plane in host-local Z; `inZ` = the sign of the
+ *  CABIN-inboard direction in host-local Z (bay frame: +Z is outward → inZ = −1; ride hatch:
+ *  +Z is inward → inZ = +1). The reveal walls sit OUTSIDE the aperture opening (into the frame/
+ *  shell region), so they never narrow the walk-through nor block the outward door swing. */
+function _addDoorSeal(host: THREE.Group, W: number, H: number, R: number, slabOuterZ: number, inZ: number, azMargin = 0.08, floorLocalY = -Infinity): void {
+  // helper: build a solid seal box between host-local Y extents [yBot, yTop] (clamped to floorLocalY so
+  //   the reveal never dips below the pod floor — the geometry-lint penetration guard), centred in X/Z.
+  const addYBar = (w: number, xc: number, zcp: number, dep: number, yBot: number, yTop: number): void => {
+    const b = Math.max(yBot, floorLocalY);
+    const h = yTop - b;
+    if (h <= 0.001) return;
+    const bar = _box(w, h, dep, _podSteel);
+    bar.position.set(xc, (b + yTop) / 2, zcp);
     host.add(bar);
-  }
-  // left + right jamb bars — the SIDE flanges that back the user's side star-gaps (between the top/bottom bars)
-  const sideH = H - 2 * lapIn;               // fit between the top/bottom bands (no double-stack at corners)
+  };
+  // door-gap arc half-angle (MUST match the shell cut of the CALLER — the bay uses +0.08 @ R=1.44,
+  //   the ride cabin uses +0.06 @ CAB_R=1.28) → the tangential extent where the shell is CUT away.
+  //   The sliver lives between the slab edge (W/2) and this cut.
+  const dAzHalf = Math.min(Math.PI * 0.85, (W / 2 + azMargin) / R);
+  const cutTang = R * Math.sin(dAzHalf);              // |tangential| where the shell is CUT (≈0.574 @ R=1.44)
+  const lapIn = 0.06;                                 // how far the reveal laps INTO the slab edge (a firm seat)
+  const reach = cutTang + 0.10;                       // OUTER reach — ~10cm past the shell cut, onto solid shell
+  // DEPTH: the reveal must run from a hair PROUD of the slab's OUTER face all the way INBOARD past the
+  //   deepest shell surface across the whole reach, so no grazing ray threads the wedge. The shell dips
+  //   inboard by at most |−R+√(R²−reach²)| within the reach; add margin. host-local: OUTWARD = −inZ·Z,
+  //   INBOARD = +inZ·Z. Build the box between the outer plane and a deep inboard plane.
+  const shellDip = R - Math.sqrt(Math.max(0, R * R - reach * reach));   // how far the shell recedes inboard over the reach (≈0.14)
+  const outSign = -inZ;                               // sign of OUTWARD in host-local Z
+  const zOuter = slabOuterZ + outSign * 0.02;         // a hair proud of the slab outer face (kill the seam)
+  // the inboard end: past the frame plane (z=0 ≈ radius R region) by the shell dip + a solid-overlap margin.
+  //   For the BAY (frame origin AT radius R), z=0 is the shell plane; for the RIDE (frame origin at
+  //   CAB_R, 0.16 inboard of the shell) the shell is a touch further out — the generous margin covers both.
+  const zBack = inZ * (shellDip + 0.14);              // inboard plane (positive·inZ) — well past the shell surface
+  const zLo = Math.min(zOuter, zBack), zHi = Math.max(zOuter, zBack);
+  const depth = Math.max(0.12, zHi - zLo), zc = (zLo + zHi) / 2;
+  // The TOP/BOTTOM edges of the aperture are NOT cut by the door-AZIMUTH arc (that only opens the
+  //   SIDES of the shell), so their slab-edge↔frame junction needs only a modest return band, not the
+  //   full tangential `reach`. Use a fixed vertical band = the side's radial width so the reveal reads
+  //   as a clean square frame.
+  const bandV = reach - (W / 2 - lapIn);              // the side jamb's radial width (≈0.22) — reuse for the top/bottom band
+  // SIDE (L/R) jamb returns — solid boxes tangential [W/2−lapIn, reach], over-height to lap the corners,
+  //   clamped at the pod floor (floorLocalY) so nothing dips below-ground (the lint penetration guard).
+  const sideW = reach - (W / 2 - lapIn);
+  const sideCx = (reach + (W / 2 - lapIn)) / 2;
+  const sideOuterY = H / 2 + bandV;                   // side jambs run up past the aperture top by bandV (corner lap)
   for (const sx of [1, -1]) {
-    const bar = _box(bandW, sideH, lipDepth, _podSteel);
-    bar.position.set(sx * cW, 0, zc);
-    host.add(bar);
+    addYBar(sideW, sx * sideCx, zc, depth, -sideOuterY, sideOuterY);
   }
+  // TOP + BOTTOM jamb returns — solid boxes spanning the full outer width (corner-lapping the sides),
+  //   vertical band [H/2−lapIn, H/2+bandV], full depth. The bottom bar is floor-clamped.
+  const topW = 2 * (reach + 0.02);                    // full outer width, laps the side jambs at the corners
+  addYBar(topW, 0, zc, depth, H / 2 - lapIn, H / 2 + bandV);     // TOP
+  addYBar(topW, 0, zc, depth, -(H / 2 + bandV), -(H / 2 - lapIn)); // BOTTOM (clamped)
 }
 
 /** CLUSTER D — the MERGED FRONT DOOR on the hero cabin (−Z, FDOOR_AZ): the ONE aperture the player
@@ -1623,10 +1661,13 @@ function buildCabinHatch(group: THREE.Group): void {
   _cabinHatchAjarY = 0;       // sealed shut at rest
   pivot.rotation.y = _cabinHatchAjarY;
   hatch.add(pivot);
-  // ROUND-1f AIRTIGHT SEAL — the same static STOP LIP as the bay door (buildCanonicalPodExterior), so
-  //   the ride cabin's front door is airtight from the seated eye too. hatch local +Z = INWARD (toward
-  //   centre), so cabin-inboard = +Z (inZ=+1). Closed slab inner face: pivot z=0.04 + doorTh/2 = 0.09.
-  _addDoorStopLip(hatch, HATCH_W, HATCH_H, +1, 0.04 + doorTh / 2);
+  // Z5b STRUCTURAL AIRTIGHT SEAL — the same box-section jamb return as the bay door (buildCanonical-
+  //   PodExterior), so the ride cabin's front door is airtight from the seated eye too, at every angle.
+  //   hatch local +Z = INWARD (toward centre) → cabin-inboard = +Z (inZ=+1). Slab OUTER (world-outward)
+  //   face: pivot z=0.04 − doorTh/2 = −0.01. Shell radius = CAB_R; the ride cabin shell cut uses the
+  //   FDOOR_AZ_HALF margin (+0.06 @ CAB_R), so pass azMargin 0.06 to match. Floor clamp: frame-local
+  //   Y = −HATCH_CY is the cabin floor (world y=0) → the seal never dips below-ground.
+  _addDoorSeal(hatch, HATCH_W, HATCH_H, CAB_R, 0.04 - doorTh / 2, +1, 0.06, -HATCH_CY);
   cabinHatchPivot = pivot;
 }
 
@@ -2129,11 +2170,13 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   doorPivot.add(door);
   // door state: closed = flush over the aperture (sealed); open = swung ~110° outward (into +X).
   doorPivot.rotation.y = state === 'open' ? -1.9 : 0;
-  // ROUND-1f AIRTIGHT SEAL — a static STOP LIP inboard of the closed slab so the flat slab's edge
-  //   clearance against the CURVED shell aperture reads as backed metal, not a star-gap crack to
-  //   space. Frame local +Z = OUTWARD (+X), so cabin-inboard = −Z (inZ=−1). Closed slab inner face:
-  //   doorPivot z=0.06 + slab centre 0 − doorTh/2 (0.05) → frame z=0.01.
-  _addDoorStopLip(frame, CPOD_DOOR_W, CPOD_DOOR_H, -1, 0.06 - doorTh / 2);
+  // Z5b STRUCTURAL AIRTIGHT SEAL — a real BOX-SECTION JAMB RETURN filling the wedge between the flat
+  //   slab edge and the CURVED shell cut, across the FULL depth (slab outer face → past the shell), so
+  //   the rotated-state grazing seated eye finds solid jamb metal (not space) at every door edge. Frame
+  //   local +Z = OUTWARD (+X) → cabin-inboard = −Z (inZ=−1). Slab OUTER face: doorPivot z=0.06 + slab
+  //   centre 0 + doorTh/2 (0.05) → frame z=0.11. Shell radius = the pod body radius R. Floor clamp:
+  //   frame-local Y = −CPOD_DOOR_CY is the pod floor (world y=0) → the seal never dips below-ground.
+  _addDoorSeal(frame, CPOD_DOOR_W, CPOD_DOOR_H, R, 0.06 + doorTh / 2, -1, 0.08, -CPOD_DOOR_CY);
 
   return { root, doorPivot };
 }
