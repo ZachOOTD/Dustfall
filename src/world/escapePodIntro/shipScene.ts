@@ -323,16 +323,30 @@ const _engBlock = _metal(0x33373d, 0.55, 0.55, { flat: true, grime: true });
 //   dead-on facing empty sky — catches a hint of cool glazing. The centre stays clear enough to read the
 //   vista through; the edge sliver still firms the seal.
 const _glass = new THREE.MeshStandardMaterial({
-  color: 0x3a4e5c, roughness: 0.06, metalness: 0.0,
-  // ROUND-2c (the user's 2nd haze report): the remaining head-on veil was the BASE OPACITY body tint —
-  //   with DoubleSide drawing both faces, the 0.10 blue-grey body STACKED ≈2× → a constant milky floor
-  //   over the stars even after the sheen band was killed (see onBeforeCompile). Dropped 0.10→0.06 +
-  //   base emissive 0.16→0.12, so head-on the pane body is near-clear (stars/planet read straight
-  //   through); the "this cell is glass, not an open hole" read is carried by the UNIFORM border glint +
-  //   the thin grazing rim (both in onBeforeCompile) — which every cell shows identically, so the top
-  //   crown panes and the side panes now read the SAME (the per-pane-inconsistency fix).
-  emissive: 0x0c1a26, emissiveIntensity: 0.12,
-  transparent: true, opacity: 0.06,
+  // ROUND-2d item-1 — THE "FUZZY STARS" DIAGNOSIS (toggle-tested by elimination, not guessed). Soft
+  //   warm dots read ON the dome glass, distinct from the crisp sky stars, and PERSISTED through
+  //   --hidestars, --noplanet, and killing the glass envMap (moved _glass to ZERO env) — so NOT
+  //   stars / planet / IBL-reflection. They VANISHED the instant the glass roughness went up (0.06→1.0
+  //   killed them; a --nohull shot proved they render ON the glass, not in the sky). ROOT CAUSE: at
+  //   roughness 0.06 the glossy dielectric glass shows a tight SPECULAR LOBE for every cabin POINT
+  //   LIGHT (the warm key/aft/exitGlow/winGlow/coolFill sources). On the big curved dome sheet each
+  //   warm point light paints a soft warm blob = the "fuzzy stars". FIX: roughness 0.06→0.7 — spreads
+  //   the specular so the point-light lobes no longer resolve as discrete blobs at ANY vantage (0.5
+  //   still left faint smudges from the STANDING eye; 0.7 is clean seated + standing). Through the
+  //   glass the only stars are now the sky dome's. The glass PRESENCE is carried by the emissive
+  //   border/rim glint + the uniform glaze floor (onBeforeCompile) — view/UV-driven, NOT
+  //   light-specular — so it's untouched by the roughness change.
+  color: 0x3a4e5c, roughness: 0.7, metalness: 0.0,
+  // ROUND-2d item-2 (haze: slightly LESS overall + EXACTLY uniform front/side/top). The per-pane BODY
+  //   glaze is machine-measured by the cockpit-glass-luma probe (isolated glass over black; the robust
+  //   per-pane read is the body-band MEDIAN, coverage-independent). Baseline median ≈21 across regions;
+  //   nudged the base emissive 0.12→0.10 for the "slightly less" ask (the uniform glaze floor +
+  //   Fresnel-alpha were also trimmed in onBeforeCompile). All presence terms are view/UV-driven +
+  //   identical per cell → parity BY CONSTRUCTION; the probe confirms front/side/top medians within
+  //   ±10% at the lower level (~3-4% dev). ROUND-2c note kept: with DoubleSide the base opacity tint
+  //   stacks ≈2×, so it's kept low (the border glint carries the "this cell is glass" read).
+  emissive: 0x0c1a26, emissiveIntensity: 0.10,
+  transparent: true, opacity: 0.055,
   side: THREE.DoubleSide,
 });
 _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
@@ -382,7 +396,7 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      //   hazy" — all cells converge). Nudged 0.03→0.05: enough that a face-on crown pane over a BLACK
      //   sky patch shows the same faint glaze as a side pane over the galaxy glow (they read identical),
      //   still low enough that head-on the stars read straight through, not a milky film.
-     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 0.05;
+     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 0.038;   // ROUND-2d: 0.05→0.038 (slightly less haze; view/UV-INDEPENDENT so every cell reads identical = parity by construction)
      // a hairline BORDER glint on the outer few % of each pane's uv → every cell shows a sealed frame
      //   even head-on (the "no missing pane" read), uniform per cell, without touching the clear centre.
      float gEdgeU = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
@@ -408,7 +422,11 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      float gEdgeU2 = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
      float gEdgeV2 = min(vGlassLocal.y, 1.0 - vGlassLocal.y);
      float gBorderA = 1.0 - smoothstep(0.0, 0.05, min(gEdgeU2, gEdgeV2));
-     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.09 + gBorderA * 0.30, 0.0, 0.5);`,
+     // ROUND-2d: the grazing Fresnel-alpha (0.09) opacified SIDE/TOP panes more than FACE-ON FRONT
+     //   panes → the per-region body divergence the user reads as "front/side/top don't match". Cut
+     //   0.09→0.05 so the pane BODY alpha is near view-INDEPENDENT (the border seal carries presence);
+     //   the three regions converge (probe: medians within ±10% at the lower level).
+     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.05 + gBorderA * 0.30, 0.0, 0.5);`,
   );
 };
 
@@ -2257,25 +2275,48 @@ function buildLighting(group: THREE.Group): void {
   // ── REAL RECESSED LIGHT FIXTURES (the actual sources) — caged metal can-lights in the crown,
   //    each = a metal bezel + a warm emissive lens. The point lights sit AT these so the light has
   //    a believable origin (gate: "the light is a blown white blob with no fixture").
-  const down = new THREE.Vector3(0, -1, 0);
-  // ROUND-2c RE-SEAT (ZERO luminaires in the glazing): the FORWARD can at fz=−0.9 sat deep inside the
-  //   glazed dome (z −0.9 is well forward of the collar 0.34) — its amber lens read as the "yellow-capped
-  //   lamp floating in the glazing" (the user's 2nd report). Both can MESHES now mount on the OPAQUE aft
-  //   ceiling (fz ≥ COLLAR_Z: on the collar crown + along the keel stringer). The forward KEY POINT light
-  //   (below, an invisible source, not a mesh) stays forward to throw warm light onto the dash — a light
-  //   in front of the glass is fine; only a visible FIXTURE in the glazing is the defect.
-  for (const fz of [COLLAR_Z + 0.16, 1.35]) {   // =0.50, 1.35 — both aft of the collar, on the opaque hull
-    const can = _cyl(0.13, 0.15, 0.10, 12, _channel);
-    can.position.set(0, HULL_CROWN_MAX - 0.16, fz);
+  // ── ROUND-2d item-3 — ONE CEILING LIGHT (user: the collar/keel cluster of TWO amber cans + the red
+  //    beacon read messy). Consolidated to a SINGLE well-made warm can-dome fixture on the collar crown
+  //    carrying the cabin's warm key; the red ALERT beacon is separated + moved clearly AFT on the keel
+  //    stringer (built below at zB=1.7, standing ALONE + purposeful). The lighting FUNCTION is preserved
+  //    (the warm key point light + the alert wash) — only the fixture COUNT drops. No luminaire in the
+  //    glazing (standing rule): the fixture mounts on the OPAQUE collar crown at fz=COLLAR_Z+0.16 (=0.50),
+  //    aft of the glass.
+  const canZ = COLLAR_Z + 0.16;   // =0.50 — on the opaque collar crown, aft of the glazing
+  const canY = HULL_CROWN_MAX;    // crown apex
+  {
+    // (1) a flush MOUNT PLATE bolted to the crown (the visible mount the spec asks for)
+    const plate = _cyl(0.18, 0.20, 0.05, 16, _band);
+    plate.position.set(0, canY - 0.045, canZ);
+    group.add(plate);
+    // 4 mount bolts around the plate rim (worked hardware)
+    for (let a = 0; a < 4; a++) {
+      const ba = (a / 4) * Math.PI * 2 + Math.PI / 4;
+      group.add(_stud(0.15 * Math.cos(ba), canY - 0.03, canZ + 0.15 * Math.sin(ba), new THREE.Vector3(0, -1, 0), _rivet, 0.016));
+    }
+    // (2) the CAN housing — a recessed metal cylinder (bezel), machined-steel, hanging just below the plate
+    const can = _cyl(0.145, 0.165, 0.13, 16, _channel);
+    can.position.set(0, canY - 0.125, canZ);
     group.add(can);
-    const lens = _cyl(0.10, 0.10, 0.02, 12, _ledAmber);
-    lens.position.set(0, HULL_CROWN_MAX - 0.22, fz);
+    // a thin bright bezel ring at the can mouth (the machined rim catches a highlight → reads as a real fixture)
+    const bezel = _cyl(0.155, 0.155, 0.02, 16, _steel);
+    bezel.position.set(0, canY - 0.195, canZ);
+    group.add(bezel);
+    // (3) the warm frosted DOME LENS recessed inside the bezel (a domed lens, not a flat disc — reads
+    //     as a real luminaire; the warm key SOURCE sits just below it so the glow has an origin)
+    const lensGeo = new THREE.SphereGeometry(0.115, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+    _disposables.push(lensGeo);
+    const lens = new THREE.Mesh(lensGeo, _ledAmber);
+    lens.rotation.x = Math.PI;   // dome opens downward into the cabin
+    lens.position.set(0, canY - 0.185, canZ);
     group.add(lens);
-    // a cross cage bar under each
-    const cage = _box(0.22, 0.012, 0.012, _steel);
-    cage.position.set(0, HULL_CROWN_MAX - 0.24, fz);
-    group.add(cage);
-    void down;
+    // (4) a slim protective CROSS CAGE under the lens (two crossed bars — the caged-fixture read)
+    for (const rot of [0, Math.PI / 2]) {
+      const bar = _box(0.26, 0.014, 0.014, _steel);
+      bar.rotation.y = rot;
+      bar.position.set(0, canY - 0.22, canZ);
+      group.add(bar);
+    }
   }
   // warm KEY (an invisible source, forward of the collar) — throws warm light DOWN onto the dash. Pulled
   //   DOWN + softened so it no longer blows the crown out. No mesh here (the fixtures are aft, opaque).
@@ -2283,9 +2324,12 @@ function buildLighting(group: THREE.Group): void {
   key.position.set(0.0, HULL_CROWN_MAX - 0.30, -0.7);
   group.add(key);
   _alertKeyLights.push(key);
-  // a softer warm aft fill at the aft fixture (lights the corridor mouth + aft curve).
-  const aft = new THREE.PointLight(0xffc488, 1.1, 4.8, 2.4);
-  aft.position.set(0.0, HULL_CROWN_MAX - 0.30, 0.7);
+  // ROUND-2d item-3 — the SINGLE ceiling can's own warm throw: a source AT the fixture (just below the
+  //   lens at canZ=0.50) so the one ceiling light visibly IS the origin of the warm crown pool + it
+  //   still reaches the corridor mouth aft. Replaces the old separate aft-fixture fill (that fixture is
+  //   gone). Kept in _alertKeyLights so it dims on red-alert.
+  const aft = new THREE.PointLight(0xffc488, 1.35, 5.0, 2.2);
+  aft.position.set(0.0, HULL_CROWN_MAX - 0.28, COLLAR_Z + 0.16);
   group.add(aft);
   _alertKeyLights.push(aft);
   // FLOW-CLARITY (checkEngines beat): the "check the engines (aft)" cue sends the seated pilot
@@ -2359,7 +2403,12 @@ function buildLighting(group: THREE.Group): void {
   //   COLLAR_Z→CK_Z−0.25, strictly AFT of the collar over/behind the pilot's head). Bracket goes UP
   //   INTO the stringer; the dome hangs just below it. Still glanced up-aft from the seat + reads on
   //   alert, but on real opaque structure — never in the glazing.
-  const zB = COLLAR_Z + 0.66;                        // =1.00 — well AFT of the collar, under the keel stringer (opaque); spaced clear of the fwd down-light (z=0.50)
+  // ROUND-2d item-3 — SEPARATE the alert beacon from the ceiling light. The old zB=1.00 sat right
+  //   behind the (former two-can) cluster → the "messy cluster" read. Moved CLEARLY AFT to zB=1.7 on
+  //   the keel stringer (over/behind the pilot's head, ~1.2m aft of the single warm can at z=0.50) so
+  //   the red ALERT beacon stands ALONE + purposeful — it exists only for the alert read. Still on the
+  //   opaque keel stringer (runs z 0.34..2.25; never in the glazing), glanced up-aft from the seat on alert.
+  const zB = COLLAR_Z + 1.36;                        // =1.70 — well aft on the keel stringer, clearly separated from the warm can (z=0.50)
   const spineY = HULL_CROWN_MAX - 0.10;              // =2.86 — the keel-stringer underside
   const beaconCan = _cyl(0.07, 0.09, 0.06, 10, _channel);
   beaconCan.position.set(0, spineY - 0.10, zB);

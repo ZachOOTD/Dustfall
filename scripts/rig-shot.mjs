@@ -2723,6 +2723,97 @@ const SCENARIOS = {
     console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
+  // ROUND-2d item-2 — GLASS HAZE PARITY PROBE. Machine-measures the dome-glass luminance in the
+  //   FRONT / SIDE / TOP pane regions against an IDENTICAL pure-BLACK sky (dome + stars + planet +
+  //   ALL non-glass ship geometry hidden), so the number is the glass presence ITSELF (emissive
+  //   glaze + border + rim), not contaminated by whatever sky patch or frame sits behind each region.
+  //   The per-pose MEAN is confounded by how much of the frame is face-on pane vs grazing sliver vs
+  //   black gap; the robust per-pane read = the MEDIAN of the body-band pixels (the typical pane-
+  //   INTERIOR glaze value, coverage-independent) = the "haze" the seated eye perceives per pane.
+  //   Parity = the three region medians within a tight tolerance (±10%). --nolights removes the cabin
+  //   point lights so the metric is the pure emissive presence; --save writes per-region PNGs.
+  //     node scripts/rig-shot.mjs --scenario=cockpit-glass-luma --port=5192 [--nolights] [--save]
+  'cockpit-glass-luma': async (page) => {
+    const noLights = !!argv.nolights;
+    await page.evaluate((noLights) => {
+      window.__RIG_NOLIGHTS = noLights;
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      try { ctx.three.renderer.toneMappingExposure = 1.08; } catch {}
+      g.startIntro(); g.jumpToBeat('cockpit'); g.setSkyIntroMode(1);
+    }, noLights);
+    await page.waitForTimeout(700);
+    const regions = { front: [0.0, 1.55, -1.0], side: [-1.0, 1.7, -0.35], top: [0.0, 2.6, -1.0] };
+    const out = await page.evaluate((regions) => {
+      const ctx = window.__game.ctx;
+      // ISOLATE THE GLASS: hide EVERY mesh/points/sprite EXCEPT the dome glass sheet (the renderOrder-2
+      //   transparent sheet) → against pure black, every non-black pixel IS glass. Optionally kill the
+      //   cabin lights (the view-dependent specular of the point lights otherwise makes face-on FRONT
+      //   panes read hotter than grazing SIDE/TOP — a measurement confound the median already tames).
+      ctx.three.scene.traverse((o) => {
+        if (o.isMesh || o.isPoints || o.isSprite) {
+          const isGlass = o.isMesh && o.material && o.material.transparent && o.renderOrder === 2;
+          if (!isGlass) o.visible = false;
+        }
+        if (window.__RIG_NOLIGHTS && o.isLight) o.intensity = 0;
+      });
+      ctx.three.renderer.setClearColor(0x000000, 1);
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera; const V = cam.position.constructor;
+      const W = 1100, H = 760; ctx.three.renderer.setSize(W, H, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = W / H; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z + 0.1);
+      const gl = ctx.three.renderer.getContext();
+      const res = {};
+      for (const [name, look] of Object.entries(regions)) {
+        cam.position.copy(eye); cam.up.set(0, 1, 0);
+        cam.lookAt(new V(tr.x + look[0], floorY + look[1], tr.z + look[2]));
+        cam.updateMatrixWorld(true);
+        ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+        const px = new Uint8Array(W * H * 4);
+        gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const body = []; let sumAll = 0, nAll = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+          if (l > 1.5) { sumAll += l; nAll++; if (l < 26) body.push(l); }   // body = the faint glaze fill (below the bright border/rim)
+        }
+        body.sort((a, b) => a - b);
+        const med = body.length ? body[Math.floor(body.length / 2)] : 0;
+        const meanBody = body.length ? body.reduce((a, b) => a + b, 0) / body.length : 0;
+        res[name] = { bodyMed: +med.toFixed(3), bodyMean: +meanBody.toFixed(3), allMean: nAll ? +(sumAll / nAll).toFixed(3) : 0, glassPx: nAll };
+      }
+      return res;
+    }, regions);
+    if (argv.save) {
+      for (const [name, look] of Object.entries(regions)) {
+        await page.evaluate((look) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera; const V = cam.position.constructor;
+          const tr = ctx.player.body.body.translation();
+          const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+          const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z + 0.1);
+          cam.position.copy(eye); cam.up.set(0, 1, 0);
+          cam.lookAt(new V(tr.x + look[0], floorY + look[1], tr.z + look[2])); cam.updateMatrixWorld(true);
+          ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+        }, look);
+        await page.screenshot({ path: join(OUT, `glass-luma-${name}.png`), clip: { x: 0, y: 0, width: 1100, height: 760 } });
+      }
+    }
+    const medVals = ['front', 'side', 'top'].map((k) => out[k].bodyMed);
+    const meanVals = ['front', 'side', 'top'].map((k) => out[k].bodyMean);
+    const parity = (vals) => { const m = vals.reduce((a, b) => a + b, 0) / vals.length; const d = Math.max(...vals.map((v) => Math.abs(v - m) / (m || 1))); return { m, d }; };
+    const pm = parity(medVals), pmn = parity(meanVals);
+    const pass = pm.d <= 0.10;
+    console.log('[glass-luma] ' + JSON.stringify(out));
+    console.log('[glass-luma] BODY-MEDIAN front=' + medVals[0] + ' side=' + medVals[1] + ' top=' + medVals[2] +
+      ' | mean=' + pm.m.toFixed(3) + ' maxDev=' + (pm.d * 100).toFixed(1) + '% ' + (pass ? 'PARITY-OK' : 'MISMATCH'));
+    console.log('[glass-luma] BODY-MEAN   front=' + meanVals[0] + ' side=' + meanVals[1] + ' top=' + meanVals[2] +
+      ' | mean=' + pmn.m.toFixed(3) + ' maxDev=' + (pmn.d * 100).toFixed(1) + '% (coverage-confounded; median is the parity metric)');
+  },
+
   // PARALLAX-FIX PROBE (sky.ts): measure the space planet's projected ANGULAR DIAMETER
   // from (a) the seated pilot eye and (b) ~10m aft down the corridor doorway, comparing the
   // OLD camera-anchored placement (planet re-centered on the camera → ZERO parallax → it
