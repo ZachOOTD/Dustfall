@@ -2814,6 +2814,267 @@ const SCENARIOS = {
       ' | mean=' + pmn.m.toFixed(3) + ' maxDev=' + (pmn.d * 100).toFixed(1) + '% (coverage-confounded; median is the parity metric)');
   },
 
+  // ── PER-CELL glass haze parity (Z1). The region probe above samples 3 CAMERA DIRECTIONS and reads
+  //   every glass pixel in the frame — it can't tell a hull-adjacent CLOSURE strip or a literal CROWN
+  //   cell apart from the front panes it shares the frame with (the C60/C63 "region centre" blind spot
+  //   the user named). THIS probe walks the merged glass sheet's TRIANGLE BUFFER: every cell = 2 tris
+  //   = 6 verts = 18 position floats, in build order (8 front panes, then 4 side-closure strips). For
+  //   each cell it: (a) computes the world centroid + face normal, (b) frames the camera head-on to
+  //   that cell from the inboard side at a fixed stand-off, (c) renders the ISOLATED glass over black,
+  //   (d) reads a tight pixel window around the projected centroid and takes the body-band MEDIAN (the
+  //   coverage-independent per-cell glaze read). Parity = every cell within ±10% of the FRONT-PANE median.
+  //   DEFAULT MODE = --seated: measures each cell (all front panes + every side-closure strip) AS THE
+  //   PILOT SEES IT — from the real seated eye, full composited render (lights + env), sky hidden so the
+  //   glaze reads over black. This is the faithful per-cell gate. The diagnostic flags below strip the
+  //   scene to isolate a root cause and are NOT the gate (they bottom out at the 8-bit quantization floor):
+  //     --isolatecell  draw one cell at a time (kills stacking) · --frontside force FrontSide (kills the
+  //     DoubleSide 2-face composite) · --nolights kill cabin lights (pure emissive). Use --raw to run the
+  //     old synthetic head-on single-pane path instead of seated. --save writes per-cell frames.
+  //     node scripts/rig-shot.mjs --scenario=cockpit-glass-cells --port=5192
+  'cockpit-glass-cells': async (page) => {
+    const noLights = !!argv.nolights;
+    const isolateCell = !!argv.isolatecell;
+    const frontSide = !!argv.frontside;
+    // seated (the faithful gate) is the DEFAULT; --raw / any isolate/frontside/nolights flag opts into the
+    //   synthetic head-on diagnostic path.
+    const seated = !argv.raw && !isolateCell && !frontSide && !noLights;
+    await page.evaluate(({ noLights, isolateCell, frontSide, seated }) => {
+      window.__RIG_NOLIGHTS = noLights;
+      window.__RIG_ISOLATECELL = isolateCell;
+      window.__RIG_FRONTSIDE = frontSide;
+      window.__RIG_SEATED = seated;
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      try { ctx.three.renderer.toneMappingExposure = 1.08; } catch {}
+      g.startIntro(); g.jumpToBeat('cockpit'); g.setSkyIntroMode(1);
+    }, { noLights, isolateCell, frontSide, seated });
+    await page.waitForTimeout(700);
+    const out = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const THREE = ctx.three.THREE || window.THREE;
+      // Isolate the dome glass sheet (renderOrder 2, transparent). Hide everything else → black backdrop.
+      let glassMesh = null;
+      ctx.three.scene.traverse((o) => {
+        if (o.isMesh || o.isPoints || o.isSprite) {
+          const isGlass = o.isMesh && o.material && o.material.transparent && o.renderOrder === 2;
+          if (!isGlass) o.visible = false; else glassMesh = o;
+        }
+        if (window.__RIG_NOLIGHTS && o.isLight) o.intensity = 0;
+      });
+      if (glassMesh && window.__RIG_FRONTSIDE) { glassMesh.material.side = 0; glassMesh.material.needsUpdate = true; }
+      // Kill the ENVIRONMENT reflection (non-seated modes only) so the synthetic head-on metric isolates
+      //   the pure EMISSIVE GLAZE ("haze") — not the glass reflecting the (non-uniform) space IBL, which
+      //   is a legitimately per-direction reflection, NOT haze. Seated mode keeps env+lights (the REAL look).
+      if (glassMesh && !window.__RIG_SEATED) { glassMesh.material.envMap = null; glassMesh.material.envMapIntensity = 0; glassMesh.material.needsUpdate = true; }
+      if (!window.__RIG_SEATED) { try { ctx.three.scene.environment = null; } catch {} }
+      if (!glassMesh) return { error: 'no glass mesh found' };
+      ctx.three.renderer.setClearColor(0x000000, 1);
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera; const V = cam.position.constructor;
+      const W = 900, H = 900; ctx.three.renderer.setSize(W, H, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.fov = 50; cam.updateProjectionMatrix(); }
+      const gl = ctx.three.renderer.getContext();
+
+      // Reconstruct cells from the position buffer (6 verts / cell, world-space).
+      glassMesh.updateMatrixWorld(true);
+      const pos = glassMesh.geometry.getAttribute('position');
+      const M = glassMesh.matrixWorld;
+      const nCells = Math.floor(pos.count / 6);
+      // build-order labels: 4 columns × 2 bands front (col L-wrap, L-ctr, R-ctr, R-wrap × band lo/hi),
+      //   then closure L lo/hi, closure R lo/hi.
+      const frontLabels = [];
+      const cols = ['Lwrap', 'Lctr', 'Rctr', 'Rwrap'];
+      for (const c of cols) for (const b of ['lo', 'hi']) frontLabels.push('front-' + c + '-' + b);
+      const closureLabels = ['closL-lo', 'closL-hi', 'closR-lo', 'closR-hi'];
+      const labels = frontLabels.concat(closureLabels);
+
+      const cellData = [];
+      for (let ci = 0; ci < nCells; ci++) {
+        const verts = [];
+        for (let vi = 0; vi < 6; vi++) {
+          const idx = ci * 6 + vi;
+          const p = new V(pos.getX(idx), pos.getY(idx), pos.getZ(idx)).applyMatrix4(M);
+          verts.push(p);
+        }
+        const centroid = new V();
+        for (const p of verts) centroid.add(p);
+        centroid.multiplyScalar(1 / 6);
+        // face normal from the first triangle
+        const e1 = verts[1].clone().sub(verts[0]);
+        const e2 = verts[2].clone().sub(verts[0]);
+        const nrm = e1.cross(e2).normalize();
+        cellData.push({ centroid, nrm, label: labels[ci] || ('cell' + ci), _ci: ci });
+      }
+
+      // the pilot head centre (dome centre) — the inboard viewing side.
+      const domeCentre = new V(0.0, 1.30, -0.12);
+      const res = [];
+      // ── SEATED-EYE mode: measure each cell AS THE PLAYER PERCEIVES IT — from the real seated eye,
+      //   full composited render (all glass panes, lights+env), sky meshes hidden so the glaze reads over
+      //   black. This is the faithful per-cell version of the region probe (which the user validated at
+      //   ~16 luma). The synthetic head-on single-pane read (the default below) bottoms out at the 8-bit
+      //   quantization floor (2-5 luma), where a 1-unit variation blows ±10% — not representative of the
+      //   perceived haze. Sample the window where each cell projects on screen from the seated eye.
+      if (window.__RIG_SEATED) {
+        const tr = ctx.player.body.body.translation();
+        const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+        // sweep the same look directions the region probe uses (fwd/up/left/right) + gather every cell
+        //   that projects into frame front-facing; take its body median from that composited frame.
+        const eye = new V(tr.x, floorY + 1.35, tr.z + 0.1);   // seated eye height
+        // Sweep MANY seated look directions so every cell is centred+near-head-on in at least one frame
+        //   (the eye pans across the whole canopy from the seat). For each cell keep the frame where its
+        //   projected centroid is nearest screen-centre (most head-on, least foreshortened).
+        const looks = [];
+        for (const ax of [-1.4, -0.7, 0, 0.7, 1.4]) for (const ay of [1.35, 1.9, 2.5]) looks.push([ax, ay, -1.0]);
+        // add strong LATERAL looks so the side-closure panes (which wrap aft to the collar, behind the
+        //   shoulders) get framed head-on too — a purely-forward gaze never faces them.
+        for (const ay of [1.35, 1.9]) { looks.push([-2.2, ay, 0.2]); looks.push([2.2, ay, 0.2]); looks.push([-2.0, ay, 0.5]); looks.push([2.0, ay, 0.5]); }
+        const cellBest = new Map();   // label → { med, bodyPx, score }
+        for (const look of looks) {
+          cam.position.copy(eye); cam.up.set(0, 1, 0);
+          cam.lookAt(new V(tr.x + look[0], floorY + look[1], tr.z + look[2]));
+          cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+          ctx.three.renderer.render(ctx.three.scene, cam);
+          const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          for (const cell of cellData) {
+            const proj = cell.centroid.clone().project(cam);
+            if (proj.z > 1 || Math.abs(proj.x) > 0.9 || Math.abs(proj.y) > 0.9) continue;
+            const sx = Math.round((proj.x * 0.5 + 0.5) * W), sy = Math.round((proj.y * 0.5 + 0.5) * H);
+            const centreDist = Math.hypot(proj.x, proj.y);   // 0 = dead centre (most head-on)
+            const win = 18; const body = []; let nAll = 0;
+            for (let dy = -win; dy <= win; dy++) { const yy = sy + dy; if (yy < 0 || yy >= H) continue;
+              for (let dx = -win; dx <= win; dx++) { const xx = sx + dx; if (xx < 0 || xx >= W) continue;
+                const i = (yy * W + xx) * 4; const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+                if (l > 1.5) { nAll++; if (l < 40) body.push(l); } } }
+            if (body.length < 120) continue;   // the window must be mostly glass (cell present, unoccluded)
+            body.sort((a, b) => a - b); const med = body[Math.floor(body.length / 2)];
+            const prev = cellBest.get(cell.label);
+            if (!prev || centreDist < prev.score) cellBest.set(cell.label, { med: +med.toFixed(2), bodyPx: body.length, score: centreDist, bodyMean: +(body.reduce((a, b) => a + b, 0) / body.length).toFixed(2) });
+          }
+        }
+        for (const label of labels) {
+          const b = cellBest.get(label);
+          res.push({ label, bodyMed: b ? b.med : 0, bodyMean: b ? b.bodyMean : 0, bodyPx: b ? b.bodyPx : 0, glassPx: 0, allMean: 0, cy: 0, ndv: 1, rgb: [0, 0, 0], seen: !!b });
+        }
+        return { nCells, res, seated: true };
+      }
+      const lightDump = [];
+      ctx.three.scene.traverse((o) => { if (o.isLight && o.visible) lightDump.push(o.type + ':' + (o.intensity || 0).toFixed(2)); });
+      for (const cell of cellData) {
+        // View each cell along its TRUE FACE NORMAL (inboard-pointing), NOT toward the dome centre —
+        //   framing toward the centre hits steeply-raked closures/crown at a grazing angle and confounds
+        //   the Fresnel-alpha with real material differences. The inboard normal removes that confound:
+        //   every cell is now viewed head-on, so any residual luma difference is genuinely material/geo.
+        let viewDir = cell.nrm.clone();
+        // ensure it points toward the cabin interior (inboard = toward the dome centre side).
+        if (viewDir.dot(domeCentre.clone().sub(cell.centroid)) < 0) viewDir.negate();
+        if (viewDir.lengthSq() < 1e-6) viewDir = domeCentre.clone().sub(cell.centroid).normalize();
+        viewDir.normalize();
+        const standOff = 1.15;
+        const camPos = cell.centroid.clone().add(viewDir.clone().multiplyScalar(standOff));
+        cam.position.copy(camPos); cam.up.set(0, 1, 0);
+        cam.lookAt(cell.centroid);
+        cam.updateMatrixWorld(true);
+        cam.updateProjectionMatrix();
+        // --isolatecell: draw ONLY this cell's 6 verts (drawRange) so NO other stacked/DoubleSide
+        //   glass layer composites into the read — isolates the SINGLE-pane material presence. Without
+        //   it, overhead/crown cells read hotter because more glass panes stack behind them along the ray.
+        if (window.__RIG_ISOLATECELL) glassMesh.geometry.setDrawRange(cell._ci * 6, 6);
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        // stash the projected NdV + a couple of cell frames for save-mode diagnosis
+        cell._proj = null;
+        if (window.__RIG_ISOLATECELL) glassMesh.geometry.setDrawRange(0, Infinity);
+        // project the centroid to screen pixels
+        const proj = cell.centroid.clone().project(cam);
+        const sx = Math.round((proj.x * 0.5 + 0.5) * W);
+        const sy = Math.round((proj.y * 0.5 + 0.5) * H);   // gl origin bottom-left
+        const px = new Uint8Array(W * H * 4);
+        gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        // sample a tight window (±win px) around the projected centroid → the CELL BODY.
+        const win = 90;
+        const body = []; let nAll = 0, sumAll = 0;
+        for (let dy = -win; dy <= win; dy++) {
+          const yy = sy + dy; if (yy < 0 || yy >= H) continue;
+          for (let dx = -win; dx <= win; dx++) {
+            const xx = sx + dx; if (xx < 0 || xx >= W) continue;
+            const i = (yy * W + xx) * 4;
+            const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+            if (l > 1.5) { nAll++; sumAll += l; if (l < 26) body.push(l); }   // body = the faint glaze fill
+          }
+        }
+        body.sort((a, b) => a - b);
+        const med = body.length ? body[Math.floor(body.length / 2)] : 0;
+        const meanBody = body.length ? body.reduce((a, b) => a + b, 0) / body.length : 0;
+        // dump the exact centroid pixel RGB (helps distinguish an alpha vs a colour/hue difference).
+        const ci4 = (Math.max(0, Math.min(H - 1, sy)) * W + Math.max(0, Math.min(W - 1, sx))) * 4;
+        const rgb = [px[ci4], px[ci4 + 1], px[ci4 + 2]];
+        res.push({
+          label: cell.label,
+          bodyMed: +med.toFixed(2),
+          bodyMean: +meanBody.toFixed(2),
+          bodyPx: body.length,
+          glassPx: nAll,
+          allMean: nAll ? +(sumAll / nAll).toFixed(2) : 0,
+          cy: +cell.centroid.y.toFixed(2),
+          ndv: +Math.abs(cell.nrm.dot(viewDir)).toFixed(3),   // 1 = head-on; low = grazing (Fresnel fires)
+          rgb,
+        });
+      }
+      return { nCells, res, lightDump, hasEnv: !!ctx.three.scene.environment, glassEnv: !!(glassMesh && glassMesh.material.envMap), glassEnvI: glassMesh ? glassMesh.material.envMapIntensity : -1 };
+    });
+    if (out.lightDump) console.log('[glass-cells][diag] lights=' + JSON.stringify(out.lightDump) + ' sceneEnv=' + out.hasEnv + ' glassEnvMap=' + out.glassEnv + ' glassEnvI=' + out.glassEnvI);
+    if (argv.save) {
+      // re-render + save a frame for each cell so we can SEE what the window contains.
+      const cellsToSave = out.res ? out.res.map((r) => r.label) : [];
+      for (let ci = 0; ci < cellsToSave.length; ci++) {
+        await page.evaluate((ci) => {
+          const ctx = window.__game.ctx;
+          const cam = ctx.three.camera; const V = cam.position.constructor;
+          let glassMesh = null;
+          ctx.three.scene.traverse((o) => { if (o.isMesh && o.material && o.material.transparent && o.renderOrder === 2) glassMesh = o; });
+          if (!glassMesh) return;
+          glassMesh.updateMatrixWorld(true);
+          const pos = glassMesh.geometry.getAttribute('position'); const M = glassMesh.matrixWorld;
+          const c = new V();
+          for (let vi = 0; vi < 6; vi++) { const idx = ci * 6 + vi; c.add(new V(pos.getX(idx), pos.getY(idx), pos.getZ(idx)).applyMatrix4(M)); }
+          c.multiplyScalar(1 / 6);
+          const a = new V(pos.getX(ci * 6), pos.getY(ci * 6), pos.getZ(ci * 6)).applyMatrix4(M);
+          const b = new V(pos.getX(ci * 6 + 1), pos.getY(ci * 6 + 1), pos.getZ(ci * 6 + 1)).applyMatrix4(M);
+          const cc = new V(pos.getX(ci * 6 + 2), pos.getY(ci * 6 + 2), pos.getZ(ci * 6 + 2)).applyMatrix4(M);
+          let nrm = b.clone().sub(a).cross(cc.clone().sub(a)).normalize();
+          const dome = new V(0, 1.30, -0.12);
+          if (nrm.dot(dome.clone().sub(c)) < 0) nrm.negate();
+          cam.position.copy(c.clone().add(nrm.clone().multiplyScalar(1.15))); cam.up.set(0, 1, 0);
+          cam.lookAt(c); cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+          if (window.__RIG_ISOLATECELL) glassMesh.geometry.setDrawRange(ci * 6, 6);
+          ctx.three.renderer.render(ctx.three.scene, cam);
+          if (window.__RIG_ISOLATECELL) glassMesh.geometry.setDrawRange(0, Infinity);
+        }, ci);
+        await page.screenshot({ path: join(OUT, `glass-cell-${String(ci).padStart(2, '0')}-${cellsToSave[ci]}.png`), clip: { x: 0, y: 0, width: 900, height: 900 } });
+      }
+      console.log('[glass-cells] saved ' + cellsToSave.length + ' per-cell frames to verification/');
+    }
+    if (out.error) { console.log('[glass-cells] ERROR ' + out.error); return; }
+    // front-pane reference median = median of the 8 front cells' bodyMed.
+    const fronts = out.res.filter((r) => r.label.startsWith('front-')).map((r) => r.bodyMed).sort((a, b) => a - b);
+    const frontMed = fronts.length ? fronts[Math.floor(fronts.length / 2)] : 0;
+    console.log('[glass-cells] nCells=' + out.nCells + '  FRONT-PANE reference median=' + frontMed.toFixed(2));
+    console.log('[glass-cells] ' + 'cell'.padEnd(14) + 'bodyMed'.padStart(9) + 'bodyMean'.padStart(10) + '  dev-vs-front  bodyPx');
+    let worst = 0, worstLabel = '';
+    for (const r of out.res) {
+      const dev = frontMed > 0 ? (r.bodyMed - frontMed) / frontMed : 0;
+      if (Math.abs(dev) > Math.abs(worst)) { worst = dev; worstLabel = r.label; }
+      const flag = Math.abs(dev) > 0.10 ? '  <<< OUT' : '';
+      console.log('[glass-cells] ' + r.label.padEnd(14) + String(r.bodyMed).padStart(9) + String(r.bodyMean).padStart(10) +
+        '  ' + (dev >= 0 ? '+' : '') + (dev * 100).toFixed(1).padStart(6) + '%' + '     ' + String(r.bodyPx).padStart(6) + ' rgb=' + JSON.stringify(r.rgb) + flag);
+    }
+    const allWithin = out.res.every((r) => frontMed > 0 && Math.abs((r.bodyMed - frontMed) / frontMed) <= 0.10);
+    console.log('[glass-cells] ' + (allWithin ? 'PARITY-OK (every cell within ±10% of front median)' :
+      'MISMATCH worst=' + worstLabel + ' ' + (worst >= 0 ? '+' : '') + (worst * 100).toFixed(1) + '%'));
+  },
+
   // PARALLAX-FIX PROBE (sky.ts): measure the space planet's projected ANGULAR DIAMETER
   // from (a) the seated pilot eye and (b) ~10m aft down the corridor doorway, comparing the
   // OLD camera-anchored placement (planet re-centered on the camera → ZERO parallax → it

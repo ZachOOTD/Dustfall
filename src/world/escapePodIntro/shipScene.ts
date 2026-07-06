@@ -347,7 +347,19 @@ const _glass = new THREE.MeshStandardMaterial({
   //   stacks ≈2×, so it's kept low (the border glint carries the "this cell is glass" read).
   emissive: 0x0c1a26, emissiveIntensity: 0.10,
   transparent: true, opacity: 0.055,
-  side: THREE.DoubleSide,
+  // Z1 PER-CELL HAZE-PARITY ROOT-CAUSE (2nd half). The glass WAS DoubleSide, which made per-cell haze
+  //   inescapably NON-uniform: a ray crossing a pane hits 1 face (near-flat sill panes, where the two
+  //   coincident faces collapse to one blend) or 2 faces (curved crown / closure panes, whose faces
+  //   separate in depth) → the crown/closure cells composited ~2× the glaze of the sill band (the
+  //   cockpit-glass-cells probe: 14.94 vs 5.15). The glaze is meant to be ONE thin layer per pane,
+  //   independent of face count. FIX: FrontSide + the per-cell inboard-winding enforcement below
+  //   (_pushInboardQuad) → EVERY pane presents exactly ONE cabin-facing face → the glaze is a single
+  //   uniform layer on every cell = parity BY CONSTRUCTION. The seated/standing pilot is always INSIDE
+  //   the cockpit, so the cabin-facing (inboard) face is the one they see — FrontSide loses nothing for
+  //   the intro's interior vantage. depthWrite:false keeps the transparent sort clean + lets the real
+  //   sky Points read through (the porthole-glass discipline).
+  side: THREE.FrontSide,
+  depthWrite: false,
 });
 _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
   shader.vertexShader = shader.vertexShader.replace(
@@ -387,10 +399,23 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      float gNdV = clamp(dot(normalize(vGlassViewNrm), gV), 0.0, 1.0);
      float gGrad = vGlassLocal.y;
      vec3 gRim = mix(vec3(0.16, 0.26, 0.36), vec3(0.34, 0.48, 0.62), gGrad);
-     // a THIN grazing-edge rim glint (the bubble seam) — confined to the outer sliver (pow 3.4) + weak
-     //   (0.9→0.55) so a side-wrap pane facing away stays see-through tinted glass, never a fogged sheet.
-     float gRimEdge = pow(1.0 - gNdV, 3.4);
-     totalEmissiveRadiance += gRim * gRimEdge * 0.55;
+     // a THIN grazing-edge rim glint (the bubble seam) — confined to the outer sliver + weak so a
+     //   side-wrap pane facing away stays see-through tinted glass, never a fogged sheet. Z1 PER-CELL
+     //   PARITY: the dome cells are NON-PLANAR quads, so the interpolated fragment normal deviates a few
+     //   degrees from head-on even mid-pane → at pow 3.4 the Fresnel leaked a faint rim tint into the
+     //   pane BODY UNEVENLY per cell (the sill band caught [+2,+3,+3] the crown band didn't → the
+     //   residual per-cell split the cockpit-glass-cells probe exposed). Raised 3.4→6.0 so the rim is
+     //   confined to a HARD grazing sliver only (1-gNdV must be large) → zero body leak → every cell's
+     //   body is the pure uniform floor = parity by construction. The seam still lights at true edges.
+     float gRimEdge = pow(1.0 - gNdV, 6.0);
+     // Z1: gate the Fresnel rim by a UV-EDGE mask too, so it can ONLY light near a pane's actual edge
+     //   (where the "bubble seam" belongs) and NEVER leaks into the body. The dome cells are non-planar
+     //   quads → the interpolated normal wobbles a few degrees mid-pane, so a pure Fresnel rim leaked a
+     //   faint tint into the body UNEVENLY per cell (the near-vertical sill panes caught it, the raked
+     //   crown panes didn't → the last per-cell residual). The UV mask (outer ~14% of the pane) confines
+     //   the rim to the frame edge → the body is the pure uniform floor on EVERY cell = full parity.
+     float gRimUV = 1.0 - smoothstep(0.0, 0.14, min(min(vGlassLocal.x, 1.0 - vGlassLocal.x), min(vGlassLocal.y, 1.0 - vGlassLocal.y)));
+     totalEmissiveRadiance += gRim * gRimEdge * gRimUV * 0.62;
      // the UNIFORM glaze floor — a bare cool whisper, view-INDEPENDENT + UV-independent, so EVERY cell
      //   (crown or side) reads the SAME faint glass presence (the fix for "top panes invisible / sides
      //   hazy" — all cells converge). Nudged 0.03→0.05: enough that a face-on crown pane over a BLACK
@@ -424,9 +449,15 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      float gBorderA = 1.0 - smoothstep(0.0, 0.05, min(gEdgeU2, gEdgeV2));
      // ROUND-2d: the grazing Fresnel-alpha (0.09) opacified SIDE/TOP panes more than FACE-ON FRONT
      //   panes → the per-region body divergence the user reads as "front/side/top don't match". Cut
-     //   0.09→0.05 so the pane BODY alpha is near view-INDEPENDENT (the border seal carries presence);
-     //   the three regions converge (probe: medians within ±10% at the lower level).
-     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.05 + gBorderA * 0.30, 0.0, 0.5);`,
+     //   0.09→0.05 so the pane BODY alpha is near view-INDEPENDENT (the border seal carries presence).
+     // Z1: gate the residual Fresnel-alpha by the SAME UV-edge mask as the rim, so it can only firm the
+     //   pane EDGE, never the body. The dome cells are non-planar → the interpolated normal wobbles a few
+     //   degrees mid-pane → this ungated gFres2 was raising the alpha (→ compositing brighter over black)
+     //   on the near-vertical SILL panes but not the raked crown/closures → the last per-cell residual
+     //   (front-sill 3.37 vs the rest 2.36 in the pure-glaze probe). UV-gated → the alpha body is now
+     //   truly view/geo-independent → every cell composites identically = per-cell parity by construction.
+     float gRimUV2 = 1.0 - smoothstep(0.0, 0.14, min(gEdgeU2, gEdgeV2));
+     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * gRimUV2 * 0.05 + gBorderA * 0.30, 0.0, 0.5);`,
   );
 };
 
@@ -1411,13 +1442,48 @@ function buildGlazedDome(group: THREE.Group): void {
     const p = _domeNode(_DOME_M[mi], _DOME_T[ti]);
     return p.add(outward(p).multiplyScalar(IN));   // recess behind the frame
   };
+  // ── PER-CELL INBOARD-WINDING ENFORCEMENT (Z1 haze-parity ROOT-CAUSE FIX, half 1 of 2 — pairs with the
+  //    FrontSide switch on _glass). The old hand winding was authored for the SILL band, but the crown
+  //    band's quad curves BACK overhead so that same vertex order yields an OUTBOARD-facing front face
+  //    there. Back when the glass was DoubleSide this "looked fine" (both faces render) but wrecked
+  //    per-cell luma PARITY: a cell whose front face pointed outboard composited its two faces DIFFERENTLY
+  //    over black than a correctly-inboard cell → the crown-band (`-hi`) panes measured ~3× the sill-band
+  //    body glaze (14.94 vs 5.15 — the user's "top cells don't carry the same haze"). Diagnosed with the
+  //    cockpit-glass-cells probe (the FrontSide test isolated it to WINDING, not a UV/view term). FIX:
+  //    after emitting a quad's two tris, measure the face normal; if it points OUTBOARD (away from the
+  //    pilot-head centre), swap the tri winding (and its UVs) so EVERY glass cell presents its front face
+  //    INBOARD. Now that _glass is FrontSide, every cell shows exactly ONE cabin-facing face → identical
+  //    single-layer glaze on every cell = parity by construction. Applied to panes AND closures.
+  const _pushInboardQuad = (
+    v0: THREE.Vector3, v1: THREE.Vector3, v2: THREE.Vector3, v3: THREE.Vector3,
+    uv0: [number, number], uv1: [number, number], uv2: [number, number], uv3: [number, number],
+  ): void => {
+    // tri A = v0,v1,v2 ; tri B = v2,v1,v3 (a consistent quad triangulation). Three.js treats the face
+    //   whose vertices wind CCW *as seen from the +normal side* as the FRONT face, and its geometric
+    //   normal (right-hand rule on the wound order) points OUT of that front face. We want the FRONT
+    //   face to look INBOARD (at the pilot), so the as-authored order is kept when its right-hand normal
+    //   already points inboard — i.e. `rhNrm · inboardDir >= 0` — and REVERSED otherwise. (The earlier
+    //   sign was inverted, which double-flipped the already-correct sill band; the probe caught it.)
+    const centroid = v0.clone().add(v1).add(v2).add(v3).multiplyScalar(0.25);
+    const rhNrm = v1.clone().sub(v0).cross(v2.clone().sub(v0)).normalize();
+    const inboardDir = centre.clone().sub(centroid).normalize();   // toward the pilot head = inboard
+    if (rhNrm.dot(inboardDir) < 0) {
+      // already inboard — emit as-is
+      glassV.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+      glassV.push(v2.x, v2.y, v2.z, v1.x, v1.y, v1.z, v3.x, v3.y, v3.z);
+      glassUV.push(uv0[0], uv0[1], uv1[0], uv1[1], uv2[0], uv2[1], uv2[0], uv2[1], uv1[0], uv1[1], uv3[0], uv3[1]);
+    } else {
+      // outboard — reverse each tri's winding (swap the 2nd & 3rd vert of each) so the front face faces in
+      glassV.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v1.x, v1.y, v1.z);
+      glassV.push(v2.x, v2.y, v2.z, v3.x, v3.y, v3.z, v1.x, v1.y, v1.z);
+      glassUV.push(uv0[0], uv0[1], uv2[0], uv2[1], uv1[0], uv1[1], uv2[0], uv2[1], uv3[0], uv3[1], uv1[0], uv1[1]);
+    }
+  };
   for (let c = 0; c < _DOME_M.length - 1; c++) {
     for (let b = 0; b < _DOME_T.length - 1; b++) {
       const a = node(c, b), d = node(c + 1, b), e = node(c, b + 1), f = node(c + 1, b + 1);
-      // wind so the normal points INBOARD (toward the cabin): a,e,d / d,e,f.
-      glassV.push(a.x, a.y, a.z, e.x, e.y, e.z, d.x, d.y, d.z);
-      glassV.push(d.x, d.y, d.z, e.x, e.y, e.z, f.x, f.y, f.z);
-      glassUV.push(0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1);
+      // quad (a=lo-left, d=lo-right, e=hi-left, f=hi-right); _pushInboardQuad forces the front face inboard.
+      _pushInboardQuad(a, e, d, f, [0, 0], [0, 1], [1, 0], [1, 1]);
     }
   }
   // -- SIDE-CLOSURE GLASS: the outer dome meridian (|m|=1) ends forward of the collar; without this
@@ -1451,15 +1517,9 @@ function buildGlazedDome(group: THREE.Group): void {
       const cHi = collarPtAtY(side, dHi.y);
       // recess the glass a hair outboard so the frame reads proud (match the pane IN)
       for (const v of [dLo, dHi]) v.add(outward(v).multiplyScalar(IN));
-      // wind so the closure normal points INBOARD. For −X side vs +X side the winding flips.
-      if (side < 0) {
-        glassV.push(cLo.x, cLo.y, cLo.z, dLo.x, dLo.y, dLo.z, cHi.x, cHi.y, cHi.z);
-        glassV.push(cHi.x, cHi.y, cHi.z, dLo.x, dLo.y, dLo.z, dHi.x, dHi.y, dHi.z);
-      } else {
-        glassV.push(cLo.x, cLo.y, cLo.z, cHi.x, cHi.y, cHi.z, dLo.x, dLo.y, dLo.z);
-        glassV.push(cHi.x, cHi.y, cHi.z, dHi.x, dHi.y, dHi.z, dLo.x, dLo.y, dLo.z);
-      }
-      glassUV.push(0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1);
+      // closure quad (cLo, cHi collar-side; dLo, dHi dome-side); _pushInboardQuad forces the front face
+      //   inboard for BOTH sides by construction (no hand winding flip → no per-side/per-band mismatch).
+      _pushInboardQuad(cLo, cHi, dLo, dHi, [0, 0], [0, 1], [1, 0], [1, 1]);
     }
   }
   const glassSheet = _skinUV(glassV, glassUV, _glass);
@@ -1506,9 +1566,16 @@ function buildGlazedDome(group: THREE.Group): void {
     for (let mi = 0; mi < _DOME_M.length - 1; mi++) addBeam(N(mi, ti), N(mi + 1, ti), heavy ? HW : MW, heavy ? HD : MD);
   }
   // (3) THE CROWN SPINE — a heavy fore-aft keel from the front crown node back to the collar crown.
+  //   Z1 SYMMETRY FIX (user: "the member joining the hull arch to the dome crown runs off-centre to a
+  //   right-side mullion — it reads lopsided"). The keel USED to spring from N(3,top) = _DOME_M[3] = +0.5
+  //   (a RIGHT-side crown node, x>0) down to the x=0 collar crown → a diagonal that visibly skewed right.
+  //   FIX: run it from the CENTRE crown node N(2,top) = _DOME_M[2] = 0.0 (x=0, the exact apex node the
+  //   node field DOES have) straight back to the x=0 collar crown → a keel dead on the centreline,
+  //   symmetric about x=0. Both endpoints are real nodes (N(2,top) is where the two centre meridian ribs
+  //   + the crown ring meet → a boss already lives there), so it joins the frame cleanly at both ends.
   const cp0 = hullProfile(COLLAR_Z);
   const collarCrown = new THREE.Vector3(0, cp0[cp0.length - 1].y - 0.06, COLLAR_Z);
-  addBeam(N(3, _DOME_T.length - 1), collarCrown, HW, HD);
+  addBeam(N(2, _DOME_T.length - 1), collarCrown, HW, HD);
   // (4) THE SIDE-CLOSURE FRAME — a bow from each outer dome meridian back to the collar (frames the
   //     wrap-to-collar glass so it seals cleanly, no raw glass edge to space).
   //   COCKPIT-ROUND-2 item-7: previously these bows ENDED PROUD in the closure-glass plane (z≈0.21) AND
