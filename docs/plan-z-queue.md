@@ -1,6 +1,12 @@
 # Z-queue plan — overnight round 3 (2026-07-06)
 
 ## LIVE STATE (update as waves land — compaction-safe checkpoint)
+- ⚠ USAGE-LIMIT CONTINGENCY (2026-07-06 ~night): the user may hit their 5-hour limit; it resets
+  at 5AM. IF A NEW SESSION BOOTS FROM THIS FILE: (1) git status — if uncommitted partial edits
+  exist in podScene/shipScene they are DEAD agents mid-work: run tsc + the owning unit gates;
+  if not verifiably complete, git checkout -- those files and RE-DISPATCH the unit from the
+  spec below; (2) resume the wave loop exactly as written; (3) the user expects the morning
+  summary when the queue + wrap complete.
 - ✅ DONE+PUSHED: Z5a+Z7 `7b1ec69` (90° rotation, player-gated wake) · Z9+Z10 `67fd140` (0.55x far-space time-rate warp; blackouts trimmed: phase 2.3s->1.6s, wake 2.5/1.2->1.8/0.8) · Z1 `9d594fa` (per-cell glass parity — winding/DoubleSide root cause, all 12 cells 0.0% dev; the crown keel centred).
 - 🔨 IN FLIGHT: Z6 (podScene: explosion-bright + descent light-streak + landed floor + parity strip, port 5191) · Z4 (shipScene bay: the intrusion sweep w/ a NEW pod-rotation-clearance rig gate [evidence: verification/probe-rotate-{73,90}-porthole.png] + airlock edge flicker, port 5192).
 - ⏳ NEXT: Z5b (podScene: sealed-door edge gaps in the ROTATED state — after Z6) · Z8 (podScene: chute lines/2-3s flutter/gravity drape — after Z5b) · Z2 quarters overhaul + Z3 reactor room (shipScene serial, after Z4) · wave-4 wrap (suite+bench+journey gate+build+deploy+live probes+docs+morning summary).
