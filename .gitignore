@@ -33,3 +33,6 @@ verification/*.png
 # cycle in-progress marker). Transient + machine-local — never commit.
 .gamedev-framework/
 shot-out/
+
+# Z8 throwaway drape/timing diagnostics (verification lives in rig-shot gates + saved PNGs)
+scripts/z8-*.mjs

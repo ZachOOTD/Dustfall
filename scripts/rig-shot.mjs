@@ -3442,6 +3442,39 @@ const SCENARIOS = {
         //   shimmer worst — the near-parallel view that exposes z-fighting)
         eye = new V(tr.x + 0.4, floorY + 1.45, tr.z + 7.4);
         look = new V(tr.x - 0.9, floorY + 1.3, tr.z + 10.8);
+      } else if (angle === 'quarters-in') {
+        // Z2 — INSIDE the room, just past the threshold, looking at the WHOLE cabin (back + fore walls
+        //   + bunk alcove). The player's-eye read on entering. Room local x −4.1..−1.0, z 8.2..12.0.
+        eye = new V(tr.x - 1.55, floorY + 1.62, tr.z + 9.6);       // just inside the door, room centre-z
+        look = new V(tr.x - 3.6, floorY + 1.25, tr.z + 9.2);       // toward the back wall / bunk
+      } else if (angle === 'quarters-bunk') {
+        // Z2 — the bunk ALCOVE, from the room centre, so the recess + integrated frame reads.
+        eye = new V(tr.x - 2.2, floorY + 1.55, tr.z + 11.4);
+        look = new V(tr.x - 3.9, floorY + 1.15, tr.z + 9.4);
+      } else if (angle === 'quarters-viewport') {
+        // Z2 — the HERO view: standing in the cabin, looking BACK through the door across the corridor
+        //   to the starboard viewport (real stars). Composition test: is the sightline clear + framed?
+        eye = new V(tr.x - 2.6, floorY + 1.60, tr.z + 9.6);
+        look = new V(tr.x + 3.0, floorY + 1.45, tr.z + 9.8);
+      } else if (angle === 'quarters-back') {
+        // Z2 — the BACK-WALL closeup (the user's "models overlapping at the back wall" vantage).
+        eye = new V(tr.x - 2.4, floorY + 1.55, tr.z + 11.2);
+        look = new V(tr.x - 4.0, floorY + 1.3, tr.z + 11.6);
+      } else if (angle === 'quarters-desk') {
+        // Z2 r2 — the desk/console moved DOOR-SIDE of the fore wall (deskX≈−1.95, z≈8.56). Look at it
+        //   from mid-room toward the fore-door corner.
+        eye = new V(tr.x - 2.5, floorY + 1.58, tr.z + 10.2);
+        look = new V(tr.x - 1.6, floorY + 1.2, tr.z + 8.5);
+      } else if (angle === 'quarters-wide') {
+        // Z2 r2 — a WIDE room overview from the door threshold looking diagonally across to the far
+        //   back-aft corner, so the WHOLE composition (bunk alcove on the back wall, lockers aft, desk
+        //   fore, ceiling fixture) reads in one frame. The "does this read as a real cabin?" gate.
+        eye = new V(tr.x - 1.2, floorY + 1.68, tr.z + 9.55);
+        look = new V(tr.x - 3.6, floorY + 1.05, tr.z + 11.3);
+      } else if (angle === 'quarters-lockers') {
+        // Z2 r2 — the AFT-wall locker bank + coverall (the storage read), from mid-room.
+        eye = new V(tr.x - 2.2, floorY + 1.58, tr.z + 9.9);
+        look = new V(tr.x - 3.4, floorY + 1.25, tr.z + 11.6);
       } else {
         eye = new V(tr.x, floorY + 1.5, tr.z + 7.0);               // mid-corridor
         look = new V(tr.x, floorY + 1.1, tr.z + 14.5);            // aft at the engine-bay blaze
@@ -3532,6 +3565,13 @@ const SCENARIOS = {
         'airlock-panel':     { eye: [tr.x + 0.6, floorY + 1.42, tr.z + 5.3], look: [tr.x - 0.75, floorY + 1.45, tr.z + 5.94], pan: [0.005, 0, 0.004] },
         'engine-glass':  { eye: [tr.x, floorY + 1.55, tr.z + 12.4], look: [tr.x, floorY + 1.35, tr.z + 16.5], pan: [0.008, 0, 0] },
         'viewport':      { eye: [tr.x - 0.7, floorY + 1.5, tr.z + 9.7], look: [tr.x + 2.0, floorY + 1.35, tr.z + 9.7], pan: [0, 0, 0.008] },
+        // Z2 — the RE-LOFTED crew-quarters INTERIOR coplanar hotspots (bunk-on-backwall, locker-on-
+        //   aftwall, desk-on-forewall, wall-dressing-on-shell). Eye INSIDE the room (room local x −1.5..
+        //   −3.6). Head-onto each surface so a coplanar winner-flip fills a face.
+        'quarters-bunk':    { eye: [tr.x - 1.7, floorY + 1.35, tr.z + 10.2], look: [tr.x - 3.9, floorY + 1.1, tr.z + 10.3], pan: [0.005, 0, 0.004] },
+        'quarters-lockers': { eye: [tr.x - 2.2, floorY + 1.4, tr.z + 10.0], look: [tr.x - 3.0, floorY + 1.3, tr.z + 11.7], pan: [0.004, 0, 0.005] },
+        'quarters-desk':    { eye: [tr.x - 2.4, floorY + 1.3, tr.z + 9.8], look: [tr.x - 1.9, floorY + 1.1, tr.z + 8.5], pan: [0.005, 0, 0.004] },
+        'quarters-backwall':{ eye: [tr.x - 2.0, floorY + 1.55, tr.z + 9.4], look: [tr.x - 3.95, floorY + 1.6, tr.z + 9.3], pan: [0.004, 0, 0.005] },
       };
       for (const k of Object.keys(J)) if (J[k].pan[0] === 0.01 || J[k].pan[2] === 0.01) { J[k].pan = J[k].pan.map((v) => v === 0.01 ? 0.008 : v); }
       const names = which === 'all' ? Object.keys(J) : [which];
@@ -4836,6 +4876,113 @@ const SCENARIOS = {
     if (!log.openedPassed) throw new Error('airlock-motion GATE FAILED: the OPEN sliding door did NOT let the player through to the pod threshold — the collar is not walkable (a blocking collider or a floor gap).');
     if (!log.onFloor) throw new Error('airlock-motion GATE FAILED: the player fell through the floor / a gap to space along the boarding path.');
     console.log('[airlock-motion] GATE PASS — closed door blocks, open door + collar are walkable to the pod threshold, no fall-through (real KCC motion).');
+  },
+
+  // Z2 — the CREW-QUARTERS WALK PROBE (CLAUDE.md rule 9: the re-lofted room's colliders match the
+  //   visible furniture). Real-KCC motion (the airlock-motion idiom): seats the player in the ship,
+  //   free-walk mode, then drives WASD to PROVE (1) the OPEN quarters doorway is passable INTO the room
+  //   (no invisible wall barring the entry — the 3rd-report clipping/clearance check), (2) the BUNK
+  //   BERTH blocks (you can't walk through the mattress into the back wall), (3) the FORE-DESK blocks,
+  //   (4) the open floor is walkable, and (5) no fall-through anywhere. FIXED-DT sim-budget loop so
+  //   it's deterministic under the ~1fps headless tab. THROWS like the other motion gates.
+  'quarters-walk': async (page) => {
+    const log = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const realClock = ctx.three.clock; const FIXED_DT = 0.05;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      realClock.getDelta = () => FIXED_DT;
+      ctx.three.renderer.setSize(48, 48, false);
+      const drive = async (simBudget, perTick) => {
+        const s0 = ctx.time.elapsed; let last = s0, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - s0 >= simBudget) break;
+        }
+      };
+      const result = { legs: [], onFloor: true };
+      try {
+        try { g.skipIntro(); } catch {}
+        await drive(0.2);
+        g.startIntro();
+        for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); await drive(0.3); if (ctx.player.body.body.translation().y > 2900) break; }
+        try { g.setSkyIntroMode(0); } catch {}
+        try { g.setQuartersDoor(0); } catch {}   // the quarters door is parked OPEN
+        ctx.flags.paused = false;
+        ctx.input.controls.isLocked = true;
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }
+        const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+        const sp = ctx.player.body.body.translation();
+        const OX = sp.x, OY = sp.y, OZ = sp.z + 0.30;   // ship-origin frame
+        // room local: door at (x −1.0, z 9.6); back-wall front (berth face) x≈−3.22; room x −1.0..−4.1.
+        const faceKey = (yaw) => { cam.rotation.set(0, yaw, 0); if (ctx.intro) ctx.intro.mode = 'walk'; };
+        const YAW_NEGX = Math.PI / 2;    // forward = −X (into the room / at the bunk)
+        const YAW_POSZ = Math.PI;        // forward = +Z (aft along the room)
+        const floorY = OY;
+        const put = (lx, lz) => { ctx.player.body.body.setTranslation({ x: OX + lx, y: OY, z: OZ + lz }, true); ctx.player.cameraSnapNextFrame = true; };
+        const pos = () => { const p = ctx.player.body.body.translation(); return { x: +(p.x - OX).toFixed(2), z: +(p.z - OZ).toFixed(2), y: p.y }; };
+        const checkFloor = (p) => { if (Math.abs(p.y - floorY) > 0.6) result.onFloor = false; };
+
+        // ── LEG 1: DOORWAY PASSABLE. Corridor-side on the door centreline (x −0.4, z 9.6), face −X,
+        //    drive W → should pass INTO the room (x < −1.3, well past the wall plane).
+        put(-0.4, 9.6); await drive(0.15, () => faceKey(YAW_NEGX));
+        await drive(2.6, () => { faceKey(YAW_NEGX); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        let p = pos(); checkFloor(p);
+        const doorPassed = p.x < -1.3;
+        result.legs.push({ leg: 'doorway-pass', xEnd: p.x, passed: doorPassed, y: +p.y.toFixed(1) });
+
+        // ── LEG 2: BUNK BLOCKS. Inside the room (x −2.2, z 10.2), face −X (at the berth), drive W → the
+        //    body must NOT cross into the berth (front x≈−3.22); allow the KCC skin (~0.15) → stop by −3.1.
+        put(-2.2, 10.2); await drive(0.15, () => faceKey(YAW_NEGX));
+        await drive(2.6, () => { faceKey(YAW_NEGX); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        p = pos(); checkFloor(p);
+        const bunkBlocked = p.x > -3.15;
+        result.legs.push({ leg: 'bunk-block', xEnd: p.x, blocked: bunkBlocked, y: +p.y.toFixed(1) });
+
+        // ── LEG 3: OPEN FLOOR WALKABLE. Inside (x −1.6, z 9.4), face +Z, drive W → should walk aft freely
+        //    across the open floor (z increases toward ~11), no invisible wall in the walkable centre.
+        put(-1.6, 9.4); await drive(0.15, () => faceKey(YAW_POSZ));
+        await drive(2.2, () => { faceKey(YAW_POSZ); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        p = pos(); checkFloor(p);
+        const floorWalkable = p.z > 10.2;
+        result.legs.push({ leg: 'floor-walk', zEnd: p.z, walked: floorWalkable, y: +p.y.toFixed(1) });
+
+        // ── LEG 4: DESK BLOCKS. On the door-side fore wall in front of the desk (x −1.95, z 9.2), face
+        //    −Z (at the fore wall / desk), drive W → must NOT pass the desk face (z≈8.3); stop by z 8.6.
+        put(-1.95, 9.2); await drive(0.15, () => faceKey(0));   // yaw 0 → forward +Z? YXZ yaw 0 → −Z
+        await drive(2.2, () => { faceKey(0); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        p = pos(); checkFloor(p);
+        const deskBlocked = p.z > 8.55;
+        result.legs.push({ leg: 'desk-block', zEnd: p.z, blocked: deskBlocked, y: +p.y.toFixed(1) });
+
+        result.doorPassed = doorPassed; result.bunkBlocked = bunkBlocked;
+        result.floorWalkable = floorWalkable; result.deskBlocked = deskBlocked;
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+      }
+      return result;
+    });
+    console.log('[quarters-walk] legs=' + JSON.stringify(log.legs));
+    console.log(`[quarters-walk] doorPassed=${log.doorPassed} bunkBlocked=${log.bunkBlocked} floorWalkable=${log.floorWalkable} deskBlocked=${log.deskBlocked} onFloor=${log.onFloor}`);
+    if (!log.doorPassed) throw new Error('quarters-walk GATE FAILED: the OPEN quarters doorway did NOT let the player into the room (an invisible wall / clip bars the entry).');
+    if (!log.bunkBlocked) throw new Error('quarters-walk GATE FAILED: the player walked THROUGH the bunk berth (missing/misplaced bunk collider — rule 9 violation).');
+    if (!log.floorWalkable) throw new Error('quarters-walk GATE FAILED: the open floor is NOT walkable (an invisible wall in the room centre).');
+    if (!log.deskBlocked) throw new Error('quarters-walk GATE FAILED: the player walked THROUGH the desk (missing/misplaced desk collider — rule 9 violation).');
+    if (!log.onFloor) throw new Error('quarters-walk GATE FAILED: the player fell through the floor somewhere in the room.');
+    console.log('[quarters-walk] GATE PASS — doorway passable, bunk + desk block, open floor walkable, no fall-through (real KCC motion).');
   },
 
   // CLUSTER D — the WALK-OUT gate (user spec: crash → wake → kick the FRONT door → walk out on your
