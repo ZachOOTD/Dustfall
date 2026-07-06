@@ -612,6 +612,23 @@ const QUARTERS_COLLIDERS: ReadonlyArray<BoxSpec> = [
   //   the CORRIDOR_COLLIDERS −X aft-A/aft-B runs (they span z 6.4..8.98 + 10.22..14.6 at x=−1.0);
   //   the door gap (8.98..10.22) is the only opening. So no extra returns are needed here (they'd
   //   duplicate the corridor wall). The room is entered ONLY through the door.
+  // ── Z2 OVERHAUL — FURNITURE COLLIDERS (CLAUDE.md rule 9: the re-lofted room's solids block movement,
+  //   updated in the SAME change as the geometry; the old room had NONE, so you could walk through the
+  //   bunk). Each box = [w,h,d, cx,cy,cz], derived from the buildCrewQuarters coordinates. Verified by
+  //   the quarters-walk motion probe (rig-shot --scenario=quarters-walk). Spec math (COR_WALL_T=0.2):
+  //     back wall inner face = QTR_FAR_X+0.1 = −4.0; bunkDepth 0.78 → berth front x=−3.22.
+  //   BUNK BERTH — a solid built-in from the back wall to the berth front, full height to the canopy,
+  //     running z 9.1..11.25 (foot off the desk, head off the lockers, Z2 r3). Blocks walking into it.
+  [0.78, 1.96, 2.15, (QTR_FAR_X + 0.1 + 0.39), 0.98, (QTR_Z0 + 0.9 + QTR_Z1 - 0.75) / 2],
+  //   LOCKER BANK — the two tall aft-wall lockers (x −3.50..−2.24, proud to z≈11.46, Z2 r3), full height.
+  [1.30, 1.86, 0.50, (QTR_FAR_X + 1.23), 0.94, (QTR_Z1 - 0.1 - 0.22)],
+  //   FOLD-DOWN DESK — the fore-wall work surface, moved DOOR-SIDE (deskX=−1.95, z≈8.56), floor→desktop.
+  [0.94, 0.86, 0.56, (QTR_WALL_X - 0.95), 0.43, (QTR_Z0 + 0.1 + 0.26)],
+  //   STOWAGE CRATE — the fore-corner floor crate (a 0.44 cube on the deck).
+  [0.48, 0.46, 0.48, (QTR_FAR_X + 0.34), 0.23, (QTR_Z0 + 0.34)],
+  //   BASE CABINET — Z2 r5 (SEV2 #3) — the low aft-wall base cabinet (x≈−1.55, z front≈11.52, 0.66 tall)
+  //     that fills the dead base band; it protrudes into the walk space so it blocks (rule 9).
+  [0.90, 0.66, 0.38, (QTR_FAR_X + 2.55), 0.33, (QTR_Z1 - 0.1 - 0.19)],
 ];
 
 // ── THE AIRLOCK COLLAR walkable envelope (the docking passage). The player walks through the open
@@ -4006,6 +4023,18 @@ const _qtrBlanket = new THREE.MeshLambertMaterial({ color: 0x7a4a34, flatShading
 const _qtrPillow = new THREE.MeshLambertMaterial({ color: 0xbdb6a4, flatShading: true });     // a grubby pillow
 const _qtrLocker = _metal(0x54595f, 0.44, 0.62, { flat: true, grime: true });                 // a steel locker (ship family)
 const _qtrDesk = _metal(0x4a4f55, 0.40, 0.66, { flat: true, grime: true });                   // a folding desk/shelf
+// Z2 OVERHAUL — the alcove liner (a warmer, darker recessed steel so the bunk niche reads as a
+//   built-in pocket, not the same flat wall panel). Two-value with the shell.
+const _qtrAlcove = _metal(0x4c4a42, 0.40, 0.70, { flat: true, grime: true });
+// Z2 OVERHAUL — the bunk reading-light lens (an unlit warm strip glowing in the alcove head) + a
+//   small amber console readout on the desk (a point of life, unlit so it glows). Kept out of the
+//   corridor alert-cut array so the cabin stays its own warm space during the disaster.
+const _qtrReadLens = new THREE.MeshBasicMaterial({ color: 0xffd79a });
+const _qtrConsole = new THREE.MeshStandardMaterial({ color: 0x0e1512, roughness: 0.2, metalness: 0.1, emissive: 0x123a26, emissiveIntensity: 0.6 });
+_buildMats.push(_qtrConsole);
+// Z2 OVERHAUL — conduit/pipe run (a worn painted pipe, distinct from the black rubber _cable — a
+//   dull oxidised copper-grey so the runs read as ship plumbing, not decoration).
+const _qtrConduit = _metal(0x6a5f4e, 0.38, 0.70, { flat: true, grime: true });
 let _qtrDoorLeaf: THREE.Group | null = null;     // the quarters sliding-door leaf (parked open by default)
 let _qtrLamp: THREE.PointLight | null = null;    // the room's warm bunk lamp (kept out of the alert dim)
 
@@ -4071,30 +4100,66 @@ function buildCrewQuarters(group: THREE.Group): void {
     dado.position.set(wallX - 0.08, 0.5, (rz0 + rz1) / 2);   // center −1.08, front −1.06 → flush on the return, 6cm behind the wall
     q.add(dado);
   }
-  // ── WALL DRESSING (round-2): the bare shell walls read institutional; break them with a proud
-  //    upper panel + a darker lower dado + a rub-rail + a bolt border on the BACK + BOTH SIDE walls,
-  //    matching the corridor's two-value language, so the cabin reads finished + lived-in, not empty.
-  const _dressWall = (nx: number, nz: number, cx: number, cz: number, spanZ: boolean, spanLen: number): void => {
-    // proud upper panel (raised battleship grey) + lower dark dado + a rub-rail line + a bolt border.
-    const along = spanZ ? spanLen : spanLen;   // panel runs along the wall
-    const upper = spanZ
-      ? _box(0.05, 1.0, along - 0.2, _band) : _box(along - 0.2, 1.0, 0.05, _band);
-    upper.position.set(cx + nx * 0.03, 1.5, cz + nz * 0.03);
+  // ── Z2 OVERHAUL — WALL DRESSING. The old pass was a flat proud panel + dado on all three walls,
+  //    which still read institutional (the user: "generic boxes"). NEW: a purposeful two-value sci-fi
+  //    panelling language keyed PER WALL to its function — the BACK wall carries the bunk alcove (built
+  //    below, so it is NOT dressed here), the FORE side wall carries the desk/console + lockers, the AFT
+  //    side wall carries tall storage. Each side wall gets a proud upper panel band + a darker recessed
+  //    lower dado + a machined rub-rail, PLUS real ship greeble (a marching bolt line + a recessed panel
+  //    seam). All boxy proud features are ≥10cm deep INTO the room off the wall face (CLAUDE.md rule 7)
+  //    so nothing reads paper-thin edge-on. The wall FACE plane is at x/z = the shell inner face; proud
+  //    features stand OFF it toward the room by ≥ their half-depth so no face is coplanar with the shell.
+  const _dressSide = (nz: number, cz: number, spanLen: number): void => {
+    const wallZ = cz;                 // the shell inner-face z for this side wall
+    const along = spanLen;            // runs along X (room depth)
+    // proud upper panel band (raised battleship grey), 12cm proud → clear of the shell face.
+    const upper = _box(along - 0.24, 1.02, 0.12, _band);
+    upper.position.set(QTR_XC, 1.52, wallZ + nz * 0.06);   // face 12cm proud, back 0cm at the shell
     q.add(upper);
-    const lower = spanZ
-      ? _box(0.035, 0.66, along - 0.2, _channel) : _box(along - 0.2, 0.66, 0.035, _channel);
-    lower.position.set(cx + nx * 0.02, 0.55, cz + nz * 0.02);
+    // a recessed panel-seam line splitting the upper band (two-plate read).
+    const seam = _box(along - 0.24, 0.03, 0.14, _channel);
+    seam.position.set(QTR_XC, 1.52, wallZ + nz * 0.055);
+    q.add(seam);
+    // lower dark dado (deeper matte), 10cm proud.
+    const lower = _box(along - 0.24, 0.72, 0.10, _channel);
+    lower.position.set(QTR_XC, 0.5, wallZ + nz * 0.05);
     q.add(lower);
-    const rail = spanZ
-      ? _box(0.06, 0.05, along - 0.1, _channel) : _box(along - 0.1, 0.05, 0.06, _channel);
-    rail.position.set(cx + nx * 0.04, 0.98, cz + nz * 0.04);
+    // a machined rub-rail where they meet (a hand-height ledge line).
+    const rail = _box(along - 0.16, 0.06, 0.14, _corrRail);
+    rail.position.set(QTR_XC, 0.98, wallZ + nz * 0.07);
     q.add(rail);
+    // a marching bolt line along the rub-rail (worked hardware, faces into the room).
+    for (let x = QTR_FAR_X + 0.4; x <= QTR_WALL_X - 0.3; x += 0.5)
+      q.add(_stud(x, 1.06, wallZ + nz * 0.14, new THREE.Vector3(0, 0, nz), _rivet, 0.016));
   };
-  //  back wall (−X face, normal +X into the room)
-  _dressWall(1, 0, farX + 0.02, (z0 + z1) / 2, true, z1 - z0);
-  //  fore + aft side walls (normal into the room along ∓Z)
-  _dressWall(0, 1, QTR_XC, z0 + 0.02, false, wallX - farX);
-  _dressWall(0, -1, QTR_XC, z1 - 0.02, false, wallX - farX);
+  //  fore + aft side walls (normal into the room along ∓Z). The back wall is dressed by the alcove.
+  _dressSide(1, z0 + COR_WALL_T / 2, wallX - farX);
+  _dressSide(-1, z1 - COR_WALL_T / 2, wallX - farX);
+
+  // ── Z2 OVERHAUL — CONDUIT + VENT greeble along the ceiling coving, so the cabin reads as a working
+  //    ship compartment, not a painted box. A pair of pipe runs sweep from the fore wall to the back
+  //    wall high on the aft side (cylinders are inherently thick → rule 7 exempt), pinned by saddle
+  //    clamps, and a louvred air-return vent sits high on the fore wall. All clear of the walkable band.
+  for (const [cy, mat, r] of [[2.16, _qtrConduit, 0.05], [2.05, _cable, 0.035]] as const) {
+    const pipe = _cyl(r, r, wallX - farX - 0.3, 8, mat);
+    pipe.rotation.z = Math.PI / 2;                       // run along X
+    pipe.position.set(QTR_XC, cy, z1 - 0.16);
+    q.add(pipe);
+    for (let x = QTR_FAR_X + 0.5; x <= QTR_WALL_X - 0.4; x += 0.7) {   // saddle clamps to the wall
+      const clamp = _box(0.06, 0.09, 0.12, _channel);
+      clamp.position.set(x, cy, z1 - 0.1);
+      q.add(clamp);
+    }
+  }
+  //  a louvred air-return vent, high on the FORE wall (proud housing + slats, rule-7 depth).
+  const ventHousing = _box(0.5, 0.34, 0.11, _steel);
+  ventHousing.position.set(QTR_FAR_X + 0.9, 2.05, z0 + 0.06);
+  q.add(ventHousing);
+  for (let vy = 1.94; vy <= 2.16; vy += 0.055) {
+    const slat = _box(0.44, 0.02, 0.13, _channel);
+    slat.position.set(QTR_FAR_X + 0.9, vy, z0 + 0.065);
+    q.add(slat);
+  }
 
   // ═══ 2. THE SLIDING DOOR — a single heavy leaf riding a header rail, PARKED OPEN in a wall pocket
   //    on the aft side (so the corridor walk sees INTO the lit cabin — the lived-in read). Frame:
@@ -4162,153 +4227,355 @@ function buildCrewQuarters(group: THREE.Group): void {
   handle.position.set(0.07, dTop * 0.5, -(dHW - 0.1));
   leaf.add(handle);
 
-  // ═══ 3. THE BUNK — against the BACK wall (−X), running along Z. A steel frame + a mattress + a
-  //    folded rust-red blanket + a grubby pillow (the lived-in centrepiece).
-  const bunkY = 0.5, bunkLen = 1.9, bunkD = 0.72;
-  const bunkX = farX + bunkD / 2 + 0.06;
-  const bunkFrame = _box(bunkD, 0.14, bunkLen, _qtrLocker);
-  bunkFrame.position.set(bunkX, bunkY, z0 + 0.55 + bunkLen / 2);
-  q.add(bunkFrame);
-  // legs
-  for (const lz of [z0 + 0.6, z0 + 0.5 + bunkLen]) for (const lx of [bunkX - bunkD / 2 + 0.06, bunkX + bunkD / 2 - 0.06]) {
-    const leg = _box(0.06, bunkY, 0.06, _qtrLocker);
-    leg.position.set(lx, bunkY / 2, lz);
-    q.add(leg);
+  // ═══ 3. THE BUILT-IN BUNK ALCOVE — Z2 OVERHAUL. The old bunk was a slab-on-4-legs floating out into
+  //    the room (the "generic box" the user flagged). NEW: an integrated BERTH built into the BACK wall
+  //    (x=−4.1) — a solid platform base (no floating legs), flanked by fabricated end-panels, capped by
+  //    a header canopy that frames a recessed warm reading-light, with the mattress + blanket + pillow
+  //    tucked cleanly INSIDE the frame. It runs along Z against the back wall so it does NOT collide
+  //    with the desk (fore wall) or the lockers (aft wall) — the overlap defect is designed out.
+  //    Coordinates: the berth deck top at bunkTop; the platform is a solid box from the floor up (a real
+  //    built-in, storage below). The mattress sits ON the deck; all soft goods are INSET so nothing
+  //    pokes past the frame. Bunk faces +X into the room. Collider = a single box at the berth front
+  //    (QTR_BUNK_COLLIDER) so the player can't walk into the mattress but the room stays open.
+  const bunkDeckY = 0.52;                        // berth deck top height
+  const bunkDepth = 0.78;                        // how far the berth reaches OUT off the back wall (+X)
+  // Z2 r2 — the berth foot is pulled AFT (bunkZ0 = z0+0.9) so it clears the desk zone on the fore wall
+  //   (the recurring "desk overlaps bunk foot" defect). The berth head is at the aft wall; the foot ends
+  //   ~0.9m off the fore wall, leaving that corner for the desk/entry.
+  // Z2 r3 — head pulled off the aft wall (bunkZ1=z1−0.75≈11.25) so the berth clears the aft-wall
+  //   LOCKER BANK (front z≈11.46) — the overlap defect that had migrated to the aft corner.
+  const bunkZ0 = z0 + 0.9, bunkZ1 = z1 - 0.75;   // berth foot z≈9.1 (clear of desk), head z≈11.25 (clear of lockers)
+  const bunkLen = bunkZ1 - bunkZ0;
+  const bunkXBack = farX + COR_WALL_T / 2;        // the back-wall inner face
+  const bunkXFront = bunkXBack + bunkDepth;       // the berth front face (−3.32)
+  const bunkXC = (bunkXBack + bunkXFront) / 2;
+  //  the ALCOVE LINER — a recessed darker panel on the back wall behind the berth head, so the bunk
+  //   reads as a built-in pocket (a two-value break vs the shell), full berth length, floor→canopy.
+  //  Z2 r5 (SEV2 #1) — the liner TOP is capped BELOW the canopy underside (top y=1.75) so no tan liner
+  //   sliver can show above/between the header cap pieces at the aft corner. Liner spans ~0.62..1.75.
+  const linerTop = 1.75, linerBot = 0.62;
+  const liner = _box(0.06, linerTop - linerBot, bunkLen + 0.24, _qtrAlcove);
+  liner.position.set(bunkXBack + 0.05, (linerTop + linerBot) / 2, (bunkZ0 + bunkZ1) / 2);
+  q.add(liner);
+  //  the solid PLATFORM base (a fabricated locker-front berth base, no legs — storage below the bunk).
+  const base = _box(bunkDepth, bunkDeckY, bunkLen, _qtrLocker);
+  base.position.set(bunkXC, bunkDeckY / 2, (bunkZ0 + bunkZ1) / 2);
+  q.add(base);
+  //  two under-berth storage-drawer fronts (a recessed seam + handles → reads as pull-out drawers).
+  for (const dz of [bunkZ0 + bunkLen * 0.28, bunkZ0 + bunkLen * 0.72]) {
+    const drawer = _box(0.03, bunkDeckY - 0.14, bunkLen * 0.4, _channel);
+    drawer.position.set(bunkXFront - 0.005, bunkDeckY / 2, dz);
+    q.add(drawer);
+    const pull = _box(0.05, 0.04, 0.18, _corrRail);
+    pull.position.set(bunkXFront + 0.02, bunkDeckY / 2 + 0.06, dz);
+    q.add(pull);
   }
-  const mattress = _box(bunkD - 0.08, 0.12, bunkLen - 0.06, _qtrMattress);
-  mattress.position.set(bunkX, bunkY + 0.13, z0 + 0.55 + bunkLen / 2);
+  //  the berth deck lip (a raised front rail so the mattress reads set into a tray).
+  const deckLip = _box(0.05, 0.09, bunkLen, _qtrLocker);
+  deckLip.position.set(bunkXFront - 0.02, bunkDeckY + 0.045, (bunkZ0 + bunkZ1) / 2);
+  q.add(deckLip);
+  //  fabricated END-PANELS flanking the berth (fore + aft), tying it into the frame — the built-in read.
+  for (const [ez, tag] of [[bunkZ0 - 0.06, -1], [bunkZ1 + 0.06, 1]] as const) {
+    const endPanel = _box(bunkDepth, 1.9, 0.10, _qtrLocker);
+    endPanel.position.set(bunkXC, 0.95, ez);
+    q.add(endPanel);
+    void tag;
+  }
+  //  the HEADER CANOPY over the berth (a boxed-in shelf/light valance — the alcove ceiling), 12cm deep.
+  //  Z2 r5 (SEV2 #1) — the header cap was TWO offset slabs (canopy top y=1.89 + a fascia top y=1.83,
+  //   set back at different Z) that met the aft side wall non-flush, showing a stepped seam + a liner
+  //   sliver at the top-right corner (the overlap-seam defect the overhaul was chartered to kill). FIX:
+  //   ONE continuous cap. The canopy slab + its fascia now share ONE top-edge Y (top=1.89) and the fascia
+  //   sits FLUSH under the canopy front (no height/depth step), and the whole cap spans z 8.3..11.9 so it
+  //   TERMINATES FLUSH against BOTH side walls' inner faces — no set-back, no liner sliver.
+  const capZ0 = z0 + COR_WALL_T / 2, capZ1 = z1 - COR_WALL_T / 2;   // side-wall inner faces (8.3 .. 11.9)
+  const capLen = capZ1 - capZ0, capZC = (capZ0 + capZ1) / 2;
+  const capTop = 1.89, capThick = 0.14;
+  const canopy = _box(bunkDepth, capThick, capLen, _qtrLocker);
+  canopy.position.set(bunkXC, capTop - capThick / 2, capZC);        // top edge at capTop
+  q.add(canopy);
+  //  the fascia is a proud front lip sharing the SAME top edge (capTop), dropping below the canopy —
+  //   one continuous face, no offset second slab. Runs the full cap length, flush to both side walls.
+  const fasciaDrop = 0.17;
+  const canopyFascia = _box(0.06, fasciaDrop, capLen, _band);
+  canopyFascia.position.set(bunkXFront - 0.02, capTop - fasciaDrop / 2, capZC);
+  q.add(canopyFascia);
+  //  the recessed READING LIGHT — a warm strip lens tucked under the canopy at the berth head, its own
+  //   modest PointLight (motivated, local). This is the room's lived-in warm pool; kept out of the
+  //   alert-dim so the cabin stays warm during the disaster.
+  const readHousing = _box(bunkDepth - 0.16, 0.06, 0.5, _channel);
+  readHousing.position.set(bunkXC, 1.71, bunkZ0 + 0.5);
+  q.add(readHousing);
+  const readLens = _box(bunkDepth - 0.24, 0.03, 0.42, _qtrReadLens);
+  readLens.position.set(bunkXC, 1.685, bunkZ0 + 0.5);
+  q.add(readLens);
+  //  the MATTRESS + soft goods, all inset within the deck lip (nothing pokes past the frame).
+  const mattress = _box(bunkDepth - 0.12, 0.13, bunkLen - 0.08, _qtrMattress);
+  mattress.position.set(bunkXC + 0.01, bunkDeckY + 0.075, (bunkZ0 + bunkZ1) / 2);
   q.add(mattress);
-  const pillow = _box(bunkD - 0.18, 0.10, 0.42, _qtrPillow);
-  pillow.position.set(bunkX - 0.02, bunkY + 0.20, z0 + 0.8);
-  q.add(pillow);
-  // a folded blanket at the foot
-  const blanket = _box(bunkD - 0.06, 0.14, 0.62, _qtrBlanket);
-  blanket.position.set(bunkX, bunkY + 0.20, z0 + 0.55 + bunkLen - 0.5);
-  q.add(blanket);
-
-  // ═══ 4. A WALL LOCKER — a tall steel cabinet against the aft side wall (a place for kit).
-  const lockerX = farX + 0.30, lockerZ = z1 - 0.5;
-  const locker = _box(0.5, 1.8, 0.5, _qtrLocker);
-  locker.position.set(lockerX, 0.9, lockerZ);
-  q.add(locker);
-  // twin doors + louvre vents + a handle
-  const lseam = _box(0.51, 1.7, 0.02, _channel);
-  lseam.position.set(lockerX, 0.9, lockerZ);
-  q.add(lseam);
-  for (const vy of [1.5, 1.42, 1.34]) {
-    const vent = _box(0.42, 0.012, 0.02, _channel);
-    vent.position.set(lockerX, vy, lockerZ - 0.24);
-    q.add(vent);
+  //  Z2 r5 (SEV2 #2) — the pillow read as a stacked foam CUBE (near-square footprint, thick proud side,
+  //   hard 90° corners). FIX: reproportion to read SOFT — ~2:1 length(Z):width(X), thickness cut to ~1/3
+  //   so it lies LOW, recessed BACK toward the head wall as a headrest, with chamfered top edges (a low
+  //   base slab + a narrower crown that steps the top edge in on all sides → a soft rounded read, not a
+  //   block) and a slight centre dip where a head would rest. Same low-poly idiom as the bolster/mattress.
+  const pillowLen = 0.52, pillowW = 0.26;                 // 2:1 along the bunk long axis (Z)
+  const pillowZ = bunkZ0 + 0.34;                          // recessed back toward the head
+  const pillowX = bunkXC - 0.08;                          // pushed back toward the head (back) wall
+  const pillowBaseY = bunkDeckY + 0.145;
+  const pillowBase = _box(pillowW, 0.045, pillowLen, _qtrPillow);   // the low flat base
+  pillowBase.position.set(pillowX, pillowBaseY, pillowZ);
+  q.add(pillowBase);
+  //  a narrower crown stepping the top edge IN on all sides (a chamfer read, no hard proud corners).
+  const pillowCrown = _box(pillowW - 0.08, 0.035, pillowLen - 0.12, _qtrPillow);
+  pillowCrown.position.set(pillowX, pillowBaseY + 0.038, pillowZ);
+  q.add(pillowCrown);
+  //  a shallow centre dip ridge along the two long sides (soft folds where a head sinks in).
+  for (const sx of [pillowX - pillowW / 2 + 0.03, pillowX + pillowW / 2 - 0.03]) {
+    const fold = _box(0.03, 0.055, pillowLen - 0.06, _qtrPillow);
+    fold.position.set(sx, pillowBaseY + 0.01, pillowZ);
+    q.add(fold);
   }
-  const lhandle = _box(0.05, 0.16, 0.04, _corrRail);
-  lhandle.position.set(lockerX + 0.01, 0.95, lockerZ + 0.24);
-  q.add(lhandle);
+  //  a rumpled blanket pulled down toward the foot (rust-red wool, inset).
+  const blanket = _box(bunkDepth - 0.14, 0.11, bunkLen * 0.5, _qtrBlanket);
+  blanket.position.set(bunkXC + 0.02, bunkDeckY + 0.155, bunkZ1 - bunkLen * 0.28);
+  q.add(blanket);
+  const blanketFold = _box(bunkDepth - 0.10, 0.09, 0.16, _qtrBlanket);   // a fold ridge where it's turned down
+  blanketFold.position.set(bunkXC + 0.03, bunkDeckY + 0.20, bunkZ1 - bunkLen * 0.52);
+  q.add(blanketFold);
 
-  // ═══ 5. A FOLDING DESK / SHELF on the fore side wall + personal props (mug, pinned photo) — the
-  //    cockpit personal-touch idiom, so the room reads as SOMEONE'S.
-  const deskX = farX + 0.55, deskZ = z0 + 0.45, deskY = 0.78;
-  const desk = _box(0.7, 0.05, 0.5, _qtrDesk);
+  // ═══ 4. STORAGE LOCKERS — a bank of two tall steel lockers against the AFT side wall (z=z1),
+  //    well clear of the desk (fore wall) and the bunk (back wall). Real locker language: twin
+  //    doors, a piano seam, louvre vents, latch handles, a stencil placard. Rule-7 depth (0.44 out).
+  const lockerZ = z1 - COR_WALL_T / 2 - 0.22;      // face 22cm proud of the aft wall
+  for (let i = 0; i < 2; i++) {
+    const lx = QTR_FAR_X + 0.9 + i * 0.66;         // Z2 r3 — nudged door-ward so they clear the bunk head
+    const cab = _box(0.6, 1.86, 0.44, _qtrLocker);
+    cab.position.set(lx, 0.94, lockerZ);
+    q.add(cab);
+    // Z2 r4 — a lighter proud DOOR-PANEL inset per leaf (a two-value break so the lockers read their
+    //   form in the dim cabin, not a flat black slab), + a dark kick-plate at the base.
+    for (const dsx of [lx - 0.15, lx + 0.15]) {     // lower door-panel inset (below the vent band)
+      const panel = _box(0.24, 1.05, 0.03, _band);
+      panel.position.set(dsx, 0.86, lockerZ + 0.225);
+      q.add(panel);
+    }
+    const kick = _box(0.58, 0.14, 0.03, _channel);
+    kick.position.set(lx, 0.14, lockerZ + 0.225);
+    q.add(kick);
+    const seam = _box(0.02, 1.7, 0.03, _channel);   // the twin-door centre seam (on the face, thin)
+    seam.position.set(lx, 0.96, lockerZ + 0.225);
+    q.add(seam);
+    for (const vy of [1.62, 1.55, 1.48]) {          // louvre vents high on the doors, ON the front face
+      const vent = _box(0.46, 0.02, 0.03, _channel);
+      vent.position.set(lx, vy, lockerZ + 0.225);
+      q.add(vent);
+    }
+    for (const hx of [lx - 0.16, lx + 0.16]) {      // latch handles either side of the seam
+      const latch = _box(0.05, 0.14, 0.05, _corrRail);
+      latch.position.set(hx, 1.0, lockerZ + 0.24);
+      q.add(latch);
+    }
+  }
+  //  a stencil placard on the first locker (a printed unit label).
+  const lockPlac = _box(0.24, 0.08, 0.02, _corrPlacard);
+  lockPlac.position.set(QTR_FAR_X + 0.9, 1.72, lockerZ + 0.24);
+  q.add(lockPlac);
+  //  a hung coverall on a hook BETWEEN the lockers and the door jamb (a soft draped form, flush wall).
+  const hook = _box(0.05, 0.06, 0.10, _corrRail);
+  hook.position.set(QTR_FAR_X + 2.15, 1.86, z1 - 0.07);
+  q.add(hook);
+  const coverall = _box(0.34, 0.86, 0.13, _qtrDesk);
+  coverall.position.set(QTR_FAR_X + 2.15, 1.44, z1 - 0.10);
+  q.add(coverall);
+  const coverallLo = _box(0.30, 0.4, 0.11, _channel);
+  coverallLo.position.set(QTR_FAR_X + 2.15, 0.88, z1 - 0.11);
+  q.add(coverallLo);
+
+  // ═══ 4b. Z2 r5 (SEV2 #3) — a LOW BASE CABINET on the door-side stretch of the AFT wall (between the
+  //    locker bank and the door jamb), breaking up the dead near-black base band that carried NO cabin
+  //    paneling while the fore wall carried a vent/shelf/conduit/rivets. Cheap targeted detail (a base-
+  //    cabinet face + a drawer + seam/latch + a kick-rail conduit + rivets + a small vent grille), kept
+  //    DIM (the tone-appropriate shadow read is preserved). It protrudes into the walk space → a paired
+  //    collider is added in QUARTERS_COLLIDERS (rule 9) + re-verified by the quarters-walk motion probe.
+  const baseCabZ = z1 - COR_WALL_T / 2 - 0.19;    // front ≈ z 11.71 (0.38 deep, proud 19cm)
+  const baseCabXC = QTR_FAR_X + 2.55;             // x ≈ −1.55 (door-side of the coverall, in the dead gap)
+  const baseCabW = 0.9, baseCabH = 0.66, baseCabD = 0.38;
+  const baseCab = _box(baseCabW, baseCabH, baseCabD, _qtrLocker);
+  baseCab.position.set(baseCabXC, baseCabH / 2, baseCabZ);
+  q.add(baseCab);
+  //  a drawer face + a recessed seam splitting it into two + a pull latch (locker/desk vocabulary).
+  const bcSeam = _box(0.02, baseCabH - 0.12, 0.03, _channel);
+  bcSeam.position.set(baseCabXC, baseCabH / 2, baseCabZ + baseCabD / 2 + 0.005);
+  q.add(bcSeam);
+  for (const dsx of [baseCabXC - 0.22, baseCabXC + 0.22]) {   // two proud drawer faces (two-value break)
+    const drawerFace = _box(0.36, baseCabH - 0.16, 0.03, _band);
+    drawerFace.position.set(dsx, baseCabH / 2, baseCabZ + baseCabD / 2 + 0.005);
+    q.add(drawerFace);
+    const pull = _box(0.14, 0.04, 0.04, _corrRail);
+    pull.position.set(dsx, baseCabH / 2 + 0.1, baseCabZ + baseCabD / 2 + 0.03);
+    q.add(pull);
+  }
+  const bcKick = _box(baseCabW - 0.04, 0.1, 0.03, _channel);   // a dark kick-plate at the base
+  bcKick.position.set(baseCabXC, 0.1, baseCabZ + baseCabD / 2 + 0.005);
+  q.add(bcKick);
+  //  a horizontal kick-rail conduit running along the wall above the cabinet (breaks the flat band).
+  const kickRail = _cyl(0.03, 0.03, 1.35, 8, _qtrConduit);
+  kickRail.rotation.z = Math.PI / 2;              // runs along X
+  kickRail.position.set(baseCabXC + 0.05, baseCabH + 0.12, z1 - 0.1);
+  q.add(kickRail);
+  for (const cx of [baseCabXC - 0.5, baseCabXC + 0.05, baseCabXC + 0.6]) {   // saddle clamps + rivets
+    const clamp = _box(0.05, 0.08, 0.1, _channel);
+    clamp.position.set(cx, baseCabH + 0.12, z1 - 0.06);
+    q.add(clamp);
+  }
+  //  a small louvred VENT GRILLE beside the cabinet, low on the wall (the fore-wall vent's echo).
+  const bcVentH = _box(0.22, 0.26, 0.08, _steel);
+  bcVentH.position.set(baseCabXC + 0.72, 0.5, z1 - 0.05);
+  q.add(bcVentH);
+  for (let vy2 = 0.42; vy2 <= 0.58; vy2 += 0.05) {
+    const slat = _box(0.18, 0.014, 0.09, _channel);
+    slat.position.set(baseCabXC + 0.72, vy2, z1 - 0.055);
+    q.add(slat);
+  }
+  //  a couple of rivets on the cabinet top edge (worked hardware, faces into the room −Z).
+  for (const rx of [baseCabXC - 0.3, baseCabXC + 0.3])
+    q.add(_stud(rx, baseCabH - 0.03, baseCabZ + baseCabD / 2 + 0.01, new THREE.Vector3(0, 0, -1), _rivet, 0.014));
+
+  // ═══ 5. THE DESK / CONSOLE — a fabricated fold-down work surface on the FORE side wall (z=z0), with
+  //    a small glowing amber console readout (a point of life), a mug, a pinned photo above, and a
+  //    stow shelf. Placed on the fore wall so it's clear of the bunk (back) + lockers (aft).
+  const deskZ = z0 + COR_WALL_T / 2 + 0.26;        // surface centre, proud of the fore wall
+  // Z2 r2 — the desk moves to the DOOR-SIDE of the fore wall (deskX=−1.95), 1.3m off the berth front
+  //   (−3.22), so the recurring "desk overlaps bunk" defect is designed out. It greets you on entry.
+  const deskX = QTR_WALL_X - 0.95;                 // −1.95, on the fore wall near the entry
+  const deskY = 0.8;
+  const deskFront = z0 + COR_WALL_T / 2 + 0.52;     // the desk's front edge z
+  const desk = _box(0.9, 0.06, 0.52, _qtrDesk);
   desk.position.set(deskX, deskY, deskZ);
   q.add(desk);
-  for (const dx of [deskX - 0.28, deskX + 0.28]) {   // a couple of bracket legs to the wall
-    const brace = _box(0.05, deskY, 0.05, _qtrDesk);
-    brace.position.set(dx, deskY / 2, deskZ - 0.2);
-    q.add(brace);
+  // Z2 r4 — a CANTILEVERED FOLD-DOWN desk (ship-mounted, not a free table): a hinge bracket bolted to
+  //   the wall + a raised lip + a shallow tool drawer under the surface + two DIAGONAL support struts
+  //   from the front edge down to the wall base. Reads as fabricated wall furniture, not a generic table.
+  const deskBracket = _box(0.9, 0.12, 0.08, _channel);   // the wall hinge bracket
+  deskBracket.position.set(deskX, deskY - 0.02, z0 + COR_WALL_T / 2 + 0.02);
+  q.add(deskBracket);
+  const deskLip = _box(0.9, 0.05, 0.03, _channel);       // a raised front lip (stops things rolling off)
+  deskLip.position.set(deskX, deskY + 0.045, deskFront - 0.02);
+  q.add(deskLip);
+  const deskDrawer = _box(0.5, 0.12, 0.4, _qtrLocker);   // a shallow tool drawer under the surface
+  deskDrawer.position.set(deskX, deskY - 0.1, deskZ - 0.02);
+  q.add(deskDrawer);
+  const deskPull = _box(0.16, 0.04, 0.04, _corrRail);
+  deskPull.position.set(deskX, deskY - 0.1, deskFront - 0.02);
+  q.add(deskPull);
+  for (const sx of [deskX - 0.34, deskX + 0.34]) {       // two diagonal support struts (front edge → wall base)
+    const strut = _box(0.05, 0.05, 0.66, _qtrDesk);
+    strut.position.set(sx, deskY / 2, deskZ + 0.06);
+    strut.rotation.x = -0.72;                             // rake back toward the wall base
+    q.add(strut);
   }
-  // a small shelf above the desk on the fore wall
-  const shelf = _box(0.7, 0.04, 0.22, _qtrDesk);
-  shelf.position.set(deskX, 1.5, z0 + 0.18);
+  //  a recessed CONSOLE READOUT on the fore wall above the desk (a small dark glass screen, amber-lit).
+  const consoleBezel = _box(0.42, 0.3, 0.06, _steel);
+  consoleBezel.position.set(deskX - 0.1, 1.35, z0 + COR_WALL_T / 2 + 0.03);
+  q.add(consoleBezel);
+  const consoleScreen = _box(0.34, 0.22, 0.02, _qtrConsole);
+  consoleScreen.position.set(deskX - 0.1, 1.35, z0 + COR_WALL_T / 2 + 0.07);
+  q.add(consoleScreen);
+  const consoleReadout = _box(0.24, 0.03, 0.01, _qtrReadLens);   // a warm status bar on the screen
+  consoleReadout.position.set(deskX - 0.1, 1.29, z0 + COR_WALL_T / 2 + 0.085);
+  q.add(consoleReadout);
+  //  a stow shelf above the console (bracketed, holding a tin + a folded cloth).
+  const shelf = _box(0.86, 0.05, 0.24, _qtrDesk);
+  shelf.position.set(deskX, 1.68, z0 + COR_WALL_T / 2 + 0.13);
   q.add(shelf);
-  for (const sx2 of [deskX - 0.3, deskX + 0.3]) {
-    const brk = _box(0.04, 0.14, 0.2, _channel);
-    brk.position.set(sx2, 1.43, z0 + 0.18);
+  for (const sx2 of [deskX - 0.38, deskX + 0.38]) {
+    const brk = _box(0.05, 0.16, 0.22, _channel);
+    brk.position.set(sx2, 1.6, z0 + COR_WALL_T / 2 + 0.12);
     q.add(brk);
   }
-  // a chipped enamel MUG on the desk (the cockpit mug idiom)
-  const mugBody = _cyl(0.045, 0.04, 0.09, 14, _qtrBlanket);
-  mugBody.position.set(deskX + 0.18, deskY + 0.07, deskZ + 0.1);
-  q.add(mugBody);
-  const mugRim = _cyl(0.047, 0.047, 0.01, 14, _band);
-  mugRim.position.set(deskX + 0.18, deskY + 0.115, deskZ + 0.1);
-  q.add(mugRim);
-  // a couple of stowed items on the shelf (a folded cloth + a tin)
-  const tin = _cyl(0.05, 0.05, 0.08, 12, _qtrLocker);
-  tin.position.set(deskX - 0.18, 1.56, z0 + 0.18);
+  const tin = _cyl(0.055, 0.055, 0.09, 12, _qtrLocker);
+  tin.position.set(deskX - 0.24, 1.75, z0 + COR_WALL_T / 2 + 0.12);
   q.add(tin);
-  const cloth = _box(0.16, 0.08, 0.14, _qtrPillow);
-  cloth.position.set(deskX + 0.14, 1.56, z0 + 0.18);
-  q.add(cloth);
-  // a PINNED PHOTO on the fore wall above the desk (a framed portrait — the human note). The fore
-  //   wall is at z0 with its inner face normal +Z, so the frame is THIN in Z + broad in X/Y, standing
-  //   proud of the wall facing into the room.
+  const clothRoll = _box(0.18, 0.09, 0.15, _qtrPillow);
+  clothRoll.position.set(deskX + 0.2, 1.75, z0 + COR_WALL_T / 2 + 0.12);
+  q.add(clothRoll);
+  //  the chipped enamel MUG on the desk.
+  const mugBody = _cyl(0.045, 0.04, 0.09, 14, _qtrBlanket);
+  mugBody.position.set(deskX + 0.28, deskY + 0.075, deskZ + 0.02);
+  q.add(mugBody);
+  const mugRim = _cyl(0.047, 0.047, 0.012, 14, _band);
+  mugRim.position.set(deskX + 0.28, deskY + 0.12, deskZ + 0.02);
+  q.add(mugRim);
+  //  a PINNED PHOTO + a smaller snapshot on the fore wall beside the console (the human note).
   const photoFrameMat = new THREE.MeshLambertMaterial({ color: 0x2e281f, flatShading: true });
   _buildMats.push(photoFrameMat);
   const photoMat = new THREE.MeshLambertMaterial({ color: 0xb8a67e, flatShading: true });
   _buildMats.push(photoMat);
-  const pframe = _box(0.30, 0.36, 0.03, photoFrameMat);
-  pframe.position.set(deskX - 0.05, 1.22, z0 + 0.075);
+  const pframe = _box(0.28, 0.34, 0.03, photoFrameMat);
+  pframe.position.set(deskX + 0.34, 1.36, z0 + COR_WALL_T / 2 + 0.03);
   q.add(pframe);
-  const photo = _box(0.24, 0.30, 0.012, photoMat);
-  photo.position.set(deskX - 0.05, 1.22, z0 + 0.092);
+  const photo = _box(0.22, 0.28, 0.012, photoMat);
+  photo.position.set(deskX + 0.34, 1.36, z0 + COR_WALL_T / 2 + 0.05);
   q.add(photo);
-  // a second, smaller snapshot taped beside it (a scatter of the pilot's people — lived-in)
   const snap = _box(0.14, 0.18, 0.01, photoMat);
-  snap.position.set(deskX + 0.22, 1.16, z0 + 0.085);
+  snap.position.set(deskX + 0.34, 1.62, z0 + COR_WALL_T / 2 + 0.05);
   snap.rotation.z = 0.14;
   q.add(snap);
 
-  // ═══ 5b. MORE LIVED-IN CLUTTER (round-2: the room read empty). A hung coverall on a hook on the
-  //    aft wall, a stowed duffel + a crate on the floor, a wall towel — the "someone lives here" read.
-  //  a HOOK + a hung coverall/jacket on the aft side wall (a soft draped form). ROUND-1e FLOATER FIX:
-  //   the coverall hung with a ~11cm gap to the aft wall (z1−0.18) and the hook gapped too → the
-  //   coverall pair read as a floating island (pre-existing lint finding). Now the hook touches the wall
-  //   and the coverall hangs flush against it (aft face at the wall, hanging FROM the hook) — connected.
-  const hook = _box(0.05, 0.06, 0.10, _corrRail);       // deeper hook, reaching from the wall out to the coverall
-  hook.position.set(farX + 1.3, 1.85, z1 - 0.06);       // aft face at the wall inner plane (z1−0.01)
-  q.add(hook);
-  const coverall = _box(0.34, 0.9, 0.14, _qtrDesk);     // a hung coverall (dark work-cloth) — flush to the wall
-  coverall.position.set(farX + 1.3, 1.42, z1 - 0.09);   // aft face ≈z1−0.02 (against the wall); top overlaps the hook
-  q.add(coverall);
-  const coverallLo = _box(0.30, 0.4, 0.12, _channel);   // the darker legs, tapering
-  coverallLo.position.set(farX + 1.3, 0.85, z1 - 0.10);
-  q.add(coverallLo);
-  //  a canvas DUFFEL on the floor by the bunk foot
-  const duffel = _cyl(0.18, 0.18, 0.6, 12, _qtrMattress);
-  duffel.rotation.x = Math.PI / 2;
-  duffel.position.set(farX + 0.4, 0.18, z1 - 0.9);
-  q.add(duffel);
-  //  a low stowage CRATE tucked in the aft-corner
-  const crate = _box(0.42, 0.4, 0.42, _qtrLocker);
-  crate.position.set(farX + 0.3, 0.2, z1 - 0.55);
+  // ═══ 5b. FLOOR CLUTTER — a stowage crate + a duffel tucked in the FORE-DOOR corner (the walkable
+  //    entry side), clear of the berth/desk/lockers. The lived-in "someone dumped their kit" read.
+  const crate = _box(0.44, 0.42, 0.44, _qtrLocker);
+  crate.position.set(QTR_FAR_X + 0.34, 0.21, z0 + 0.34);
   q.add(crate);
-  const crateLid = _box(0.44, 0.04, 0.44, _channel);
-  crateLid.position.set(farX + 0.3, 0.42, z1 - 0.55);
+  const crateLid = _box(0.46, 0.04, 0.46, _channel);
+  crateLid.position.set(QTR_FAR_X + 0.34, 0.43, z0 + 0.34);
   q.add(crateLid);
-  //  a towel draped over the bunk rail (a small soft tell)
-  const towel = _box(0.06, 0.28, 0.34, _qtrPillow);
-  towel.position.set(bunkX + bunkD / 2 - 0.02, bunkY - 0.02, z0 + 1.7);
-  q.add(towel);
+  const crateStrap = _box(0.46, 0.05, 0.04, _corrHazard);   // a hazard-yellow shipping strap
+  crateStrap.position.set(QTR_FAR_X + 0.34, 0.25, z0 + 0.34);
+  q.add(crateStrap);
+  const duffel = _cyl(0.17, 0.17, 0.58, 12, _qtrMattress);
+  duffel.rotation.x = Math.PI / 2;
+  duffel.position.set(QTR_FAR_X + 0.9, 0.17, z0 + 0.32);
+  q.add(duffel);
 
-  // ═══ 6. LIGHTING — a warm bunk lamp (a lived-in pool) + a small ceiling fixture. The lamp spills
-  //    through the OPEN door into the corridor (a warm "someone lives here" tell). Kept modest so the
-  //    red-alert corridor floods still dominate the doorway during the disaster.
-  const lampHousing = _box(0.14, 0.08, 0.2, _channel);
-  lampHousing.position.set(farX + 0.16, 1.5, z0 + 1.0);
-  q.add(lampHousing);
-  const lampLens = _box(0.03, 0.06, 0.16, _corrLens);
-  lampLens.position.set(farX + 0.24, 1.5, z0 + 1.0);
-  q.add(lampLens);
-  const lamp = new THREE.PointLight(0xffcf94, 0.9, 4.0, 1.9);
-  lamp.position.set(farX + 0.5, 1.55, z0 + 1.1);
+  // ═══ 5c. FLOOR DETAIL — Z2 r4: the deck read too bare. A worn hazard THRESHOLD TREAD just inside the
+  //    door (the ship-door idiom) + a pair of recessed deck-plate seams break the empty floor without
+  //    cluttering the walkable centre. All flush/near-flush (2cm proud) so they don't trip the walk.
+  const tread = _box(0.28, 0.02, 2 * dHW - 0.1, _corrHazard);
+  tread.position.set(wallX - 0.28, 0.011, zc);
+  q.add(tread);
+  //  two deck-plate seams running across the floor (X-wise), dividing the deck into worked plates.
+  for (const sz of [z0 + 1.25, z1 - 1.05]) {
+    const seam = _box(wallX - farX - 0.2, 0.012, 0.04, _channel);
+    seam.position.set(QTR_XC, 0.007, sz);
+    q.add(seam);
+  }
+
+  // ═══ 6. LIGHTING — MOTIVATED, LOCAL PointLights ONLY. Z2 CRITICAL FIX: the old build used a
+  //    THREE.HemisphereLight for room fill — a SCENE-GLOBAL light that bleeds into the desert world
+  //    (the exact bug class the brief warns about; it shipped once). REMOVED. The cabin is now lit by
+  //    (a) the warm bunk reading-light pool, motivated by the alcove lens, and (b) a cool ceiling can,
+  //    motivated by the recessed ceiling fixture. Both are POINT lights with finite range/decay so they
+  //    stay inside the room. The warm bunk lamp is kept out of the alert-dim (the cabin's own warmth).
+  //  the alcove reading light (warm, pooled at the berth head).
+  const lamp = new THREE.PointLight(0xffca8a, 0.85, 3.4, 2.0);
+  lamp.position.set(bunkXC + 0.1, 1.62, bunkZ0 + 0.5);
   q.add(lamp);
   _qtrLamp = lamp;
-  // a soft ceiling fill so the whole room reads modelled (cool over warm, matching the corridor idiom)
-  const roomFill = new THREE.HemisphereLight(0xbfae94, 0x3a3f46, 0.5);
-  roomFill.position.set(QTR_XC, H, (z0 + z1) / 2);
-  q.add(roomFill);
-  const can = new THREE.PointLight(0xd6dae2, 0.6, 4.5, 1.8);
-  can.position.set(QTR_XC, H - 0.1, (z0 + z1) / 2);
+  //  a recessed CEILING CAN fixture (housing + a cool lens) + its cool fill PointLight, centred.
+  const canHousing = _box(0.44, 0.06, 0.44, _channel);
+  canHousing.position.set(QTR_XC, H - 0.03, (z0 + z1) / 2);
+  q.add(canHousing);
+  const canLens = _box(0.34, 0.02, 0.34, _corrLens);
+  canLens.position.set(QTR_XC, H - 0.075, (z0 + z1) / 2);
+  q.add(canLens);
+  const can = new THREE.PointLight(0xcfd6de, 0.7, 5.0, 1.7);
+  can.position.set(QTR_XC, H - 0.18, (z0 + z1) / 2);
   q.add(can);
+  //  a second dim cool fill low toward the door so the entry read isn't a black pit (finite range).
+  const entryFill = new THREE.PointLight(0xbcc6d0, 0.4, 3.2, 2.0);
+  entryFill.position.set(wallX - 0.6, 1.3, zc);
+  q.add(entryFill);
 }
 
 // ── X4 item-2 — the STARBOARD VIEWPORT glass: a GENUINELY TRANSPARENT cool space-tinted pane.
