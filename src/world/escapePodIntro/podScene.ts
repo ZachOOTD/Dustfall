@@ -296,6 +296,7 @@ let _reentryT0 = 0;   // build-time epoch (for the plasma/shimmer animation time
 // spill (cool space-light → warm dawn wash) + a hint of dawn on the ambient fill, so the cabin
 // warms as the dawn desert swells in the viewport. Refs captured at build; reset by progress.
 let vpGlowLight: THREE.PointLight | null = null;
+let cabinDeckFill: THREE.PointLight | null = null;   // Z6 delta #3 — LOCAL cool deck-fill (0 at descent → WAKE_DECK_FILL at the wake; carries the cool component the zeroed global fill used to give the deck)
 let cabinFill: THREE.HemisphereLight | null = null;
 const _VP_COOL = new THREE.Color(0xa6c0d6);    // porthole spill in space — cool window light
 // CONSISTENT-MIDDAY (user re-scope, 2026-07-01): the descent arrives at + the crash/wake happen in
@@ -305,8 +306,15 @@ const _VP_COOL = new THREE.Color(0xa6c0d6);    // porthole spill in space — co
 const _VP_WARM = new THREE.Color(0xfff2e0);    // porthole spill at the midday desert — bright near-white daylight (was dawn-orange 0xffb070)
 const _FILL_COOL = new THREE.Color(0x93a0b0);  // ambient sky-tint in space (matches the build default)
 const _FILL_WARM = new THREE.Color(0xd9d2c4);  // ambient sky-tint at midday (bright neutral daylight; was warm-dawn 0xb89a82)
-const _VP_BLAST = new THREE.Color(0xff7a2e);   // T2.3 — the explosion flooding the cabin (hot blast-orange) during the tumble
-const _FILL_BLAST = new THREE.Color(0xdc8a48); // T2.3 — the blast wash on the ambient fill
+// Z6 delta #1 (the "explosion-phase bright/WRONG pod" read): the blast flash used to recolor the
+//   WHOLE cabin ambient hot-orange (_FILL_BLAST 0xdc8a48 at 0.9 weight, vpGlow → 3.55 #ff7a2e), so
+//   the cool-aluminium pod turned into a warm-material pod at the detonation — the user read it as a
+//   DIFFERENT/wrong model. The blast is now a DIRECTIONAL window FLARE (the vpGlow porthole spill
+//   catches the fireball — physically the light comes THROUGH the −Z window), while the ambient FILL
+//   only warms a TOUCH (a warm-grey, not orange) so the aluminium keeps its identity. Same cabin,
+//   lit by a blast through the window — not recoloured into another pod.
+const _VP_BLAST = new THREE.Color(0xff9a52);   // the window flare (a hot orange, but a step less saturated so it flares not recolours)
+const _FILL_BLAST = new THREE.Color(0xb8a58c); // the ambient warm-GREY blast wash (was hot-orange 0xdc8a48) — keeps the aluminium reading as aluminium
 const _vpScratch = new THREE.Color();
 const _fillScratch = new THREE.Color();
 let chuteLever: THREE.Group | null = null;  // the parachute lever pivot (setParachuteLeverPull)
@@ -383,7 +391,16 @@ const COOL_RAKE_BASE = 0.28;        // cool counter-rake — build default
 const WAKE_CABIN_LAMP = 2.5;        // ceiling lamp at the wake / walk-in — boosted (2.0→2.5, AT the
                                     //   persistence gate's anti-wash ceiling) to carry the interior
                                     //   read now the scene-global fill/rakes park at ZERO (leak fix)
+// Z6 delta #3 (the "landed floor reads rusty vs the descent deck") — ROOT CAUSE: the wake zeroes the
+//   SCENE-GLOBAL cool fill (the leak-fix), so the grounded cabin is lit almost entirely by the WARM
+//   tungsten ceiling lamp (0xffd2a0). That warm-only wash pushes the cool-grey aluminium deck (_cabDeck)
+//   to a rusty/tan read — the SAME material the descent lights cool-neutral. FIX: at the wake, warm the
+//   lamp only PART-WAY toward its tungsten build colour (lerp toward a neutral daylight), so the deck
+//   keeps its cool-aluminium identity under the LOCAL lamp — no global light re-introduced, no desert leak.
+const _LAMP_TUNGSTEN = new THREE.Color(0xffd2a0);   // the lamp's cool-descent build colour (warm pooled key)
+const _LAMP_WAKE     = new THREE.Color(0xf3efe6);   // wake lamp colour — a near-NEUTRAL daylight (was full tungsten 0xffd2a0) so the aluminium deck reads cool-neutral like the descent, not rusty-tan
 const WAKE_VP_GLOW = 1.35;          // porthole glow — a calm cool accent forward
+const WAKE_DECK_FILL = 0.55;        // Z6 delta #3 — the LOCAL cool deck-fill at the wake (neutralises the warm-brown scene ambient on the aluminium deck now the global cool fill is zeroed; short range so no terrain leak). 0.55 lands the deck at the descent's cool-neutral read without over-cooling / over-brightening.
 const WAKE_HATCH_SPILL = 2.4;       // the door spill (a warm bounce into the bore); ≤ 2.5 so it never blows out / pools on the sand
 const WAKE_HATCH_DIST = 4.8;        // the door-spill reach (≤ 5.0 — covers the bore without spilling far onto the terrain)
 
@@ -2714,8 +2731,12 @@ const PLASMA_FS = /* glsl */ `
     // ── TURBULENT streak field sampled in the slipstream frame, scrolling ALONG the flow fast
     //    (filaments raked past the glass). Tight across-flow, stretched along-flow → long
     //    threads. Two octaves at different rates for a turbulent, non-uniform rip.
-    float s1 = fbm(vec2(q*9.0, s*1.7 - t*3.4));
-    float s2 = fbm(vec2(q*17.0 + 4.0, s*2.8 - t*5.0));
+    // Z6 delta #2 (the descent "light textures moving super fast + scattering inside") — the streak
+    //   scroll + flicker rates were aggressive (t*3.4..5.0 scroll, t*34 flicker), reading as textures
+    //   RACING/scattering through the porthole rather than a heavy incandescent roar. Rates pulled ~40%
+    //   slower here + in the flicker/shimmer below so the plasma rolls past with weight, not a fast blur.
+    float s1 = fbm(vec2(q*9.0, s*1.7 - t*2.0));
+    float s2 = fbm(vec2(q*17.0 + 4.0, s*2.8 - t*3.0));
     float streak = s1*0.62 + s2*0.5;
     // Sharpen HARD into distinct threads with dark lanes between (the vista shows through the
     // lanes at EVERY altitude including peak — air on fire, not a curtain).
@@ -2727,15 +2748,16 @@ const PLASMA_FS = /* glsl */ `
     //    rides the slipstream axis s and its threshold is warped by turbulence + angled, then
     //    feathered — convected plasma, not a decal seam. Reach scales with uRe (peak climbs the
     //    window; fade retreats to a thin lower veil → the arc reads build→peak→ease).
-    float warp = (fbm(vec2(q*5.0, s*2.2 - t*2.6)) - 0.5) * 0.42;   // ragged, turbulent boundary
+    float warp = (fbm(vec2(q*5.0, s*2.2 - t*1.5)) - 0.5) * 0.42;   // ragged, turbulent boundary (Z6 #2: t*2.6→1.5, slower)
     float reach = mix(-0.30, 0.66, uRe);                          // how far up the slipstream the fire climbs
     float lead = smoothstep(reach, -0.46, s + warp + (streak-0.6)*0.22);   // feathered, warped edge (no straight line)
     float rim = length(vec2(p.x*1.0, p.y*0.95));
     float rimLick = 0.45 + 0.95*smoothstep(0.08, 0.44, rim);      // licks AROUND the porthole edge
     float body = lead * rimLick;
 
-    // ── Flicker — a fast shimmer + a per-thread twinkle so the plasma roars/breathes.
-    float flick = 0.80 + 0.20*sin(t*34.0 + q*11.0) + 0.16*(vn(vec2(q*24.0, t*7.0))-0.5);
+    // ── Flicker — a shimmer + per-thread twinkle so the plasma roars/breathes (Z6 #2: t*34→20,
+    //    t*7→4.2 — a slower, heavier flicker; the fast strobe read as "scattering super fast").
+    float flick = 0.80 + 0.20*sin(t*20.0 + q*11.0) + 0.16*(vn(vec2(q*24.0, t*4.2))-0.5);
 
     // ── COOLER TRAILING WAKE — red/orange only, downstream of the stagnation edge (fix 2: the
     //    wake stays cooler; the white-hot core lives at the leading edge below).
@@ -2789,11 +2811,11 @@ const SHIMMER_FS = /* glsl */ `
     // the glass). The DIFFERENCE of two vertically-offset samples gives thin shimmering ripple
     // EDGES (a refraction-like wobble) rather than a flat tint — reads as air boiling, a
     // shimmer not a smear. Two scales layered (broad heat columns + fine quiver).
-    float w1 = vn(vec2(p.x*4.5, p.y*3.2 - t*1.6));
-    float w2 = vn(vec2(p.x*4.5, p.y*3.2 + 0.16 - t*1.6));
+    float w1 = vn(vec2(p.x*4.5, p.y*3.2 - t*1.0));     // Z6 #2: t*1.6→1.0 (slower heat convection)
+    float w2 = vn(vec2(p.x*4.5, p.y*3.2 + 0.16 - t*1.0));
     float ripple = abs(w1 - w2) * 9.0;                 // thin bright ripple edges (refraction-like wobble)
-    float f1 = vn(vec2(p.x*11.0, p.y*8.0 - t*2.8));
-    float f2 = vn(vec2(p.x*11.0, p.y*8.0 + 0.11 - t*2.8));
+    float f1 = vn(vec2(p.x*11.0, p.y*8.0 - t*1.7));    // Z6 #2: t*2.8→1.7 (slower quiver)
+    float f2 = vn(vec2(p.x*11.0, p.y*8.0 + 0.11 - t*1.7));
     float quiver = abs(f1 - f2) * 6.0;                 // fine high-freq quiver
     float v = ripple * 0.7 + quiver * 0.3;
     // Bias the haze toward the UPPER window — where the vista (planet/sky) still shows past the
@@ -2843,10 +2865,19 @@ function buildCabinLampRig(group: THREE.Group, storeRefs = true): void {
   const vpGlow = new THREE.PointLight(0xa6c0d6, 0.95, 4.2, 2.2);
   vpGlow.position.set(0, VP_CY, -CAB_R + 0.05);
   group.add(vpGlow);
+  // Z6 delta #3 — LOCAL cool DECK-FILL. ROOT CAUSE of the "rusty landed floor": the scene-global
+  //   warm-brown AmbientLight (0x4a3a2a) tints the deck warm everywhere; the DESCENT neutralises it
+  //   with the cool hemisphere fill (0.72), but the WAKE zeroes that fill (the world-light leak-fix),
+  //   so the warm ambient wins → the aluminium deck reads rusty-tan. This is a LOCAL falloff light
+  //   (no global leak) that ramps UP only at the wake to carry the cool component the global fill used
+  //   to give the deck — restoring the descent's cool-neutral aluminium read on the LANDED floor.
+  const deckFill = new THREE.PointLight(0xaebfce, 0.0, 3.4, 2.4);   // cool; intensity driven 0 (descent) → WAKE by the crash pose
+  deckFill.position.set(0.0, 0.9, 0.15);   // low + central so it pools on the deck, dies before the terrain (short range)
+  group.add(deckFill);
   // Only the RIDE cabin (buildPodScene) keeps the animated refs — the descent/crash/tumble paths
   //   drive them. The docked BAY pod uses the same rig for parity but must NOT clobber them (its
   //   lights are disposed with the ship at the swap; a dangling ref would be a bug).
-  if (storeRefs) { cabinLamp = lamp; cabinFill = fill; cabinKeyRake = key; cabinCoolRake = coolRake; vpGlowLight = vpGlow; }
+  if (storeRefs) { cabinLamp = lamp; cabinFill = fill; cabinKeyRake = key; cabinCoolRake = coolRake; vpGlowLight = vpGlow; cabinDeckFill = deckFill; }
 }
 
 /** Build the RE-ENTRY FX (plasma + heat-shimmer) into the group, just in front of the −Z
@@ -3086,10 +3117,18 @@ export function setCabinCrashPose(pose: number): void {
   }
   if (cabinLamp) {
     cabinLamp.intensity = LAMP_BASE + s * (WAKE_CABIN_LAMP - LAMP_BASE);   // the ceiling lamp KEY pools the dome/apex
+    // Z6 delta #3 — cool the lamp toward a neutral daylight as it grounds (the global cool fill has
+    //   zeroed by now, so a full-tungsten lamp would rust the aluminium deck). Keeps the deck reading
+    //   as the SAME aluminium the descent shows.
+    cabinLamp.color.copy(_vpScratch.copy(_LAMP_TUNGSTEN).lerp(_LAMP_WAKE, s));
     // CRASH-AFTERMATH — publish the CLEAN base each frame so the wake flicker (updateChutePop, later
     //   in the tick) modulates the correct value even as the crashed-settle ease drives it (no drift).
     cabinLamp.userData._flickerBase = cabinLamp.intensity;
   }
+  // Z6 delta #3 — ramp the LOCAL cool deck-fill UP as the cabin grounds (opposite the global cool fill,
+  //   which ramps to ZERO for the leak-fix). Carries the cool component locally so the landed deck reads
+  //   aluminium like the descent, WITHOUT re-introducing a scene-global light that would wash the desert.
+  if (cabinDeckFill) cabinDeckFill.intensity = s * WAKE_DECK_FILL;
   // the RAKE directionals are SCENE-GLOBAL (see the leak-fix note above) — grounded, they ramp to
   //   ZERO with the fill; the boosted local ceiling lamp + hatch spill carry the wake interior read.
   if (cabinKeyRake) {
@@ -3166,9 +3205,14 @@ export function parkPodLights(): void {
   if (cabinCoolRake) cabinCoolRake.intensity = 0;
   // Hatch spill — a warm bounce that dies inside the doorway (short range WAKE_HATCH_DIST), so the
   //   open door reads lit-from-within without a hot terrain pool; the real midday sun lights the ground.
-  if (hatchSpillLight) { hatchSpillLight.intensity = WAKE_HATCH_SPILL; hatchSpillLight.distance = WAKE_HATCH_DIST; }
-  if (vpGlowLight) vpGlowLight.intensity = WAKE_VP_GLOW;
-  if (cabinLamp) cabinLamp.intensity = WAKE_CABIN_LAMP;
+  if (hatchSpillLight) { hatchSpillLight.color.copy(_VP_WARM); hatchSpillLight.intensity = WAKE_HATCH_SPILL; hatchSpillLight.distance = WAKE_HATCH_DIST; }
+  if (vpGlowLight) { vpGlowLight.color.copy(_VP_WARM); vpGlowLight.intensity = WAKE_VP_GLOW; }
+  if (cabinLamp) {
+    cabinLamp.intensity = WAKE_CABIN_LAMP;
+    cabinLamp.color.copy(_LAMP_WAKE);   // Z6 delta #3 — the neutral-warm wake lamp (NOT full tungsten) so the LOAD-path landed deck reads aluminium, matching the live wake + the descent deck
+    cabinLamp.userData._flickerBase = cabinLamp.intensity;
+  }
+  if (cabinDeckFill) cabinDeckFill.intensity = WAKE_DECK_FILL;   // Z6 delta #3 — the LOAD-path landed deck gets the SAME cool deck-fill as the live wake (parity across Continue)
 }
 
 /** Descent driver (REBUILD v2 R1b) — drive the PHYSICAL fall off the fall's single 0..1
@@ -3239,12 +3283,16 @@ export function setTumbleLight(settle: number): void {
   //   pre-blast window (the pale/warm lift the user read as "too bright after eject").
   const sq = s * s;
   if (vpGlowLight) {
+    // the DIRECTIONAL window flare — the porthole catches the fireball. Kept strong (this is the
+    //   correct read: the blast light comes through the −Z window), just a touch less than before.
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_BLAST, sq));
-    vpGlowLight.intensity = 0.95 + sq * 2.6;    // 0.95 orbital cool base → ~3.5 only at the blast peak
+    vpGlowLight.intensity = 0.95 + sq * 2.2;    // 0.95 orbital cool base → ~3.15 at the peak (was 3.55)
   }
   if (cabinFill) {
-    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_BLAST, sq * 0.9));
-    cabinFill.intensity = 0.72 + sq * 0.5;      // ambient base 0.72 (= the bay/ride base) → +0.5 only at the peak
+    // Z6 delta #1 — the ambient fill only warms a TOUCH toward a warm-GREY (sq*0.45, not sq*0.9 hot
+    //   orange), so the cabin ambient never recolours off aluminium. The identity holds through the blast.
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_BLAST, sq * 0.45));
+    cabinFill.intensity = 0.72 + sq * 0.28;     // ambient base 0.72 → +0.28 at the peak (was +0.5) — a lift, not a flood
   }
 }
 
@@ -3306,6 +3354,7 @@ export function disposePodScene(ctx: GameContext): void {
   reentryShimmerMat = null;
   reentryShimmerMesh = null;
   vpGlowLight = null;
+  cabinDeckFill = null;   // Z6 delta #3 — the local cool deck-fill (re-created on the next interior build)
   cabinFill = null;
   chuteLever = null;
   leverBrokenTell = null;

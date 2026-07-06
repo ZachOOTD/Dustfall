@@ -20,6 +20,7 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, benchIntro, planetApproachCurve, type BeatId, type IntroBenchResult } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro/benchIntro; W6 item 3 — planetApproachCurve (the rig mirrors the new two-phase approach)
+import { setTumbleLight as setPodTumble } from '../world/escapePodIntro/podScene.ts';   // Z6 rig — drive the recede cabin blast-flood for the phase-parity diagnostic
 import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setEjectLeverPull as setPodEject, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, chuteLifecyclePhase, advanceChuteLifecycle as advanceChuteDbg, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureConstant, smokeWakeFlicker, probeEyeInCabin, probeCabinDoor } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; W6 item 5 — smokeExposureConstant (the zero-shift constant-exposure proof); W6 item 4 — probeEyeInCabin (the impact eye-inside gate); W6 item 6 — probeCabinDoor (the slanted-door diagnostic)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
@@ -76,6 +77,8 @@ interface DebugApi {
   /** Escape-pod T1.2 — grow the descent planet in the cabin viewport (0..1). For the
    *  pod-interior rig-shot (frame the descent forward view). */
   setDescentProgress: (p: number) => void;
+  getPodSpawn: () => { x: number; y: number; z: number };
+  setTumbleLight: (settle: number) => void;
   /** Escape-pod T1.2 — pose the parachute lever (the gag): t in [0,1] (0=rest, 1=yanked);
    *  snapped=true droops it dead. For the pod-interior rig-shot + the parachute beat. */
   setParachuteLeverPull: (t: number, snapped?: boolean) => void;
@@ -378,6 +381,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     benchIntro: (opts) => benchIntro(ctx, opts),
     placeCrashedPod: (x, z) => { placeCrashedPodWreck(ctx, x, z); },
     setDescentProgress: (p) => { setPodDescent(p); },
+    getPodSpawn: () => { const s = getPodSpawnDbg(ctx); return { x: s.x, y: s.y, z: s.z }; },
+    setTumbleLight: (settle) => { setPodTumble(settle); },
     setParachuteLeverPull: (t, snapped) => { setPodChute(t, snapped); },
     setEjectLeverPull: (t) => { setPodEject(t); },
     setCabinCrashPose: (pose) => { setPodCrashPose(pose); },
