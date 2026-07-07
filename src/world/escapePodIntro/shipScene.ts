@@ -657,14 +657,19 @@ const QUARTERS_COLLIDERS: ReadonlyArray<BoxSpec> = [
   //   the CORRIDOR_COLLIDERS −X aft-A/aft-B runs (they span z 6.4..8.98 + 10.22..14.6 at x=−1.0);
   //   the door gap (8.98..10.22) is the only opening. So no extra returns are needed here (they'd
   //   duplicate the corridor wall). The room is entered ONLY through the door.
-  // ── Z2 OVERHAUL — FURNITURE COLLIDERS (CLAUDE.md rule 9: the re-lofted room's solids block movement,
-  //   updated in the SAME change as the geometry; the old room had NONE, so you could walk through the
-  //   bunk). Each box = [w,h,d, cx,cy,cz], derived from the buildCrewQuarters coordinates. Verified by
-  //   the quarters-walk motion probe (rig-shot --scenario=quarters-walk). Spec math (COR_WALL_T=0.2):
-  //     back wall inner face = QTR_FAR_X+0.1 = −4.0; bunkDepth 0.78 → berth front x=−3.22.
-  //   BUNK BERTH — a solid built-in from the back wall to the berth front, full height to the canopy,
-  //     running z 9.1..11.25 (foot off the desk, head off the lockers, Z2 r3). Blocks walking into it.
-  [0.78, 1.96, 2.15, (QTR_FAR_X + 0.1 + 0.39), 0.98, (QTR_Z0 + 0.9 + QTR_Z1 - 0.75) / 2],
+  // ── FURNITURE COLLIDERS (CLAUDE.md rule 9: the re-lofted room's solids block movement, updated in the
+  //   SAME change as the geometry). Each box = [w,h,d, cx,cy,cz], derived from buildCrewQuarters. Verified
+  //   by the quarters-walk motion probe (rig-shot --scenario=quarters-walk). Spec math (COR_WALL_T=0.2):
+  //     back-wall inner face (room bound) = QTR_FAR_X+0.1 = −4.0... actually the room-inner wall plane is
+  //     QTR_FAR_X = −4.1 (rBack inner face); the general room back-wall collider (above) stops the player
+  //     at −4.1.
+  //   ROUND-6 TRUE WALL BORE (rule 9 — the bunk is now a HOLE bored into the wall; NOTHING stands proud):
+  //     the proud-lip bunk collider is DELETED. The bunk geometry (mattress/bedding/liner/flush drawer)
+  //     all sits AT or BEHIND the −4.1 wall plane; the flush reveal + drawer face stand ≤2cm proud (within
+  //     KCC skin). The general room BACK-WALL collider (above, inner face −4.1, full width+height) already
+  //     stops the player flush at the wall over the whole berth Z-band — so no separate bunk collider is
+  //     needed (a proud one would be a stale-geometry bug). The player is blocked flush at −4.1 (KCC centre
+  //     ~−3.75), the open floor in front is fully walkable. Verified by the quarters-walk motion probe.
   //   LOCKER BANK — the two tall aft-wall lockers (x −3.50..−2.24, proud to z≈11.46, Z2 r3), full height.
   [1.30, 1.86, 0.50, (QTR_FAR_X + 1.23), 0.94, (QTR_Z1 - 0.1 - 0.22)],
   //   FOLD-DOWN DESK — the fore-wall work surface, moved DOOR-SIDE (deskX=−1.95, z≈8.56), floor→desktop.
@@ -950,6 +955,37 @@ function _stud(x: number, y: number, z: number, faceDir: THREE.Vector3, mat: THR
   const m = new THREE.Mesh(g, mat);
   m.position.set(x, y, z);
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), faceDir.clone().normalize());
+  return m;
+}
+// ── SOFT CLOTH helpers (ROUND-5 — the adversarial gate: "bedding reads as stacked painted boards; the
+//    loose bedroll CYLINDER reads soft — match THAT"). A capsule (rounded ends + a round barrel) is the
+//    engine's proven soft read. `_cushion` = a flattened capsule for a plumped pillow (rounded on all
+//    sides, squashed low in Y). `_roll` = a horizontal capped cylinder for a rolled blanket turn-down /
+//    bolster (soft round tube). Both take generous scale so their silhouette is clearly rounder + softer
+//    than the machined boxy cabinetry, so cloth visually separates from furniture.
+function _cushion(w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
+  // a CapsuleGeometry is built along local Y (a barrel of length L capped by hemispheres of radius r).
+  //   Lay it on its side so the barrel runs along X (the berth width). Build it at the DEPTH radius, then
+  //   squash the HEIGHT so it reads as a LOW, WIDE, plumped cushion (rounded on every side, not a tall
+  //   lump). After rot.z=π/2 the round cross-section spans Y+Z at radius r; scale Y down to height h.
+  const r = d / 2;                              // the depth (Z) radius = the rounded cross-section
+  const len = Math.max(0.02, w - 2 * r);        // barrel length so total X span ≈ w
+  const g = new THREE.CapsuleGeometry(r, len, 4, 12);
+  _disposables.push(g);
+  const m = new THREE.Mesh(g, mat);
+  m.rotation.z = Math.PI / 2;                    // lay it down: local length axis (Y) → world X
+  // after rot.z=+90°, local X → world Y (height) and local Z → world Z (depth). Squash local X to set the
+  //   world HEIGHT to h (low + soft); local Z keeps the rounded depth radius.
+  m.scale.set(h / (2 * r), 1, 1);
+  return m;
+}
+function _roll(len: number, r: number, mat: THREE.Material, axis: 'x' | 'z' = 'x'): THREE.Mesh {
+  // a capped soft tube (a rolled blanket edge / bolster). Capsule ends read as a soft rounded roll.
+  const g = new THREE.CapsuleGeometry(r, Math.max(0.01, len - 2 * r), 4, 10);
+  _disposables.push(g);
+  const m = new THREE.Mesh(g, mat);
+  if (axis === 'x') m.rotation.z = Math.PI / 2;  // barrel along X
+  else m.rotation.x = Math.PI / 2;               // barrel along Z
   return m;
 }
 // ── A custom-vertex skin mesh from a flat list of triangle vertices (each tri = 9 floats).
@@ -3507,9 +3543,8 @@ function down_(_up: THREE.Vector3): THREE.Vector3 { return new THREE.Vector3(0, 
 // hazard ACCENT chevron paint — a saturated warn-yellow used ONLY as thin edge accents (doorway
 //   leading edges), NOT the primary read. Worn matte so it takes the airlock light like painted steel.
 const _bayHazardAccent = _metal(0xc39a22, 0.28, 0.70, { flat: true, grime: true });
-// umbilical hoses — dark ribbed rubber conduit (reuse the corridor cable idiom).
-const _bayHose = _metal(0x1c1a1e, 0.10, 0.86, { flat: true });
-// a brass/bronze coupling on the umbilicals + fuel line (a warm hardware pop vs the grey hull).
+// a brass/bronze coupling on the clamp arms + fuel line (a warm hardware pop vs the grey hull).
+// (the umbilical-hose material was removed with the collar-flank umbilicals in ROUND-4 — see buildPodBay.)
 const _bayCoupling = _metal(0x6e5a34, 0.55, 0.55, { flat: true });
 // airlock seal collar — a dark rubber gasket ring at the collar mouth (matte, non-metal).
 const _baySeal = _metal(0x16151a, 0.06, 0.90, { flat: true });
@@ -4055,43 +4090,14 @@ function buildPodBay(group: THREE.Group): void {
     pad.position.set(podArcX - 0.05, 1.10, armZ);
     bay.add(pad);
   }
-  //  two tidy umbilicals routed along the COLLAR's −Z exterior flank (Z4 FIX). PREVIOUSLY the coupling
-  //  plate + hose ends terminated on the pod SHOULDER at pod-local (0.43, −0.89) — radial ~0.99 m from
-  //  the pod axis, i.e. ~0.45 m INSIDE the 1.44 m hull. At yaw 0 that hid behind the open door; the
-  //  moment the pod rotates in its cradle the solid barrel sweeps over that spot and the plate + hoses
-  //  punched straight through the interior shell (the user's screenshot; probe-rotate-{73,90}). A pod
-  //  that turns freely can't have fixed hardware plugged INTO its skin, so the umbilicals now live wholly
-  //  on the COLLAR — a coupling plate bolted to the collar's −Z side wall and hoses draping between two
-  //  collar sockets, terminating in a capped stub SHORT of the pod (a ~8 cm mate gap). Every vertex stays
-  //  at radial distance > POD_R from the pod axis (verified by pod-rotation-clearance), so the barrel
-  //  clears them at all sweep angles. The −Z-flank read is unchanged from the corridor eye.
-  const umbY = 1.72;
-  const umbWallZ = zc - aHW - COR_WALL_T / 2;               // ON the collar's −Z side-wall inner face
-  // coupling plate bolted flat to the collar −Z wall, near the pod-door (outboard) end of the collar
-  const umbPlate = _box(0.10, 0.36, 0.30, _channel);
-  umbPlate.position.set(collarFar + 0.34, umbY, umbWallZ + 0.06);
-  bay.add(umbPlate);
-  for (const [hy, sag] of [[umbY + 0.06, 0.12], [umbY - 0.14, 0.16]] as const) {
-    // both ends on the collar −Z flank: an inboard socket at the wall plane → a capped stub just SHORT
-    //   of the pod-door face (the mate point), draping along the collar (never entering the pod cylinder).
-    const x0 = wallX - 0.10, x1 = collarFar + 0.14;          // inboard (ship end) → outboard (pod-door end)
-    const z0 = umbWallZ + 0.05, z1 = umbWallZ + 0.05;        // hug the −Z wall the whole run
-    const socket = _cyl(0.05, 0.05, 0.16, 10, _bayCoupling);
-    socket.rotation.z = Math.PI / 2; socket.position.set(x0, hy, z0);
-    bay.add(socket);
-    // the capped mate stub at the outboard end (reads as the connector that would plug the pod, held clear)
-    const stub = _cyl(0.045, 0.05, 0.12, 10, _bayCoupling);
-    stub.rotation.z = Math.PI / 2; stub.position.set(x1, hy, z1);
-    bay.add(stub);
-    // a single sagging hose spanning the two collar-flank points (sagging in y; runs along −X)
-    const midX = (x0 + x1) / 2, midZ = (z0 + z1) / 2;
-    const len = Math.hypot(x1 - x0, z1 - z0);
-    const hose = _cyl(0.04, 0.04, len, 8, _bayHose);
-    hose.position.set(midX, hy - sag, midZ);
-    hose.rotation.y = Math.atan2(x1 - x0, z1 - z0);
-    hose.rotation.x = Math.PI / 2;
-    bay.add(hose);
-  }
+  //  ROUND-4 REMOVAL (user, 2026-07-06 pod-bay review): the two capped umbilical MATE STUBS that
+  //  terminated at the outboard (pod-door) end of the collar −Z flank read, from the airlock "OPEN THE
+  //  POD [E]" eye, as two horizontal dark pipe stubs poking out of the wall TOWARD the pod door — the
+  //  user asked for them removed. The whole collar-flank umbilical block (coupling plate + two sockets +
+  //  two capped stubs + two draping hoses) existed ONLY to dress that flank, and its only in-view
+  //  presence was those intruding stubs, so the entire block is removed rather than leaving orphaned
+  //  hose/socket geometry. Nothing was walkable or collidable here (void-side prop), so no collider
+  //  change is needed; pod-rotation-clearance can only improve (fewer meshes near the sweep envelope).
 
   // ═══ 5. AIRLOCK LIGHTING — the collar is a lit docking passage, not a black tube. A warm glow at the
   //    pod-door end (the "board here" beacon, spilling back into the corridor through the open door) +
@@ -4117,9 +4123,15 @@ function buildPodBay(group: THREE.Group): void {
 // ── X4 item-1 — CREW QUARTERS materials (lived-in basics, in the ship's gunmetal family). Bunk
 //    mattress + a folded blanket, a locker, a desk, plus the cockpit's personal-touch idiom (mug,
 //    framed photo). Warm fabric tones read the "human" note against the grey hull.
-const _qtrMattress = new THREE.MeshLambertMaterial({ color: 0x8f8a7c, flatShading: true });   // pale worn ticking
-const _qtrBlanket = new THREE.MeshLambertMaterial({ color: 0x7a4a34, flatShading: true });    // a rust-red wool blanket
-const _qtrPillow = new THREE.MeshLambertMaterial({ color: 0xbdb6a4, flatShading: true });     // a grubby pillow
+const _qtrMattress = new THREE.MeshLambertMaterial({ color: 0x9a9384, flatShading: true });   // pale worn ticking (the bare mattress, shows at the head)
+const _qtrBlanket = new THREE.MeshLambertMaterial({ color: 0x7a4a34, flatShading: true });    // a rust-red wool blanket (legacy — still used elsewhere)
+// ROUND-6 (adversarial gate Fix 3): a DISTINCT bunk blanket layer in a muted olive/grey-green wool — a
+//   clear MATERIAL BREAK from the pale mattress so a horizontal made-bed line reads (mattress at the head,
+//   blanket over the lower 2/3), + a contrasting liner tone under the turned-down flap (a double-thickness
+//   fold with a visible underside).
+const _qtrBlanketWool = new THREE.MeshLambertMaterial({ color: 0x5b6350, flatShading: true }); // muted olive/grey-green wool
+const _qtrBlanketLiner = new THREE.MeshLambertMaterial({ color: 0x8a8b74, flatShading: true }); // the paler fold liner (underside of the turn-down)
+const _qtrPillow = new THREE.MeshLambertMaterial({ color: 0xc7c1b1, flatShading: true });     // a grubby pillow
 const _qtrLocker = _metal(0x54595f, 0.44, 0.62, { flat: true, grime: true });                 // a steel locker (ship family)
 const _qtrDesk = _metal(0x4a4f55, 0.40, 0.66, { flat: true, grime: true });                   // a folding desk/shelf
 // Z2 OVERHAUL — the alcove liner (a warmer, darker recessed steel so the bunk niche reads as a
@@ -4170,9 +4182,50 @@ function buildCrewQuarters(group: THREE.Group): void {
   const rCeil = _box(wallX - farX + 0.2, COR_WALL_T, z1 - z0 + 0.2, _ceil);
   rCeil.position.set(QTR_XC, H + COR_WALL_T / 2 + 0.006, (z0 + z1) / 2);
   q.add(rCeil);
-  const rBack = _box(COR_WALL_T, H + 0.2, z1 - z0 + 0.2, _shell);
-  rBack.position.set(farX - COR_WALL_T / 2, H / 2, (z0 + z1) / 2);
-  q.add(rBack);
+  // ROUND-4 RECESSED BUNK ALCOVE (user: "actually RECESS the bed INTO the wall like a sci-fi bed").
+  //   The back wall is no longer a single flat slab — it is CUT over the berth opening so the bunk sits
+  //   INSIDE a pocket recessed BEHIND the wall plane. These alcove-opening constants are shared by the
+  //   wall cut (here) and the berth build (section 3 below). Opening Z-band = the berth footprint; the
+  //   opening runs from the berth deck up to ALCOVE_OPEN_TOP; the pocket back is recessed ALCOVE_DEPTH
+  //   behind the wall inner face (−4.1). The wall inner face plane is x = farX = −4.1 (the room bound).
+  const ALCOVE_Z0 = z0 + 0.9, ALCOVE_Z1 = z1 - 0.75;   // 9.1 .. 11.25 (foot off the desk, head off the lockers)
+  // ROUND-6 (adversarial gate, 3rd miss: the "berth + understructure + proud frame" hybrid STILL read as
+  //   a box proud of the wall). KILL THE HYBRID → a TRUE WALL BORE. The opening is a plain rectangular
+  //   hole in the back wall; the room wall continues FLUSH (at −4.1) right up to all four opening edges —
+  //   NO proud frame, NO understructure below, NO legs/brackets/shadow gap. The mattress rests DIRECTLY
+  //   on the recessed pocket floor (a plausible bunk sit-height). Only a SHALLOW flush reveal (a machined
+  //   dark edge liner sitting IN the wall plane, not proud) trims the bore. Under-bunk storage is a single
+  //   FLUSH drawer face set INTO the wall BELOW the opening (in the wall plane), never a proud chest.
+  const ALCOVE_OPEN_BOT = 0.46;                        // opening bottom = the pocket floor = mattress sit-height
+  const ALCOVE_OPEN_TOP = 1.24;                        // opening top — a snug berth (~0.78m clear headroom)
+  const ALCOVE_DEPTH = 0.72;                           // how far the pocket bores BEHIND the wall face
+  const wallFace = farX;                               // −4.1, the room-inner back-wall plane
+  const nicheBackX = wallFace - ALCOVE_DEPTH;          // −4.82, the bored pocket back
+  //  the back wall is bored: the room-side wall surface stays FLUSH at −4.1 EXCEPT the plain rectangular
+  //   opening (ALCOVE_OPEN_BOT..TOP over the berth Z-band). Below the opening a shallow drawer recess is
+  //   cut into the wall for a flush drawer face; everything else is solid flush wall.
+  const rbXC = farX - COR_WALL_T / 2;
+  const DRAWER_TOP_Y = ALCOVE_OPEN_BOT - 0.05;         // 0.41 — top of the flush under-bunk drawer recess
+  const DRAWER_BOT_Y = 0.14;                           // bottom of the drawer recess (a solid toe below)
+  //   toe base: floor → toe top (solid flush wall)
+  const rbToe = _box(COR_WALL_T, DRAWER_BOT_Y + 0.2, z1 - z0 + 0.2, _shell);
+  rbToe.position.set(rbXC, (DRAWER_BOT_Y - 0.2) / 2, (z0 + z1) / 2);
+  q.add(rbToe);
+  //   upper band: the berth opening top → the ceiling (solid flush wall)
+  const rbHi = _box(COR_WALL_T, (H + 0.2) - ALCOVE_OPEN_TOP, z1 - z0 + 0.2, _shell);
+  rbHi.position.set(rbXC, (ALCOVE_OPEN_TOP + H + 0.2) / 2, (z0 + z1) / 2);
+  q.add(rbHi);
+  //   the thin sill band between the drawer-recess top and the berth opening bottom (solid flush wall)
+  const rbSill = _box(COR_WALL_T, ALCOVE_OPEN_BOT - DRAWER_TOP_Y, z1 - z0 + 0.2, _shell);
+  rbSill.position.set(rbXC, (DRAWER_TOP_Y + ALCOVE_OPEN_BOT) / 2, (z0 + z1) / 2);
+  q.add(rbSill);
+  //   Z-end returns flanking the opening + drawer band (fore of ALCOVE_Z0, aft of ALCOVE_Z1) — solid
+  //     flush wall either side of the berth, so the wall reads continuous up to the opening edges.
+  for (const [rz0, rz1] of [[z0 - 0.1, ALCOVE_Z0], [ALCOVE_Z1, z1 + 0.1]] as const) {
+    const seg = _box(COR_WALL_T, ALCOVE_OPEN_TOP - DRAWER_BOT_Y, rz1 - rz0, _shell);
+    seg.position.set(rbXC, (DRAWER_BOT_Y + ALCOVE_OPEN_TOP) / 2, (rz0 + rz1) / 2);
+    q.add(seg);
+  }
   for (const sz of [-1, 1]) {
     const side = _box(wallX - farX + 0.2, H + 0.2, COR_WALL_T, _shell);
     side.position.set(QTR_XC, H / 2, (sz < 0 ? z0 : z1) + sz * COR_WALL_T / 2);
@@ -4230,6 +4283,23 @@ function buildCrewQuarters(group: THREE.Group): void {
     // a marching bolt line along the rub-rail (worked hardware, faces into the room).
     for (let x = QTR_FAR_X + 0.4; x <= QTR_WALL_X - 0.3; x += 0.5)
       q.add(_stud(x, 1.06, wallZ + nz * 0.14, new THREE.Vector3(0, 0, nz), _rivet, 0.016));
+    // ROUND-6 Fix 5 — the bare shell ABOVE the upper panel (y≈2.03..2.4) read as a dead bright greybox.
+    //   Fill it with a darker worn HEAD BAND (a two-value break in the deeper matte channel tone) + a
+    //   panel seam + a vertical seam dividing it into plates + a couple of rivets, so the upper wall reads
+    //   as worked worn panelling, not clean bright greybox. Proud ≥10cm (rule 7), matte darker value.
+    const head = _box(along - 0.24, 0.34, 0.10, _channel);
+    head.position.set(QTR_XC, 2.20, wallZ + nz * 0.05);
+    q.add(head);
+    const headSeam = _box(along - 0.24, 0.025, 0.12, _qtrConduit);   // a horizontal machined seam (worn metal)
+    headSeam.position.set(QTR_XC, 2.05, wallZ + nz * 0.06);
+    q.add(headSeam);
+    for (const px of [QTR_XC - (along - 0.24) / 4, QTR_XC + (along - 0.24) / 4]) {   // vertical plate seams
+      const vseam = _box(0.03, 0.32, 0.12, _qtrConduit);
+      vseam.position.set(px, 2.20, wallZ + nz * 0.06);
+      q.add(vseam);
+    }
+    for (let x = QTR_FAR_X + 0.55; x <= QTR_WALL_X - 0.4; x += 0.7)   // sparse rivets on the head band
+      q.add(_stud(x, 2.32, wallZ + nz * 0.11, new THREE.Vector3(0, 0, nz), _rivet, 0.014));
   };
   //  fore + aft side walls (normal into the room along ∓Z). The back wall is dressed by the alcove.
   _dressSide(1, z0 + COR_WALL_T / 2, wallX - farX);
@@ -4326,159 +4396,213 @@ function buildCrewQuarters(group: THREE.Group): void {
   handle.position.set(0.07, dTop * 0.5, -(dHW - 0.1));
   leaf.add(handle);
 
-  // ═══ 3. THE BUILT-IN BUNK ALCOVE — Z2 OVERHAUL. The old bunk was a slab-on-4-legs floating out into
-  //    the room (the "generic box" the user flagged). NEW: an integrated BERTH built into the BACK wall
-  //    (x=−4.1) — a solid platform base (no floating legs), flanked by fabricated end-panels, capped by
-  //    a header canopy that frames a recessed warm reading-light, with the mattress + blanket + pillow
-  //    tucked cleanly INSIDE the frame. It runs along Z against the back wall so it does NOT collide
-  //    with the desk (fore wall) or the lockers (aft wall) — the overlap defect is designed out.
-  //    Coordinates: the berth deck top at bunkTop; the platform is a solid box from the floor up (a real
-  //    built-in, storage below). The mattress sits ON the deck; all soft goods are INSET so nothing
-  //    pokes past the frame. Bunk faces +X into the room. Collider = a single box at the berth front
-  //    (QTR_BUNK_COLLIDER) so the player can't walk into the mattress but the room stays open.
-  const bunkDeckY = 0.52;                        // berth deck top height
-  const bunkDepth = 0.78;                        // how far the berth reaches OUT off the back wall (+X)
-  // Z2 r2 — the berth foot is pulled AFT (bunkZ0 = z0+0.9) so it clears the desk zone on the fore wall
-  //   (the recurring "desk overlaps bunk foot" defect). The berth head is at the aft wall; the foot ends
-  //   ~0.9m off the fore wall, leaving that corner for the desk/entry.
-  // Z2 r3 — head pulled off the aft wall (bunkZ1=z1−0.75≈11.25) so the berth clears the aft-wall
-  //   LOCKER BANK (front z≈11.46) — the overlap defect that had migrated to the aft corner.
-  const bunkZ0 = z0 + 0.9, bunkZ1 = z1 - 0.75;   // berth foot z≈9.1 (clear of desk), head z≈11.25 (clear of lockers)
+  // ═══ 3. THE BORED WALL BUNK — ROUND-6 (adversarial gate, 3rd miss: the "berth + understructure + proud
+  //    frame" hybrid STILL read as a box PROUD of the wall). The hybrid is KILLED. This is now a TRUE BORE:
+  //    a plain rectangular hole in the back wall; the room wall stays FLUSH at −4.1 up to all four opening
+  //    edges; NOTHING stands proud into the room and NOTHING shows below the mattress (no legs/drawers-as-
+  //    platform/brackets/shadow-gap). The mattress rests DIRECTLY on the bored pocket floor; only a shallow
+  //    flush reveal liner trims the bore edge; a single flush drawer face sits IN the wall below the hole.
+  const bunkZ0 = ALCOVE_Z0, bunkZ1 = ALCOVE_Z1;   // 9.1 .. 11.25 (foot off the desk, head off the lockers)
   const bunkLen = bunkZ1 - bunkZ0;
-  const bunkXBack = farX + COR_WALL_T / 2;        // the back-wall inner face
-  const bunkXFront = bunkXBack + bunkDepth;       // the berth front face (−3.32)
-  const bunkXC = (bunkXBack + bunkXFront) / 2;
-  //  the ALCOVE LINER — a recessed darker panel on the back wall behind the berth head, so the bunk
-  //   reads as a built-in pocket (a two-value break vs the shell), full berth length, floor→canopy.
-  //  Z2 r5 (SEV2 #1) — the liner TOP is capped BELOW the canopy underside (top y=1.75) so no tan liner
-  //   sliver can show above/between the header cap pieces at the aft corner. Liner spans ~0.62..1.75.
-  const linerTop = 1.75, linerBot = 0.62;
-  const liner = _box(0.06, linerTop - linerBot, bunkLen + 0.24, _qtrAlcove);
-  liner.position.set(bunkXBack + 0.05, (linerTop + linerBot) / 2, (bunkZ0 + bunkZ1) / 2);
-  q.add(liner);
-  //  the solid PLATFORM base (a fabricated locker-front berth base, no legs — storage below the bunk).
-  const base = _box(bunkDepth, bunkDeckY, bunkLen, _qtrLocker);
-  base.position.set(bunkXC, bunkDeckY / 2, (bunkZ0 + bunkZ1) / 2);
-  q.add(base);
-  //  two under-berth storage-drawer fronts (a recessed seam + handles → reads as pull-out drawers).
-  for (const dz of [bunkZ0 + bunkLen * 0.28, bunkZ0 + bunkLen * 0.72]) {
-    const drawer = _box(0.03, bunkDeckY - 0.14, bunkLen * 0.4, _channel);
-    drawer.position.set(bunkXFront - 0.005, bunkDeckY / 2, dz);
-    q.add(drawer);
-    const pull = _box(0.05, 0.04, 0.18, _corrRail);
-    pull.position.set(bunkXFront + 0.02, bunkDeckY / 2 + 0.06, dz);
+  const bunkZC = (bunkZ0 + bunkZ1) / 2;
+  const pocketFloorY = ALCOVE_OPEN_BOT;           // 0.46 — the mattress rests DIRECTLY on the bored floor
+  const nicheTop = ALCOVE_OPEN_TOP - 0.02;        // the bore ceiling underside (1.22)
+  //  ── the BORE LINER — the pocket is lined (back / ceiling / floor / two side walls) with a darker steel
+  //     so the inside of the bore reads as a machined recess (a two-value break vs the grey shell). The
+  //     liner floor IS the surface the mattress sits on. Liners span back → the wall plane.
+  const pBack = _box(0.06, nicheTop - pocketFloorY + 0.04, bunkLen + 0.04, _qtrAlcove);
+  pBack.position.set(nicheBackX + 0.03, (pocketFloorY + nicheTop) / 2, bunkZC);
+  q.add(pBack);
+  const pCeil = _box(ALCOVE_DEPTH, 0.05, bunkLen + 0.04, _qtrAlcove);   // bore ceiling
+  pCeil.position.set((nicheBackX + wallFace) / 2, nicheTop, bunkZC);
+  q.add(pCeil);
+  const pFloor = _box(ALCOVE_DEPTH, 0.05, bunkLen + 0.04, _qtrAlcove);  // bore floor (mattress rests on it)
+  pFloor.position.set((nicheBackX + wallFace) / 2, pocketFloorY, bunkZC);
+  q.add(pFloor);
+  for (const sz of [bunkZ0, bunkZ1]) {            // bore side walls (fore + aft)
+    const pSide = _box(ALCOVE_DEPTH, nicheTop - pocketFloorY, 0.05, _qtrAlcove);
+    pSide.position.set((nicheBackX + wallFace) / 2, (pocketFloorY + nicheTop) / 2, sz);
+    q.add(pSide);
+  }
+  //  ── the FLUSH REVEAL — a shallow dark machined edge liner sitting IN the wall plane around the opening
+  //     (top + two sides + bottom), standing at most ~3cm proud so it reads as the machined EDGE of the
+  //     bore, NOT a cabinet frame. Depth 0.05 into the wall; front face ≈ −4.08 (≤3cm proud of −4.1).
+  const revProud = 0.006;                          // ~6mm proud — a near-flush machined edge, not a frame
+  const revXC = wallFace + revProud - 0.025;       // box centre so front ≈ wallFace+revProud
+  const revThk = 0.045;                            // reveal band thickness (edge width)
+  //   top + bottom reveal (horizontal edges of the bore)
+  for (const [ry, rh] of [[ALCOVE_OPEN_TOP, revThk], [ALCOVE_OPEN_BOT, revThk]] as const) {
+    const rev = _box(0.05, rh, bunkLen + 0.02, _channel);
+    rev.position.set(revXC, ry, bunkZC);
+    q.add(rev);
+  }
+  //   two side reveals (vertical edges of the bore)
+  for (const sz of [bunkZ0, bunkZ1]) {
+    const rev = _box(0.05, ALCOVE_OPEN_TOP - ALCOVE_OPEN_BOT + revThk, revThk, _channel);
+    rev.position.set(revXC, (ALCOVE_OPEN_BOT + ALCOVE_OPEN_TOP) / 2, sz);
+    q.add(rev);
+  }
+  //  ── the FLUSH UNDER-BUNK DRAWER — a single drawer face set INTO the wall plane BELOW the opening (in
+  //     the shallow drawer recess cut in the wall, DRAWER_BOT_Y..DRAWER_TOP_Y). The face sits ~1cm proud
+  //     of −4.1 (flush), NOT a proud chest. A recess back + floor close it; a seam splits it + two pulls.
+  const drFaceX = wallFace - 0.005;                // recessed ~5mm INTO the wall (flush, never proud)
+  const drRecBackX = wallFace - 0.13;              // shallow recess back inside the wall
+  const drRecBack = _box(0.04, DRAWER_TOP_Y - DRAWER_BOT_Y, bunkLen + 0.02, _qtrAlcove);
+  drRecBack.position.set(drRecBackX, (DRAWER_BOT_Y + DRAWER_TOP_Y) / 2, bunkZC);
+  q.add(drRecBack);
+  const drFace = _box(0.03, DRAWER_TOP_Y - DRAWER_BOT_Y - 0.03, bunkLen - 0.06, _band);   // the flush drawer face
+  drFace.position.set(drFaceX, (DRAWER_BOT_Y + DRAWER_TOP_Y) / 2, bunkZC);
+  q.add(drFace);
+  const drSeam = _box(0.02, DRAWER_TOP_Y - DRAWER_BOT_Y - 0.05, 0.02, _channel);   // split into two drawers
+  drSeam.position.set(drFaceX + 0.008, (DRAWER_BOT_Y + DRAWER_TOP_Y) / 2, bunkZC);
+  q.add(drSeam);
+  for (const dz of [bunkZC - bunkLen * 0.24, bunkZC + bunkLen * 0.24]) {
+    const pull = _box(0.03, 0.025, 0.18, _corrRail);   // a recessed flush pull (barely proud)
+    pull.position.set(drFaceX + 0.012, (DRAWER_BOT_Y + DRAWER_TOP_Y) / 2, dz);
     q.add(pull);
   }
-  //  the berth deck lip (a raised front rail so the mattress reads set into a tray).
-  const deckLip = _box(0.05, 0.09, bunkLen, _qtrLocker);
-  deckLip.position.set(bunkXFront - 0.02, bunkDeckY + 0.045, (bunkZ0 + bunkZ1) / 2);
-  q.add(deckLip);
-  //  fabricated END-PANELS flanking the berth (fore + aft), tying it into the frame — the built-in read.
-  for (const [ez, tag] of [[bunkZ0 - 0.06, -1], [bunkZ1 + 0.06, 1]] as const) {
-    const endPanel = _box(bunkDepth, 1.9, 0.10, _qtrLocker);
-    endPanel.position.set(bunkXC, 0.95, ez);
-    q.add(endPanel);
-    void tag;
-  }
-  //  the HEADER CANOPY over the berth (a boxed-in shelf/light valance — the alcove ceiling), 12cm deep.
-  //  Z2 r5 (SEV2 #1) — the header cap was TWO offset slabs (canopy top y=1.89 + a fascia top y=1.83,
-  //   set back at different Z) that met the aft side wall non-flush, showing a stepped seam + a liner
-  //   sliver at the top-right corner (the overlap-seam defect the overhaul was chartered to kill). FIX:
-  //   ONE continuous cap. The canopy slab + its fascia now share ONE top-edge Y (top=1.89) and the fascia
-  //   sits FLUSH under the canopy front (no height/depth step), and the whole cap spans z 8.3..11.9 so it
-  //   TERMINATES FLUSH against BOTH side walls' inner faces — no set-back, no liner sliver.
-  const capZ0 = z0 + COR_WALL_T / 2, capZ1 = z1 - COR_WALL_T / 2;   // side-wall inner faces (8.3 .. 11.9)
-  const capLen = capZ1 - capZ0, capZC = (capZ0 + capZ1) / 2;
-  const capTop = 1.89, capThick = 0.14;
-  const canopy = _box(bunkDepth, capThick, capLen, _qtrLocker);
-  canopy.position.set(bunkXC, capTop - capThick / 2, capZC);        // top edge at capTop
-  q.add(canopy);
-  //  the fascia is a proud front lip sharing the SAME top edge (capTop), dropping below the canopy —
-  //   one continuous face, no offset second slab. Runs the full cap length, flush to both side walls.
-  const fasciaDrop = 0.17;
-  const canopyFascia = _box(0.06, fasciaDrop, capLen, _band);
-  canopyFascia.position.set(bunkXFront - 0.02, capTop - fasciaDrop / 2, capZC);
-  q.add(canopyFascia);
-  //  the recessed READING LIGHT — a warm strip lens tucked under the canopy at the berth head, its own
-  //   modest PointLight (motivated, local). This is the room's lived-in warm pool; kept out of the
-  //   alert-dim so the cabin stays warm during the disaster.
-  const readHousing = _box(bunkDepth - 0.16, 0.06, 0.5, _channel);
-  readHousing.position.set(bunkXC, 1.71, bunkZ0 + 0.5);
+  //  ── the recessed READING LIGHT — a warm strip lens tucked into the BORE CEILING at the berth head.
+  const readHousing = _box(0.42, 0.05, 0.5, _channel);
+  readHousing.position.set((nicheBackX + wallFace) / 2, nicheTop - 0.045, bunkZ0 + 0.5);
   q.add(readHousing);
-  const readLens = _box(bunkDepth - 0.24, 0.03, 0.42, _qtrReadLens);
-  readLens.position.set(bunkXC, 1.685, bunkZ0 + 0.5);
+  const readLens = _box(0.34, 0.02, 0.42, _qtrReadLens);
+  readLens.position.set((nicheBackX + wallFace) / 2, nicheTop - 0.08, bunkZ0 + 0.5);
   q.add(readLens);
-  //  the MATTRESS + soft goods, all inset within the deck lip (nothing pokes past the frame).
-  const mattress = _box(bunkDepth - 0.12, 0.13, bunkLen - 0.08, _qtrMattress);
-  mattress.position.set(bunkXC + 0.01, bunkDeckY + 0.075, (bunkZ0 + bunkZ1) / 2);
+  //  ── the MATTRESS — rests DIRECTLY on the bored floor, INSET behind the wall plane so the flush reveal
+  //     occludes its front edge from side angles (Fix 2: no overhang past the trim). Softened (Fix 4):
+  //     rounded top edges via a crown + a compression dip under the pillow → a soft mattress, not a plank.
+  const mattBackX = nicheBackX + 0.05;            // −4.77, near the bore back (fills the depth)
+  const mattFrontX = wallFace - 0.11;             // −4.21 — INSET behind the wall/reveal so trim occludes it
+  const mattXW = mattFrontX - mattBackX;          // ~0.56 — fills most of the bore depth
+  const mattXC = (mattFrontX + mattBackX) / 2;
+  const mattLen = bunkLen - 0.14;                 // ≥3cm off each bore side wall
+  const mattBaseY = pocketFloorY + 0.025;         // rests on the bored floor
+  const mattress = _box(mattXW, 0.10, mattLen, _qtrMattress);
+  mattress.position.set(mattXC, mattBaseY + 0.05, bunkZC);
   q.add(mattress);
-  //  Z2 r5 (SEV2 #2) — the pillow read as a stacked foam CUBE (near-square footprint, thick proud side,
-  //   hard 90° corners). FIX: reproportion to read SOFT — ~2:1 length(Z):width(X), thickness cut to ~1/3
-  //   so it lies LOW, recessed BACK toward the head wall as a headrest, with chamfered top edges (a low
-  //   base slab + a narrower crown that steps the top edge in on all sides → a soft rounded read, not a
-  //   block) and a slight centre dip where a head would rest. Same low-poly idiom as the bolster/mattress.
-  const pillowLen = 0.52, pillowW = 0.26;                 // 2:1 along the bunk long axis (Z)
-  const pillowZ = bunkZ0 + 0.34;                          // recessed back toward the head
-  const pillowX = bunkXC - 0.08;                          // pushed back toward the head (back) wall
-  const pillowBaseY = bunkDeckY + 0.145;
-  const pillowBase = _box(pillowW, 0.045, pillowLen, _qtrPillow);   // the low flat base
-  pillowBase.position.set(pillowX, pillowBaseY, pillowZ);
-  q.add(pillowBase);
-  //  a narrower crown stepping the top edge IN on all sides (a chamfer read, no hard proud corners).
-  const pillowCrown = _box(pillowW - 0.08, 0.035, pillowLen - 0.12, _qtrPillow);
-  pillowCrown.position.set(pillowX, pillowBaseY + 0.038, pillowZ);
-  q.add(pillowCrown);
-  //  a shallow centre dip ridge along the two long sides (soft folds where a head sinks in).
-  for (const sx of [pillowX - pillowW / 2 + 0.03, pillowX + pillowW / 2 - 0.03]) {
-    const fold = _box(0.03, 0.055, pillowLen - 0.06, _qtrPillow);
-    fold.position.set(sx, pillowBaseY + 0.01, pillowZ);
-    q.add(fold);
-  }
-  //  a rumpled blanket pulled down toward the foot (rust-red wool, inset).
-  const blanket = _box(bunkDepth - 0.14, 0.11, bunkLen * 0.5, _qtrBlanket);
-  blanket.position.set(bunkXC + 0.02, bunkDeckY + 0.155, bunkZ1 - bunkLen * 0.28);
-  q.add(blanket);
-  const blanketFold = _box(bunkDepth - 0.10, 0.09, 0.16, _qtrBlanket);   // a fold ridge where it's turned down
-  blanketFold.position.set(bunkXC + 0.03, bunkDeckY + 0.20, bunkZ1 - bunkLen * 0.52);
-  q.add(blanketFold);
+  const mattCrown = _box(mattXW - 0.05, 0.05, mattLen - 0.06, _qtrMattress);   // rounded top edge (soft)
+  mattCrown.position.set(mattXC, mattBaseY + 0.105, bunkZC);
+  q.add(mattCrown);
+  const mattTopY = mattBaseY + 0.13;              // the sleeping surface height
+  //   a shallow COMPRESSION DIP under the pillow (a slightly lower inset where the head/weight sinks in).
+  const mattDip = _box(mattXW - 0.14, 0.03, 0.42, _qtrMattress);
+  mattDip.position.set(mattXC, mattTopY - 0.03, bunkZ0 + 0.34);
+  q.add(mattDip);
+  //  ── ONE PLUMPED PILLOW at the head — a rounded CUSHION (a squashed capsule → soft), lying crosswise,
+  //     with a shallow head dent. Sits in the mattress compression dip.
+  const pillowW = mattXW - 0.04;                  // wide across the berth (X)
+  const pillowD = 0.30;                            // front-to-back (Z) at the head
+  const pillowZ = bunkZ0 + 0.32;                   // at the head
+  const pillow = _cushion(pillowW, 0.14, pillowD, _qtrPillow);
+  pillow.position.set(mattXC - 0.01, mattTopY + 0.035, pillowZ);
+  q.add(pillow);
+  const pillowDent = _box(pillowW * 0.42, 0.025, pillowD * 0.5, _qtrPillow);   // a shallow head dent
+  pillowDent.position.set(mattXC - 0.02, mattTopY + 0.06, pillowZ);
+  q.add(pillowDent);
+  //  ── the BLANKET — Fix 3: a DISTINCT layer in olive/grey-green wool (a clear material break from the
+  //     pale mattress), covering only the LOWER ~2/3 (foot → mid) so the mattress + pillow show at the
+  //     head under a horizontal made-bed line. A real TURN-DOWN FOLD at the head edge = a short flap
+  //     folded back over itself (double-thickness lip + a paler liner underside + a shadow line). Drapes
+  //     a few cm over the front long edge (cloth over the mattress, not a flush painted plane).
+  const blZ0 = pillowZ + pillowD / 2 + 0.06;       // the made-bed line — blanket starts below the pillow (~mid)
+  const blZ1 = bunkZ1 - 0.05;                      // to the foot
+  const blZC = (blZ0 + blZ1) / 2, blLen = blZ1 - blZ0;
+  const blW = mattXW + 0.02;
+  //   the main blanket drape — on the mattress top, with a gentle low-poly sag (a thin top over a slightly
+  //     lower centre), overhanging the mattress a touch.
+  const blMain = _box(blW, 0.05, blLen, _qtrBlanketWool);
+  blMain.position.set(mattXC, mattTopY + 0.03, blZC);
+  q.add(blMain);
+  const blSag = _box(blW - 0.12, 0.03, blLen - 0.12, _qtrBlanketWool);   // a slightly lower centre (sag)
+  blSag.position.set(mattXC, mattTopY + 0.015, blZC);
+  q.add(blSag);
+  //   the front OVERHANG skirt — draping DOWN over the mattress front edge ~6cm, leaning outward (soft).
+  const blFrontSkirt = _box(0.035, 0.08, blLen + 0.02, _qtrBlanketWool);
+  blFrontSkirt.position.set(mattFrontX + 0.015, mattTopY + 0.015 - 0.04, blZC);
+  blFrontSkirt.rotation.z = -0.14;
+  q.add(blFrontSkirt);
+  const blFootSkirt = _box(blW, 0.08, 0.035, _qtrBlanketWool);          // foot overhang
+  blFootSkirt.position.set(mattXC, mattTopY + 0.015 - 0.04, blZ1 + 0.01);
+  blFootSkirt.rotation.x = 0.14;
+  q.add(blFootSkirt);
+  //   the TURN-DOWN FOLD at the head edge — a short flap (~0.16m) folded BACK over the blanket top, so
+  //     you see a double-thickness lip; its UNDERSIDE is the paler liner tone (contrast + a shadow line).
+  const foldLen = 0.16;
+  const foldTop = _box(blW, 0.035, foldLen, _qtrBlanketWool);           // the folded-over top face (wool)
+  foldTop.position.set(mattXC, mattTopY + 0.075, blZ0 + foldLen / 2);
+  q.add(foldTop);
+  const foldLiner = _box(blW - 0.02, 0.02, foldLen - 0.02, _qtrBlanketLiner);   // the paler underside liner
+  foldLiner.position.set(mattXC, mattTopY + 0.055, blZ0 + foldLen / 2 + 0.005);
+  q.add(foldLiner);
+  const foldLip = _roll(blW, 0.03, _qtrBlanketWool, 'x');               // the soft rolled fold crease
+  foldLip.position.set(mattXC, mattTopY + 0.075, blZ0 + foldLen);
+  q.add(foldLip);
 
   // ═══ 4. STORAGE LOCKERS — a bank of two tall steel lockers against the AFT side wall (z=z1),
   //    well clear of the desk (fore wall) and the bunk (back wall). Real locker language: twin
   //    doors, a piano seam, louvre vents, latch handles, a stencil placard. Rule-7 depth (0.44 out).
-  const lockerZ = z1 - COR_WALL_T / 2 - 0.22;      // face 22cm proud of the aft wall
+  const lockerZ = z1 - COR_WALL_T / 2 - 0.22;      // cab CENTRE, 22cm proud of the aft wall
+  // ROUND-4 BUGFIX: the locker DOOR faces the ROOM (−Z, toward the camera at lower z), so its detail
+  //   must sit on the −Z front face (lockerZ − cabDepth/2). The prior build placed all door detail at
+  //   lockerZ+0.225 — the +Z face, BURIED IN THE AFT WALL — which is exactly why the lockers read as
+  //   "plain-boxy dark slabs" (all their panels/vents/latches were hidden behind them in the wall).
+  const lockFace = lockerZ - 0.225;                // the room-facing (−Z) door front face z
   for (let i = 0; i < 2; i++) {
     const lx = QTR_FAR_X + 0.9 + i * 0.66;         // Z2 r3 — nudged door-ward so they clear the bunk head
     const cab = _box(0.6, 1.86, 0.44, _qtrLocker);
     cab.position.set(lx, 0.94, lockerZ);
     q.add(cab);
-    // Z2 r4 — a lighter proud DOOR-PANEL inset per leaf (a two-value break so the lockers read their
-    //   form in the dim cabin, not a flat black slab), + a dark kick-plate at the base.
-    for (const dsx of [lx - 0.15, lx + 0.15]) {     // lower door-panel inset (below the vent band)
-      const panel = _box(0.24, 1.05, 0.03, _band);
-      panel.position.set(dsx, 0.86, lockerZ + 0.225);
-      q.add(panel);
-    }
+    // ROUND-4 LOCKER DETAIL PASS (user: "lockers read plain-boxy — give them purposeful sci-fi detail
+    //   + a status light, no clutter"). Each locker: a lighter recessed DOOR PANEL (a two-value break so
+    //   the door form reads in the dim), a machined vertical HINGE line at the outer edge + a centre
+    //   SEAM (so it reads as a hinged single door, not a slab), a legible LATCH bar, a stencil PLACARD,
+    //   and a small STATUS LED (the point of life). Proud detail on the door face (rule-7 depths).
+    //   a raised proud door PANEL (lighter value _band) framed inside the door face → reads the form.
+    const doorPanel = _box(0.5, 1.5, 0.03, _band);   // proud toward the room = MORE −Z (lockFace − offset)
+    doorPanel.position.set(lx, 0.98, lockFace - 0.005);
+    q.add(doorPanel);
+    //   a recessed inner-panel seam inside the door panel (a two-plate machined read)
+    const innerSeam = _box(0.42, 1.32, 0.035, _channel);
+    innerSeam.position.set(lx, 0.98, lockFace - 0.02);
+    q.add(innerSeam);
+    const innerPanel = _box(0.38, 1.24, 0.04, _band);
+    innerPanel.position.set(lx, 0.98, lockFace - 0.03);
+    q.add(innerPanel);
     const kick = _box(0.58, 0.14, 0.03, _channel);
-    kick.position.set(lx, 0.14, lockerZ + 0.225);
+    kick.position.set(lx, 0.14, lockFace - 0.005);
     q.add(kick);
-    const seam = _box(0.02, 1.7, 0.03, _channel);   // the twin-door centre seam (on the face, thin)
-    seam.position.set(lx, 0.96, lockerZ + 0.225);
-    q.add(seam);
+    //   a machined HINGE line at the outer edge + a centre SEAM (hinged-door read)
+    for (const [hx, mat] of [[lx + (i === 0 ? -0.27 : 0.27), _corrRail], [lx, _channel]] as const) {
+      const line = _box(0.02, 1.6, 0.04, mat);
+      line.position.set(hx, 0.96, lockFace - 0.035);
+      q.add(line);
+    }
     for (const vy of [1.62, 1.55, 1.48]) {          // louvre vents high on the doors, ON the front face
-      const vent = _box(0.46, 0.02, 0.03, _channel);
-      vent.position.set(lx, vy, lockerZ + 0.225);
+      const vent = _box(0.42, 0.02, 0.04, _channel);
+      vent.position.set(lx, vy, lockFace - 0.05);
       q.add(vent);
     }
-    for (const hx of [lx - 0.16, lx + 0.16]) {      // latch handles either side of the seam
-      const latch = _box(0.05, 0.14, 0.05, _corrRail);
-      latch.position.set(hx, 1.0, lockerZ + 0.24);
-      q.add(latch);
-    }
+    //   a legible recessed LATCH housing + a bright bar handle at hand height (catches light)
+    const latchBox = _box(0.12, 0.2, 0.05, _channel);
+    latchBox.position.set(lx - 0.16, 1.02, lockFace - 0.03);
+    q.add(latchBox);
+    const latch = _box(0.05, 0.15, 0.06, _corrRail);
+    latch.position.set(lx - 0.16, 1.02, lockFace - 0.06);
+    q.add(latch);
+    //   a small STATUS LED per locker (the point of life) — green = secured (unlit MeshBasic → glows)
+    const ledHousing = _box(0.05, 0.05, 0.04, _channel);
+    ledHousing.position.set(lx + 0.2, 1.3, lockFace - 0.03);
+    q.add(ledHousing);
+    const led = _box(0.04, 0.04, 0.04, i === 0 ? _ledGreen : _ledAmber);
+    led.position.set(lx + 0.2, 1.3, lockFace - 0.06);
+    q.add(led);
   }
-  //  a stencil placard on the first locker (a printed unit label).
-  const lockPlac = _box(0.24, 0.08, 0.02, _corrPlacard);
-  lockPlac.position.set(QTR_FAR_X + 0.9, 1.72, lockerZ + 0.24);
-  q.add(lockPlac);
+  //  a stencil placard on each locker (a printed unit label, catches light).
+  for (const lx of [QTR_FAR_X + 0.9, QTR_FAR_X + 0.9 + 0.66]) {
+    const lockPlac = _box(0.2, 0.07, 0.02, _corrPlacard);
+    lockPlac.position.set(lx, 1.74, lockFace - 0.03);   // proud on the −Z (room-facing) door
+    q.add(lockPlac);
+  }
   //  a hung coverall on a hook BETWEEN the lockers and the door jamb (a soft draped form, flush wall).
   const hook = _box(0.05, 0.06, 0.10, _corrRail);
   hook.position.set(QTR_FAR_X + 2.15, 1.86, z1 - 0.07);
@@ -4502,43 +4626,54 @@ function buildCrewQuarters(group: THREE.Group): void {
   const baseCab = _box(baseCabW, baseCabH, baseCabD, _qtrLocker);
   baseCab.position.set(baseCabXC, baseCabH / 2, baseCabZ);
   q.add(baseCab);
+  // ROUND-4 BUGFIX: the cabinet faces the ROOM (−Z, toward lower z), so its detail sits on the −Z front
+  //   face (baseCabZ − depth/2), NOT the +Z face (which is buried in the aft wall — the same wall-facing
+  //   bug the lockers had). baseCabF is the room-facing front; detail stands proud toward −Z (front − ε).
+  const baseCabF = baseCabZ - baseCabD / 2;        // ≈ 11.52, the room-facing front
   //  a drawer face + a recessed seam splitting it into two + a pull latch (locker/desk vocabulary).
   const bcSeam = _box(0.02, baseCabH - 0.12, 0.03, _channel);
-  bcSeam.position.set(baseCabXC, baseCabH / 2, baseCabZ + baseCabD / 2 + 0.005);
+  bcSeam.position.set(baseCabXC, baseCabH / 2, baseCabF - 0.005);
   q.add(bcSeam);
   for (const dsx of [baseCabXC - 0.22, baseCabXC + 0.22]) {   // two proud drawer faces (two-value break)
     const drawerFace = _box(0.36, baseCabH - 0.16, 0.03, _band);
-    drawerFace.position.set(dsx, baseCabH / 2, baseCabZ + baseCabD / 2 + 0.005);
+    drawerFace.position.set(dsx, baseCabH / 2, baseCabF - 0.01);
     q.add(drawerFace);
     const pull = _box(0.14, 0.04, 0.04, _corrRail);
-    pull.position.set(dsx, baseCabH / 2 + 0.1, baseCabZ + baseCabD / 2 + 0.03);
+    pull.position.set(dsx, baseCabH / 2 + 0.1, baseCabF - 0.03);
     q.add(pull);
   }
   const bcKick = _box(baseCabW - 0.04, 0.1, 0.03, _channel);   // a dark kick-plate at the base
-  bcKick.position.set(baseCabXC, 0.1, baseCabZ + baseCabD / 2 + 0.005);
+  bcKick.position.set(baseCabXC, 0.1, baseCabF - 0.005);
   q.add(bcKick);
+  //  a small STATUS LED on the cabinet (a point of life, room-facing).
+  const bcLed = _box(0.035, 0.035, 0.02, _ledGreen);
+  bcLed.position.set(baseCabXC + 0.36, baseCabH - 0.08, baseCabF - 0.02);
+  q.add(bcLed);
   //  a horizontal kick-rail conduit running along the wall above the cabinet (breaks the flat band).
+  const kickRailZ = z1 - COR_WALL_T / 2 - 0.06;   // just proud of the aft wall inner face (11.84)
   const kickRail = _cyl(0.03, 0.03, 1.35, 8, _qtrConduit);
   kickRail.rotation.z = Math.PI / 2;              // runs along X
-  kickRail.position.set(baseCabXC + 0.05, baseCabH + 0.12, z1 - 0.1);
+  kickRail.position.set(baseCabXC + 0.05, baseCabH + 0.12, kickRailZ);
   q.add(kickRail);
   for (const cx of [baseCabXC - 0.5, baseCabXC + 0.05, baseCabXC + 0.6]) {   // saddle clamps + rivets
     const clamp = _box(0.05, 0.08, 0.1, _channel);
-    clamp.position.set(cx, baseCabH + 0.12, z1 - 0.06);
+    clamp.position.set(cx, baseCabH + 0.12, kickRailZ - 0.02);
     q.add(clamp);
   }
-  //  a small louvred VENT GRILLE beside the cabinet, low on the wall (the fore-wall vent's echo).
+  //  a small louvred VENT GRILLE beside the cabinet, low on the aft wall (the fore-wall vent's echo),
+  //   standing proud of the wall inner face toward the room (−Z).
+  const bcVentZ = z1 - COR_WALL_T / 2 - 0.05;     // proud of the aft wall (11.85)
   const bcVentH = _box(0.22, 0.26, 0.08, _steel);
-  bcVentH.position.set(baseCabXC + 0.72, 0.5, z1 - 0.05);
+  bcVentH.position.set(baseCabXC + 0.72, 0.5, bcVentZ);
   q.add(bcVentH);
   for (let vy2 = 0.42; vy2 <= 0.58; vy2 += 0.05) {
     const slat = _box(0.18, 0.014, 0.09, _channel);
-    slat.position.set(baseCabXC + 0.72, vy2, z1 - 0.055);
+    slat.position.set(baseCabXC + 0.72, vy2, bcVentZ - 0.02);
     q.add(slat);
   }
   //  a couple of rivets on the cabinet top edge (worked hardware, faces into the room −Z).
   for (const rx of [baseCabXC - 0.3, baseCabXC + 0.3])
-    q.add(_stud(rx, baseCabH - 0.03, baseCabZ + baseCabD / 2 + 0.01, new THREE.Vector3(0, 0, -1), _rivet, 0.014));
+    q.add(_stud(rx, baseCabH - 0.03, baseCabF - 0.01, new THREE.Vector3(0, 0, -1), _rivet, 0.014));
 
   // ═══ 5. THE DESK / CONSOLE — a fabricated fold-down work surface on the FORE side wall (z=z0), with
   //    a small glowing amber console readout (a point of life), a mug, a pinned photo above, and a
@@ -4573,16 +4708,28 @@ function buildCrewQuarters(group: THREE.Group): void {
     strut.rotation.x = -0.72;                             // rake back toward the wall base
     q.add(strut);
   }
-  //  a recessed CONSOLE READOUT on the fore wall above the desk (a small dark glass screen, amber-lit).
-  const consoleBezel = _box(0.42, 0.3, 0.06, _steel);
-  consoleBezel.position.set(deskX - 0.1, 1.35, z0 + COR_WALL_T / 2 + 0.03);
-  q.add(consoleBezel);
-  const consoleScreen = _box(0.34, 0.22, 0.02, _qtrConsole);
-  consoleScreen.position.set(deskX - 0.1, 1.35, z0 + COR_WALL_T / 2 + 0.07);
-  q.add(consoleScreen);
-  const consoleReadout = _box(0.24, 0.03, 0.01, _qtrReadLens);   // a warm status bar on the screen
-  consoleReadout.position.set(deskX - 0.1, 1.29, z0 + COR_WALL_T / 2 + 0.085);
-  q.add(consoleReadout);
+  //  a recessed CONSOLE READOUT on the fore wall above the desk (a lit glass screen — a point of life).
+  //   ROUND-4: the old readout was a near-black screen + one dim bar that didn't register in the cabin.
+  //   Now: a proud bezel + a dark glass face + several GLOWING readout bars (green data + an amber alert
+  //   line) + a small status LED, so it clearly reads as a live console (the human/working-ship note).
+  const consBezel = _box(0.42, 0.3, 0.07, _steel);
+  consBezel.position.set(deskX - 0.1, 1.35, z0 + COR_WALL_T / 2 + 0.04);
+  q.add(consBezel);
+  const consScreen = _box(0.34, 0.22, 0.02, _qtrConsole);
+  consScreen.position.set(deskX - 0.1, 1.35, z0 + COR_WALL_T / 2 + 0.085);
+  q.add(consScreen);
+  const consFace = z0 + COR_WALL_T / 2 + 0.10;    // proud of the screen glass (+Z toward the room)
+  for (let r = 0; r < 4; r++) {                    // green data bars (glowing, varied lengths)
+    const bar = _box(0.24 - (r % 2) * 0.08, 0.018, 0.008, _ledGreen);
+    bar.position.set(deskX - 0.16 + ((r % 2) * 0.04), 1.42 - r * 0.045, consFace);
+    q.add(bar);
+  }
+  const consAlert = _box(0.26, 0.02, 0.008, _ledAmber);   // an amber alert/status line
+  consAlert.position.set(deskX - 0.1, 1.25, consFace);
+  q.add(consAlert);
+  const consLed = _box(0.03, 0.03, 0.02, _ledGreen);      // a corner status LED
+  consLed.position.set(deskX + 0.04, 1.43, consFace);
+  q.add(consLed);
   //  a stow shelf above the console (bracketed, holding a tin + a folded cloth).
   const shelf = _box(0.86, 0.05, 0.24, _qtrDesk);
   shelf.position.set(deskX, 1.68, z0 + COR_WALL_T / 2 + 0.13);
@@ -4621,8 +4768,11 @@ function buildCrewQuarters(group: THREE.Group): void {
   snap.rotation.z = 0.14;
   q.add(snap);
 
-  // ═══ 5b. FLOOR CLUTTER — a stowage crate + a duffel tucked in the FORE-DOOR corner (the walkable
-  //    entry side), clear of the berth/desk/lockers. The lived-in "someone dumped their kit" read.
+  // ═══ 5b. FLOOR CLUTTER — a stowage crate tucked in the FORE-DOOR corner (the walkable entry side),
+  //    clear of the berth/desk/lockers. The lived-in "someone dumped their kit" read.
+  //  ROUND-5 (adversarial gate Fix 4): the loose beige bedroll CYLINDER that lay on the bare floor in the
+  //    open walking path — an orphaned prop with no cradle/strap/function — is REMOVED (the cabin reads
+  //    clean without it; preferred over stowing). Only the deliberately-strapped crate remains.
   const crate = _box(0.44, 0.42, 0.44, _qtrLocker);
   crate.position.set(QTR_FAR_X + 0.34, 0.21, z0 + 0.34);
   q.add(crate);
@@ -4632,10 +4782,6 @@ function buildCrewQuarters(group: THREE.Group): void {
   const crateStrap = _box(0.46, 0.05, 0.04, _corrHazard);   // a hazard-yellow shipping strap
   crateStrap.position.set(QTR_FAR_X + 0.34, 0.25, z0 + 0.34);
   q.add(crateStrap);
-  const duffel = _cyl(0.17, 0.17, 0.58, 12, _qtrMattress);
-  duffel.rotation.x = Math.PI / 2;
-  duffel.position.set(QTR_FAR_X + 0.9, 0.17, z0 + 0.32);
-  q.add(duffel);
 
   // ═══ 5c. FLOOR DETAIL — Z2 r4: the deck read too bare. A worn hazard THRESHOLD TREAD just inside the
   //    door (the ship-door idiom) + a pair of recessed deck-plate seams break the empty floor without
@@ -4656,9 +4802,10 @@ function buildCrewQuarters(group: THREE.Group): void {
   //    (a) the warm bunk reading-light pool, motivated by the alcove lens, and (b) a cool ceiling can,
   //    motivated by the recessed ceiling fixture. Both are POINT lights with finite range/decay so they
   //    stay inside the room. The warm bunk lamp is kept out of the alert-dim (the cabin's own warmth).
-  //  the alcove reading light (warm, pooled at the berth head).
-  const lamp = new THREE.PointLight(0xffca8a, 0.85, 3.4, 2.0);
-  lamp.position.set(bunkXC + 0.1, 1.62, bunkZ0 + 0.5);
+  //  the alcove reading light (warm) — seated INSIDE the recessed niche at the berth head, under the
+  //   niche-ceiling lens, so it pools warm light in the nook + spills out of the opening into the room.
+  const lamp = new THREE.PointLight(0xffca8a, 0.95, 3.6, 1.9);
+  lamp.position.set(wallFace - 0.28, ALCOVE_OPEN_TOP - 0.18, ALCOVE_Z0 + 0.5);
   q.add(lamp);
   _qtrLamp = lamp;
   //  a recessed CEILING CAN fixture (housing + a cool lens) + its cool fill PointLight, centred.
