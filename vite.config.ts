@@ -13,9 +13,10 @@ import { defineConfig, type PluginOption } from 'vite';
 // sat unused for NEVER_MS. FAIL-SAFE: if the client count can't be read, it never exits.
 // Opt out entirely with DUSTFALL_NO_AUTOSHUTDOWN=1 (e.g. to keep a server up with its tab closed).
 function autoShutdownIdle(): PluginOption {
-  const IDLE_MS = 8 * 60 * 1000;    // had browsers, all gone this long → exit
-  const NEVER_MS = 20 * 60 * 1000;  // no browser EVER connected this long → exit (an unused server)
-  const CHECK_MS = 20 * 1000;
+  // Defaults tuned for agent/rig servers; env-overridable (also lets a quick test prove it fires).
+  const IDLE_MS = Number(process.env.DUSTFALL_AUTOSHUTDOWN_IDLE_MS) || 8 * 60 * 1000;    // had browsers, all gone this long → exit
+  const NEVER_MS = Number(process.env.DUSTFALL_AUTOSHUTDOWN_NEVER_MS) || 20 * 60 * 1000; // no browser EVER connected this long → exit
+  const CHECK_MS = Number(process.env.DUSTFALL_AUTOSHUTDOWN_CHECK_MS) || 20 * 1000;
   return {
     name: 'dustfall-auto-shutdown',
     apply: 'serve',

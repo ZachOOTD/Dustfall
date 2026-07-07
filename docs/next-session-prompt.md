@@ -54,6 +54,8 @@ every dev server terminates ITSELF once no browser has been connected for ~8 min
 used), safe because an in-use rig-shot/bench keeps its page attached so it never dies mid-run. So
 servers self-clean; no command needed. `npm run reap` (scripts/reap-dev.ps1) remains the manual
 force-clean for immediate relief; `DUSTFALL_NO_AUTOSHUTDOWN=1` opts a server out.
-FOLLOW-UP (verify next session): confirm the auto-shutdown actually fires as designed on the real
-machine (boot-tested clean, but the idle-fire timing wasn't observed live) — watch a leftover agent
-server self-exit, and confirm it never kills an active rig-shot/bench mid-run.
+VERIFIED (2026-07-06): the auto-shutdown fires — a server with no browser self-exited at ~11s under a
+short test threshold ("auto-shutdown: unused for 0m — freeing this idle dev server"), reading a real
+client-count of 0 (the same path the "don't kill an active run" safety relies on). Thresholds are env-
+overridable (DUSTFALL_AUTOSHUTDOWN_{IDLE,NEVER,CHECK}_MS). Also PORTED into the gamedev-framework
+(shared-memory/dev-server-auto-shutdown.md + the project skeleton) so every new game inherits it.
