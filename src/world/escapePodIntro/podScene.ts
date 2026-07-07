@@ -55,6 +55,11 @@ const POD_ORIGIN = new THREE.Vector3(0, 3200, 0);   // orbit-frame fallback (no 
 // feel where roughly the last half of the fall shows the desert rushing up through the porthole.
 // (The float-precision ceiling is ~10 km — not the limit here; the WORLD SIZE + porthole angle is.)
 const DESCENT_ALT = 600;
+// A dedicated render layer for the SEALED cabin interior so the SCENE-GLOBAL world lights (the sun that
+//   blends space→midday during the fall) can't rake it — the interior is lit only by its own steady local
+//   lights. The camera enables this layer; the landed exterior skin stays on layer 0 (real-sun-lit). See
+//   the METAL-CRAWL FIX in buildPodScene. 8 = a high, unused layer (0 = default, low layers reserved).
+const POD_LIT_LAYER = 8;
 
 // The real-world pod BASE for the descent (floor-top centre). Derived from ctx.intro.returnPos
 // when the descent begins (set by setDescentBase, called from setDescentProgress / the beats).
@@ -3024,6 +3029,22 @@ export function buildPodScene(ctx: GameContext): void {
   hSpill.position.set(hDir.x * (CAB_R - 0.1), HATCH_CY + 0.1, hDir.z * (CAB_R - 0.1));
   group.add(hSpill);
   hatchSpillLight = hSpill;
+
+  // ── METAL-CRAWL FIX (user live-test 2026-07-06: "dynamic shading SLIDING on the door/lever/console
+  //    metal, ONLY while the pod is falling"). Diagnosis by elimination: not texture (all grime is
+  //    localSpace-pinned), not z-fight/specular (view-INDEPENDENT — the crawl doesn't move on look-around;
+  //    the plain-Lambert lever grip shows it → a DIFFUSE light, not a reflection). The cause: tickDescent
+  //    drives setSkyIntroMode space→midday DURING the fall, blending the SCENE-GLOBAL world sun up — and
+  //    that sun rakes the SEALED cabin interior, its gradient sliding over the metal as the descent
+  //    progresses. A sealed capsule must be lit by its OWN steady lights, never the transitioning world
+  //    sun. So render the interior cabin + its local lights on a dedicated LAYER the global world lights
+  //    don't reach (the camera renders it). The LANDED exterior skin is added LATER (_landPodWalkable) and
+  //    stays on layer 0, so the real desert sun still lights the OUTSIDE of the grounded pod.
+  group.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.layers.set(POD_LIT_LAYER); });
+  for (const L of [cabinLamp, cabinFill, cabinKeyRake, cabinCoolRake, vpGlowLight, cabinDeckFill, hatchSpillLight]) {
+    if (L) L.layers.set(POD_LIT_LAYER);
+  }
+  ctx.three.camera.layers.enable(POD_LIT_LAYER);
 
   // ── Conservative cage collider (seated → can't walk, but keep the capsule caged so a
   //    physics nudge can't drop the player out). The cabin is a round bore; a boxy AABB
