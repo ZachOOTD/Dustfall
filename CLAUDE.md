@@ -122,6 +122,7 @@ before continuing further code commits.**
 - **Fan out** independent work: procedural materials/wreck variants authored together, multi-angle visual critique via `/visual-triage` (high-value for the procedural-character + wreck work), research sweeps, and exploratory architecture branches for tabled walls (e.g. the D125 riding mechanic — spike 2-3 candidates concurrently instead of serial retry). Issue as concurrent Agent calls or a dynamic workflow; `isolation: worktree` when agents mutate the same files.
 - **Stay solo + sequential** only for dependency-ordered work (a step consuming the previous step's output) and observation-dependent tuning loops.
 - Govern cost with per-agent `effort` (`low|medium|high|xhigh|max`), not by avoiding fan-out. `/effort ultracode` lets the model auto-orchestrate a whole session.
+- **Reap dev servers between waves.** Each modeler agent + each rig-shot spawns its own Vite server (node) + a headless browser, and completed agents don't reliably clean up — over a long session dozens accumulate and slow the machine. Run **`npm run reap`** (scripts/reap-dev.ps1 — kills stale dev servers + headless browsers, keeps the MCP servers) between waves in a long session, and any time the user reports slowdown. `npm run reap -- -KeepPort 5180` preserves a running test server.
 
 ## Don't burn context on
 

@@ -1,46 +1,54 @@
-# Next session — the Z-QUEUE round-3 playtest-fix batch SHIPPED (2026-07-06, overnight autonomous)
+# Next session — PAUSE POINT (2026-07-06, live-feedback rounds); resume here
 
-The released escape-pod intro got the user's round-3 playtest (5 screenshots + verbal
-notes); the whole 10-unit "Z-queue" shipped overnight across parallel podScene/shipScene
-modeler agents, per-unit commits, all pushed to master + auto-deployed. Live at
-https://zachootd.github.io/Dustfall/.
+The user ran a long live-feedback session on the released escape-pod intro, then paused
+(machine slowdown). Everything is committed + pushed to master; the tree is clean at
+`86fa769`. Live at https://zachootd.github.io/Dustfall/.
 
-## What shipped (per-unit detail in git log 8ff11a8..af5c51e + docs/changelog.md 2026-07-06)
-- **Cockpit** — glass haze per-cell parity (Z1); **eject** rotation 180°→90° + wake kick
-  now PLAYER-GATED (Z5a/Z7); far-space approach time-warped 0.55× + blackouts trimmed (Z9/Z10).
-- **Pod** — ONE-model parity: explosion blast-flare, plasma/shimmer ~40% slower, local
-  deck-fill (Z6); the sealed-door edge gaps ended STRUCTURALLY (`_addDoorSeal` box-section
-  jamb returns, both doors — 4th report; new pod-seal-sweep gate) (Z5b).
-- **Bay** — the umbilical hardware that was authored INSIDE the pod hull relocated to the
-  collar flank (new pod-rotation-clearance gate); the airlock readout un-buried (Z4).
-- **Crew quarters** — full sci-fi overhaul, HERO (Z2): built-in berth / lockers / fold-down
-  desk / base cabinet / panels; the back-wall overlap killed; scene-global HemisphereLight
-  removed; 4 rule-9 colliders. Passed an adversarial gate (0 SEV1) + a 3-SEV2 fix pass.
-- **Reactor** — the engine "blocky cylinders" → a real reactor hall, HERO (Z3): containment
-  core + emissive channel, coolant towers, control station; CALM cyan / CRITICAL orange via
-  setEngineFire. Passed an adversarial gate + a 2-SEV1 fix pass (dead-grey calm core → cyan
-  glow; the glass mullion bisecting the core → seamless pane).
-- **Parachute** — round 2 (Z8): lines EMBED into the brim, flutter 10s→~2s, a per-vertex
-  gravity drape wrapping the hull to a ground pool.
-- **Test infra** — a stale doorway-torture harness (broken by Z7's movement-gated wake, NOT
-  a game bug — bisected + cross-confirmed by pod-walkin/out) fixed to reach step-out by walking.
+## What shipped this session (all pushed; see git log 2ad74fe..86fa769)
+- **Crew quarters — full redesign** (`e618d4a`, 6 rounds + 3 adversarial gates): the bunk
+  is a TRUE recess bored INTO the wall (flush wall, mattress inside the pocket, nothing
+  proud/underneath, flush under-bunk drawer); made bedding (distinct olive blanket + turn-down,
+  rounded pillow, softened mattress); detailed lockers/cabinet + status LEDs; the dead bright
+  wall worn down. **Airlock**: the 2 umbilical stubs that read as pipes into the pod removed.
+- **Parachute** (`53f4b47`): sits ~6cm off the hull (no phase-through) + ropes removed on deflate.
+- **Porthole** (`2fd1a65`): domed glass → a single FLAT circular pane, depthWrite:false so the
+  re-entry FIRE reads through it again (the dome was depth-occluding the additive FX). Plasma
+  scroll/flicker slowed further.
+- **Cockpit** (`ba5287a`): the glass was BACKFACE-CULLED (the real reason it read "invisible"
+  for 5 rounds) — fixed the inverted winding + retuned the haze; added the waist side-mullions;
+  trimmed the floor behind the glass.
+- **Audio** (`13264ff`): no wind/music until the ship (suppress before handoffToGame).
+- **Loading screen** (`ad69ea4`): REVERTED the live-menu experiment back to the freeze-frame —
+  the live 3D menu can't be smooth during the main-thread-blocking shader preload (stuttered +
+  the title buttons overlapped the bar). If we want life there later: a COMPOSITOR-thread CSS
+  animation on the captured frame (not a main-thread 3D render).
 
-## Verification (all PASS on the merged tree)
-Full intro gate suite: smoke-intro `{ok:true,beats:12}`, door-flush-audit (9), pod-seal-sweep
-(0 cracks), pod-rotation-clearance (0 violations), airlock-motion, quarters-walk, engine-glass
-z-fight (0), cockpit-glass-cells (0.0% dev), pod-walkin, pod-walkout (foreignGlobals=[]),
-doorway-torture (6/6), verify:colliders, `build:intro`. Two hero adversarial gates + a
-cross-area adversarial JOURNEY gate (0 confirmed) passed. Bench: see the morning summary.
+## DEFERRED — pick these up next (in priority order)
+1. **The descent METAL-CRAWL** (the user's live report): a dynamic-texture "swim" on the DOOR /
+   LEVER / CONSOLE metal, visible only while the pod MOVES during descent. NOT the plasma (that's
+   separate + fixed). NOT the classic localSpace world-space crawl — every pod createRustedHullMaterial
+   ALREADY has `localSpace: true`, and the pod stays LEVEL (no tumble) during descent, so the two
+   obvious mechanisms are ruled out. Leading suspects: z-fighting on those pieces that shifts with
+   the view, or a view-dependent specular/env sweep on the metal. A reproduction agent was mid-hunt
+   when paused (no diagnosis yet); a `crawl-probe` rig scenario it left (in rig-shot.mjs, `86fa769`)
+   drives the descent motion + captures the interior metal — reuse it. Reproduce → name the exact
+   mechanism → fix (podScene.ts; do NOT edit the SHARED hullMaterial.ts blind — report if the root
+   cause is there).
+2. **The systemic SWIM-GUARD** (the user's architecture ask: "make sure texture swim never happens
+   on any texture ever again, even moving"): (a) flip createRustedHullMaterial's default to swim-safe
+   (local-space) so new materials are protected by default — VERIFY the static desert wrecks/terrain
+   don't lose cross-seam grime tiling; (b) add a MACHINE GUARD rig gate that translates each object a
+   test delta + asserts the surface pattern doesn't slide (catches existing + new, forever); (c)
+   document the convention. Fold #1's actual mechanism into the guard so it covers that class too.
 
-## For the user's next playthrough — walk-test / feel items (their domain; stills can't judge motion)
-- The felt eject rhythm: lever pull → the 90° rotate (planet swings into the porthole) → blast.
-- The reactor flicker cadence (calm cyan hum vs the critical breach) at run pace through the glass.
-- The parachute flutter→collapse FEEL and the drape read on approach.
-- The far-space approach pacing (now 0.55×) and the trimmed blackouts.
-- The crew-quarters at walk pace (the warm berth spill, the viewport framing).
+## Open flags for the user's eyes (their call)
+- The cockpit glass HAZE level (now that the glass actually renders — tune up/down to taste).
+- Whether the descent STREAKS read better now (plasma slowed) — the metal-crawl (#1) is separate + deferred.
+- The cockpit floor-overshoot (agent applied the geometrically-correct inset but couldn't frame the
+  user's exact screenshot angle — confirm in-build).
 
-## Standing (documented, not started)
-The deferred campaign phases (the hero ship-explosion polish through the eject frame · the
-audio mix listen-pass) + the out-of-loop queue (Skyfall hero wreck · CAVE rework ·
-pickup-instancing · §A walk-tests) remain in [docs/roadmap.md](roadmap.md). Rule 9 + the
-model-stage/lint/adversarial-gate discipline stand.
+## Keeping the machine fast (NEW this session)
+Long sessions accumulate orphaned Vite dev servers + headless browsers (each agent/rig-shot spawns
+its own; completed agents don't always clean up). Run **`npm run reap`** anytime the machine slows
+(kills all stale dev servers + headless browsers, keeps the MCP servers; `-KeepPort 5180` to keep a
+test server). The agent should reap between waves in long sessions. Script: scripts/reap-dev.ps1.
