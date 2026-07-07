@@ -544,3 +544,39 @@ Chosen via a research pass (`docs/research/escape-pod-cylindrical.md`, 5 cylindr
 **Impact**: rebuild T1.1 exterior (`placeCrashedPodWreck`) + T1.2 interior (`buildPodScene`) to the new cylindrical identity; keep the module contracts (`getPodSpawn`/`setDescentProgress`/`setParachuteLeverPull`/dispose) intact so the beats keep playing. Supersedes the §B box parts of the C9/C10 builds (their commits remain the audit trail). `docs/research/escape-pod-design-variety.md` §B is now historical; `escape-pod-cylindrical.md` is the live reference.
 
 **friction-score:** 3 (a hero re-design reversing an explicit prior choice + ~2 hero cycles of rework; de-risked by confirming the direction before rebuilding — the right call vs. shipping a second wrong pod).
+
+## D272 — cockpit-console personal clutter (photo/mug) anchors to console-derived module vars, not a fixed CON_Z (2026-07-07)
+
+**When**: the console was moved closer to the glass (`INSET 0.42→0.24`); the photo + mug then floated over the gap because `buildPersonalTouch` placed them at a hardcoded `CON_Z + 0.5`.
+**Decision**: `buildConsoleBank` computes `_consoleShelfL/R` (the front deck's far corners via `onDeck`) and stores them module-level; `buildPersonalTouch` rests the clutter on those (fallback to the old constant if the console isn't built).
+**Why**: the console geometry is parametric off `INSET`; any future INSET change must carry the clutter with it. Anchoring to the same source keeps them on the deck by construction.
+**friction-score:** 1 (small, reversible; the pattern is worth keeping — parametric props anchor to their surface's real geometry, not a guessed constant).
+
+## D273 — diagnose "wrong material/lighting" reports by RAYCASTING the surface first, not theorizing (2026-07-07)
+
+**When**: the pod floor read brown at board + landed but grey at descent. I first theorized it was LIGHTING (warm lamp vs cool descent balance) and spent a round tuning deck-fills. The user insisted it was "a totally different model." A raycast probe (`scripts/floor-probe.mjs`) settled it: at board/landed an extra mesh (`#1c140d`, the charred heat-shield `baseCap`) sat 18cm ABOVE the grey deck; the descent's interior-only cabin lacks it.
+**Decision**: dropped both `baseCap`s below the deck (`y 0.11→−0.15`) + reverted the lighting tweaks. Going forward, when a surface "looks like the wrong material," raycast it and read the actual mesh/material hit before adjusting lights.
+**Why**: lighting theories are seductive + hard to falsify by eye; a raycast is ground truth in one run. Trusting the user's "it's a different model" over my lighting hypothesis was correct.
+**friction-score:** 2 (one wasted tuning round; the raycast-first habit is the durable fix — see [[ship-zfight-probe-first]] for the z-fight sibling).
+
+## D274 — pod deck + sub-floor separated 1cm in Y to kill coplanar z-fight (2026-07-07)
+
+**When**: the pod floor flickered with radial streaks on camera/pod motion. Probe: the visible grey deck (`_cabDeck`) + the dark sub-floor (`_cabChannel`) were BOTH `y=0.025 h=0.05` → coplanar top faces at `y=0.05`.
+**Decision**: dropped the sub-floor to `h=0.04 y=0.02` (top `0.04`, 1cm below the deck top), bottom still flush on `y=0` (no base penetration).
+**Why**: two coplanar discs tie in the depth buffer + break differently each frame = the flicker. 1cm of Y separation is invisible but far more than depth precision.
+**friction-score:** 1 (trivial once identified; a reminder that stacked same-Y plates are a z-fight source).
+
+## D275 — airlock corner z-fight fixed with polygonOffset on the collar wall, not geometry separation (2026-07-07)
+
+**When**: the collar side wall (`escapePodBay`) is coplanar with the ship's −X corridor wall (`escapePodShipCockpit` `#686e73`) where the passage meets the airlock — a flickering seam. A passage wall meeting a corridor wall can't avoid sharing that plane without a gap to space.
+**Decision**: trimmed the collar wall's 5cm overhang (so it doesn't cross deeper into the corridor wall) + gave it a `polygonOffset` material clone (factor −1, units −2) so it wins the depth tie every frame.
+**Considered alternatives**: geometric trim/gap — rejected (any butt joint re-coplanars, any gap peeks to space — the X4 "solid flanking wall" bug). Removing the collar wall — rejected (it walls the passage).
+**Why**: polygonOffset is the textbook fix for two coplanar surfaces you can't separate. NOTE: the `--probe` geometry test still reports them coplanar (it can't see the GPU depth bias); this fix only verifies in live MOTION.
+**friction-score:** 2 (took 3 wrong guesses to reach — the lesson, not the fix, is the value: [[ship-zfight-probe-first]]).
+
+## D276 — ship-scene z-fights: run ship-shot --probe (no-merge) to name the pair BEFORE editing (2026-07-07)
+
+**When**: the airlock-area flicker cost FOUR wrong attempts (moved the sliding leaf proud → coincided it with the jamb post; polygonOffset'd the leaf; removed a portal frame) because I guessed the culprit each time.
+**Decision**: for any ship-scene z-fight, first run `ship-shot --view=<aimed> --airlock=open --probe` — it sets `__stageNoMerge` (the static merge otherwise collapses everything into one giant BufferGeometry, so the plain diag/ray-AABB can't resolve faces) and reports coplanar pairs with group names + colours. Fix the named pair.
+**Why**: guessing the "obviously moving" element (the door leaf) was wrong three times; the probe named the real pair (two static walls) in one run.
+**friction-score:** 3 (repeated user-facing churn from guessing; codified in memory `ship-zfight-probe-first` so it doesn't recur).

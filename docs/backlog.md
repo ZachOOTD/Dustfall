@@ -10,6 +10,12 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
+### ABQ live-feedback residuals (2026-07-07)
+- `[bug]` **Airlock-corner z-fight — LIVE-MOTION confirm owed.** Fixed via polygonOffset on the collar side wall (D275, probe-confirmed pair vs the −X corridor wall), but the `--probe`/still-render can't verify a GPU depth bias — only motion shows the flicker. If it STILL flickers live, the fallback is a real geometry change (pull the collar wall back + close the corner differently). See [[ship-zfight-probe-first]] memory.
+- `[polish]` **Cockpit glass haze amount** — set slight (`opacity 0.09`, glaze `1.05`, shipScene `_glass`). User may want it stronger/weaker; it's a one-value tune.
+- `[polish]` **Pod EXTERIOR weathering** — interior + door-visible exterior flecks zeroed (2026-07-07). If the crashed pod in the desert now reads too CLEAN (the scrappy-salvage look relied partly on flecks), dial `fleckStrength` back up modestly on `_podPaint`/`_podDoorMat`/`_podBandMat`/etc. (kept wear/streaks/patina, so it's not flat).
+- `[idea]` **Audio wind + ship hum are MUTED "for now"** (2026-07-07, user: too loud/distracting). `WIND_BODY_MASTER`/`WIND_WHISTLE_MASTER=0` in tuning; `startDesertWind`/`startCockpitHum` calls commented in sequence.ts. Re-enable + rebalance (quieter) as part of the deferred audio mix listen-pass.
+
 - `[polish]` **Escape-pod INTERIOR detail/improvement pass** (C17 walk-test — user: "decent first model for now, tackle later"). The cabin (`buildPodScene`) reads as a solid first model but wants a craft pass — surface detail, wear, more lived-in tells, material refinement. Do after the intro's other phases land. (Sibling: the descent vista + re-entry FX already gate-passed @ beauty 8; this is the CABIN interior specifically.)
 
 ### A. Owed walk-tests + in-motion feel-tunes (need a human in `npm run dev` — the headless harness can't judge feel; the "D150" pile)

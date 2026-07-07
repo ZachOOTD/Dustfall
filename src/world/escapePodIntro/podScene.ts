@@ -137,7 +137,7 @@ const _cabPaintOpts = {
   bareMetalHex: 0xb2b8bc,        // bright cool scuffed-aluminium reveal (scratches still pop against the darker skin)
   rustHex: 0x33333a,             // COOL near-grey grime tone (a neutral shadow accent, no brown)
   streakIntensity: 0.26, wearAmplitude: 0.38,   // a touch more plate-to-plate tonal break-up now that the base is darker (denting reads)
-  fleckStrength: 0.55,           // moderate scuff scratches
+  fleckStrength: 0.0,            // user 2026-07-07: the bare-metal scuff FLECKS read as white splotches all over the INTERIOR — removed (wear + streaks still break up the flatness)
   oxStrength: 0.10, oxHex: 0x5c5c58,            // sparse neutral patina (slightly stronger against the darker skin)
   localSpace: true,   // the pod FALLS ~600m during the descent — pin the grime to the surface so it doesn't crawl (see hullMaterial.ts localSpace)
 } as const;
@@ -148,7 +148,7 @@ _cabShell.side = THREE.BackSide;
 // value contrast to the bright aluminium skin so the steel structure reads as fitted-on.
 const _cabSteel = createRustedHullMaterial({
   baseColor: 0x40454b,           // COOL dark-grey steel (lifted a touch; value contrast vs bright skin)
-  rustHex: 0x242830, streakIntensity: 0.26, wearAmplitude: 0.24,
+  rustHex: 0x242830, streakIntensity: 0.26, wearAmplitude: 0.24, fleckStrength: 0.0,   // fleck 0 (was default 0.7) — no white scuff splotches on the interior ribs/steel
   oxStrength: 0.08, oxHex: 0x55555a, seamRustStrength: 0.12,   // neutral grime (warm oxide stripped → no brown)
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
@@ -163,7 +163,7 @@ const _cabBandOpts = {
   // curve — just in-family, not bleached.
   baseColor: 0x868c90,           // WORN GUNMETAL band, a step lighter than the shell (was 0xb0b5b8 near-white)
   bareMetalHex: 0xafb4b8,        // cool scuff reveal (was 0xd2d8dc near-white)
-  streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.6,
+  streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.0,   // fleck 0 (was 0.6) — no white scuff splotches on the hoops
   oxStrength: 0.06, oxHex: 0x5a5c5e, seamRustStrength: 0.10,   // cool grime; the hoops carry the curvature read, keep them a bright cool value but not white
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 } as const;
@@ -176,7 +176,7 @@ _cabBandShell.side = THREE.BackSide;
 // WRECK_HULL_DARK_HEX which read wood-brown). A value contrast to the bright aluminium.
 const _cabChannel = createRustedHullMaterial({
   baseColor: 0x363b41,           // cool near-charcoal steel
-  rustHex: 0x222631,
+  rustHex: 0x222631, fleckStrength: 0.0,   // fleck 0 (was default 0.7) — no white scuff splotches on the console body / deep frame
   streakIntensity: 0.24, wearAmplitude: 0.22, oxStrength: 0.08, oxHex: 0x55555a, seamRustStrength: 0.12,
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
@@ -193,7 +193,7 @@ _cabChannelBack.side = THREE.BackSide;
 // exterior _podFrameMat so the rivet language is identical inside + out).
 const _cabRivet = createRustedHullMaterial({
   baseColor: 0x8d9094, rustHex: 0x3a3a3e, streakIntensity: 0.18,   // cool mid steel-grey studs (warm rivet read as brassy)
-  oxStrength: 0.08, oxHex: 0x6a6a66, fleckStrength: 0.5,
+  oxStrength: 0.08, oxHex: 0x6a6a66, fleckStrength: 0.0,   // fleck 0 (was 0.5) — no white scuff splotches on the studs
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Conduit / cabling — dark matte near-black (lambert, flat).
@@ -204,8 +204,13 @@ const _cabDeck = createRustedHullMaterial({
   // reveal 0xc4c9cc) → read pale. Pulled to the ship _deck gunmetal (0x5c6167) but kept a
   // touch lighter/lit so the floor still reads as a finished lit deck, not a void.
   baseColor: 0x71767a, bareMetalHex: 0xa4a9ad,   // worn gunmetal tread (was 0x969a9e pale)
-  streakIntensity: 0.18, wearAmplitude: 0.28, fleckStrength: 0.7,
-  oxStrength: 0.08, oxHex: 0x5a5c5e, seamRustStrength: 0.10,   // cool grime (deck was reading warm-tan under the lamp)
+  streakIntensity: 0.0, wearAmplitude: 0.10, fleckStrength: 0.0,   // user 2026-07-07: no STREAKS on the floor — streak layer OFF (was 0.18) + wear pulled low (0.28→0.10, just a whisper of plate variation) + fleck 0 (was 0.7). A clean light-grey deck.
+  // user 2026-07-07: the floor read RUSTY at board + crash but grey during descent. ROOT CAUSE: the deck
+  //   left rustHex at the WARM default (0x2a1206), so its streak + seam-rust layers baked warm rust-brown
+  //   that the warm ceiling lamp popped (cool descent light desaturated it → grey). Cool rustHex now →
+  //   the deck grime is cool-grey under ALL lighting, so the light-grey detailed floor reads throughout.
+  rustHex: 0x33333a,
+  oxStrength: 0.08, oxHex: 0x5a5c5e, seamRustStrength: 0.0,   // cool grime patina kept faint; seam-rust drip-streaks OFF (was 0.10) — part of the "no streaks on the floor" fix
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Seat cushion — worn padded vinyl, a desaturated warm tan, slightly soft (lambert).
@@ -242,7 +247,7 @@ const _cabDoorSlab = createRustedHullMaterial({
   baseColor: 0x646a70,           // WORN GUNMETAL door slab — a step lighter than the hull skin (0x565c62), same cool family (was 0x868c90 pale band-grey)
   bareMetalHex: 0x8f959b,        // cool scuffed reveal (matches _podPaint reveal; was near-white band reveal)
   rustHex: 0x2c3036,             // cool grime channel
-  streakIntensity: 0.30, wearAmplitude: 0.36, fleckStrength: 0.8,
+  streakIntensity: 0.30, wearAmplitude: 0.36, fleckStrength: 0.0,   // fleck 0 (was 0.8) — no white scuff splotches on the door
   oxStrength: 0.12, oxHex: 0x54585c, oxDeepStrength: 0.18, seamRustStrength: 0.22,   // cool grime, no warm oxide
   localSpace: true,   // the door rides the descent SEALED then swings at the wake — pin the grime (see hullMaterial.ts)
 });
@@ -718,8 +723,13 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
   //   RIM-CLOSER (fills the seam between the deck disc r=1.26 and the wall r=1.28), so it only needs
   //   to sit UNDER the deck, not below the hull base. Seat it flush ON y=0 (spans 0→0.05, under the
   //   0.025-centred deck plate) → no penetration, same "no space through the rim" read.
-  const subFloor = _cyl(CAB_R + SHELL, CAB_R + SHELL, 0.05, WALL_SEG, _cabChannel);
-  subFloor.position.y = 0.025;
+  // Z-FIGHT FIX (user 2026-07-07: "the floor texture flickers with streaks from the centre when the
+  //   camera/pod moves"). The subFloor + the deck plate were BOTH y=0.025 h=0.05 → their TOP faces were
+  //   COPLANAR at y=0.05, so over the deck's whole disc the depth buffer tied between the two and flickered
+  //   (radial streaks = the disc's fan triangulation fighting). Drop the subFloor's TOP 1cm BELOW the deck
+  //   top (h=0.04, y=0.02 → top 0.04, bottom still flush on y=0) so the two discs are no longer coplanar.
+  const subFloor = _cyl(CAB_R + SHELL, CAB_R + SHELL, 0.04, WALL_SEG, _cabChannel);
+  subFloor.position.y = 0.02;
   group.add(subFloor);
   // the visible aluminium deck plate (bright skin so the floor is LIT, not a void)
   const deck = _cyl(CAB_R - 0.02, CAB_R - 0.02, 0.05, WALL_SEG, _cabDeck);
@@ -748,22 +758,9 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
     tread.position.set(r * 0.34, 0.06, 0.12);              // biased aft so no fore end reaches the rim
     group.add(tread);
   }
-  // FOOTWELL — a marked foot-rest zone FORWARD of the seat (−Z): a bright rim lip + a dark inset
-  //   pan. Y5 lint fix: the old pan sat at y=−0.02 (bottom −0.07), dipping BELOW the y=0 base plane
-  //   (poking through the hull foot). It now sits FLUSH ON the base (pan spans 0→0.045, just below the
-  //   0.05 deck-top so it still reads inset) — the same footwell read without penetrating the base.
-  const wellRim = _cyl(0.44, 0.44, 0.06, 20, _cabBand);
-  wellRim.position.set(0, 0.05, -0.62);
-  group.add(wellRim);
-  const wellPan = _cyl(0.38, 0.38, 0.045, 20, _cabSteel);
-  wellPan.position.set(0, 0.0225, -0.62);
-  group.add(wellPan);
-  // a couple of foot-rest treads in the well
-  for (const wz of [-0.5, -0.74]) {
-    const ft = _box(0.5, 0.025, 0.07, _cabRivet);
-    ft.position.set(0, 0.02, wz);
-    group.add(ft);
-  }
+  // FOOTWELL REMOVED (user 2026-07-07: "remove the circular thing on the floor of the pod"). It was a
+  //   solid 20-sided raised disc (wellRim r=0.44) forward of the seat + a hidden pan + two treads — it
+  //   read as a random circle sitting on the deck. The flat tread-plate deck now runs clean under the seat.
   // 1.d a chunky channel-steel FLOOR RING capping the wall-to-floor seam. Y3 finding 1 (the "black
   //     wall lower half" on first door-open): the old full-circle footRing (r=CAB_R−0.03, y 0→0.18)
   //     was a SOLID band crossing the lower ~7cm of the door aperture (bottom at HATCH_CY−HATCH_H/2 =
@@ -1164,73 +1161,43 @@ function buildEjectControl(group: THREE.Group): void {
   ej.rotation.y = ejAz - Math.PI / 2;
   group.add(ej);
   // In ej-local: −X faces the cabin centre. Build the control reaching inboard (−X).
-  // ── ONE chunky steel mounting PLATE → a bright safety-yellow guarded HOUSING → a recessed dark
-  //    guard well → a flip-up steel guard cage → ONE fat red T-handle. Big volumes, no greeble field.
-  const plate = _box(0.10, 0.66, 0.56, _cabChannel);      // chunky steel mounting plate
-  plate.position.set(-0.03, 0, 0);
-  ej.add(plate);
-  const housing = _box(0.06, 0.50, 0.48, _ejectGrip);     // bright-yellow guarded housing (one block)
-  housing.position.set(-0.10, 0, 0);
-  ej.add(housing);
-  // hazard stripe bars top + bottom of the housing (the "danger" tell — two clean bars)
-  for (const sy of [-1, 1]) {
-    const hz = _box(0.02, 0.08, 0.46, _cabScreen);
-    hz.position.set(-0.135, sy * 0.29, 0);
-    ej.add(hz);
+  // ── SIMPLE PULL-DOWN HANDLE (user 2026-07-07: the guarded housing + cage + hazard stripes + clevis
+  //    read "complicated and messy" — redesigned to a clean pull-down lever: a small wall backplate, a
+  //    pivot on two ears, ONE arm, and a fat RED grip that swings DOWN on the pull. Nothing else.
+  //    The animation contract is UNCHANGED — the ejectLever pivot still swings on rotation.z.)
+  const backplate = _box(0.05, 0.30, 0.16, _cabSteel);     // a small flush wall backplate (the mount)
+  backplate.position.set(-0.02, 0, 0);
+  ej.add(backplate);
+  const pinX = -0.10, pinY = 0.07;                          // the pivot pin, proud of the plate
+  for (const sz of [-1, 1]) {                               // two clean hinge ears (no clevis clutter)
+    const ear = _box(0.06, 0.11, 0.03, _cabSteel);
+    ear.position.set(pinX, pinY, sz * 0.06);
+    ej.add(ear);
   }
-  const well = _box(0.08, 0.34, 0.34, _cabScreen);        // recessed dark guard cavity
-  well.position.set(-0.14, 0.02, 0);
-  ej.add(well);
-  // flip-up guard CAGE arching inboard over the handle (a chunky steel bar cage — reads "guarded")
-  const guard = _box(0.30, 0.05, 0.40, _cabSteel);
-  guard.position.set(-0.34, 0.22, 0);
-  ej.add(guard);
-  for (const sz of [-1, 1]) {
-    const leg = _box(0.24, 0.05, 0.05, _cabSteel);
-    leg.position.set(-0.25, 0.11, sz * 0.17);
-    leg.rotation.z = 0.7;
-    ej.add(leg);
-  }
-  // ── Y7 — the T-handle now hangs off a CLEVIS PIVOT so it SWINGS DOWN on a pull (setEjectLeverPull).
-  //    A stout steel clevis is fixed on the housing face; the pivot group sits at its pin; the handle
-  //    (stem + fat red crossbar) is a child reaching inboard (−X). At rest it points inboard-and-up
-  //    (ejectLeverRestZ); a pull rotates it about the group-local +Z (a horizontal tangent axis) so the
-  //    inboard-pointing arm swings DOWN toward −Y — a clear yank-down. KISS: the clevis + the handle only.
-  const pinX = -0.20, pinY = 0.10;   // the pivot pin location on the housing face (inboard of the well)
-  // the clevis: two steel cheek plates flanking the arm root + a cross pin (reads as a real hinge).
-  for (const sz of [-1, 1]) {
-    const cheekE = _box(0.05, 0.16, 0.04, _cabSteel);
-    cheekE.position.set(pinX, pinY + 0.02, sz * 0.075);
-    ej.add(cheekE);
-  }
-  const clevisPin = _cyl(0.020, 0.020, 0.20, 8, _cabRivet);
-  clevisPin.rotation.x = Math.PI / 2;
-  clevisPin.position.set(pinX, pinY, 0);
-  ej.add(clevisPin);
-  // the swinging handle group, hinged at the pin. Local −X = the arm reach; a pull rotates +Z → down.
+  const pin = _cyl(0.016, 0.016, 0.15, 8, _cabRivet);
+  pin.rotation.x = Math.PI / 2;
+  pin.position.set(pinX, pinY, 0);
+  ej.add(pin);
+  // the swinging LEVER — one stout arm reaching inboard (−X) to a fat RED grip. At rest it points
+  //   inboard-and-up (a clear "pull me down" pose); a pull rotates it DOWN about local +Z (setEjectLeverPull).
   ejectLever = new THREE.Group();
   _ejectLevers.add(ejectLever);         // release wiring — the setter drives EVERY live instance (see _ejectLevers)
   ejectLever.position.set(pinX, pinY, 0);
-  ejectLever.userData.noMerge = true;   // Y7 — the swinging handle must NOT be folded into the static batch (or the pull reads dead)
-  ejectLeverRestZ = -0.30;              // resting: arm points inboard-and-slightly-UP (a raised handle at rest)
+  ejectLever.userData.noMerge = true;   // the swinging handle must NOT fold into the static batch (or the pull reads dead)
+  ejectLeverRestZ = -0.38;              // resting: arm raised inboard-and-up
   ejectLever.rotation.z = ejectLeverRestZ;
   ej.add(ejectLever);
-  const stem = _cyl(0.044, 0.044, 0.30, 8, _cabSteel);   // stout stem reaching inboard from the pin
-  stem.rotation.z = Math.PI / 2;
-  stem.position.set(-0.15, 0, 0);
-  ejectLever.add(stem);
-  const barT = _cyl(0.062, 0.062, 0.36, 10, _ledRed);     // fat RED crossbar grip at the arm end (distinct from the yellow housing)
-  barT.position.set(-0.30, 0, 0);
-  ejectLever.add(barT);
-  for (const sz of [-1, 1]) {
-    const cap = _cyl(0.072, 0.058, 0.04, 8, _cabSteel);
-    cap.rotation.x = Math.PI / 2;
-    cap.position.set(-0.30, 0, sz * 0.18);
-    ejectLever.add(cap);
-  }
-  // a chunky stencilled "EJECT" placard on the lower housing (one dark-on-yellow label bar)
-  const ejLabel = _box(0.03, 0.10, 0.34, _cabScreen);
-  ejLabel.position.set(-0.135, -0.30, 0);
+  const arm = _cyl(0.026, 0.026, 0.34, 8, _cabSteel);      // the slim lever shaft
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set(-0.17, 0, 0);
+  ejectLever.add(arm);
+  const grip = _cyl(0.05, 0.05, 0.16, 12, _ledRed);        // fat RED pull grip at the end (reads "eject", grabbable)
+  grip.rotation.z = Math.PI / 2;
+  grip.position.set(-0.36, 0, 0);
+  ejectLever.add(grip);
+  // a small "EJECT" placard on the backplate under the pivot
+  const ejLabel = _box(0.02, 0.055, 0.12, _cabScreen);
+  ejLabel.position.set(-0.05, -0.17, 0);
   ej.add(ejLabel);
   // Y7 — re-apply the last pull pose so a descent/crash rebuild restores the handle where it was
   //   (mirrors how buildConsoleAndLever re-applies the chute state below).
@@ -1843,8 +1810,13 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
   noseProf.push(new THREE.Vector2(0.001, apex));
   root.add(_lathe(noseProf, POD_SEG, _podPaint));
   // a scorched flat heat-shield base cap peeking at the sand (reentered base-first).
+  // user 2026-07-07: at y=0.11 (top y=0.23) this CHARRED cap poked ~18cm ABOVE the interior deck (y=0.05),
+  //   so the full-pod builds (boarded bay pod + landed walk-in) showed a dark-brown charred disc ON the
+  //   cabin floor instead of the grey aluminium deck (the descent's interior-only cabin has no baseCap, so
+  //   its floor read correctly grey — the "different brown floor model" the user flagged). Dropped so its
+  //   TOP sits BELOW the deck (exterior heat-shield belongs UNDER the pod, not in the cabin).
   const baseCap = _cyl(OUTR * 0.92, OUTR * 0.80, 0.24, POD_SEG, _podScorchMat);
-  baseCap.position.y = 0.11;
+  baseCap.position.y = -0.15;
   root.add(baseCap);
 
   // ── 2. REENTRY SCORCH — a char fade up the lower ~45% of the body (it burned coming down),
@@ -2041,9 +2013,11 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   }
   noseProf.push(new THREE.Vector2(0.001, apex));
   root.add(_lathe(noseProf, POD_SEG, _podPaint));
-  // scorched heat-shield base cap
+  // scorched heat-shield base cap — DROPPED below the deck (user 2026-07-07): at y=0.11 its top (0.23) poked
+  //   ~18cm above the interior deck, showing a brown charred disc on the cabin floor in the boarded/landed
+  //   full-pod builds. The exterior heat-shield belongs UNDER the pod, not in the cabin.
   const baseCap = _cyl(R * 0.92, R * 0.80, 0.24, POD_SEG, _podScorchMat);
-  baseCap.position.y = 0.11; root.add(baseCap);
+  baseCap.position.y = -0.15; root.add(baseCap);
 
   // ── 2. REENTRY SCORCH — a char fade up the lower body (the shared identity weathering).
   //    ROUND-1f FIX (the "curved grey sheet walling the lower half of the doorway"): this scorch
@@ -4189,7 +4163,7 @@ const _podPaint = createRustedHullMaterial({
   rustHex: 0x30343a,             // COOL near-grey grime tone for the drip channel (was warm 0x6a4a2c)
   streakIntensity: 0.40,         // grime drip-runs (the seam channel rides this hue too)
   wearAmplitude: 0.44,           // STRONG plate-to-plate tonal break-up (dents + denting)
-  fleckStrength: 1.0,            // dense tight bare-metal scuff scratches → scrappy worn metal
+  fleckStrength: 0.0,            // user 2026-07-07: the bare-metal scuff flecks read as WHITE SPLOTCHES on the doorway/hull — removed (wear + streaks + patina + abrasion still carry the scrappy worn read)
   oxStrength: 0.16, oxHex: 0x585c60,    // sparse COOL patina patches (warm oxide pulled DOWN + cooled → no coral glow)
   // dust + chalk PULLED DOWN + cooled — they washed the up-facing nose dome pale/warm
   // (the nose must read as the SAME worn gunmetal as the body, not a bleached cap).
@@ -4202,7 +4176,7 @@ const _podPaint = createRustedHullMaterial({
 const _podSteel = createRustedHullMaterial({
   baseColor: 0x3a4047,           // COOL dark structural steel — matches shipScene _steel 0x373c42 (was warm 0x4f4c46 → read coppery under the sun)
   rustHex: 0x24272d,             // cool grime (was default warm rust)
-  streakIntensity: 0.4, wearAmplitude: 0.3,
+  streakIntensity: 0.4, wearAmplitude: 0.3, fleckStrength: 0.0,   // fleck 0 (was default 0.7) — no white scuff splotches on the hatch/porthole frames
   oxStrength: 0.18, oxHex: 0x50555b,   // warm oxide PULLED DOWN + cooled (was 0.4 warm-default → the bezel glowed copper)
   oxDeepStrength: 0.24, seamRustStrength: 0.26,
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
@@ -4212,7 +4186,7 @@ const _podSteel = createRustedHullMaterial({
 const _podFrameMat = createRustedHullMaterial({
   baseColor: 0x82868c,           // COOL mid steel-grey rivets/studs — matches shipScene _rivet 0x9299a0 (was warm 0x7d7a72)
   rustHex: 0x2a2d33, streakIntensity: 0.3, oxStrength: 0.14, oxHex: 0x54585e,   // cool grime + faint cool patina (was warm rust 0x4a2810 / 0x9a5a2e)
-  oxDeepStrength: 0.2, seamRustStrength: 0.22, fleckStrength: 0.6,
+  oxDeepStrength: 0.2, seamRustStrength: 0.22, fleckStrength: 0.0,   // fleck 0 (was 0.6) — no white scuff splotches on the rivets/frames
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Cables / antenna — dark matte, near-black.
@@ -4256,7 +4230,7 @@ const _podScorchFadeMat = new THREE.MeshLambertMaterial({ vertexColors: true, fl
 // Charred heat-shield base cap (the flat burnt end-down slab peeking at the sand).
 const _podScorchMat = createRustedHullMaterial({
   baseColor: 0x1c140d,           // charred near-black, warm
-  rustHex: 0x120b06, bleachHex: 0x2e2218,
+  rustHex: 0x120b06, bleachHex: 0x2e2218, fleckStrength: 0.0,   // fleck 0 (was default 0.7) — no white scuff spots on the charred cap
   streakIntensity: 0.3, wearAmplitude: 0.35,
   oxStrength: 0.5, oxHex: 0x5e3a1e,     // burnt-umber discolouration zones
   oxTopStrength: 0.4, abrasionStrength: 0.3,
@@ -4269,7 +4243,7 @@ const _podBandMat = createRustedHullMaterial({
   baseColor: 0x7c8288,           // WORN COOL painted-band grey — matches shipScene _band 0x7c8288 (was mid warm-grey 0x8c8d85); a touch lighter than the skin so hoops read proud
   bareMetalHex: 0x9aa0a6,        // cool scuff reveal (no near-white)
   rustHex: 0x2c3036,             // cool grime channel
-  streakIntensity: 0.3, wearAmplitude: 0.34, fleckStrength: 0.7,
+  streakIntensity: 0.3, wearAmplitude: 0.34, fleckStrength: 0.0,   // fleck 0 (was 0.7) — no white scuff splotches on the seam-bands
   oxStrength: 0.14, oxHex: 0x56585c, oxDeepStrength: 0.2, seamRustStrength: 0.24,   // warm oxide pulled DOWN + cooled (was 0.32 warm 0x96602e)
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
@@ -4282,7 +4256,7 @@ const _podDoorMat = createRustedHullMaterial({
   baseColor: 0x6a7076,           // WORN GUNMETAL salvage door — a step LIGHTER than the skin (0x565c62) so it still POPS as the tutorial target, but in-family + survives the point-blank WARM airlock spill as gunmetal, not near-white (was 0xcdd0cb → the "pale door" the user flagged in the bay)
   bareMetalHex: 0x93999f,        // cool scuffed reveal — it's been forced (was 0xe2e4e2 near-white)
   rustHex: 0x2e3238,             // cool grime channel
-  streakIntensity: 0.2, wearAmplitude: 0.34, fleckStrength: 1.0,
+  streakIntensity: 0.2, wearAmplitude: 0.34, fleckStrength: 0.0,   // fleck 0 (was 1.0) — no white scuff splotches on the salvage door
   oxStrength: 0.10, oxHex: 0x585c60, abrasionStrength: 0.4,   // faint cool patina (was warm 0x9a6a3e)
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });

@@ -52,6 +52,12 @@ const HIDE = argv.hide ? String(argv.hide).split(',').map((s) => s.trim()).filte
 //   cam = eye local pos, look = local aim point. -Z is forward (the window/nose);
 //   the crew-quarters door is on the -X corridor wall at local z=9.6.
 const VIEWS = {
+  'con-sillfloor': { cam: [1.4, 1.5, -0.2],  look: [-0.4, 0.05, -2.3], w: 1400, h: 1050 },   // stand at the right, look DOWN-forward-left at the front/left sill→floor junction (where the user saw a gap into space)
+  'airlock-leaf':  { cam: [0.5, 1.5, 5.5],   look: [-0.95, 0.9, 3.4],  w: 1400, h: 1050 },   // from aft-right, look fore-left at the OPEN fore leaf (z≈3.62) against the −X wall (x=−1.0) — the z-fight spot
+  'collar-rwall':  { cam: [-1.3, 1.4, 4.8],  look: [-1.05, 1.2, 5.9],  w: 1400, h: 1050 },   // in the collar, look +Z at the right side wall / aft airlock leaf junction (the moiré spot)
+  'collar-lwall':  { cam: [-1.3, 1.4, 4.8],  look: [-1.05, 1.2, 3.7],  w: 1400, h: 1050 },   // in the collar, look −Z at the left side wall / fore airlock leaf junction
+  'bay-appr':      { cam: [0.2, 1.6, 4.8],   look: [-1.92, 1.15, 4.8], w: 1400, h: 950 },   // from the corridor, looking −X INTO the airlock collar toward the pod door
+  'bay-collar':    { cam: [-1.0, 1.55, 4.8], look: [-1.92, 1.2, 4.8],  w: 1400, h: 950 },   // inside the collar mouth, looking down the docking passage at the pod door
   'console':       { cam: [0.25, 1.62, 0.65], look: [0.0, 0.72, -1.7],  w: 1500, h: 950 },
   'console-lo':    { cam: [0.9, 1.35, -0.35], look: [-0.2, 0.6, -1.9],  w: 1400, h: 950 },
   'con-pilot':     { cam: [0.0, 1.33, -0.08], look: [0.0, 0.55, -1.95], w: 1500, h: 950 },   // seated forward-down at the U + dome
@@ -224,6 +230,14 @@ async function main() {
       }, HIDE);
       console.log(`[ship-shot] hid ${n} object(s) matching ${HIDE.join(',')}`);
     }
+    if (argv.airlock === 'open') {   // slide the airlock leaves apart to the OPEN position (z 3.62 / 5.98)
+      await page.evaluate(() => {
+        const s = window.__game.ctx.three.scene;
+        const L = s.getObjectByName('airlockDoorLeafL'), R = s.getObjectByName('airlockDoorLeafR');
+        if (L) L.position.z = 3.62; if (R) R.position.z = 5.98;
+      });
+      console.log('[ship-shot] airlock slid OPEN');
+    }
     // ── Capture each requested view in this ONE boot (park camera → diag → probe → grab canvas).
     for (const view of views) {
       // Park the camera and PAUSE so no tick re-drives it. The ship mesh group
@@ -246,11 +260,12 @@ async function main() {
       if (!posOk) { console.log(`[ship-shot] WARN: ship group not found — "${view.name}" skipped`); continue; }
       await page.waitForTimeout(200);
 
-      // Center-ray diagnostic (what's the camera looking at?).
+      // Center-ray diagnostic — report EVERY box the centre ray enters, sorted by depth (near-equal
+      //   entry distances = a coplanar z-fight pair). Reports material colour + dims + world x/z to ID them.
       const diag = await page.evaluate(() => {
         const t3 = window.__game.ctx.three; const c = t3.camera; const V = c.position.constructor;
         const fwd = new V(); c.getWorldDirection(fwd); const ro = c.position;
-        let best = Infinity, bestName = '(none)', bestGeo = '', bestWp = null;
+        const hits = [];
         t3.scene.traverse((o) => {
           if (!o.isMesh || !o.visible || !o.geometry) return;
           if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
@@ -258,17 +273,19 @@ async function main() {
           const b = bb.clone().applyMatrix4(o.matrixWorld);
           let tmin = -Infinity, tmax = Infinity;
           for (const a of ['x', 'y', 'z']) { const inv = 1 / fwd[a]; let t1 = (b.min[a] - ro[a]) * inv, t2 = (b.max[a] - ro[a]) * inv; if (t1 > t2) { const s = t1; t1 = t2; t2 = s; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; }
-          if (tmax >= Math.max(tmin, 0) && tmin > 0 && tmin < best) {
-            best = tmin; let p = o; let nm = ''; while (p) { if (p.name) { nm = p.name; break; } p = p.parent; } bestName = nm || '(unnamed)';
+          if (tmax >= Math.max(tmin, 0) && tmin > 0) {
+            let p = o, nm = ''; while (p) { if (p.name) { nm = p.name; break; } p = p.parent; }
             const wp = new V(); o.getWorldPosition(wp);
-            const g = o.geometry.parameters || {}; const gt = o.geometry.type;
-            const dims = g.width != null ? `${g.width}x${g.height}x${g.depth}` : (g.radiusTop != null ? `r${g.radiusTop} h${g.height}` : '');
-            bestGeo = `${gt} ${dims}`.trim(); bestWp = [+wp.x.toFixed(2), +wp.y.toFixed(2), +wp.z.toFixed(2)];
+            const g = o.geometry.parameters || {}; const dims = g.width != null ? `${(+g.width).toFixed(2)}x${(+g.height).toFixed(2)}x${(+g.depth).toFixed(2)}` : (o.geometry.type);
+            const col = (o.material && o.material.color) ? o.material.color.getHexString() : '?';
+            hits.push({ d: +tmin.toFixed(3), nm: nm || '(unnamed)', dims, col, wx: +wp.x.toFixed(2), wz: +wp.z.toFixed(2) });
           }
         });
-        return { camPos: [+ro.x.toFixed(2), +ro.y.toFixed(2), +ro.z.toFixed(2)], centerHit: bestName, geo: bestGeo, wp: bestWp, dist: best === Infinity ? null : +best.toFixed(2) };
+        hits.sort((a, b) => a.d - b.d);
+        return { camPos: [+ro.x.toFixed(2), +ro.y.toFixed(2), +ro.z.toFixed(2)], hits: hits.slice(0, 10) };
       });
-      console.log(`[diag:${view.name}] cam=${diag.camPos} centerHit="${diag.centerHit}" ${diag.geo || ''} @world${diag.wp || '?'} (${diag.dist}m)`);
+      console.log(`[diag:${view.name}] cam=${diag.camPos}`);
+      for (const h of diag.hits) console.log(`  d=${h.d} #${h.col} ${h.nm} ${h.dims} wx=${h.wx} wz=${h.wz}`);
 
       if (PROBE) {
         const pairs = await page.evaluate(({ eps, body }) => (new Function('eps', `return (${body})(eps)`))(eps), { eps: 0.006, body: probeBody });

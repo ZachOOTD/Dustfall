@@ -391,7 +391,7 @@ const _glass = new THREE.MeshStandardMaterial({
   //   glaze-luma 2.37→~3.4, front/side/top within ±10%. Not a return to the old milky sheet.
   //   ROUND-4: with the FrontSide backface-cull FIXED (winding, below), the glass finally renders, so a
   //   modest opacity now reads as real transparent glass (was invisible before regardless of value).
-  transparent: true, opacity: 0.05,
+  transparent: true, opacity: 0.09,   // user 2026-07-07: "glass is super clear, can't tell it's there — add a very slight haze" (0.05→0.09)
   // Z1 PER-CELL HAZE-PARITY ROOT-CAUSE (2nd half). The glass WAS DoubleSide, which made per-cell haze
   //   inescapably NON-uniform: a ray crossing a pane hits 1 face (near-flat sill panes, where the two
   //   coincident faces collapse to one blend) or 2 faces (curved crown / closure panes, whose faces
@@ -466,7 +466,7 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      //   hazy" — all cells converge). Nudged 0.03→0.05: enough that a face-on crown pane over a BLACK
      //   sky patch shows the same faint glaze as a side pane over the galaxy glow (they read identical),
      //   still low enough that head-on the stars read straight through, not a milky film.
-     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 0.62;   // ROUND-4 (user: "reads as an open hole — add a TINY bit of haze"). ROOT CAUSE of "open hole" was a FrontSide backface-cull bug (the _pushInboardQuad winding was inverted → the whole dome glass was culled → NOTHING rendered → every prior haze tune did nothing, hence the 5+ swings). With the winding fixed above, this UNIFORM glaze floor is FINALLY effective. It is view/UV-INDEPENDENT (identical per fragment) so it is the DOMINANT, perfectly-uniform presence → per-cell parity by construction (cockpit-glass-cells PARITY-OK). 0.038 (culled-era value) → 0.62. Reads as a faint cool whisper over the starfield/galaxy band, stars+planet still crisp through it — NOT the old milky sheet. Paired parity aids: env dropped to _GLASS_ENV=0.10 (per-pane IBL reflection was the biggest breaker once the glass rendered) + base color darkened to 0x1c2a34 (kills per-pane diffuse-lighting variance).
+     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 1.05;   // user 2026-07-07: bumped the uniform glaze floor 0.62→1.05 ("glass too clear, add a slight haze"). Still view/UV-independent → per-cell parity holds. ROUND-4 (user: "reads as an open hole — add a TINY bit of haze"). ROOT CAUSE of "open hole" was a FrontSide backface-cull bug (the _pushInboardQuad winding was inverted → the whole dome glass was culled → NOTHING rendered → every prior haze tune did nothing, hence the 5+ swings). With the winding fixed above, this UNIFORM glaze floor is FINALLY effective. It is view/UV-INDEPENDENT (identical per fragment) so it is the DOMINANT, perfectly-uniform presence → per-cell parity by construction (cockpit-glass-cells PARITY-OK). 0.038 (culled-era value) → 0.62. Reads as a faint cool whisper over the starfield/galaxy band, stars+planet still crisp through it — NOT the old milky sheet. Paired parity aids: env dropped to _GLASS_ENV=0.10 (per-pane IBL reflection was the biggest breaker once the glass rendered) + base color darkened to 0x1c2a34 (kills per-pane diffuse-lighting variance).
      // a hairline BORDER glint on the outer few % of each pane's uv → every cell shows a sealed frame
      //   even head-on (the "no missing pane" read), uniform per cell, without touching the clear centre.
      float gEdgeU = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
@@ -823,6 +823,8 @@ let _alertBeaconMesh: THREE.Mesh | null = null;         // the beacon dome (its 
 let _alertStripMats: THREE.MeshBasicMaterial[] = [];    // rib strip-lights (dark→red on alert)
 let _alertKeyLights: THREE.Light[] = [];               // the warm keys → dimmed on alert
 let _alertAmbient: THREE.HemisphereLight | null = null; // the cabin ambient → reddened on alert
+let _consoleShelfL: THREE.Vector3 | null = null;        // front-deck corner anchors for the personal clutter (photo/mug) — set in buildConsoleBank so they TRACK the console's INSET (a fixed CON_Z left them floating when the console moved)
+let _consoleShelfR: THREE.Vector3 | null = null;
 let _cockpitAlertLevel: 0 | 1 | 2 = 0;
 
 // ── A per-cockpit IBL env map — required so the cool brushed-aluminium PBR metals reflect
@@ -921,14 +923,14 @@ function _cyl(rt: number, rb: number, h: number, seg: number, mat: THREE.Materia
   _disposables.push(g);
   return new THREE.Mesh(g, mat);
 }
-/** An OPEN-ENDED cylinder BAND (no end caps) — a see-through ring/hoop. Used for the docking-bellows
- *  convolutions + mating flanges so you look THROUGH the collar to the pod (a capped _cyl reads as a
- *  solid disc). DoubleSide so the inner wall shows when viewed down the axis. */
-function _ring(r: number, h: number, seg: number, mat: THREE.Material): THREE.Mesh {
-  const g = new THREE.CylinderGeometry(r, r, h, seg, 1, true);   // openEnded
-  _disposables.push(g);
-  const m = new THREE.Mesh(g, mat);
-  return m;
+// Open bellows/flange bands are walked THROUGH, so their INNER wall must render — a FrontSide open cylinder
+//   culls the inner face → the band reads invisible from inside (user 2026-07-07: "the airlock corridor to
+//   the pod has no interior, it's invisible"). The docstrings already intend DoubleSide. Return a DoubleSide
+//   CLONE of the source material (tracked in _buildMats for disposal) so the shared material — used by SOLID
+//   geometry all over the ship — is NOT flipped to DoubleSide globally (perf + correctness).
+function _openBandMat(mat: THREE.Material): THREE.Material {
+  if (mat.side === THREE.DoubleSide) return mat;
+  const d = mat.clone(); d.side = THREE.DoubleSide; _buildMats.push(d); return d;
 }
 /** A GAPPED open-ended cylinder band — an arc that SKIPS a wedge centred on a door azimuth so a band
  *  wrapping the pod barrel does NOT cross the door aperture (COCKPIT-ROUND-2 item 9). `gapCenterTheta`
@@ -939,7 +941,7 @@ function _arcBand(r: number, h: number, seg: number, mat: THREE.Material, gapCen
   const thetaLength = Math.PI * 2 - gapHalf * 2;
   const g = new THREE.CylinderGeometry(r, r, h, Math.max(6, seg), 1, true, thetaStart, thetaLength);
   _disposables.push(g);
-  return new THREE.Mesh(g, mat);
+  return new THREE.Mesh(g, _openBandMat(mat));   // DoubleSide so the open band's inner wall shows from inside the collar
 }
 /** A small flush dome rivet stud (a half-sphere) at (x,y,z), domed toward `faceDir`.
  *  X1 BOLT-ORIENTATION FIX (user walk-test 2026-07-04: "cockpit bolts must sit flush on their
@@ -1855,16 +1857,27 @@ function buildGlazedDome(group: THREE.Group): void {
       const inb = outward(p).negate(); inb.y = 0; inb.normalize();
       return new THREE.Vector3(p.x + inb.x * s, p.y, p.z + inb.z * s);
     };
+    // the floor-plate edge point for a sill-ring node — inset 0.06 toward the cabin centre (0,0.6), the
+    //   EXACT inset buildCockpitShell's floor uses, so the skirt bottom lands ON the trimmed floor edge.
+    const spineFloor = new THREE.Vector2(0, 0.6);
+    const floorEdgePt = (p: THREE.Vector3): THREE.Vector3 => {
+      const q = new THREE.Vector2(p.x, p.z); const d = q.clone().sub(spineFloor); const L = d.length() || 1;
+      const e = q.sub(d.multiplyScalar(0.06 / L));
+      return new THREE.Vector3(e.x, -0.06, e.y);   // BELOW the deck (y=−0.06) so the wall runs past the floor with no slit
+    };
     const skirtV: number[] = [], lipV: number[] = [], edgeV: number[] = [];
     for (let i = 0; i < ring.length - 1; i++) {
       const a = biasOut(ring[i]), b = biasOut(ring[i + 1]);
-      // (1) KICK SKIRT — a solid wall from the sill node straight DOWN to the deck at that footprint.
-      const af = new THREE.Vector3(a.x, floorTopY, a.z);
-      const bf = new THREE.Vector3(b.x, floorTopY, b.z);
-      // wind so the skirt normal faces INBOARD (toward the cabin/pilot). Double-wound (both faces) so the
-      //   base wall reads solid from inside AND from the outside-looking-in vantage.
-      skirtV.push(a.x, a.y, a.z, af.x, af.y, af.z, b.x, b.y, b.z);
-      skirtV.push(b.x, b.y, b.z, af.x, af.y, af.z, bf.x, bf.y, bf.z);
+      // (1) KICK SKIRT (user 2026-07-07: "a gap into space under the glass where it meets the floor, all
+      //   sides"). ROOT CAUSE: the skirt ran straight down at the OUTBOARD footprint, but the floor plate is
+      //   inset 0.06 INBOARD — so a horizontal slit between the skirt bottom + the floor edge showed space at
+      //   grazing angles. FIX: start the skirt just ABOVE the sill (overlaps the glass bottom) and slope it
+      //   DOWN-and-INBOARD to the floor-plate edge (same 0.06 inset) + BELOW the deck → the base wall now
+      //   meets the trimmed floor with NO slit at the sill line OR the deck. Double-wound (solid both faces).
+      const aTop = new THREE.Vector3(a.x, a.y + 0.05, a.z), bTop = new THREE.Vector3(b.x, b.y + 0.05, b.z);
+      const af = floorEdgePt(ring[i]), bf = floorEdgePt(ring[i + 1]);
+      skirtV.push(aTop.x, aTop.y, aTop.z, af.x, af.y, af.z, bTop.x, bTop.y, bTop.z);
+      skirtV.push(bTop.x, bTop.y, bTop.z, af.x, af.y, af.z, bf.x, bf.y, bf.z);
       // (2) SILL LIP — a short inboard ledge at the sill height (the finished surface the glass sits on).
       const aI = lipInb(a, 0.12), bI = lipInb(b, 0.12); aI.y -= 0.05; bI.y -= 0.05;
       lipV.push(a.x, a.y, a.z, aI.x, aI.y, aI.z, b.x, b.y, b.z);
@@ -2221,7 +2234,7 @@ function buildConsoleBank(group: THREE.Group): void {
   //     crosses a pane (verified EXTERIOR + graze). A node post joins each front↔side corner. Matched
   //     instrument detail on all three. Colliders: one AABB per panel (rule 9).
   const deckH = 0.55, fascH = 1.06, Wd = 0.48;    // deck height, fascia crown, panel depth (window→kneewell)
-  const INSET = 0.42;                             // inboard offset of each panel's window edge from the sill (moved closer to the glass)
+  const INSET = 0.24;                             // inboard offset of each panel's window edge from the sill (moved closer to the glass — the 0.42 gap read weird; verify fascia TOP still clears the inward-curving dome)
   const cabinC = new THREE.Vector2(0, -0.1);
   const V2 = (x: number, y: number) => new THREE.Vector2(x, y);
   const insetSill = (m: number) => {              // a dome-sill point pulled INSET inboard toward the cabin
@@ -2355,6 +2368,11 @@ function buildConsoleBank(group: THREE.Group): void {
   };
   // an along-chord offset (local +X for a yaw=atan2(inN.x,inN.y) box maps to world (inN.y, −inN.x)).
   const alongOff = (x: number, z: number, pl: Panel, o: number) => ({ x: x + o * pl.inN.y, z: z - o * pl.inN.x });
+  // the personal-clutter shelf anchors — the FRONT deck's two far corners toward the pilot edge (io=Wd*0.62,
+  //   clear of the fascia instruments). Stored so buildPersonalTouch rests the photo/mug on the REAL deck and
+  //   they track the console's INSET instead of floating at a fixed CON_Z.
+  { const l = onDeck(FRONT, 0.16, Wd * 0.62), r = onDeck(FRONT, 0.84, Wd * 0.62);
+    _consoleShelfL = new THREE.Vector3(l.x, l.y, l.z); _consoleShelfR = new THREE.Vector3(r.x, r.y, r.z); }
 
   // ── fascia instruments mount in each panel's TILTED group `fg`, in flat LOCAL coords: cx = along the
   //    chord (0 = panel centre), sy = up the fascia (0 = deck). The fascia front face is at local z≈0.025,
@@ -2488,52 +2506,52 @@ function buildConsoleBank(group: THREE.Group): void {
  *  framed PHOTO propped on the dash, a chipped enamel MUG (cup + handle + rim + dark coffee
  *  surface), and a small TOKEN hanging on a cord off the window mullion. */
 function buildPersonalTouch(group: THREE.Group): void {
-  const conZ = CON_Z;
-  // R2 RE-SEAT for the redesigned console: the clutter now sits ON the control shelf (shelfY≈0.80),
-  //   tucked to the FAR corners (out of the MFD + the window sightline) so it reads as lived-in
-  //   detail, not a piece floating over the instruments. shelfTop = the physical surface it rests on.
-  const shelfTop = 0.575;                 // the wrap-console deck-polygon top (deckH 0.55 + 0.025) — items rest here
-  const cornerZ = conZ + 0.50;            // on the front deck toward the pilot edge, clear of the instrument suite
+  // R2 RE-SEAT for the redesigned console: the clutter rests ON the front deck's far corners (out of the MFD +
+  //   window sightline) so it reads as lived-in detail. The anchors come from buildConsoleBank so they TRACK
+  //   the console's INSET — a fixed CON_Z left the photo/mug floating when the console moved toward the glass.
+  const L = _consoleShelfL ?? new THREE.Vector3(-0.6, 0.575, CON_Z + 0.5);   // far-left deck corner (fallback if console not built)
+  const R = _consoleShelfR ?? new THREE.Vector3(0.6, 0.575, CON_Z + 0.5);    // far-right deck corner
+  const shelfTop = L.y;                   // the deck-polygon top the items rest on
   // ── a framed PHOTO propped in the FAR-LEFT shelf corner, canted toward the seat
   const photoMat = new THREE.MeshLambertMaterial({ color: 0xc9b890, flatShading: true });
   _buildMats.push(photoMat);
   const photoFrame = new THREE.MeshLambertMaterial({ color: 0x3e362c, flatShading: true });
   _buildMats.push(photoFrame);
   const stand = _box(0.06, 0.05, 0.10, photoFrame);
-  stand.position.set(-0.6, shelfTop + 0.02, cornerZ + 0.02);
+  stand.position.set(L.x, shelfTop + 0.02, L.z + 0.02);
   group.add(stand);
   const frame = _box(0.20, 0.25, 0.02, photoFrame);
-  frame.position.set(-0.6, shelfTop + 0.15, cornerZ);
+  frame.position.set(L.x, shelfTop + 0.15, L.z);
   frame.rotation.set(-0.4, 0.2, 0.02);
   group.add(frame);
   const photo = _box(0.16, 0.21, 0.012, photoMat);
-  photo.position.set(-0.6, shelfTop + 0.155, cornerZ + 0.012);
+  photo.position.set(L.x, shelfTop + 0.155, L.z + 0.012);
   photo.rotation.set(-0.4, 0.2, 0.02);
   group.add(photo);
   const figMat = new THREE.MeshLambertMaterial({ color: 0x9a8a70, flatShading: true });
   _buildMats.push(figMat);
   const fig = _cyl(0.035, 0.035, 0.006, 10, figMat);
-  fig.position.set(-0.6, shelfTop + 0.18, cornerZ + 0.02);
+  fig.position.set(L.x, shelfTop + 0.18, L.z + 0.02);
   fig.rotation.set(Math.PI / 2 - 0.4, 0, 0.02);
   group.add(fig);
   // ── a chipped enamel MUG in the FAR-RIGHT shelf corner (body + rim + dark coffee + handle)
   const mugMat = new THREE.MeshLambertMaterial({ color: 0xb06a44, flatShading: true });
   _buildMats.push(mugMat);
   const mugBody = _cyl(0.05, 0.044, 0.10, 16, mugMat);
-  mugBody.position.set(0.6, shelfTop + 0.05, cornerZ);
+  mugBody.position.set(R.x, shelfTop + 0.05, R.z);
   group.add(mugBody);
   const mugRim = _cyl(0.052, 0.052, 0.012, 16, _band);   // a bright chipped enamel rim
-  mugRim.position.set(0.6, shelfTop + 0.10, cornerZ);
+  mugRim.position.set(R.x, shelfTop + 0.10, R.z);
   group.add(mugRim);
   const coffeeMat = new THREE.MeshLambertMaterial({ color: 0x2a1a0e, flatShading: true });
   _buildMats.push(coffeeMat);
   const coffee = _cyl(0.044, 0.044, 0.004, 16, coffeeMat);
-  coffee.position.set(0.6, shelfTop + 0.097, cornerZ);
+  coffee.position.set(R.x, shelfTop + 0.097, R.z);
   group.add(coffee);
   const mugGeo = new THREE.TorusGeometry(0.032, 0.01, 6, 12);
   _disposables.push(mugGeo);
   const mugHandle = new THREE.Mesh(mugGeo, mugMat);
-  mugHandle.position.set(0.66, shelfTop + 0.05, cornerZ);
+  mugHandle.position.set(R.x + 0.06, shelfTop + 0.05, R.z);
   mugHandle.rotation.y = Math.PI / 2;
   group.add(mugHandle);
   // ── W1: the hanging TOKEN charm is DROPPED. With the enlarged panoramic canopy it dangled into
@@ -3623,11 +3641,8 @@ function down_(_up: THREE.Vector3): THREE.Vector3 { return new THREE.Vector3(0, 
 // hazard ACCENT chevron paint — a saturated warn-yellow used ONLY as thin edge accents (doorway
 //   leading edges), NOT the primary read. Worn matte so it takes the airlock light like painted steel.
 const _bayHazardAccent = _metal(0xc39a22, 0.28, 0.70, { flat: true, grime: true });
-// a brass/bronze coupling on the clamp arms + fuel line (a warm hardware pop vs the grey hull).
-// (the umbilical-hose material was removed with the collar-flank umbilicals in ROUND-4 — see buildPodBay.)
-const _bayCoupling = _metal(0x6e5a34, 0.55, 0.55, { flat: true });
-// airlock seal collar — a dark rubber gasket ring at the collar mouth (matte, non-metal).
-const _baySeal = _metal(0x16151a, 0.06, 0.90, { flat: true });
+// (the _bayCoupling brass coupling + _baySeal rubber gasket materials were removed with the rounded
+//  docking hardware — the mating shroud + collar bellows — in the 2026-07-07 "plain hallway" rework.)
 // the OPERATIONAL sliding-door leaf face — a heavy blast-door slab (the engine-room door idiom but
 //   OPAQUE steel + it actually OPENS). Worn gunmetal, a touch glossier than the hull so it reads as
 //   a fabricated door plate, not wall.
@@ -3965,17 +3980,18 @@ function buildPodBay(group: THREE.Group): void {
   //    slides them apart into wall pockets. (The engine-room sliding-door idiom — but OPAQUE steel +
   //    it actually OPENS.) The leaves are protected from the static merge (they move).
   const railZ = jambHW + 0.20;
+  const doorProudX = wallX;
   const headerRail = _box(0.16, 0.14, railZ * 2, _steel);   // header rail (leaves hang from it)
-  headerRail.position.set(wallX, top + 0.05, zc);
+  headerRail.position.set(doorProudX, top + 0.05, zc);
   bay.add(headerRail);
   const floorTrack = _box(0.16, 0.06, railZ * 2, _channel); // floor track
-  floorTrack.position.set(wallX, 0.03, zc);
+  floorTrack.position.set(doorProudX, 0.03, zc);
   bay.add(floorTrack);
   for (const [sz, ref] of [[-1, 'L'], [1, 'R']] as const) {
     const leaf = new THREE.Group();
     leaf.name = 'airlockDoorLeaf' + ref;   // findable by the rig framer
     // each leaf covers half the aperture when closed (meeting at centre); fore leaf −Z, aft leaf +Z.
-    leaf.position.set(wallX, 0, zc + sz * (aHW / 2));
+    leaf.position.set(doorProudX, 0, zc + sz * (aHW / 2));
     bay.add(leaf);
     if (ref === 'L') _airlockDoorL = leaf; else _airlockDoorR = leaf;
     // the door slab (opaque blast plate)
@@ -4024,69 +4040,37 @@ function buildPodBay(group: THREE.Group): void {
   //    porthole). The walk envelope is UNCHANGED (the bellows inner bore clears the 1.44m aperture);
   //    the collar structural floor/ceiling/side walls stay (the AIRLOCK_COLLIDERS still match them).
   const collarXC = (wallX + collarFar) / 2, collarLen = wallX - collarFar;
-  // the collar HOUSING — a recessed DARK tube (channel steel), read as the socket the bellows sits in
-  //   (not bright framing). Floor + ceiling + side walls, kept for structure + the collider match.
-  const cFloor = _box(collarLen + 0.1, COR_WALL_T, aHW * 2 + 0.2, _channel);
+  // the collar HOUSING — a recessed DARK tube (channel steel). Floor + ceiling + side walls.
+  // Z-FIGHT FIX (user 2026-07-07: "light grey archway overlapping the corridor — flickers when moving").
+  //   The probe pinned it: the housing ran collarLen+0.1 → its +X end reached x=−0.95, CROSSING the ship's
+  //   −X corridor wall (x −1.0..−1.2, the light-grey #686e73 the user saw) → coplanar overlap = the seam.
+  //   FIX: (1) width = collarLen so the housing ends flush at the airlock plane (wallX=−1.0), no 5cm poke
+  //   into the corridor; (2) polygonOffset so the housing WINS the depth tie against the corridor wall in
+  //   the residual −1.0..−1.2 overlap — no flicker (both a coplanar-safe joint AND a depth-bias belt).
+  const collarMat = (_channel as THREE.MeshStandardMaterial).clone();
+  collarMat.polygonOffset = true; collarMat.polygonOffsetFactor = -1; collarMat.polygonOffsetUnits = -2;
+  _buildMats.push(collarMat);
+  const cFloor = _box(collarLen, COR_WALL_T, aHW * 2 + 0.2, collarMat);
   cFloor.position.set(collarXC, -COR_WALL_T / 2, zc);
   bay.add(cFloor);
-  const cCeil = _box(collarLen + 0.1, COR_WALL_T, aHW * 2 + 0.2, _channel);
+  const cCeil = _box(collarLen, COR_WALL_T, aHW * 2 + 0.2, collarMat);
   cCeil.position.set(collarXC, top + COR_WALL_T / 2 + 0.1, zc);
   bay.add(cCeil);
   for (const sz of [-1, 1]) {
-    const wall = _box(collarLen + 0.1, top + 0.2, COR_WALL_T, _channel);
+    const wall = _box(collarLen, top + 0.2, COR_WALL_T, collarMat);
     wall.position.set(collarXC, (top + 0.2) / 2, zc + sz * (aHW + COR_WALL_T / 2));
     bay.add(wall);
   }
-  // ── THE ROUND RIBBED BELLOWS — concentric dark-rubber convolution rings threaded along the −X axis
-  //    from just inboard of the blast door to the pod-door seal. Each ring is an open cylinder band
-  //    (axis along X) whose radius ALTERNATES (a fat convolution, then a tucked valley) so the eye
-  //    reads a flexible accordion docking sleeve, NOT stacked rectangular frames. Radius clears the
-  //    aperture (bore ≥ aHW so the 1.44m walk-through is unobstructed). The bellows CY centres it on
-  //    the aperture (aperture spans y 0..AIRLOCK_TOP → centre AIRLOCK_TOP/2).
-  const belCY = top * 0.52;                           // vertical centre of the bore (a hair high → clears
-                                                      //   the deck + frames the pod-door porthole)
-  const belBoreR = aHW + 0.12;                        // inner bore radius — comfortably clears the walk-through
-  const belRings = 7;
-  for (let bi = 0; bi < belRings; bi++) {
-    const bt = bi / (belRings - 1);                   // 0 at the ship end → 1 at the pod end
-    const bx = (wallX - 0.06) - bt * (collarLen - 0.10);   // step from just inboard of the door → the pod seal
-    const convo = bi % 2 === 0;                        // alternate: a proud convolution vs a tucked valley
-    const ringR = belBoreR + (convo ? 0.14 : 0.04);   // the accordion profile (fat ring / thin valley)
-    const ringThick = convo ? 0.11 : 0.06;
-    const ring = _ring(ringR, ringThick, 24, _baySeal);   // OPEN round band (dark rubber) — see through it
-    ring.rotation.z = Math.PI / 2;                    // cylinder axis Y → align to the collar's X axis
-    ring.position.set(bx, belCY, zc);
-    bay.add(ring);
-  }
-  // a pair of STEEL retaining bands clamping the bellows at each end (a fabricated tell — the sleeve is
-  //   bolted to the ship ring + the pod ring, not floating). Open round bands in bare steel.
-  for (const [bx, r] of [[wallX - 0.05, belBoreR + 0.18], [collarFar + 0.10, belBoreR + 0.18]] as const) {
-    const band = _ring(r, 0.07, 24, _steel);
-    band.rotation.z = Math.PI / 2;
-    band.position.set(bx, belCY, zc);
-    bay.add(band);
-    // a few bolt studs marching around the retaining band (worked hardware) — only the ones that
-    //   land in the visible housing (not below the deck / above the ceiling).
-    for (let a = 0; a < 10; a++) {
-      const ang = (a / 10) * Math.PI * 2;
-      const sy = belCY + Math.cos(ang) * r, sz2 = zc + Math.sin(ang) * r;
-      if (sy < 0.16 || sy > top - 0.04) continue;
-      const dir = new THREE.Vector3(0, Math.cos(ang), Math.sin(ang));
-      bay.add(_stud(bx + 0.02, sy, sz2, dir, _rivet, 0.02));
-    }
-  }
-  // the round rubber SEAL GASKET where the bellows mates the pod hull (a soft dark compression ring
-  //   pressed against the pod door face) — a fatter dark band at the pod end. Z4 FIX: the gasket is a
-  //   band whose AXIS is along X (rot.z=π/2), so its pod-FACING face sits at (centerX − halfDepth). The
-  //   old center collarFar+0.04 with depth 0.14 put that face at worldX −1.95 — 0.03 m PAST the pod hull
-  //   face (collarFar −1.92) → a 2.6 cm graze of the barrel that the rotating pod swept through (the
-  //   Z4 sweep's last violator). Thinner (0.10) + pulled outboard (collarFar+0.10) so the pod-facing
-  //   face lands at worldX −1.87, a ~5 cm clean mate GAP off the −1.92 hull — the barrel clears it at
-  //   every yaw (a docked pod isn't fused to its collar; a small compression standoff reads correct).
-  const seal = _ring(belBoreR + 0.06, 0.10, 26, _baySeal);
-  seal.rotation.z = Math.PI / 2;
-  seal.position.set(collarFar + 0.10, belCY, zc);
-  bay.add(seal);
+  // ── PLAIN HALLWAY (user 2026-07-07: "remove the rounded airlock, just have the regular hallway").
+  //    The rounded docking SLEEVE (tube skin + rib rings + retaining flanges + gasket) is REMOVED — the
+  //    boxy collar housing (cFloor + cCeil + the two side walls, above) IS the straight rectangular
+  //    passage from the blast door to the pod door. Nothing rounded crosses the walk-through OR the
+  //    pod-door porthole view.
+  //  PORTAL-FRAME REMOVED (user 2026-07-07: "light grey archway overlapping the corridor — flickers when
+  //    you move"). The added jamb frame sat at z=zc±(aHW+0.08), which COINCIDED with the collar SIDE WALLS
+  //    at z=zc±(aHW+COR_WALL_T/2) (COR_WALL_T=0.16 → same plane) and its depth spanned INTO the docked pod's
+  //    hull at collarFar → coplanar _channel faces = the flickering moiré. The collar housing side walls +
+  //    the pod's own exterior hull already frame the pod door cleanly, so the extra frame was redundant.
 
   // ═══ 4. THE DOCKED CANONICAL POD — the ONE pod (buildCanonicalPodExterior), its merged glass FRONT
   //    DOOR CLOSED + facing +X (the collar), mostly OUTSIDE the hull. Its +X door-arc mates the collar
@@ -4108,68 +4092,13 @@ function buildPodBay(group: THREE.Group): void {
   //    the ship visibly reaches out and grips the pod; (b) a dark rubber COMPRESSION SEAL pressed onto
   //    the pod hull at the mate line; (c) CLAMP ARMS that terminate on REAL ship-side anchor pads
   //    (not mid-air). Void-side, non-walkable → NO colliders (rule 7 depths on the boxy bits).
-  //  (a) the hull-side collar SKIRT — cone bands stepping from the wall-plane aperture (x=−1.0, r≈aHW)
-  //      out to the pod arc (x=−1.92, r≈aHW), reading as a fabricated docking ring wrapping the pod.
-  const mateCY = top * 0.52;
-  const skirtBands = 4;
-  for (let mi = 0; mi < skirtBands; mi++) {
-    const mt = mi / (skirtBands - 1);
-    const mx = wallX - 0.02 - mt * (collarLen - 0.06);      // wall plane → pod-door face
-    const rr = (aHW + 0.26) + mt * 0.16;                    // flares slightly as it reaches toward the pod
-    const band = _ring(rr, 0.07, 22, _steel);               // open band (a fabricated docking-ring flange)
-    band.rotation.z = Math.PI / 2;
-    band.position.set(mx, mateCY, zc);
-    bay.add(band);
-  }
-  //  (b) a dark COMPRESSION SEAL + a steel CLAMP BAND wrapping the pod's barrel at the door band — open
-  //      rings coaxial with the vertical pod cylinder, so the ship visibly grips the pod hull curvature
-  //      (a docking flange banding the barrel, not a floating disc). Reads "clamped/docked" from outside.
-  const podArcX = podLocalX + BAY_POD_R;                    // −1.92, the pod's +X-most (door) face
-  // COCKPIT-ROUND-2 item 9: the mating seal + clamp band previously wrapped the FULL 360° barrel at the
-  //   door height → they crossed the +X DOOR APERTURE, barring the doorway (the user's screenshot). GAP
-  //   them over the door arc (centred on +X = CylinderGeometry theta π/2), the same complementary-arc
-  //   scheme the pod's own bands use, so the doorway is CLEAR floor-to-lintel. Gap half-angle 0.62 rad
-  //   (door subtends ~0.72 rad at r=1.44 + margin) → the ≈1.02m door + its frame are fully unbanded.
-  const DOOR_THETA = Math.PI / 2;      // +X arc (the pod door faces the collar)
-  const DOOR_GAP_HALF = 0.62;          // clears the CPOD_DOOR_W 1.02 aperture + frame at BAY_POD_R
-  const mateSeal = _arcBand(BAY_POD_R + 0.04, 0.16, 34, _baySeal, DOOR_THETA, DOOR_GAP_HALF);   // dark rubber gasket, GAPPED at the door
-  mateSeal.position.set(podLocalX, CPOD_BAY_DOOR_CY, podZ);       // axis Y (default) = the pod's own axis
-  bay.add(mateSeal);
-  const mateBand = _arcBand(BAY_POD_R + 0.10, 0.10, 34, _steel, DOOR_THETA, DOOR_GAP_HALF);     // steel clamp band, GAPPED at the door
-  mateBand.position.set(podLocalX, CPOD_BAY_DOOR_CY + 0.44, podZ);
-  bay.add(mateBand);
-  // bolt studs marching around the clamp band — but ONLY where the band EXISTS (item 9: skip the door
-  //   gap, which we just cut over the +X arc; else the studs would float in the empty doorway). The door
-  //   arc is centred on +X (azimuth π/2, dx=sin=1); omit studs within the same gap half-angle.
-  for (let a = 0; a < 24; a++) {
-    const ang = (a / 24) * Math.PI * 2;
-    const dx = Math.sin(ang), dz = Math.cos(ang);
-    // angular distance from the +X door centre (azimuth π/2); skip the gap so no stud lands in the doorway.
-    let d = Math.abs(ang - Math.PI / 2); if (d > Math.PI) d = Math.PI * 2 - d;
-    if (d < DOOR_GAP_HALF + 0.06) continue;                  // in the door gap → no band here, no stud
-    const bx2 = podLocalX + dx * (BAY_POD_R + 0.10), bz2 = podZ + dz * (BAY_POD_R + 0.10);
-    bay.add(_stud(bx2, CPOD_BAY_DOOR_CY + 0.44, bz2, new THREE.Vector3(dx, 0, dz), _rivet, 0.02));
-  }
-  //  (c) two clamp arms reaching from a REAL ship-side ANCHOR PAD (bolted to the wall-plane aperture
-  //      rim) out to a gripper pad cupping the pod's door-collar shoulder — both ends on real hardware.
-  for (const sz of [-1, 1]) {
-    const armZ = zc + sz * (aHW + 0.10);
-    // ship-side anchor pad — bolted to the −X wall aperture jamb (a real termination, not mid-air)
-    const anchor = _box(0.16, 0.34, 0.18, _steel);
-    anchor.position.set(wallX - 0.09, 1.10, armZ);
-    bay.add(anchor);
-    for (const ay of [0.94, 1.26]) bay.add(_stud(wallX - 0.01, ay, armZ, new THREE.Vector3(1, 0, 0), _rivet, 0.02));
-    // the arm — a hydraulic strut spanning the anchor → the pod gripper
-    const armLen = (wallX - 0.09) - (podArcX - 0.06);
-    const arm = _cyl(0.06, 0.06, armLen, 8, _bayCoupling);
-    arm.rotation.z = Math.PI / 2;
-    arm.position.set((wallX - 0.09 + podArcX - 0.06) / 2, 1.10, armZ);
-    bay.add(arm);
-    // the gripper PAD cupping the pod shoulder — cupped onto the pod's +X arc (real termination)
-    const pad = _box(0.14, 0.32, 0.16, _bayCoupling);
-    pad.position.set(podArcX - 0.05, 1.10, armZ);
-    bay.add(pad);
-  }
+  //  EXTERIOR DOCKING HARDWARE REMOVED (user 2026-07-07: "remove the rounded airlock, just a regular
+  //  hallway" + "bands come across the viewport before eject, gone after"). The skirt rings, the mate
+  //  seal + clamp band + studs, and the clamp arms were void-side ROUND bands wrapping the pod's +X door
+  //  arc — they crossed the pod-door PORTHOLE view while docked and were left behind on eject (the
+  //  before/after inconsistency the user saw). The pod's +X door face already sits AT the collar opening
+  //  (BAY_POD_X + BAY_POD_R = collarFar = −1.92), so it reads as a pod docked at the end of the plain
+  //  rectangular hallway — no rounded apparatus, and the porthole looks down a clean passage.
   //  ROUND-4 REMOVAL (user, 2026-07-06 pod-bay review): the two capped umbilical MATE STUBS that
   //  terminated at the outboard (pod-door) end of the collar −Z flank read, from the airlock "OPEN THE
   //  POD [E]" eye, as two horizontal dark pipe stubs poking out of the wall TOWARD the pod door — the

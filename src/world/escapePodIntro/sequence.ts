@@ -55,9 +55,9 @@ import { setSkyIntroMode, setPlanetApproach } from '../sky.ts';   // REBUILD v2 
 import {
   ensureAudioStarted, playEjectThunk, playExplosionBoom, playKlaxon, playHullGroan,
   playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
-  startCockpitHum, stopCockpitHum, startDescentRush, stopDescentRush, stopAllIntroLoops,
+  stopCockpitHum, startDescentRush, stopDescentRush, stopAllIntroLoops,   // startCockpitHum + startDesertWind imports dropped — calls DISABLED for now (2026-07-07)
   startMusicEscape, stopMusicEscape, startMusicDescent, stopMusicDescent, startMusicDesert,
-  startEngineFire, stopEngineFire, startDesertWind,
+  startEngineFire, stopEngineFire,
   playBoltShear, playHatchSeal, playShipDeathRoar, playAweSwell,
 } from '../../audio/audio.ts';   // T5.1 SFX + ambient loops · T5.2 music cues · T5.3 gap-fill (fire/wind beds + bolt/seal/death-roar/awe one-shots)
 import { setSoundscapeSuppressed } from '../../audio/soundscape.ts';   // C2 — silence the normal desert wind while the intro owns the scene (its own ambience plays)
@@ -521,7 +521,7 @@ function tickCockpit(ctx: GameContext, dt: number): void {
   if (!intro.scratch.shipBuilt) {
     buildShipScene(ctx);
     seatPlayerAt(ctx, getShipSpawn(ctx));
-    startCockpitHum();                          // T5.1b — the calm in-orbit ambient bed (until eject)
+    // startCockpitHum();  // DISABLED for now (user 2026-07-07: ship hum too loud/distracting). Uncomment to restore.
     setSkyIntroMode(1);                         // R1a — the REAL sky in space mode (wrapping stars + planet through the window)
     setPlanetApproach(0);                       // C3 — the cockpit shows the ORBIT-FRAMED distant disc (the descent's planet-approach grow is DESCENT-only). Self-heals a dev jumpToBeat BACK to cockpit after a mid-descent grow (else the scaled+dropped planet would balloon in the orbit view — _planetApproach only auto-resets when space mode is FULLY off, but the cockpit re-engages space mode at 1). Real forward flow: this is already 0, a harmless no-op.
     setIntroAtmosphereHidden(ctx, true);        // R1a — no desert dust floating in orbit
@@ -1260,7 +1260,7 @@ function tickWake(ctx: GameContext, dt: number): void {
     //   camera rotation; the front door is already dead-ahead (−Z) if they were watching the vista.
     //   (Was seatPlayerAt + faceControl(FRONT_DOOR_YAW,−0.05) — a re-anchor the user asked us to drop.)
     seatBodyKeepLook(ctx, getCrashedSeatWorld(ctx));   // body at the seated spawn INSIDE the crashed (tilted) cabin; look preserved (W6 item 4 — tilt-aware seat keeps the eye in the bore)
-    startDesertWind();           // T5.3 — the dawn-desert WIND fades in as you come to (the quiet aftermath; persists into step-out, stopped at handoff)
+    // startDesertWind();  // DISABLED for now (user 2026-07-07: desert wind removed). Uncomment to restore the intro wind cue.
     intro.mode = 'seated';       // dazed: free-look, can't move yet
     setIntroBlack(1);
     intro.scratch.t = 0;

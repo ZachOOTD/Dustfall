@@ -90,8 +90,8 @@ export const Tuning = {
   WIND_CUTOFF_NIGHT: 620,            // Hz — body low-pass at deep night (dull, lonely)
   WIND_CUTOFF_DAY: 2600,             // Hz — body low-pass at noon (bright, airy)
   WIND_CUTOFF_STORM: 5200,           // Hz — a storm opens the wind to full-spectrum roar
-  WIND_BODY_MASTER: 0.5,             // peak wind-bed gain (× windLvl × gust)
-  WIND_WHISTLE_MASTER: 0.16,         // the lonely band-pass moan (subtle; fuller at night)
+  WIND_BODY_MASTER: 0.0,             // MUTED for now (user 2026-07-07: desert wind too loud/distracting). Was 0.5 — restore to bring the wind bed back.
+  WIND_WHISTLE_MASTER: 0.0,          // MUTED for now (was 0.16) — the lonely band-pass moan; part of the desert-wind mute
   DEHYDRATION_DAMAGE: 1 / 120,       // ~2 min health drain once thirst hits 0 (was 1/30 = 30s) — a recoverable spiral, not a cliff
   HEATSTROKE_DAMAGE: 1 / 150,        // ~2.5 min once temp ≥ 1 (was 1/25 = 25s)
   // M6 ② (C38) — health REGEN when fully provisioned: the forgiving keystone. A player

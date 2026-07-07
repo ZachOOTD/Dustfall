@@ -1,29 +1,29 @@
-# Next session — PAUSE POINT (2026-07-06, live-feedback rounds); resume here
+# Next session — resume the live-feedback loop (after round ABQ, 2026-07-07)
 
-The user ran a long live-feedback session on the released escape-pod intro, then paused
-(machine slowdown). Everything is committed + pushed to master; the tree is clean at
-`86fa769`. Live at https://zachootd.github.io/Dustfall/.
+The user is live-testing the escape-pod intro in `npm run dev` and filing per-issue fixes.
+Round ABQ (2026-07-07) landed a big cockpit/pod/audio/airlock fix batch — see
+[changelog.md](changelog.md) 2026-07-07 + D272-D276. Just keep taking their feedback and
+fixing, probe-/render-verifying each via the ship-shot + pod harnesses.
 
-## What shipped this session (all pushed; see git log 2ad74fe..86fa769)
-- **Crew quarters — full redesign** (`e618d4a`, 6 rounds + 3 adversarial gates): the bunk
-  is a TRUE recess bored INTO the wall (flush wall, mattress inside the pocket, nothing
-  proud/underneath, flush under-bunk drawer); made bedding (distinct olive blanket + turn-down,
-  rounded pillow, softened mattress); detailed lockers/cabinet + status LEDs; the dead bright
-  wall worn down. **Airlock**: the 2 umbilical stubs that read as pipes into the pod removed.
-- **Parachute** (`53f4b47`): sits ~6cm off the hull (no phase-through) + ropes removed on deflate.
-- **Porthole** (`2fd1a65`): domed glass → a single FLAT circular pane, depthWrite:false so the
-  re-entry FIRE reads through it again (the dome was depth-occluding the additive FX). Plasma
-  scroll/flicker slowed further.
-- **Cockpit** (`ba5287a`): the glass was BACKFACE-CULLED (the real reason it read "invisible"
-  for 5 rounds) — fixed the inverted winding + retuned the haze; added the waist side-mullions;
-  trimmed the floor behind the glass.
-- **Audio** (`13264ff`): no wind/music until the ship (suppress before handoffToGame).
-- **Loading screen** (`ad69ea4`): REVERTED the live-menu experiment back to the freeze-frame —
-  the live 3D menu can't be smooth during the main-thread-blocking shader preload (stuttered +
-  the title buttons overlapped the bar). If we want life there later: a COMPOSITOR-thread CSS
-  animation on the captured frame (not a main-thread 3D render).
+## What shipped in round ABQ (2026-07-07; `f17fce6` + the ABQ commit)
+- **Cockpit console** rebuilt as 3 angular panels off the dome sill (mitred deck/folded fascia,
+  proud instruments) + moved closer to the glass (`INSET 0.24`; clutter re-anchored to track it).
+- **Pod interior**: the "brown floor" was the charred `baseCap` poking above the deck (dropped
+  below, D273); white splotches = shader flecks (zeroed, interior + exterior); floor z-fight
+  flicker (deck/sub-floor split 1cm, D274) + streak layers stripped; footwell disc removed;
+  eject lever → a simple pull-down handle.
+- **Rounded airlock → plain hallway** (bellows + mating shroud removed; also cleared the
+  pre-eject porthole bands). Pod door confirmed ONE unified model.
+- **Audio**: desert wind + ship hum muted reversibly. **Cockpit glass**: sill gap closed + slight
+  haze added. **Airlock corner z-fight**: `--probe`-confirmed pair → polygonOffset (D275/D276).
 
-## DEFERRED — pick these up next (in priority order)
+## FIRST THING next session (owed live-motion checks)
+- **Confirm the airlock-corner z-fight is gone IN MOTION** (polygonOffset can't be verified by the
+  probe/still render — see backlog + [[ship-zfight-probe-first]]). If it still flickers, fall back
+  to a geometry fix (pull the collar wall back). Also eyeball: the cockpit glass haze amount, the
+  crashed-pod exterior (did zeroing flecks make it too clean?).
+
+## Older deferred items (lower priority)
 1. **The descent METAL-CRAWL** (the user's live report): a dynamic-texture "swim" on the DOOR /
    LEVER / CONSOLE metal, visible only while the pod MOVES during descent. NOT the plasma (that's
    separate + fixed). NOT the classic localSpace world-space crawl — every pod createRustedHullMaterial
