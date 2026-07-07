@@ -674,11 +674,11 @@ const QUARTERS_COLLIDERS: ReadonlyArray<BoxSpec> = [
   [1.30, 1.86, 0.50, (QTR_FAR_X + 1.23), 0.94, (QTR_Z1 - 0.1 - 0.22)],
   //   FOLD-DOWN DESK — the fore-wall work surface, moved DOOR-SIDE (deskX=−1.95, z≈8.56), floor→desktop.
   [0.94, 0.86, 0.56, (QTR_WALL_X - 0.95), 0.43, (QTR_Z0 + 0.1 + 0.26)],
-  //   STOWAGE CRATE — the fore-corner floor crate (a 0.44 cube on the deck).
-  [0.48, 0.46, 0.48, (QTR_FAR_X + 0.34), 0.23, (QTR_Z0 + 0.34)],
-  //   BASE CABINET — Z2 r5 (SEV2 #3) — the low aft-wall base cabinet (x≈−1.55, z front≈11.52, 0.66 tall)
-  //     that fills the dead base band; it protrudes into the walk space so it blocks (rule 9).
-  [0.90, 0.66, 0.38, (QTR_FAR_X + 2.55), 0.33, (QTR_Z1 - 0.1 - 0.19)],
+  //   (STOWAGE CRATE collider REMOVED 2026-07-07 — the crate mesh was deleted per user playtest note; rule 9.)
+  //   BASE CABINET — Z2 r5 (SEV2 #3) — the low aft-wall base cabinet (x≈−1.70, z front≈11.52, 0.66 tall)
+  //     that fills the dead base band; it protrudes into the walk space so it blocks (rule 9). Shifted
+  //     15cm door-ward→locker-ward 2026-07-07 (off the corridor-side wall return) — matches the mesh.
+  [0.90, 0.66, 0.38, (QTR_FAR_X + 2.40), 0.33, (QTR_Z1 - 0.1 - 0.19)],
 ];
 
 // ── THE AIRLOCK COLLAR walkable envelope (the docking passage). The player walks through the open
@@ -1162,21 +1162,32 @@ function buildCockpitShell(group: THREE.Group): void {
   // ── DECK PANEL SEAMS — break the flat deck into riveted plates (gate: floor was a flat plane).
   //    Cross seams + corner fasteners → reads as a real bolted deck, not cardboard.
   for (const sz0 of [-1.6, -0.6, 0.4, 1.4]) {
-    const seam = _box(CK_W - 0.5, 0.012, 0.03, _channel);
+    // clamp the cross seam to the trimmed floor edge so forward seams stop behind the glass line (not into space)
+    const half = Math.min((CK_W - 0.5) / 2, floorEdgeXAt(sz0) - 0.12);
+    if (half <= 0.1) continue;
+    const seam = _box(half * 2, 0.012, 0.03, _channel);
     seam.position.set(0, 0.043, sz0);
     group.add(seam);
-    for (const fx of [-2.0, -1.0, 1.0, 2.0]) group.add(_stud(fx, 0.05, sz0, up, _rivet, 0.013));
+    for (const fx of [-2.0, -1.0, 1.0, 2.0]) if (Math.abs(fx) <= half - 0.05) group.add(_stud(fx, 0.05, sz0, up, _rivet, 0.013));
   }
   for (const sx0 of [-1.5, 1.5]) {
-    const seam = _box(0.03, 0.012, CK_D - 0.5, _channel);
-    seam.position.set(sx0, 0.043, 0.0);
+    // longitudinal seam runs at x=±1.5; trim its forward end where the tapered floor narrows past that x
+    const zBack = CK_Z - 0.25;                        // 2.25 (aft end, unchanged)
+    let zFront = -(CK_Z - 0.25);
+    for (let z = zBack; z >= -(CK_Z - 0.25); z -= 0.05) {
+      if (floorEdgeXAt(z) < Math.abs(sx0) + 0.1) { zFront = z + 0.05; break; }
+    }
+    const len = zBack - zFront;
+    if (len <= 0.1) continue;
+    const seam = _box(0.03, 0.012, len, _channel);
+    seam.position.set(sx0, 0.043, (zBack + zFront) / 2);
     group.add(seam);
   }
-  // deck-plate rivet ring near the floor edge
+  // deck-plate rivet ring near the floor edge (skip studs that fall outside the trimmed footprint)
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;
     const rx = Math.cos(a) * (CK_X - 0.4), rz = Math.sin(a) * (CK_Z - 0.4);
-    group.add(_stud(rx, 0.05, rz, up, _rivet, 0.016));
+    if (Math.abs(rx) <= floorEdgeXAt(rz) - 0.06) group.add(_stud(rx, 0.05, rz, up, _rivet, 0.016));
   }
 
   // ── THE LOFTED VAULTED HULL SKIN (this is the box-breaker). Loft the chamfered, tapering
@@ -1502,6 +1513,35 @@ function _domeSillRing(): THREE.Vector3[] {
   for (let mi = 0; mi < _DOME_M.length; mi++) ring.push(_domeNode(_DOME_M[mi], 0));  // −1..+1 front arc
   ring.push(_collarSillPt(1));                                   // right collar terminus
   return ring;
+}
+
+// ── The TRIMMED floor's +x edge x at station z — matches buildCockpitShell's floor `bnd` exactly, so
+//    deck DETAILS (panel seams, fasteners, the rivet ring) can be clamped to the real footprint instead
+//    of the old full-rectangle width. Aft of the collar the deck is full width (±CK_X); forward it
+//    follows the dome sill ring inset toward the cabin centre (same RING_INSET/spineC as the floor plate).
+//    Fixes the round-4 leftovers: seams/studs that still poked past the trimmed glass line into space.
+const FLOOR_RING_INSET = 0.06;                     // must match buildCockpitShell's RING_INSET
+function floorEdgeXAt(z: number): number {
+  if (z >= COLLAR_Z) return CK_X;                  // full-width deck aft of the collar
+  const spineC = new THREE.Vector2(0, 0.6);        // cabin walk centre (matches the floor inset reference)
+  const inset = (p: THREE.Vector2): THREE.Vector2 => {
+    const d = p.clone().sub(spineC); const L = d.length() || 1;
+    return p.clone().sub(d.multiplyScalar(FLOOR_RING_INSET / L));
+  };
+  // boundary forward of the collar: right collar node → inset sill ring → left collar node.
+  const pts: THREE.Vector2[] = [new THREE.Vector2(CK_X, COLLAR_Z)];
+  for (const v of _domeSillRing()) pts.push(inset(new THREE.Vector2(v.x, v.z)));
+  pts.push(new THREE.Vector2(-CK_X, COLLAR_Z));
+  let best = 0;
+  for (let i = 0; i < pts.length - 1; i++) {       // +x crossing of the horizontal line Z=z
+    const a = pts[i], b = pts[i + 1];
+    if (a.y !== b.y && (a.y - z) * (b.y - z) <= 0) {
+      const t = (z - a.y) / (b.y - a.y);
+      const x = a.x + (b.x - a.x) * t;
+      if (x > best) best = x;
+    }
+  }
+  return best || CK_X;
 }
 
 // ── FABRICATED SKELETON MEMBERS (user feedback 2026-07-04 on the Mk-II canopy: "the mullions look way
@@ -2172,292 +2212,328 @@ function buildPilotSeat(group: THREE.Group): void {
  *  Everything is built off two reference planes (the fascia + the shelf) so faces never overlap/coplane. */
 function buildConsoleBank(group: THREE.Group): void {
   _alertStatusLeds = [];
-  const conZ = CON_Z, deckY = CON_DECK_Y;
-  const inward = new THREE.Vector3(0, 0, 1);
-  const CANT = -0.62;   // the single instrument-fascia tilt (up toward the seated pilot)
 
-  // ── (1) THE PEDESTAL BODY — one clean wrapped console mass. A front kneewell wall (seat-facing),
-  //    a top deck, and two gently-angled end returns that WRAP toward the pilot. Depth-staggered so
-  //    the faces never coplane. This is the console's whole lower body; the fascia + shelf sit on it.
-  const bodyH = deckY;                 // 0.78 — knee-height dash
-  const bodyD = 0.72;
-  const bodyFrontZ = conZ + bodyD / 2; // the seat-facing front plane
-  // the core body block
-  const body = _box(3.2, bodyH, bodyD, _channel);
-  body.position.set(0, bodyH / 2, conZ);
-  group.add(body);
-  // the seat-facing FRONT FASCIA WALL (one clean painted plate, proud of the body front by 1cm so
-  //   it reads as the finished skin — not coplanar with the body face)
-  const frontWall = _box(3.14, bodyH - 0.04, 0.05, _band);
-  frontWall.position.set(0, bodyH / 2, bodyFrontZ + 0.005);
-  group.add(frontWall);
-  // a slim kickplate at the floor + a single clean waist reveal line (panel break, real depth)
-  const kick = _box(3.14, 0.14, 0.07, _steel);
-  kick.position.set(0, 0.07, bodyFrontZ + 0.01);
-  group.add(kick);
-  const reveal = _box(3.0, 0.03, 0.02, _channel);
-  reveal.position.set(0, bodyH * 0.62, bodyFrontZ + 0.03);
-  group.add(reveal);
-  // two flush access panels + a stencil label on the front wall (lived-in, NOT proud clutter)
-  for (const px of [-1.05, 1.05]) {
-    for (const cyp of [-0.13, 0.13]) group.add(_stud(px - 0.34, bodyH * 0.34 + cyp, bodyFrontZ + 0.03, inward, _rivet, 0.012));
-    for (const cyp of [-0.13, 0.13]) group.add(_stud(px + 0.34, bodyH * 0.34 + cyp, bodyFrontZ + 0.03, inward, _rivet, 0.012));
-  }
-  const lbl = _box(0.46, 0.05, 0.006, _decal);
-  lbl.position.set(-0.9, bodyH * 0.30, bodyFrontZ + 0.035);
-  group.add(lbl);
-  // (Mk-III review round 1 — the WRAP end-returns REMOVED per the user: the angled end blocks with
-  //   their proud lighter face plates read as odd handle-boxes on the console's far ends. The
-  //   console now ends cleanly at its body; the collider narrows to match (rule 9).)
-  // A5 COLLIDER — the solid console mass (narrowed to the body now the end-returns are gone).
-  _addFurnitureCollider(3.3, deckY + 0.30, 0.95, 0, (deckY + 0.30) / 2, conZ + 0.05);
+  // ═══ THE 3-SECTION ANGULAR CONSOLE — REWORK 2026-07-07 (user: "keep it ANGULAR, not curved — the
+  //     original STRAIGHT front console + two STRAIGHT side consoles running PARALLEL to the side glass,
+  //     joined as one system; and it must never poke through the glass"). Three FLAT panels chorded off
+  //     the dome sill: a straight FRONT panel facing the pilot, + a LEFT and RIGHT panel each parallel to
+  //     its side glass. Every panel's window edge is inset a fixed distance INBOARD of the sill so nothing
+  //     crosses a pane (verified EXTERIOR + graze). A node post joins each front↔side corner. Matched
+  //     instrument detail on all three. Colliders: one AABB per panel (rule 9).
+  const deckH = 0.55, fascH = 1.06, Wd = 0.48;    // deck height, fascia crown, panel depth (window→kneewell)
+  const INSET = 0.42;                             // inboard offset of each panel's window edge from the sill (moved closer to the glass)
+  const cabinC = new THREE.Vector2(0, -0.1);
+  const V2 = (x: number, y: number) => new THREE.Vector2(x, y);
+  const insetSill = (m: number) => {              // a dome-sill point pulled INSET inboard toward the cabin
+    const nd = _domeNode(m, 0); const p = V2(nd.x, nd.z);
+    return p.add(cabinC.clone().sub(p).normalize().multiplyScalar(INSET));
+  };
+  // corner (front↔side) + aft anchors on the RIGHT (left mirrors). Front chord C_L→C_R faces the pilot;
+  //   the side chords C→A run parallel to the side glass (m 0.45 = the front-to-side transition, 0.96 = beside the pilot).
+  const C_R = insetSill(0.45), A_R = insetSill(0.96);
+  const C_L = V2(-C_R.x, C_R.y), A_L = V2(-A_R.x, A_R.y);
 
-  // ── (2) THE CONTROL SHELF — one flat top surface on the body (the physical shelf that all the
-  //    controls sit ON, so nothing floats). Slightly proud of the body top; a rear lip rises to the
-  //    fascia. This single plane is the datum for the switch/dial/throttle groups below.
-  const shelfY = bodyH + 0.02;
-  const shelf = _box(3.14, 0.05, bodyD - 0.06, _steel);
-  shelf.position.set(0, shelfY, conZ - 0.01);
-  group.add(shelf);
-  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.46, shelfY + 0.03, bodyFrontZ - 0.06, inward, _rivet, 0.013));
-
-  // ── (2b) THE GLARE-SHIELD HOOD + INSTRUMENT FASCIA — one canted plane rising off the shelf's rear
-  //    edge, hooded by a brow so the screens read RECESSED. This is the ONE fascia the MFDs live in.
-  // Mk-III review round 1 (user): the raised back was "a bit tall — blocks the view" → the fascia
-  //   centre drops 10cm and the brow hugs the fascia top instead of riding 2cm above it; the whole
-  //   silhouette falls from ~1.38 (right AT the 1.35 seated eye) to ~1.26 — horizon clears it.
-  const fasCY = deckY + 0.20;                 // fascia centre height (was +0.30)
-  const fasZ = conZ - 0.14;                    // set back (behind the shelf, toward the window)
-  // the fascia backing panel (the instrument face all screens recess INTO)
-  const fascia = _box(3.0, 0.56, 0.05, _channel);
-  fascia.position.set(0, fasCY, fasZ);
-  fascia.rotation.x = CANT;
-  group.add(fascia);
-  // the GLARE-SHIELD BROW — a slim hood cantilevered over the fascia top (shades the screens; gives
-  //   the console its purposeful silhouette). One clean bar, angled to overhang.
-  const brow = _box(3.06, 0.06, 0.22, _steel);
-  brow.position.set(0, fasCY + 0.28, fasZ + 0.10);   // hugs the fascia top (review round 1)
-  brow.rotation.x = CANT + 0.5;
-  group.add(brow);
-  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.46, fasCY + 0.28, fasZ + 0.16, inward, _rivet, 0.012));
-
-  // ── (3) THE MAIN MFD — recessed INTO the fascia (off-centre left). Integral bezel, recessed dark
-  //    glass, green emissive content (horizon + readout lines) + scanlines. Keeps the alert refs.
-  const mfdX = -0.62;
-  const scrCY = fasCY + 0.02, scrZ = fasZ + 0.05;
-  const bezel = _box(1.0, 0.50, 0.05, _steel);   // integral bezel proud of the fascia
-  bezel.position.set(mfdX, scrCY, scrZ);
-  bezel.rotation.x = CANT;
-  group.add(bezel);
-  const faceGlass = _box(0.86, 0.40, 0.02, _screenGlass);   // recessed glass (sits back in the bezel)
-  faceGlass.position.set(mfdX, scrCY, scrZ + 0.015);
-  faceGlass.rotation.x = CANT;
-  group.add(faceGlass);
-  // ── the screen CONTENT lives in a child GROUP carrying the screen's position + CANT tilt, so all
-  //    content is authored in flat local (x, y) coords + reads correctly on the tilted plane (the
-  //    prior hand-projected z-math pushed the lower readout lines BEHIND the glass — a real bug).
-  const scr = new THREE.Group();
-  scr.position.set(mfdX, scrCY, scrZ + 0.03);
-  scr.rotation.x = CANT;
-  group.add(scr);
-  const scrLocal = (mesh: THREE.Mesh, x: number, y: number, z = 0) => { mesh.position.set(x, y, z); scr.add(mesh); };
-  const glowGeo = new THREE.PlaneGeometry(0.84, 0.38);
-  _disposables.push(glowGeo);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x1f5a2c });   // R2: brighter green CRT base → the screen reads as a lit avionics page
-  _buildMats.push(glowMat);
-  const scrGlow = new THREE.Mesh(glowGeo, glowMat);
-  scrLocal(scrGlow, 0, 0, 0);
-  _alertScreenGlow = scrGlow;
-  // content: a banked horizon line + a nav crosshair + scrolling readout lines (alert refs recolor).
-  const brightGreen = new THREE.MeshBasicMaterial({ color: 0x8cf29a });
-  _buildMats.push(brightGreen);
-  const horizGeo = new THREE.PlaneGeometry(0.6, 0.018);
-  _disposables.push(horizGeo);
-  const horiz = new THREE.Mesh(horizGeo, brightGreen);
-  scrLocal(horiz, 0, 0.10, 0.004); horiz.rotation.z = 0.05;   // a slightly banked horizon
-  _alertStatusLeds.push(horiz);
-  // a small nav crosshair box on the horizon (a real avionics glyph, not just lines)
-  const crossGeo = new THREE.PlaneGeometry(0.05, 0.05);
-  _disposables.push(crossGeo);
-  const cross = new THREE.Mesh(crossGeo, brightGreen);
-  scrLocal(cross, 0, 0.10, 0.005);
-  _alertStatusLeds.push(cross);
-  const lineGeo = new THREE.PlaneGeometry(0.6, 0.028);
-  _disposables.push(lineGeo);
-  for (let r = 0; r < 4; r++) {
-    const line = new THREE.Mesh(lineGeo, brightGreen);
-    const w = [0.95, 0.5, 0.72, 0.4][r];
-    line.scale.x = w;
-    scrLocal(line, -0.28 * (1 - w), -0.02 - r * 0.05, 0.004);
-    _alertStatusLeds.push(line);
-  }
-  // faint CRT scanlines (in the same local frame → they stay ON the screen)
-  const scanGeo = new THREE.PlaneGeometry(0.84, 0.004);
-  _disposables.push(scanGeo);
-  const scanMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.26 });
-  _buildMats.push(scanMat);
-  for (let s = 0; s < 9; s++) {
-    const sl = new THREE.Mesh(scanGeo, scanMat);
-    scrLocal(sl, 0, 0.16 - s * 0.04, 0.006);
+  // build a straight PANEL: flat body + deck + kneewell + kick (world), + a FASCIA built in a TILTED child
+  //   GROUP `fg` (canted back like the original console) whose LOCAL frame is X=along chord, Y=up the
+  //   fascia, Z=proud toward the pilot — instruments mount in that flat local frame so they cant as one.
+  const TILT = -0.42;   // fascia cant (top leans back toward the glass) — "a bit" like the original
+  const YUP = new THREE.Vector3(0, 1, 0);
+  type Panel = { p0: THREE.Vector2; p1: THREE.Vector2; inN: THREE.Vector2; yaw: number; fg: THREE.Group; half: number };
+  const mkPanel = (p0: THREE.Vector2, p1: THREE.Vector2, bodyPad: number): Panel => {
+    const mid = p0.clone().add(p1).multiplyScalar(0.5);
+    const d = p1.clone().sub(p0); const L0 = d.length(); d.normalize();
+    const inN = V2(-d.y, d.x); if (inN.dot(cabinC.clone().sub(mid)) < 0) inN.negate();
+    const yaw = Math.atan2(inN.x, inN.y);
+    // the BODY (below the deck) OVERLAPS at the corners to fill them — hidden under the continuous deck.
+    const L = L0 + bodyPad;
+    const bodyC = mid.clone().add(inN.clone().multiplyScalar(Wd / 2));
+    const body = _box(L, deckH, Wd, _channel); body.position.set(bodyC.x, deckH / 2, bodyC.y); body.rotation.y = yaw; group.add(body);
+    // the knee SKIN + toe KICK sit PROUD of the body front face (at depth Wd) so no face is coplanar with it
+    //   (a coplanar knee/body front z-fought — fine vertical hatching on the kneewell). knee front = Wd+0.015,
+    //   kick front = Wd+0.03 (the toe sticks out past the knee), body front = Wd — three distinct depths.
+    const kneeC = mid.clone().add(inN.clone().multiplyScalar(Wd - 0.005));
+    const knee = _box(L, deckH - 0.06, 0.04, _band); knee.position.set(kneeC.x, deckH / 2, kneeC.y); knee.rotation.y = yaw; group.add(knee);
+    const kick = _box(L, 0.12, 0.07, _steel); kick.position.set(kneeC.x, 0.06, kneeC.y); kick.rotation.y = yaw; group.add(kick);
+    // the TILTED fascia group — rooted at the deck's window-side edge, yawed to face the pilot then canted.
+    //   Its length is TRIMMED 0.14 SHORT of the chord (fL) so the tilted fascias DON'T pile into a block at
+    //   the corners; the small gap there is clean deck (the fascia panels read as distinct sections).
+    const fasC = mid.clone().add(inN.clone().multiplyScalar(0.06));
+    const fg = new THREE.Group();
+    fg.position.set(fasC.x, deckH, fasC.y);
+    const qy = new THREE.Quaternion().setFromAxisAngle(YUP, yaw);
+    const qt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(inN.y, 0, -inN.x).normalize(), TILT);
+    fg.quaternion.copy(qt).multiply(qy);
+    group.add(fg);   // fg is now ONLY the instrument frame; the fascia SURFACE is one continuous folded strip (below).
+    _addFurnitureCollider(Math.abs(d.x * L0) + Wd + 0.14, deckH + 0.30, Math.abs(d.y * L0) + Wd + 0.14, bodyC.x, (deckH + 0.30) / 2, bodyC.y);
+    return { p0, p1, inN, yaw, fg, half: L0 / 2 };
+  };
+  const FRONT = mkPanel(C_L, C_R, 0.04);
+  const RIGHT = mkPanel(C_R, A_R, 0.04);
+  const LEFT = mkPanel(C_L, A_L, 0.04);
+  // corner fillers — a short body block at each front↔side corner (below the deck) so the bodies join with
+  //   no gap AND no past-corner lip poking above the deck (the residual "block"). Hidden under the deck poly.
+  for (const c of [C_R, C_L]) {
+    const inw = cabinC.clone().sub(c).normalize();
+    const fillC = c.clone().add(inw.multiplyScalar(Wd / 2));
+    const fill = _box(0.34, deckH, 0.34, _channel); fill.position.set(fillC.x, deckH / 2 - 0.02, fillC.y);
+    fill.rotation.y = Math.atan2(inw.x, inw.y); group.add(fill);
   }
 
-  // ── (3b) THE SECONDARY READOUT — recessed into the SAME fascia plane to the right (coherent, not a
-  //    floating pod). A small amber data screen in its own integral bezel + two clean flush gauges.
-  const rX = 0.9;
-  const bez2 = _box(0.62, 0.42, 0.05, _steel);
-  bez2.position.set(rX, fasCY + 0.03, scrZ);
-  bez2.rotation.x = CANT;
-  group.add(bez2);
-  // the secondary screen content in a child GROUP (same tilt-correct pattern as the MFD).
-  const scr2 = new THREE.Group();
-  scr2.position.set(rX, fasCY + 0.03, scrZ + 0.03);
-  scr2.rotation.x = CANT;
-  group.add(scr2);
-  const scr2Geo = new THREE.PlaneGeometry(0.5, 0.32);
-  _disposables.push(scr2Geo);
-  const amberScr = new THREE.MeshBasicMaterial({ color: 0x6a4a12 });   // R2: brighter amber base (was 0x4a3208 → too dark to read as lit)
-  _buildMats.push(amberScr);
-  const scr2Face = new THREE.Mesh(scr2Geo, amberScr);
-  scr2.add(scr2Face);
-  const amberBar = new THREE.MeshBasicMaterial({ color: 0xe0a040 });
-  _buildMats.push(amberBar);
-  for (let r = 0; r < 3; r++) {
-    const l2Geo = new THREE.PlaneGeometry(0.4, 0.03);
-    _disposables.push(l2Geo);
-    const l2 = new THREE.Mesh(l2Geo, amberBar);
-    l2.scale.x = [0.9, 0.6, 0.8][r];
-    l2.position.set(-0.02, 0.08 - r * 0.07, 0.004);
-    scr2.add(l2);
-  }
-  // two clean flush GAUGES recessed in the fascia, low-right (a tidy pair, not a scattered cluster)
-  for (const [gx, gr] of [[1.42, 0.12], [1.42, 0.0]] as [number, number][]) {
-    if (gr === 0) continue;
-    const gy = fasCY - 0.16;
-    const ring = _cyl(gr, gr, 0.035, 20, _band);
-    ring.rotation.x = Math.PI / 2 + CANT;
-    ring.position.set(gx, gy, fasZ + 0.05);
-    group.add(ring);
-    const fce = _cyl(gr * 0.8, gr * 0.8, 0.01, 20, _dialFace);
-    fce.rotation.x = Math.PI / 2 + CANT;
-    fce.position.set(gx, gy, fasZ + 0.065);
-    group.add(fce);
-    const needle = _box(gr * 0.7, 0.008, 0.004, _ledAmber);
-    needle.position.set(gx, gy, fasZ + 0.075);
-    needle.rotation.set(CANT, 0, -0.4);
-    group.add(needle);
-  }
-
-  // ── (4) THE CONTROL SHELF GROUPS — all seated ON the shelf plane (shelfY), grouped + tidy.
-  //    (a) one clean grouped SWITCH STRIP (guarded), left-of-centre.
+  // ── ONE CONTINUOUS DECK — a single mitred polygon over the whole 3-panel footprint (replaces the
+  //    per-panel deck boxes that overlapped + z-fought at the corners). Outer ring = the window edge
+  //    A_L→C_L→C_R→A_R; inner ring = that offset inboard by Wd, the corner points MITRED (intersection of
+  //    the two adjacent inner-edge lines) so the top reads as one clean surface with no seam or step.
   {
-    const bx = -0.35;
-    const plate = _box(0.6, 0.02, 0.16, _band);
-    plate.position.set(bx, shelfY + 0.03, conZ + 0.10);
-    group.add(plate);
-    for (let i = 0; i < 5; i++) {
-      const sw = _cyl(0.011, 0.011, 0.05, 6, _rivet);
-      sw.rotation.x = -0.5;
-      sw.position.set(bx - 0.22 + i * 0.11, shelfY + 0.06, conZ + 0.09);
-      group.add(sw);
+    const dirF = C_R.clone().sub(C_L).normalize(), dirR = A_R.clone().sub(C_R).normalize(), dirL = A_L.clone().sub(C_L).normalize();
+    const innerF0 = C_L.clone().add(FRONT.inN.clone().multiplyScalar(Wd));
+    const innerR0 = C_R.clone().add(RIGHT.inN.clone().multiplyScalar(Wd));
+    const innerL0 = C_L.clone().add(LEFT.inN.clone().multiplyScalar(Wd));
+    const lineInt = (p1: THREE.Vector2, d1: THREE.Vector2, p2: THREE.Vector2, d2: THREE.Vector2) => {
+      const den = d1.x * d2.y - d1.y * d2.x;
+      if (Math.abs(den) < 1e-5) return p1.clone().add(p2).multiplyScalar(0.5);
+      const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den;
+      return p1.clone().add(d1.clone().multiplyScalar(t));
+    };
+    const C_Rin = lineInt(innerF0, dirF, innerR0, dirR);
+    const C_Lin = lineInt(innerF0, dirF, innerL0, dirL);
+    const A_Rin = A_R.clone().add(RIGHT.inN.clone().multiplyScalar(Wd));
+    const A_Lin = A_L.clone().add(LEFT.inN.clone().multiplyScalar(Wd));
+    const ring = [A_L, C_L, C_R, A_R, A_Rin, C_Rin, C_Lin, A_Lin];
+    const shp = new THREE.Shape();
+    shp.moveTo(ring[0].x, -ring[0].y);
+    for (let i = 1; i < ring.length; i++) shp.lineTo(ring[i].x, -ring[i].y);
+    shp.closePath();
+    const geo = new THREE.ShapeGeometry(shp); _disposables.push(geo);
+    const deckMesh = new THREE.Mesh(geo, _steel);
+    deckMesh.rotation.x = -Math.PI / 2;   // lay the XY shape flat in XZ, facing up (shape built with −z → world +z)
+    deckMesh.position.y = deckH + 0.02;
+    group.add(deckMesh);
+  }
+
+  // ── ONE CONTINUOUS FOLDED FASCIA — the tilted instrument wall follows the window edge A_L→C_L→C_R→A_R and
+  //    FOLDS at each corner (miter normals) into a single surface, so the panels join cleanly with NO exposed
+  //    ends piling into a corner block. Instruments still mount in each panel's `fg` frame, proud of this wall.
+  {
+    const verts = [A_L, C_L, C_R, A_R];
+    const segN = [LEFT.inN, FRONT.inN, RIGHT.inN];   // inward normal of segment i (verts[i]→verts[i+1])
+    const fascLen = fascH - deckH;
+    const miterAt = (i: number) => (i === 0) ? segN[0].clone()
+      : (i === verts.length - 1) ? segN[segN.length - 1].clone()
+        : segN[i - 1].clone().add(segN[i]).normalize();
+    const bases: THREE.Vector3[] = [], tops: THREE.Vector3[] = [];
+    for (let i = 0; i < verts.length; i++) {
+      const m = miterAt(i);
+      const b2 = verts[i].clone().add(m.clone().multiplyScalar(0.06));
+      const base = new THREE.Vector3(b2.x, deckH, b2.y);
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(m.y, 0, -m.x).normalize(), TILT);
+      const upT = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+      bases.push(base); tops.push(base.clone().add(upT.multiplyScalar(fascLen)));
     }
-    const guard = _box(0.62, 0.015, 0.02, _steel);
-    guard.position.set(bx, shelfY + 0.10, conZ + 0.04);
-    group.add(guard);
+    const pos: number[] = [];
+    const pv2 = (arr: number[], v: THREE.Vector3) => arr.push(v.x, v.y, v.z);
+    const pv = (v: THREE.Vector3) => pv2(pos, v);
+    for (let i = 0; i < verts.length - 1; i++) { pv(bases[i]); pv(tops[i]); pv(tops[i + 1]); pv(bases[i]); pv(tops[i + 1]); pv(bases[i + 1]); }
+    const fgeo = new THREE.BufferGeometry(); fgeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); fgeo.computeVertexNormals(); _disposables.push(fgeo);
+    const fasMat = (_channel as THREE.MeshStandardMaterial).clone(); fasMat.side = THREE.DoubleSide; _buildMats.push(fasMat);
+    group.add(new THREE.Mesh(fgeo, fasMat));
+    // a BROW ledge along the folded top edge — a thin steel strip proud toward the pilot, following the fold.
+    const bpos: number[] = [];
+    const brows = tops.map((tp, i) => tp.clone().add(new THREE.Vector3(miterAt(i).x, 0, miterAt(i).y).multiplyScalar(0.1)));
+    for (let i = 0; i < verts.length - 1; i++) {
+      pv2(bpos, tops[i]); pv2(bpos, tops[i + 1]); pv2(bpos, brows[i + 1]);
+      pv2(bpos, tops[i]); pv2(bpos, brows[i + 1]); pv2(bpos, brows[i]);
+    }
+    const bgeo = new THREE.BufferGeometry(); bgeo.setAttribute('position', new THREE.Float32BufferAttribute(bpos, 3)); bgeo.computeVertexNormals(); _disposables.push(bgeo);
+    const browMat = (_steel as THREE.MeshStandardMaterial).clone(); browMat.side = THREE.DoubleSide; _buildMats.push(browMat);
+    group.add(new THREE.Mesh(bgeo, browMat));
   }
-  //    (b) the telltale LED status row — a tidy grouped strip on the shelf (recessed sockets).
-  const ledCols = [_ledGreen, _ledAmber, _ledGreen, _ledBlue, _ledGreen];
-  for (let i = 0; i < ledCols.length; i++) {
-    const lx = -0.32 + i * 0.11;
-    const socket = _cyl(0.022, 0.022, 0.028, 8, _channel);
-    socket.rotation.x = Math.PI / 2;
-    socket.position.set(lx, shelfY + 0.03, conZ + 0.30);
-    group.add(socket);
-    const led = _cyl(0.015, 0.015, 0.02, 8, ledCols[i]);
-    led.rotation.x = Math.PI / 2;
-    led.position.set(lx, shelfY + 0.05, conZ + 0.30);
-    group.add(led);
+
+  // ── instrument placement helpers on a panel. t = 0..1 along the chord; io = inward from the window edge.
+  const onDeck = (pl: Panel, t: number, io: number) => {
+    const b = pl.p0.clone().lerp(pl.p1, t).add(pl.inN.clone().multiplyScalar(io));
+    return { x: b.x, y: deckH + 0.025, z: b.y, yaw: pl.yaw };   // just above the continuous deck polygon
+  };
+  // an along-chord offset (local +X for a yaw=atan2(inN.x,inN.y) box maps to world (inN.y, −inN.x)).
+  const alongOff = (x: number, z: number, pl: Panel, o: number) => ({ x: x + o * pl.inN.y, z: z - o * pl.inN.x });
+
+  // ── fascia instruments mount in each panel's TILTED group `fg`, in flat LOCAL coords: cx = along the
+  //    chord (0 = panel centre), sy = up the fascia (0 = deck). The fascia front face is at local z≈0.025,
+  //    so bezel(0.045)→glass(0.07)→content(0.085) stack PROUD toward the pilot + cant with the fascia.
+  const addScreenL = (pl: Panel, cx: number, sy: number, w: number, h: number, glassHex: number) => {
+    const bez = _box(w, h, 0.04, _steel); bez.position.set(cx, sy, 0.045); pl.fg.add(bez);
+    const gm = new THREE.MeshBasicMaterial({ color: glassHex }); _buildMats.push(gm);
+    const glass = _box(w - 0.07, h - 0.06, 0.02, gm); glass.position.set(cx, sy, 0.07); pl.fg.add(glass);
+    return glass;
+  };
+  const addBarL = (pl: Panel, cx: number, sy: number, bw: number, mat: THREE.Material) => {
+    const bar = _box(bw, 0.02, 0.006, mat); bar.position.set(cx, sy, 0.085); pl.fg.add(bar); return bar;
+  };
+
+  // ── (A) FRONT PANEL — the green MFD (keeps the alert-recolour refs) + an amber readout, both recessed
+  //    into the canted fascia; a throttle quadrant + a switch strip + an LED status row on the deck.
+  {
+    const mfdX = -0.3, scY = 0.30;
+    _alertScreenGlow = addScreenL(FRONT, mfdX, scY, 0.56, 0.36, 0x1f5a2c);   // calm-green base (setCockpitAlert drives green→amber→red)
+    const bg = new THREE.MeshBasicMaterial({ color: 0x8cf29a }); _buildMats.push(bg);   // green readout text (recoloured by the alert state)
+    _alertStatusLeds.push(addBarL(FRONT, mfdX, scY + 0.11, 0.4, bg));                    // horizon line
+    for (let r = 0; r < 4; r++) _alertStatusLeds.push(addBarL(FRONT, mfdX - 0.03, scY + 0.03 - r * 0.05, [0.4, 0.22, 0.32, 0.18][r], bg));
+    const secX = 0.32;                                                                    // secondary amber readout (right of the MFD)
+    addScreenL(FRONT, secX, scY, 0.4, 0.32, 0x6a4a12);
+    for (let r = 0; r < 3; r++) addBarL(FRONT, secX - 0.02, scY + 0.06 - r * 0.06, [0.24, 0.15, 0.2][r], _ledAmber);
+    // throttle quadrant on the deck — CENTRED in the gap between the two screens (so it never rises in
+    //   front of a screen, the prior overlap).
+    const dp = onDeck(FRONT, 0.5, Wd * 0.55);
+    const boss = _box(0.28, 0.07, 0.22, _steel); boss.position.set(dp.x, dp.y + 0.03, dp.z); boss.rotation.y = dp.yaw; group.add(boss);
+    const LEV_TILT = -0.5, LEV_H = 0.2, upC = Math.cos(LEV_TILT), upS = Math.sin(LEV_TILT);
+    for (const tx of [-0.06, 0.06]) {
+      const lp = alongOff(dp.x, dp.z, FRONT, tx); const lcy = dp.y + 0.12;
+      const lever = _cyl(0.016, 0.022, LEV_H, 8, _steel); lever.rotation.set(LEV_TILT, dp.yaw, 0); lever.position.set(lp.x, lcy, lp.z); group.add(lever);
+      const knob = _cyl(0.032, 0.032, 0.045, 10, _ledAmber); knob.rotation.set(LEV_TILT, dp.yaw, 0); knob.position.set(lp.x, lcy + (LEV_H / 2 - 0.01) * upC, lp.z + (LEV_H / 2 - 0.01) * upS); group.add(knob);
+    }
+    // switch strip (left, below the MFD) + an LED status row (right, below the secondary) on the deck
+    const sp = onDeck(FRONT, 0.27, Wd * 0.55);
+    const splate = _box(0.4, 0.02, 0.13, _band); splate.position.set(sp.x, sp.y, sp.z); splate.rotation.y = sp.yaw; group.add(splate);
+    for (let k = -2; k <= 2; k++) { const t2 = alongOff(sp.x, sp.z, FRONT, k * 0.075); const sw = _cyl(0.011, 0.011, 0.05, 6, _rivet); sw.rotation.set(-0.5, sp.yaw, 0); sw.position.set(t2.x, sp.y + 0.03, t2.z); group.add(sw); }
+    const lr = onDeck(FRONT, 0.72, Wd * 0.6);
+    const ledColsF = [_ledGreen, _ledAmber, _ledGreen, _ledBlue];
+    for (let k = 0; k < 4; k++) { const lp = alongOff(lr.x, lr.z, FRONT, -0.14 + k * 0.09); const led = _cyl(0.014, 0.014, 0.018, 8, ledColsF[k]); led.rotation.x = Math.PI / 2; led.position.set(lp.x, lr.y + 0.005, lp.z); group.add(led); }
   }
-  //    (c) THE THROTTLE QUADRANT — on a raised boss, centre-right (the freighter tell). Twin levers.
-  //    W1 (user: "the yellow lever caps don't connect to their shafts"). ROOT CAUSE: the knob was
-  //    placed at a hand-guessed (y,z) that didn't track the raked lever's TOP — the lever tilts
-  //    rotation.x=−0.5, so its top is at center + halfLen·(0, cos, sin), NOT straight up. The knob's
-  //    z was ~0.16m off the shaft top → a floating cap. FIX: compute the lever-top from its own
-  //    transform + seat the knob there, rotated to match the shaft so it caps flush.
-  const boss = _box(0.3, 0.08, 0.28, _steel);
-  boss.position.set(0.5, shelfY + 0.05, conZ + 0.12);
-  group.add(boss);
-  const LEV_TILT = -0.5, LEV_H = 0.24;
-  const upC = Math.cos(LEV_TILT), upS = Math.sin(LEV_TILT);   // the lever's up-axis after rotation.x
-  for (const tx of [-0.06, 0.06]) {
-    const lcx = 0.5 + tx, lcy = shelfY + 0.17, lcz = conZ + 0.12;
-    const lever = _cyl(0.016, 0.022, LEV_H, 8, _steel);
-    lever.position.set(lcx, lcy, lcz);
-    lever.rotation.x = LEV_TILT;
-    group.add(lever);
-    // the knob caps the shaft: seat its centre a hair below the lever top so the base overlaps the
-    //   shaft (no gap), on the SAME tilt axis.
-    const knob = _cyl(0.034, 0.034, 0.05, 10, _ledAmber);
-    knob.position.set(lcx, lcy + (LEV_H / 2 - 0.01) * upC, lcz + (LEV_H / 2 - 0.01) * upS);
-    knob.rotation.x = LEV_TILT;
-    group.add(knob);
+
+  // ── (B) THE TWO SIDE PANELS — matched CLEAN detail: an amber data screen (recessed) + a deck switch plate
+  //    + a small fascia LED strip + a decal. Everything on the canted fascia (screen) or the flat deck.
+  for (const pl of [LEFT, RIGHT]) {
+    addScreenL(pl, -0.05, 0.30, 0.42, 0.3, 0x6a4a12);
+    for (let r = 0; r < 3; r++) addBarL(pl, -0.07, 0.30 + 0.05 - r * 0.055, [0.24, 0.15, 0.2][r], _ledAmber);
+    // deck switch plate + 3 toggles
+    const dp = onDeck(pl, 0.6, Wd * 0.5);
+    const plate = _box(0.28, 0.02, 0.13, _band); plate.position.set(dp.x, dp.y, dp.z); plate.rotation.y = dp.yaw; group.add(plate);
+    for (let k = -1; k <= 1; k++) { const t2 = alongOff(dp.x, dp.z, pl, k * 0.08); const sw = _cyl(0.011, 0.011, 0.05, 6, _rivet); sw.rotation.set(-0.5, dp.yaw, 0); sw.position.set(t2.x, dp.y + 0.03, t2.z); group.add(sw); }
+    // a stencil decal placard on the fascia BELOW the screen (clear of it). The old fore-of-screen LED strip
+    //   is DROPPED — it poked into the screen's lower-left corner (a stair-step overlap), and the flank
+    //   annunciator grid to the right of the screen now carries the indicator LEDs.
+    const dec = _box(0.2, 0.03, 0.006, _decal); dec.position.set(-0.05, 0.1, 0.06); pl.fg.add(dec);
+    // a small NAV UNIT on the deck (t=0.32, the previously-empty end) — a raised avionics boss + a dark screen
+    //   top, so the side deck reads worked instead of a bare slab beside the lone switch plate.
+    const np = onDeck(pl, 0.32, Wd * 0.5);
+    const nboss = _box(0.22, 0.06, 0.16, _steel); nboss.position.set(np.x, np.y + 0.03, np.z); nboss.rotation.y = np.yaw; group.add(nboss);
+    const nsg = new THREE.MeshBasicMaterial({ color: 0x16344a }); _buildMats.push(nsg);
+    const nscr = _box(0.16, 0.014, 0.1, nsg); nscr.position.set(np.x, np.y + 0.06, np.z); nscr.rotation.y = np.yaw; group.add(nscr);
   }
-  // a single grab-rail across the shelf front edge (one clean lived-in handhold, not clutter).
-  const grab = _cyl(0.016, 0.016, 2.4, 8, _band);
-  grab.rotation.z = Math.PI / 2;
-  grab.position.set(0, shelfY + 0.02, bodyFrontZ - 0.02);
-  group.add(grab);
+
+  // ── (A2) FASCIA FLANK CLUSTERS — the tilted wall to either side of the screens read as bare grey slabs.
+  //    Fill each bare gap with a recessed indicator sub-panel (a dark inset face + a grid of small annunciator
+  //    LEDs + label decals). Sized/placed from each panel's actual half-width so they ALWAYS sit clear of the
+  //    screens (skip if the computed gap is too small to hold one). All proud on the fascia (z 0.04→0.075).
+  const addFlank = (pl: Panel, cx: number, w: number): void => {
+    if (w < 0.15) return;                                   // no room beside the screen — leave it clean
+    const bez = _box(w, 0.42, 0.03, _steel); bez.position.set(cx, 0.28, 0.04); pl.fg.add(bez);
+    const face = _box(w - 0.05, 0.36, 0.015, _channel); face.position.set(cx, 0.28, 0.056); pl.fg.add(face);
+    const cols = [_ledGreen, _ledAmber, _ledBlue];
+    const nc = w > 0.24 ? 2 : 1;                             // 2 LED columns if wide enough, else 1
+    for (let ci = 0; ci < nc; ci++) for (let r = 0; r < 4; r++) {
+      const led = _box(0.026, 0.026, 0.02, cols[(ci + r) % 3]);
+      led.position.set(cx - (nc - 1) * 0.05 + ci * 0.1 - 0.02, 0.40 - r * 0.072, 0.075); pl.fg.add(led);
+    }
+    for (let r = 0; r < 3; r++) { const b = _box(0.05, 0.016, 0.006, _decal); b.position.set(cx + w * 0.5 - 0.055, 0.38 - r * 0.085, 0.075); pl.fg.add(b); }
+  };
+  // a DIFFERENT flank for the SIDE panels — a bank of TOGGLE BREAKERS (a base plate + a tilted rocker) instead
+  //   of the FRONT's LED-dot grid, so the two flanks meeting at each corner don't read copy-paste.
+  const addBreaker = (pl: Panel, cx: number, w: number): void => {
+    if (w < 0.15) return;
+    const bez = _box(w, 0.42, 0.03, _steel); bez.position.set(cx, 0.28, 0.04); pl.fg.add(bez);
+    const face = _box(w - 0.05, 0.36, 0.015, _channel); face.position.set(cx, 0.28, 0.056); pl.fg.add(face);
+    const nc = w > 0.24 ? 2 : 1;
+    for (let ci = 0; ci < nc; ci++) for (let r = 0; r < 4; r++) {
+      const bx = cx - (nc - 1) * 0.05 + ci * 0.1 - 0.01, by = 0.40 - r * 0.072;
+      const base = _box(0.055, 0.032, 0.014, _band); base.position.set(bx, by, 0.064); pl.fg.add(base);      // breaker base plate
+      const rock = _box(0.042, 0.022, 0.022, _steel); rock.rotation.x = 0.5; rock.position.set(bx, by, 0.08); pl.fg.add(rock);   // the tilted rocker
+    }
+    for (let r = 0; r < 3; r++) { const b = _box(0.05, 0.016, 0.006, _decal); b.position.set(cx + w * 0.5 - 0.055, 0.38 - r * 0.085, 0.07); pl.fg.add(b); }
+  };
+  {
+    const hF = FRONT.half;                                  // FRONT: left gap = panel edge → MFD left (−0.58); right gap = secondary right (0.52) → panel edge
+    addFlank(FRONT, -(hF + 0.58) / 2, (hF - 0.58) - 0.05);
+    addFlank(FRONT, (0.52 + hF) / 2, (hF - 0.52) - 0.05);
+    for (const pl of [LEFT, RIGHT]) addBreaker(pl, (0.19 + pl.half) / 2, (pl.half - 0.19) - 0.05);   // fascia right of the amber screen (screen right edge ≈ 0.19)
+  }
+
+  // ── (B2) SURFACE DETAIL — panel seams + rivet rows on every fascia / deck / kneewell, so the console reads
+  //    as worked metal (matching the corridor + quarters greeble) instead of plain slabs.
+  for (const pl of [FRONT, LEFT, RIGHT]) {
+    const half = pl.half, fscLen = fascH - deckH;
+    // FASCIA (fg local): a bottom panel seam + rivet rows along the bottom + top edges (clear of the screens).
+    const botSeam = _box(half * 2 - 0.1, 0.012, 0.02, _channel); botSeam.position.set(0, 0.055, 0.032); pl.fg.add(botSeam);
+    for (const sy of [0.05, fscLen - 0.02]) for (let x = -half + 0.13; x <= half - 0.1; x += 0.26) {
+      const r = _box(0.018, 0.018, 0.02, _rivet); r.position.set(x, sy, 0.04); pl.fg.add(r);
+    }
+    // DECK: two thin cross seams (perp to the chord) proud on the deck plate.
+    for (const t of [0.3, 0.7]) {
+      const c = onDeck(pl, t, Wd * 0.5); const seam = _box(0.018, 0.006, Wd - 0.1, _channel);
+      seam.position.set(c.x, deckH + 0.026, c.z); seam.rotation.y = c.yaw; group.add(seam);
+    }
+    // KNEEWELL: two rivet rows along the pilot-facing face (on the proud knee skin at Wd+0.015).
+    for (const ky of [0.18, 0.4]) for (let t = 0.18; t <= 0.82; t += 0.16) {
+      const b = pl.p0.clone().lerp(pl.p1, t).add(pl.inN.clone().multiplyScalar(Wd + 0.015));
+      group.add(_stud(b.x, ky, b.y, new THREE.Vector3(pl.inN.x, 0, pl.inN.y), _rivet, 0.013));
+    }
+  }
+
+  // ── (C) GRAB RAILS were REMOVED (2026-07-07): the low tubes (deckH+0.05) along each kneewell read as loose
+  //    pipes lying across the deck / floating diagonally over the corner ("placed weirdly") rather than
+  //    intentional handrails. The console reads full + purposeful without them; proper stanchioned handrails
+  //    can be added later at a real grab height if wanted.
 }
 
 /** The 2-second PERSONAL TOUCH — the lone pilot's humanity, made recognizable (gate #6): a
  *  framed PHOTO propped on the dash, a chipped enamel MUG (cup + handle + rim + dark coffee
  *  surface), and a small TOKEN hanging on a cord off the window mullion. */
 function buildPersonalTouch(group: THREE.Group): void {
-  const conZ = CON_Z, deckY = CON_DECK_Y;
+  const conZ = CON_Z;
   // R2 RE-SEAT for the redesigned console: the clutter now sits ON the control shelf (shelfY≈0.80),
   //   tucked to the FAR corners (out of the MFD + the window sightline) so it reads as lived-in
   //   detail, not a piece floating over the instruments. shelfTop = the physical surface it rests on.
-  const shelfTop = deckY + 0.02 + 0.03;   // shelf plate top (matches buildConsoleBank shelfY + half)
-  const cornerZ = conZ + 0.22;            // on the shelf, toward the pilot but clear of the fascia
+  const shelfTop = 0.575;                 // the wrap-console deck-polygon top (deckH 0.55 + 0.025) — items rest here
+  const cornerZ = conZ + 0.50;            // on the front deck toward the pilot edge, clear of the instrument suite
   // ── a framed PHOTO propped in the FAR-LEFT shelf corner, canted toward the seat
   const photoMat = new THREE.MeshLambertMaterial({ color: 0xc9b890, flatShading: true });
   _buildMats.push(photoMat);
   const photoFrame = new THREE.MeshLambertMaterial({ color: 0x3e362c, flatShading: true });
   _buildMats.push(photoFrame);
   const stand = _box(0.06, 0.05, 0.10, photoFrame);
-  stand.position.set(-1.28, shelfTop + 0.02, cornerZ + 0.02);
+  stand.position.set(-0.6, shelfTop + 0.02, cornerZ + 0.02);
   group.add(stand);
   const frame = _box(0.20, 0.25, 0.02, photoFrame);
-  frame.position.set(-1.28, shelfTop + 0.15, cornerZ);
+  frame.position.set(-0.6, shelfTop + 0.15, cornerZ);
   frame.rotation.set(-0.4, 0.2, 0.02);
   group.add(frame);
   const photo = _box(0.16, 0.21, 0.012, photoMat);
-  photo.position.set(-1.28, shelfTop + 0.155, cornerZ + 0.012);
+  photo.position.set(-0.6, shelfTop + 0.155, cornerZ + 0.012);
   photo.rotation.set(-0.4, 0.2, 0.02);
   group.add(photo);
   const figMat = new THREE.MeshLambertMaterial({ color: 0x9a8a70, flatShading: true });
   _buildMats.push(figMat);
   const fig = _cyl(0.035, 0.035, 0.006, 10, figMat);
-  fig.position.set(-1.28, shelfTop + 0.18, cornerZ + 0.02);
+  fig.position.set(-0.6, shelfTop + 0.18, cornerZ + 0.02);
   fig.rotation.set(Math.PI / 2 - 0.4, 0, 0.02);
   group.add(fig);
   // ── a chipped enamel MUG in the FAR-RIGHT shelf corner (body + rim + dark coffee + handle)
   const mugMat = new THREE.MeshLambertMaterial({ color: 0xb06a44, flatShading: true });
   _buildMats.push(mugMat);
   const mugBody = _cyl(0.05, 0.044, 0.10, 16, mugMat);
-  mugBody.position.set(1.24, shelfTop + 0.05, cornerZ);
+  mugBody.position.set(0.6, shelfTop + 0.05, cornerZ);
   group.add(mugBody);
   const mugRim = _cyl(0.052, 0.052, 0.012, 16, _band);   // a bright chipped enamel rim
-  mugRim.position.set(1.24, shelfTop + 0.10, cornerZ);
+  mugRim.position.set(0.6, shelfTop + 0.10, cornerZ);
   group.add(mugRim);
   const coffeeMat = new THREE.MeshLambertMaterial({ color: 0x2a1a0e, flatShading: true });
   _buildMats.push(coffeeMat);
   const coffee = _cyl(0.044, 0.044, 0.004, 16, coffeeMat);
-  coffee.position.set(1.24, shelfTop + 0.097, cornerZ);
+  coffee.position.set(0.6, shelfTop + 0.097, cornerZ);
   group.add(coffee);
   const mugGeo = new THREE.TorusGeometry(0.032, 0.01, 6, 12);
   _disposables.push(mugGeo);
   const mugHandle = new THREE.Mesh(mugGeo, mugMat);
-  mugHandle.position.set(1.30, shelfTop + 0.05, cornerZ);
+  mugHandle.position.set(0.66, shelfTop + 0.05, cornerZ);
   mugHandle.rotation.y = Math.PI / 2;
   group.add(mugHandle);
   // ── W1: the hanging TOKEN charm is DROPPED. With the enlarged panoramic canopy it dangled into
@@ -2708,9 +2784,11 @@ export function buildShipScene(ctx: GameContext): void {
 
   // ── HERO COCKPIT ──
   buildCockpitShell(group);
-  buildPilotSeat(group);
+  const seatG = new THREE.Group(); seatG.name = 'escapePodPilotSeat'; group.add(seatG);   // named so verify/rig shots can hide it
+  buildPilotSeat(seatG);
   buildConsoleBank(group);
-  buildPersonalTouch(group);
+  const clutterG = new THREE.Group(); clutterG.name = 'escapePodConsoleClutter'; group.add(clutterG);   // mug/photo — named so verify shots can hide it
+  buildPersonalTouch(clutterG);
   buildSideConsoles(group);
   // REBUILD v2 R1a — the v1 FAKE orbit planes (flat STAR_FS/PLANET_FS/ATMO_FS meshes)
   // are GONE. The window now shows the game's REAL wrapping sky in "space mode"
@@ -2788,6 +2866,8 @@ export function buildShipScene(ctx: GameContext): void {
   _protect(_airlockDoorL);          // W2b — the operational sliding-door leaves (slide open/shut)
   _protect(_airlockDoorR);
   _protect(_qtrDoorLeaf);           // X4 — the crew-quarters sliding-door leaf (setQuartersDoor slides it)
+  _protect(seatG);                  // verify/rig shots hide the pilot seat via --hide; keep its meshes in the named group (merge would detach them → hide misses)
+  _protect(clutterG);               // ditto for the mug/photo clutter
   // (the engine-room glass panes ride under the sliding-door leaves _engineDoorJudderL/R → already
   //  protected as children of a noMerge subtree, so their emissive-on-fire lift keeps working.)
   // DEV-ONLY: the geometry-lint stage sets `window.__stageNoMerge` so the z-fight sampler can see
@@ -4241,16 +4321,69 @@ function buildCrewQuarters(group: THREE.Group): void {
   //   return face (front −1.04), 4cm clear BEHIND the corridor wall front — it no longer shares or
   //   crosses the wall plane, and no longer pokes into the corridor. The return + dado are room-interior
   //   detail (seen through the door aperture); nothing of them lands on the corridor-side wall plane now.
-  for (const [rz0, rz1] of [[z0, zc - dHW], [zc + dHW, z1]] as const) {
+  // Z-FIGHT FIX 2026-07-07: the returns terminated EXACTLY at the door aperture edges (zc∓dHW = 8.98/
+  //   10.22), coplanar with the corridor wall's aperture-edge z-faces → shimmer around/above the door
+  //   (probe: return⟷corridor-wall at z=10.22). Inset the door-side ends 5cm so they no longer share
+  //   that plane; the jamb posts + lintel cover the small reveal, and above them it reads as door edge.
+  for (const [rz0, rz1] of [[z0, zc - dHW - 0.05], [zc + dHW + 0.05, z1]] as const) {
     const rlen = rz1 - rz0; if (rlen < 0.05) continue;
     const ret = _box(0.12, H + 0.2, rlen, _band);
     ret.position.set(wallX - 0.12, H / 2, (rz0 + rz1) / 2);   // front x=−1.06 (recessed 6cm behind the wall line)
     q.add(ret);
-    // a lower dado band recessed ONTO the return face (front −1.04) — matches the corridor two-value
-    //   language but stays clear behind the corridor wall plane (no proud-into-corridor poke).
+    // a lower dado band standing PROUD of the return face — a two-value break. Z-FIGHT FIX 2026-07-07:
+    //   the dado front was −1.06, COINCIDENT with the return front (−1.06) → the striped shimmer the user
+    //   saw at the doorway (probe: ×105 dado⟷return coplanar). Now front −1.04 (2cm proud of the return),
+    //   still 4cm behind the corridor wall plane (−1.0) so it never pokes into the hallway.
     const dado = _box(0.04, 0.6, rlen - 0.1, _channel);
-    dado.position.set(wallX - 0.08, 0.5, (rz0 + rz1) / 2);   // center −1.08, front −1.06 → flush on the return, 6cm behind the wall
+    dado.position.set(wallX - 0.06, 0.5, (rz0 + rz1) / 2);   // center −1.06, front −1.04 → proud of the return, no coplanar face
     q.add(dado);
+  }
+
+  // ── BACK-WALL DRESSING (2026-07-07, user: "the bed wall is too flat — give it detail like the other
+  //    walls; keep the bed entryway clean + accessible"). The alcove wall read as bare grey while the
+  //    side walls carry a two-value panel language. Add the SAME vocabulary ABOVE + FLANKING the bore so
+  //    the opening reads recessed into a finished paneled wall — not crowding the entryway. The wall
+  //    inner face is x=farX (−4.1), normal +X into the room; proud features stand toward the room off it.
+  //    Shallow wall dressing (like _dressSide) → no collider (the back-wall collider stops the player at −4.1).
+  {
+    const fwZC = (z0 + z1) / 2, fwW = _QTR_WIDTH, nX = new THREE.Vector3(1, 0, 0);
+    // (1) UPPER PANEL BAND — a proud plate spanning the wall ABOVE the bore (clear of the opening top 1.24),
+    //     with a mid seam + a bolt row (the _dressSide language).
+    const upBot = ALCOVE_OPEN_TOP + 0.18, upTop = QTR_H - 0.36;   // 1.42 .. 2.04
+    const upH = upTop - upBot, upY = (upTop + upBot) / 2;
+    const upper = _box(0.12, upH, fwW - 0.3, _band);
+    upper.position.set(farX + 0.06, upY, fwZC);
+    q.add(upper);
+    const upSeam = _box(0.14, 0.03, fwW - 0.3, _channel);
+    upSeam.position.set(farX + 0.055, upY, fwZC);
+    q.add(upSeam);
+    for (let z = z0 + 0.5; z <= z1 - 0.5; z += 0.6)
+      q.add(_stud(farX + 0.13, upY + upH / 2 - 0.06, z, nX, _rivet, 0.016));
+    // (2) a machined RUB-RAIL at the band base (a hand-height ledge line).
+    const rail = _box(0.15, 0.06, fwW - 0.2, _corrRail);
+    rail.position.set(farX + 0.07, upBot - 0.02, fwZC);
+    q.add(rail);
+    // (3) HEAD BAND near the ceiling (a darker worn band + a machined seam + sparse rivets).
+    const head = _box(0.10, 0.34, fwW - 0.3, _channel);
+    head.position.set(farX + 0.05, 2.20, fwZC);
+    q.add(head);
+    const headSeam = _box(0.12, 0.025, fwW - 0.3, _qtrConduit);
+    headSeam.position.set(farX + 0.06, 2.05, fwZC);
+    q.add(headSeam);
+    for (let z = z0 + 0.6; z <= z1 - 0.6; z += 0.9)
+      q.add(_stud(farX + 0.10, 2.32, z, nX, _rivet, 0.014));
+    // (4) FLANKING PILASTERS — two proud vertical panels beside the bore (fore of ALCOVE_Z0, aft of
+    //     ALCOVE_Z1) at bore height, so the opening reads framed + recessed, not a hole in a flat plane.
+    for (const [pz0, pz1] of [[z0 + 0.12, ALCOVE_Z0 - 0.06], [ALCOVE_Z1 + 0.06, z1 - 0.12]] as const) {
+      const plen = pz1 - pz0; if (plen < 0.1) continue;
+      const pil = _box(0.10, (ALCOVE_OPEN_TOP - ALCOVE_OPEN_BOT) + 0.14, plen, _band);
+      pil.position.set(farX + 0.05, (ALCOVE_OPEN_BOT + ALCOVE_OPEN_TOP) / 2, (pz0 + pz1) / 2);
+      q.add(pil);
+      // a slim recessed seam down each pilaster (two-plate read)
+      const pseam = _box(0.12, (ALCOVE_OPEN_TOP - ALCOVE_OPEN_BOT), 0.03, _channel);
+      pseam.position.set(farX + 0.055, (ALCOVE_OPEN_BOT + ALCOVE_OPEN_TOP) / 2, (pz0 + pz1) / 2);
+      q.add(pseam);
+    }
   }
   // ── Z2 OVERHAUL — WALL DRESSING. The old pass was a flat proud panel + dado on all three walls,
   //    which still read institutional (the user: "generic boxes"). NEW: a purposeful two-value sci-fi
@@ -4342,18 +4475,27 @@ function buildCrewQuarters(group: THREE.Group): void {
   //   plane. Studs face into the frame (not out toward the wall). No _steel/_shell coplanar pair remains.
   const qFrameX = wallX - 0.14;   // door-frame base X: +X face 4cm proud into the room off the wall line
   const qFrontX = qFrameX + 0.09; // the proud frame front face (x=−1.04) — hazard/placard seat OUTBOARD of this
+  // Z-FIGHT FIX 2026-07-07 (the doorway shimmer on the L/R jambs): the posts sat at ±(dHW+0.09) so their
+  //   aperture-facing +z face landed EXACTLY on the corridor wall's aperture edge (z 8.98 / 10.22) →
+  //   coplanar faces (probe: post⟷corridor-wall + post⟷return). Pulled to ±(dHW+0.07) so each post
+  //   STRADDLES its aperture edge (its body covers the wall's edge face → occluded, no coplanar pair).
+  const _postZ = (sz: number) => zc + sz * (dHW + 0.07);
   for (const sz of [-1, 1]) {
     const post = _box(0.18, dTop + 0.12, 0.18, _steel);
-    post.position.set(qFrameX, (dTop + 0.12) / 2, zc + sz * (dHW + 0.09));
+    post.position.set(qFrameX, (dTop + 0.12) / 2, _postZ(sz));
     q.add(post);
-    // studs on the FRONT face of the post (facing +X into the room), proud of the frame front, clear of
-    //   the wall plane (tip ≈ −1.06, well behind the corridor wall front −1.0 is wrong sign — front face
-    //   is at −1.04 toward the room, so studs sit at −1.05 facing +X, proud of the frame, no wall contact)
-    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(qFrontX + 0.01, y, zc + sz * (dHW + 0.09), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
+    // studs on the FRONT face of the post (facing +X into the room), proud of the frame front.
+    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(qFrontX + 0.01, y, _postZ(sz), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
   }
-  //  HEADER lintel + a slim hazard band + a stencilled placard ("CREW") — all seated on the proud frame
-  const lintel = _box(0.18, 0.2, dHW * 2 + 0.5, _steel);
-  lintel.position.set(qFrameX, dTop + 0.10, zc);
+  //  HEADER lintel + a slim hazard band + a stencilled placard ("CREW") — all seated on the proud frame.
+  //  Z-FIGHT FIX 2026-07-07 (the doorway shimmer on the TOP): the lintel bottom sat at y=dTop+0.00=2.06,
+  //   COINCIDENT with the corridor over-door wall's bottom face (also 2.06). Dropped 2cm (bottom→2.04) so
+  //   the proud lintel body covers that wall edge from the front → the coplanar face is occluded.
+  //   Z-FIGHT FIX 2026-07-07 (post⟷lintel): the lintel was 0.18 wide — SAME as the posts at the same
+  //   x-centre, so their front/back faces coincided where the post tops tuck under it. Widened to 0.22 so
+  //   the lintel ENCLOSES the post ends (post front −1.05 now sits 2cm behind the lintel front → occluded).
+  const lintel = _box(0.22, 0.2, dHW * 2 + 0.5, _steel);
+  lintel.position.set(qFrameX, dTop + 0.08, zc);
   q.add(lintel);
   // the hazard band sits PROUD on the lintel front (front face ≈ −1.06, clear of the wall −1.0), not
   //   straddling the wall plane as before.
@@ -4621,7 +4763,10 @@ function buildCrewQuarters(group: THREE.Group): void {
   //    DIM (the tone-appropriate shadow read is preserved). It protrudes into the walk space → a paired
   //    collider is added in QUARTERS_COLLIDERS (rule 9) + re-verified by the quarters-walk motion probe.
   const baseCabZ = z1 - COR_WALL_T / 2 - 0.19;    // front ≈ z 11.71 (0.38 deep, proud 19cm)
-  const baseCabXC = QTR_FAR_X + 2.55;             // x ≈ −1.55 (door-side of the coverall, in the dead gap)
+  // FIX 2026-07-07 (user: "move the cupboard slightly right — it overlaps the wall"): was +2.55 (x=−1.55),
+  //   whose door-side edge (−1.10) poked into the room's corridor-side wall RETURN (x −1.18..−1.06). Shifted
+  //   15cm toward the lockers → edge −1.25, clear of the return. Collider in QUARTERS_COLLIDERS moved to match (rule 9).
+  const baseCabXC = QTR_FAR_X + 2.40;             // x ≈ −1.70 (shifted off the corridor-side wall return)
   const baseCabW = 0.9, baseCabH = 0.66, baseCabD = 0.38;
   const baseCab = _box(baseCabW, baseCabH, baseCabD, _qtrLocker);
   baseCab.position.set(baseCabXC, baseCabH / 2, baseCabZ);
@@ -4651,26 +4796,20 @@ function buildCrewQuarters(group: THREE.Group): void {
   q.add(bcLed);
   //  a horizontal kick-rail conduit running along the wall above the cabinet (breaks the flat band).
   const kickRailZ = z1 - COR_WALL_T / 2 - 0.06;   // just proud of the aft wall inner face (11.84)
-  const kickRail = _cyl(0.03, 0.03, 1.35, 8, _qtrConduit);
+  const kickRail = _cyl(0.03, 0.03, 1.10, 8, _qtrConduit);   // length 1.10, centred on the cabinet so it stays in-room (was 1.35 → poked past the −1.0 wall)
   kickRail.rotation.z = Math.PI / 2;              // runs along X
-  kickRail.position.set(baseCabXC + 0.05, baseCabH + 0.12, kickRailZ);
+  kickRail.position.set(baseCabXC, baseCabH + 0.12, kickRailZ);
   q.add(kickRail);
-  for (const cx of [baseCabXC - 0.5, baseCabXC + 0.05, baseCabXC + 0.6]) {   // saddle clamps + rivets
+  for (const cx of [baseCabXC - 0.45, baseCabXC, baseCabXC + 0.45]) {   // saddle clamps + rivets
     const clamp = _box(0.05, 0.08, 0.1, _channel);
     clamp.position.set(cx, baseCabH + 0.12, kickRailZ - 0.02);
     q.add(clamp);
   }
-  //  a small louvred VENT GRILLE beside the cabinet, low on the aft wall (the fore-wall vent's echo),
-  //   standing proud of the wall inner face toward the room (−Z).
-  const bcVentZ = z1 - COR_WALL_T / 2 - 0.05;     // proud of the aft wall (11.85)
-  const bcVentH = _box(0.22, 0.26, 0.08, _steel);
-  bcVentH.position.set(baseCabXC + 0.72, 0.5, bcVentZ);
-  q.add(bcVentH);
-  for (let vy2 = 0.42; vy2 <= 0.58; vy2 += 0.05) {
-    const slat = _box(0.18, 0.014, 0.09, _channel);
-    slat.position.set(baseCabXC + 0.72, vy2, bcVentZ - 0.02);
-    q.add(slat);
-  }
+  //  (was a small louvred VENT GRILLE "beside the cabinet" — REMOVED 2026-07-07 per user playtest note:
+  //   its x-offset baseCabXC+0.72 = −0.83 overshot the room door-side wall (x=−1.0) by 0.17m, so the
+  //   grille poked THROUGH the wall into the corridor + read "rotated the wrong way" from the hallway.
+  //   It was a redundant echo of the fore-wall air-return vent; the cabinet keeps its drawers/LED/kick-
+  //   rail/rivets. Confirmed via the corridor probe (a room-group slat hit from a corridor camera).)
   //  a couple of rivets on the cabinet top edge (worked hardware, faces into the room −Z).
   for (const rx of [baseCabXC - 0.3, baseCabXC + 0.3])
     q.add(_stud(rx, baseCabH - 0.03, baseCabF - 0.01, new THREE.Vector3(0, 0, -1), _rivet, 0.014));
@@ -4702,10 +4841,19 @@ function buildCrewQuarters(group: THREE.Group): void {
   const deskPull = _box(0.16, 0.04, 0.04, _corrRail);
   deskPull.position.set(deskX, deskY - 0.1, deskFront - 0.02);
   q.add(deskPull);
+  //   FIX 2026-07-07 (user: "supports aren't connecting to the table"): the old struts used a hand-
+  //   guessed centre/tilt that missed the desk underside (a floating gap). Compute the strut from its
+  //   real endpoints — the desk FRONT-underside corner down to the WALL BASE — so it lands flush at both
+  //   ends (same class as the throttle-knob W1 fix). Box long axis is +Z; rake it into the (Y,Z) span.
+  const strutTopY = deskY - 0.03, strutTopZ = deskFront - 0.03;        // under the desk front lip
+  const strutBotY = 0.06, strutBotZ = z0 + COR_WALL_T / 2 + 0.02;      // at the wall base
+  const strutDY = strutTopY - strutBotY, strutDZ = strutTopZ - strutBotZ;
+  const strutLen = Math.hypot(strutDY, strutDZ) + 0.03;               // +3cm so both ends overlap (no butt gap)
+  const strutAng = -Math.atan2(strutDY, strutDZ);
   for (const sx of [deskX - 0.34, deskX + 0.34]) {       // two diagonal support struts (front edge → wall base)
-    const strut = _box(0.05, 0.05, 0.66, _qtrDesk);
-    strut.position.set(sx, deskY / 2, deskZ + 0.06);
-    strut.rotation.x = -0.72;                             // rake back toward the wall base
+    const strut = _box(0.05, 0.05, strutLen, _qtrDesk);
+    strut.position.set(sx, (strutTopY + strutBotY) / 2, (strutTopZ + strutBotZ) / 2);
+    strut.rotation.x = strutAng;
     q.add(strut);
   }
   //  a recessed CONSOLE READOUT on the fore wall above the desk (a lit glass screen — a point of life).
@@ -4768,20 +4916,9 @@ function buildCrewQuarters(group: THREE.Group): void {
   snap.rotation.z = 0.14;
   q.add(snap);
 
-  // ═══ 5b. FLOOR CLUTTER — a stowage crate tucked in the FORE-DOOR corner (the walkable entry side),
-  //    clear of the berth/desk/lockers. The lived-in "someone dumped their kit" read.
-  //  ROUND-5 (adversarial gate Fix 4): the loose beige bedroll CYLINDER that lay on the bare floor in the
-  //    open walking path — an orphaned prop with no cradle/strap/function — is REMOVED (the cabin reads
-  //    clean without it; preferred over stowing). Only the deliberately-strapped crate remains.
-  const crate = _box(0.44, 0.42, 0.44, _qtrLocker);
-  crate.position.set(QTR_FAR_X + 0.34, 0.21, z0 + 0.34);
-  q.add(crate);
-  const crateLid = _box(0.46, 0.04, 0.46, _channel);
-  crateLid.position.set(QTR_FAR_X + 0.34, 0.43, z0 + 0.34);
-  q.add(crateLid);
-  const crateStrap = _box(0.46, 0.05, 0.04, _corrHazard);   // a hazard-yellow shipping strap
-  crateStrap.position.set(QTR_FAR_X + 0.34, 0.25, z0 + 0.34);
-  q.add(crateStrap);
+  // ═══ 5b. (was a strapped stowage crate in the fore-door corner.) REMOVED 2026-07-07 per user
+  //    playtest note — the small corner box read as clutter. The cabin reads clean without it; its
+  //    rule-9 collider in QUARTERS_COLLIDERS is removed in the same change.
 
   // ═══ 5c. FLOOR DETAIL — Z2 r4: the deck read too bare. A worn hazard THRESHOLD TREAD just inside the
   //    door (the ship-door idiom) + a pair of recessed deck-plate seams break the empty floor without
