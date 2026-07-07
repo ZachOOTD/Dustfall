@@ -2140,6 +2140,203 @@ const SCENARIOS = {
     }
   },
 
+  // TEXTURE-CRAWL DIAGNOSTIC (additive, 2026-07-06) — reproduce + root-cause the interior-metal
+  //   "crawling texture" the user sees ONLY while the pod is DESCENDING, reportedly on the DOOR /
+  //   LEVER / CONSOLE but NOT the main walls. Method (rule 8, diagnose-by-reproduction):
+  //     (1) Build the pod at the descent beat, seat the camera at the FIXED seated eye. The camera
+  //         NEVER moves between motion frames — so any pixel change is the SURFACE, not the view.
+  //     (2) Step setDescentProgress across a mid-descent MOTION window (the pod physically
+  //         translates ~hundreds of metres). readPixels over probe boxes: DOOR, CONSOLE/LEVER,
+  //         WALL, DECK — compute a per-region frame-to-frame RMS delta. Crawl = the affected
+  //         regions churn frame-to-frame while the walls stay ~constant.
+  //     (3) ISOLATION passes toggle one candidate mechanism at a time + re-measure: freeze the
+  //         descent lights, drop the pod's local-Y translation (pure lateral vs vertical),
+  //         flat-matte the metal (kill the rusted-hull shader), and snap altitude discretely vs a
+  //         moving pod. Whichever pass zeroes the affected delta names the mechanism.
+  //   --window=lo,hi motion range (default 0.42,0.74) · --steps=<n> frames (default 8) · captures
+  //   scen-crawl-*.png strips for the eye + logs the machine deltas.
+  'crawl-probe': async (page) => {
+    const win = String(argv.window || '0.42,0.74').split(',').map(Number);
+    const steps = Number(argv.steps || 8);
+    const [lo, hi] = win;
+    // Build + seat exactly like pod-interior's descent angle, then PIN the camera absolutely.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      g.startIntro(); g.jumpToBeat('descent');
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+    });
+    await page.waitForTimeout(700);   // let the descent init tick build the pod + seat the player
+    const fixPitch = !argv.vpitch;   // default: FIXED pitch (isolate crawl); --vpitch = the lived p-pitch
+    const midP = (lo + hi) / 2;
+    await page.evaluate(({ fixPitch, midP }) => {
+      window.__game.ctx.flags.paused = true;
+      window.__crawlFixPitch = fixPitch; window.__crawlMidP = midP;
+    }, { fixPitch, midP });
+    console.log(`[crawl-probe] camera pitch mode: ${fixPitch ? 'FIXED@mid (isolates crawl)' : 'p-dependent (lived view)'}`);
+
+    // Helper injected into the page: seat the FIXED eye relative to the pod ORIGIN, but keep the
+    //   eye's OFFSET from the pod origin constant across the motion (so the camera rides the fall
+    //   exactly like the seated player — the pod moves under a fixed relative eye; nothing about the
+    //   VIEW changes, only the world position of the whole rig). Returns pixel probes.
+    const runPass = async (passName, setup, teardown) => {
+      // apply the isolation setup once
+      await page.evaluate(setup || '(()=>{})');
+      const series = [];
+      for (let i = 0; i < steps; i++) {
+        const p = lo + (hi - lo) * (i / (steps - 1));
+        const probe = await page.evaluate((p) => {
+          const g = window.__game; const ctx = g.ctx;
+          const THREE = g.THREE;
+          try { g.setDescentProgress(p); } catch {}
+          if (window.__crawlHook) window.__crawlHook(p);   // per-pass per-frame override
+          const cam = ctx.three.camera;
+          const V = cam.position.constructor;
+          const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+          pod.updateMatrixWorld(true);
+          const o = pod.getWorldPosition(new V());
+          // Seated eye: pod origin + the constant seated offset (mirrors pod-interior's derivation).
+          const pb = ctx.player.body;
+          const eyeY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3) + (ctx.player.eyeOffset || 0.5);
+          cam.position.set(o.x, eyeY, o.z + 0.35);
+          // Descent look pitch. DEFAULT: FIXED at the window midpoint so the view RELATIVE to the pod
+          //   is IDENTICAL across every motion frame — any pixel change is then pure SURFACE crawl, not
+          //   view parallax. (--vpitch drives the real p-dependent pitch to also show the lived view.)
+          const midP = window.__crawlMidP != null ? window.__crawlMidP : p;
+          const useP = window.__crawlFixPitch ? midP : p;
+          const pitch = -0.12 - 0.28 * (useP * useP);
+          cam.lookAt(o.x, eyeY + Math.tan(pitch), o.z - 1);
+          cam.updateMatrixWorld(true);
+          ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+          // Read the framebuffer back. Probe boxes are in CANVAS pixels (1000x760). The seated eye
+          //   faces −Z: the porthole/door fills the upper-centre; the console/lever sit lower-RIGHT;
+          //   the deck fills the bottom; the curved walls flank left+right at mid height.
+          const gl = ctx.three.renderer.getContext();
+          const W = ctx.three.renderer.domElement.width, H = ctx.three.renderer.domElement.height;
+          const readBox = (x0, y0, x1, y1) => {
+            const w = x1 - x0, h = y1 - y0;
+            const buf = new Uint8Array(w * h * 4);
+            // WebGL readPixels origin is BOTTOM-left; flip the y range.
+            gl.readPixels(x0, H - y1, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+            return Array.from(buf);
+          };
+          return {
+            p: +p.toFixed(3), podY: +o.y.toFixed(2),
+            door:    readBox(390, 150, 610, 360),   // door slab + porthole ring (upper-centre)
+            console: readBox(560, 430, 860, 660),   // console body + lever (lower-right)
+            lever:   readBox(600, 470, 720, 640),   // the lever grip/shaft specifically
+            wall:    readBox(60, 300, 220, 520),     // left curved wall (the "fixed" control)
+            deck:    readBox(360, 640, 640, 750),    // deck plate (bottom)
+          };
+        }, p);
+        series.push(probe);
+      }
+      await page.evaluate(teardown || '(()=>{})');
+      await page.evaluate('window.__crawlHook = null');
+      // Frame-to-frame RMS delta per region (ignore fully-black pixels so a void frame doesn't skew).
+      const regions = ['door', 'console', 'lever', 'wall', 'deck'];
+      const out = { pass: passName, podY: series.map((s) => s.podY) };
+      for (const r of regions) {
+        let sum = 0, n = 0, peak = 0;
+        for (let i = 1; i < series.length; i++) {
+          const a = series[i - 1][r], b = series[i][r];
+          let f = 0, fn = 0;
+          for (let k = 0; k < a.length; k += 4) {
+            const d = Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]);
+            f += d * d; fn++;
+          }
+          const rms = Math.sqrt(f / fn);
+          sum += rms; n++; peak = Math.max(peak, rms);
+        }
+        out[r] = { meanΔ: +(sum / n).toFixed(2), peakΔ: +peak.toFixed(2) };
+      }
+      return out;
+    };
+
+    // ── PASS A: BASELINE — the real descent, nothing altered. Establishes the crawl signature.
+    const baseline = await runPass('A-baseline', null, null);
+    console.log('[crawl-probe] ' + JSON.stringify(baseline));
+
+    // ── PASS B: FREEZE LIGHTS — pin every descent-driven light to a constant so a moving/ramping
+    //   light or shadow can't be the churn. If the affected delta drops → it's lighting, not surface.
+    const passB = await runPass('B-frozen-lights',
+      `(() => {
+        const ctx = window.__game.ctx;
+        window.__crawlHook = () => {
+          ctx.three.scene.traverse((o) => {
+            if (o.isLight) { o.userData.__frzI = o.userData.__frzI ?? o.intensity; o.intensity = o.userData.__frzI;
+                             if (o.color) o.color.setRGB(1,1,1); }
+          });
+        };
+      })()`,
+      `(() => { window.__game.ctx.three.scene.traverse((o)=>{ if(o.isLight && o.userData.__frzI!==undefined){ o.intensity=o.userData.__frzI; delete o.userData.__frzI; } }); })()`);
+    console.log('[crawl-probe] ' + JSON.stringify(passB));
+
+    // ── PASS C: FLAT-MATTE METAL — replace every rusted-hull material's fragment output with the
+    //   plain base color (kill the onBeforeCompile weathering + any view-dependent term) on the
+    //   DOOR/CONSOLE/LEVER family. If the affected delta drops to the wall level → the churn is in
+    //   the metal MATERIAL (shader/spec), pointing at the surface effect. We do this by swapping the
+    //   affected meshes to a plain MeshBasicMaterial (no lighting, no shader) captured by name-ish
+    //   heuristics: any mesh under the pod whose material is a MeshStandard (glass/metal spec) OR a
+    //   Lambert with onBeforeCompile, in the console/lever/door screen-region, is flattened.
+    const passC = await runPass('C-flat-matte-metal',
+      `(() => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+        window.__crawlSwaps = [];
+        pod.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          const m = o.material;
+          // Flatten anything that could carry a view/shader-dependent term: standard mats (spec/metal)
+          //   and lambert mats that were patched (onBeforeCompile set). Leave basic/emissive LEDs alone.
+          const patched = typeof m.onBeforeCompile === 'function' && m.onBeforeCompile.length > 0;
+          if (m.isMeshStandardMaterial || patched) {
+            const flat = new THREE.MeshBasicMaterial({ color: (m.color ? m.color.getHex() : 0x808080) });
+            window.__crawlSwaps.push([o, m]);
+            o.material = flat;
+          }
+        });
+      })()`,
+      `(() => { for (const [o, m] of (window.__crawlSwaps || [])) o.material = m; window.__crawlSwaps = []; })()`);
+    console.log('[crawl-probe] ' + JSON.stringify(passC));
+
+    // ── PASS D: KILL SPECULAR/METALNESS ONLY — set every MeshStandardMaterial's metalness=0 +
+    //   roughness=1 (kills the view-dependent specular lobe) but KEEP the lambert rusted-hull shader.
+    //   Isolates spec-aliasing (candidate #2) from the rest of the material.
+    const passD = await runPass('D-no-spec',
+      `(() => {
+        const g = window.__game; const ctx = g.ctx;
+        const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+        window.__crawlSpec = [];
+        pod.traverse((o) => {
+          if (!o.isMesh || !o.material || !o.material.isMeshStandardMaterial) return;
+          const m = o.material;
+          window.__crawlSpec.push([m, m.metalness, m.roughness]);
+          m.metalness = 0; m.roughness = 1; m.needsUpdate = true;
+        });
+      })()`,
+      `(() => { for (const [m, met, rgh] of (window.__crawlSpec || [])) { m.metalness = met; m.roughness = rgh; m.needsUpdate = true; } window.__crawlSpec = []; })()`);
+    console.log('[crawl-probe] ' + JSON.stringify(passD));
+
+    // ── PASS E: DISCRETE ALTITUDE (no motion) — hold the pod at a SINGLE altitude and re-render the
+    //   SAME progress each step (no translation between frames). If the affected delta collapses to
+    //   ~0 → the churn is genuinely motion-correlated (confirms it tracks the fall, not RNG/time).
+    const passE = await runPass('E-no-motion',
+      `(() => { window.__crawlHook = () => { window.__game.setDescentProgress(0.58); }; })()`,
+      null);
+    console.log('[crawl-probe] ' + JSON.stringify(passE));
+
+    // Summary table for the eye.
+    const table = [baseline, passB, passC, passD, passE].map((r) => ({
+      pass: r.pass, door: r.door.meanΔ, console: r.console.meanΔ, lever: r.lever.meanΔ, wall: r.wall.meanΔ, deck: r.deck.meanΔ,
+    }));
+    console.log('[crawl-probe] SUMMARY (meanΔ per region): ' + JSON.stringify(table, null, 0));
+  },
+
   // W6 item 6 — THE SEALED CABIN DOOR must sit FLUSH (not slanted) at every sealed stage. Probes the
   //   cabin hatch pivot's rotation (x,y,z) at descent (sealed), impact (sealed, crashed), and reports
   //   whether any residual tilt exists; then shoots a TRUE head-on porthole-centred frame at descent
@@ -5100,7 +5297,11 @@ const SCENARIOS = {
         await drive(2.6, () => { faceKey(YAW_NEGX); ctx.input.keys['KeyW'] = true; });
         ctx.input.keys['KeyW'] = false;
         p = pos(); checkFloor(p);
-        const bunkBlocked = p.x > -3.15;
+        // Quarters v2 recessed-alcove redesign: the bed is now SET INTO the back wall, so the player
+        //   is blocked at the opening-frame lip collider (~-3.58) — well before the -4.1 wall — and the
+        //   floor in front is open (the old projecting platform stopped them by ~-3.1). Assert stopped
+        //   BEFORE the wall / not walked into the pocket, not at the retired platform line (-3.15).
+        const bunkBlocked = p.x > -3.9;
         result.legs.push({ leg: 'bunk-block', xEnd: p.x, blocked: bunkBlocked, y: +p.y.toFixed(1) });
 
         // ── LEG 3: OPEN FLOOR WALKABLE. Inside (x −1.6, z 9.4), face +Z, drive W → should walk aft freely
