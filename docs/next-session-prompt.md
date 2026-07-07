@@ -47,8 +47,13 @@ The user ran a long live-feedback session on the released escape-pod intro, then
 - The cockpit floor-overshoot (agent applied the geometrically-correct inset but couldn't frame the
   user's exact screenshot angle — confirm in-build).
 
-## Keeping the machine fast (NEW this session)
-Long sessions accumulate orphaned Vite dev servers + headless browsers (each agent/rig-shot spawns
-its own; completed agents don't always clean up). Run **`npm run reap`** anytime the machine slows
-(kills all stale dev servers + headless browsers, keeps the MCP servers; `-KeepPort 5180` to keep a
-test server). The agent should reap between waves in long sessions. Script: scripts/reap-dev.ps1.
+## Keeping the machine fast (SOLVED this session — automatic)
+Long sessions used to accumulate orphaned Vite dev servers (each agent/rig-shot spawns its own;
+completed ones leaked). FIXED at the source: `vite.config.ts` now has an `autoShutdownIdle` plugin —
+every dev server terminates ITSELF once no browser has been connected for ~8 min (or ~20 min if never
+used), safe because an in-use rig-shot/bench keeps its page attached so it never dies mid-run. So
+servers self-clean; no command needed. `npm run reap` (scripts/reap-dev.ps1) remains the manual
+force-clean for immediate relief; `DUSTFALL_NO_AUTOSHUTDOWN=1` opts a server out.
+FOLLOW-UP (verify next session): confirm the auto-shutdown actually fires as designed on the real
+machine (boot-tested clean, but the idle-fire timing wasn't observed live) — watch a leftover agent
+server self-exit, and confirm it never kills an active rig-shot/bench mid-run.
