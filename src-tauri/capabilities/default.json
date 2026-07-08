@@ -6,6 +6,10 @@
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-decorations",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize"
   ]
 }

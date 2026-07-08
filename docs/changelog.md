@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Display-mode settings — 2026-07-08 (attended) — fullscreen / windowed / borderless ✓ tsc clean · desktop runtime-verified
+
+`verified` — tsc clean; the web dropdown + localStorage round-trip verified in the preview; the desktop borderless path proven at runtime (a temp-default build launched maximized + undecorated), then the final windowed-default app rebuilt.
+
+- **NEW `display mode` row in the graphics settings** (between render-quality + shadows). Web = windowed/fullscreen (the Fullscreen API); the **Tauri desktop app** = windowed/fullscreen/**borderless windowed** (the window API). NEW `src/core/displayMode.ts` picks the backend at runtime: Tauri via the `withGlobalTauri` global (`window.__TAURI__.window` — no npm dep) guarded by `isDesktopApp()`, else the web Fullscreen API. Borderless is desktop-only (hidden from the web dropdown — browsers have no borderless-window concept). Web fullscreen applies on the dropdown change (a user gesture) + re-syncs on `fullscreenchange` (Esc/F11); desktop applies the saved mode at boot. Persisted in `dustfall.settings.v1` (localStorage, not the save schema). `src-tauri/`: `app.withGlobalTauri: true` + the window capabilities (`allow-set-fullscreen`/`-set-decorations`/`-maximize`/`-unmaximize`). Settings model: `DisplayMode` in `settings.ts`, wired in `menus.ts` mirroring the render-quality dropdown.
+
 ## Crafting rework + desktop packaging — 2026-07-08 (attended) — pickup-gated recipe unlock (card grid) + Tauri desktop app ✓ tsc clean · built Dustfall.exe
 
 `verified` — `npm run verify` (tsc) clean; NEW `craft-unlock` rig gate + existing `smoke-pod-tutorial` PASS; save v16 round-trip + a tampered pre-v16 migration verified (no card regresses); the desktop `.exe` launch-tested (WebGL title renders in a native WebView2 window). Two features → two commits.

@@ -10,7 +10,9 @@ import {
   presetValues,
   type Settings,
   type RenderQuality,
+  type DisplayMode,
 } from '../core/settings.ts';
+import { applyDisplayMode, initDisplayMode, isDesktopApp } from '../core/displayMode.ts';
 import { setMasterVolume, playUiHover, playUiClick } from '../audio/audio.ts';
 import { hasSave, saveGameState, loadGameState, clearSave } from '../persistence/save.ts';
 import { resetMeteorCrash, applyPendingCrashRestore } from '../world/meteorCrash.ts';   // ACBE (D1) — death-continue crash reset+restore
@@ -29,6 +31,7 @@ interface SettingsRefs {
   fov: HTMLInputElement;
   fovVal: HTMLSpanElement;
   renderQuality: HTMLSelectElement;
+  display: HTMLSelectElement;    // window display mode (fullscreen/windowed/borderless)
   shadows: HTMLInputElement;
   diegetic: HTMLInputElement;   // M6 ④ (C40)
 }
@@ -320,6 +323,13 @@ export function createMenus(ctx: GameContext): void {
     ['medium', 'medium'],
     ['high', 'high'],
   ]));
+  // Display mode — `borderless windowed` is a desktop-only window state, so it's
+  // only offered in the Tauri app; the web build shows windowed/fullscreen (the
+  // Fullscreen API). See core/displayMode.ts.
+  const displayOptions: ReadonlyArray<readonly [string, string]> = isDesktopApp()
+    ? [['windowed', 'windowed'], ['fullscreen', 'fullscreen'], ['borderless', 'borderless windowed']]
+    : [['windowed', 'windowed'], ['fullscreen', 'fullscreen']];
+  rows.appendChild(makeSettingsDropdown('display mode', 'set-display', displayOptions));
   rows.appendChild(makeSettingsToggle('shadows', 'set-shadows'));
   // M6 ④ (C40) — diegetic-survival opt-in. The row only shows when the feature is enabled
   // (else it's a dead toggle); the ref still exists so the wiring below never null-crashes.
@@ -346,6 +356,7 @@ export function createMenus(ctx: GameContext): void {
     fov:            sp.querySelector<HTMLInputElement>('#set-fov')!,
     fovVal:         sp.querySelector<HTMLSpanElement>('#set-fov-val')!,
     renderQuality:  sp.querySelector<HTMLSelectElement>('#set-quality')!,
+    display:        sp.querySelector<HTMLSelectElement>('#set-display')!,
     shadows:        sp.querySelector<HTMLInputElement>('#set-shadows')!,
     diegetic:       sp.querySelector<HTMLInputElement>('#set-diegetic')!,
   };
@@ -358,6 +369,10 @@ export function createMenus(ctx: GameContext): void {
   _settingsRefs.fov.value = String(_settings.fov);
   _settingsRefs.fovVal.textContent = String(_settings.fov);
   _settingsRefs.renderQuality.value = _settings.renderQuality;
+  // On web a 'borderless' saved value has no matching option → reflect it as
+  // 'fullscreen' (its web equivalent) so the dropdown isn't left blank.
+  _settingsRefs.display.value =
+    !isDesktopApp() && _settings.displayMode === 'borderless' ? 'fullscreen' : _settings.displayMode;
   _settingsRefs.shadows.checked = _settings.shadowsEnabled;
   _settingsRefs.diegetic.checked = _settings.diegeticSurvival;
 
@@ -405,6 +420,16 @@ export function createMenus(ctx: GameContext): void {
     saveSettings(_settings);
   });
 
+  // Display mode: applies via the web Fullscreen API or the Tauri window API.
+  // The change event is a user gesture — required for web requestFullscreen.
+  _settingsRefs.display.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.display.addEventListener('change', () => {
+    _settings.displayMode = _settingsRefs!.display.value as DisplayMode;
+    playUiClick();
+    void applyDisplayMode(_settings.displayMode);
+    saveSettings(_settings);
+  });
+
   // Shadows on/off — biggest single GPU lever.
   _settingsRefs.shadows.addEventListener('mouseenter', playUiHover);
   _settingsRefs.shadows.addEventListener('change', () => {
@@ -420,6 +445,15 @@ export function createMenus(ctx: GameContext): void {
     _settings.diegeticSurvival = _settingsRefs!.diegetic.checked;
     playUiClick();
     applySettings(_settings);
+    saveSettings(_settings);
+  });
+
+  // Display mode: on desktop, apply the saved mode now (no gesture needed); on
+  // web, watch fullscreenchange so an Esc/F11 out of fullscreen updates the
+  // setting + dropdown. (Web can't force fullscreen at boot — needs a gesture.)
+  initDisplayMode(_settings.displayMode, (m) => {
+    _settings.displayMode = m;
+    if (_settingsRefs) _settingsRefs.display.value = m;
     saveSettings(_settings);
   });
 }
