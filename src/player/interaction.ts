@@ -60,7 +60,6 @@ import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
 import { findJournalById, type JournalKind } from '../world/journal.ts';   // ACBE (D1) — crash black-box per-instance content
-import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 import { Tuning } from '../config/tuning.ts';
 
@@ -232,7 +231,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
     return;
   }
   // Overlay menus suppress interaction (pointer is unlocked anyway).
-  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen() || isJournalPanelOpen() || isRecipeBookPanelOpen()) {
+  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen() || isJournalPanelOpen()) {
     if (_salvaging) cancelSalvage();
     if (_pickupSwap) cancelPickupSwap();
     return;

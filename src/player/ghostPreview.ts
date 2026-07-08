@@ -23,7 +23,6 @@ import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
-import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
 
@@ -103,8 +102,7 @@ function overlayOpen(): boolean {
     || isCraftingMenuOpen()
     || isInventoryOverlayOpen()
     || isControlsPanelOpen()
-    || isJournalPanelOpen()
-    || isRecipeBookPanelOpen();
+    || isJournalPanelOpen();
 }
 
 const _fwd = new THREE.Vector3();

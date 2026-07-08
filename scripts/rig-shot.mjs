@@ -1409,38 +1409,51 @@ const SCENARIOS = {
     console.log(`[drop-test] ${allOk ? 'PASS' : 'FAIL'} ${JSON.stringify(after)}`);
   },
 
-  // ACAS B3 + C37 — crafting multi-match CHOOSER verification.
-  //   REAL collision (C37): branch×3 + scrap×1 now matches BOTH fire_kit (id 2) AND
-  //   signal_kit (id 18) — the first live gameplay collision, which lights up the
-  //   chooser in real play (dev-mode pre-discovers both, so it shows two NAMED buttons).
-  //   INJECTED (ACAS B3): also inject a transient recipe colliding with scrap_bar
-  //   (scrap×2 + branch×1) to exercise the discovery-respecting "?" path (one option
-  //   discovered, one not). Confirm the chooser renders one button per recipe + gates
-  //   CRAFT until a pick. Control: a single-match combo + a no-match combo show no chooser.
-  'craft-chooser': async (page) => {
+  // Crafting rework — PICKUP-GATED discovery gate (replaces the old craft-chooser
+  //   gate). A recipe unlocks once ALL its ingredient TYPES have been collected
+  //   (any means — pickup/craft/loot, all via addItem). Runs NON-dev (enterGame(false),
+  //   clean empty inventory) so the real cold→warm→unlocked progression is exercised:
+  //     - machete (id 19, scrap×2+cloth×1): cold → +scrap = warm → +cloth = unlocked.
+  //     - fire_kit (id 2) + signal_flare (id 18) share branch×3+scrap×1 — the old
+  //       collision now unlocks as TWO independent cards on the same ingredient set.
+  //     - sled_kit (id 9, scrap+branch+ROPE): rope is CRAFTED not picked up, so
+  //       obtaining a rope (real acquire path) is what flips sled cold/warm → unlocked.
+  'craft-unlock': async (page) => {
     const r = await page.evaluate(() => {
-      const g = window.__game; g.enterGame(true);
-      // C37 — the REAL fire_kit ⇄ signal_kit collision (no injection needed).
-      const real = g.craftChooserTest([{ id: 'branch', count: 3 }, { id: 'scrap', count: 1 }]);
-      // Inject a transient recipe colliding with scrap_bar to exercise the "?" path.
-      g.injectTestRecipe();
-      const collide = g.craftChooserTest([{ id: 'scrap', count: 2 }, { id: 'branch', count: 1 }]);
-      const single = g.craftChooserTest([{ id: 'cloth', count: 1 }, { id: 'scrap', count: 1 }]);  // → bandage only
-      const none = g.craftChooserTest([{ id: 'cloth', count: 2 }, { id: 'branch', count: 5 }]);    // no recipe
-      return { real, collide, single, none };
+      const g = window.__game;
+      // enterLive() already handed off in DEV mode, whose loadout pre-discovers
+      // every recipe + seeds the collected-type ledger. Reset both to a clean
+      // new-game baseline so the pickup-gated progression is exercised honestly.
+      // (Dev items left in the bag are irrelevant — craftCardState reads only
+      // the discovered + collected ledgers, not bag counts.)
+      g.ctx.inventory.discoveredRecipes.length = 0;
+      g.ctx.inventory.collectedItemTypes.clear();
+      const MACHETE = 19, FIRE = 2, SIGNAL = 18, SLED = 9;
+      const out = {};
+      out.start = { machete: g.craftCardState(MACHETE), fire: g.craftCardState(FIRE) };
+      g.giveItem('scrap', 1);
+      out.afterScrap = { machete: g.craftCardState(MACHETE) };
+      g.giveItem('cloth', 1);
+      out.afterCloth = { machete: g.craftCardState(MACHETE) };
+      g.giveItem('branch', 1);
+      out.afterBranch = { fire: g.craftCardState(FIRE), signal: g.craftCardState(SIGNAL) };
+      out.sledBefore = g.craftCardState(SLED);           // warm — scrap+branch collected, no rope
+      g.giveItem('rope', 1);                             // simulate crafting a rope
+      out.sledAfter = g.craftCardState(SLED);            // unlocked — crafted-ingredient chain
+      return out;
     });
-    const c = r.collide || {};
-    const rl = r.real || {};
-    // REAL collision: 2 buttons, CRAFT gated, both named (dev pre-discovers both).
-    const realPass = !!rl.buttons && rl.buttons.length === 2 && rl.craftDisabled === true
-      && rl.buttons.includes('fire kit') && rl.buttons.includes('signal flare');
-    // Injected: 2 buttons, CRAFT gated, discovery-respecting (scrap_bar named, injected "?").
-    const injPass = !!c.buttons && c.buttons.length === 2 && c.craftDisabled === true
-      && c.buttons.includes('?') && c.buttons.includes('scrap bar');
-    const pass = realPass && injPass
-      && (r.single ? r.single.buttons.length === 0 : false)
-      && (r.none ? r.none.buttons.length === 0 : false);
-    console.log(`[craft-chooser] ${pass ? 'PASS' : 'FAIL'} (real=${realPass} injected=${injPass}) ${JSON.stringify(r)}`);
+    const s = r || {};
+    const coldStart = s.start && s.start.machete.state === 'cold' && !s.start.machete.discovered
+      && s.start.fire.state === 'cold';
+    const warmScrap = s.afterScrap && s.afterScrap.machete.state === 'warm' && !s.afterScrap.machete.discovered;
+    const unlockedCloth = s.afterCloth && s.afterCloth.machete.state === 'unlocked' && s.afterCloth.machete.discovered;
+    const collision = s.afterBranch
+      && s.afterBranch.fire.state === 'unlocked' && s.afterBranch.fire.discovered
+      && s.afterBranch.signal.state === 'unlocked' && s.afterBranch.signal.discovered;
+    const chain = s.sledBefore && s.sledBefore.state === 'warm'
+      && s.sledAfter && s.sledAfter.state === 'unlocked' && s.sledAfter.discovered;
+    const pass = coldStart && warmScrap && unlockedCloth && collision && chain;
+    console.log(`[craft-unlock] ${pass ? 'PASS' : 'FAIL'} (cold=${coldStart} warm=${warmScrap} unlocked=${unlockedCloth} collision=${collision} chain=${chain}) ${JSON.stringify(r)}`);
   },
 
   // M6 ② (C38) — survival-rebalance gate. Drives the REAL updateStats deterministically

@@ -75,7 +75,7 @@ const CONTROLS: ReadonlyArray<readonly [string, string]> = [
   ['1 – 4 / WHEEL', 'select hotbar slot'],
   ['C', 'open crafting menu'],
   ['I', 'open backpack'],
-  ['TAB', 'open recipe book'],
+  ['TAB', 'open crafting / recipes'],
   ['ESC', 'pause'],
   ['H', 'show controls'],
   ['F1', 'performance HUD (dev)'],

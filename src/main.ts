@@ -48,7 +48,6 @@ import { updateCompanion, spawnCompanionAt, despawnCompanion } from './enemies/c
 import { createFootprintPuffs, updateFootprintPuffs } from './world/footprintPuffs.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
-import { createRecipeBookPanel } from './ui/recipeBookPanel.ts';
 import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
@@ -596,7 +595,6 @@ createCraftingMenu(ctx);
 createSleepOverlay(ctx);
 createInventoryOverlay(ctx);
 createJournalPanel(ctx);
-createRecipeBookPanel(ctx);  // AAA — TAB-key modal listing discovered recipes
 createPerfHud(ctx);
 createStatVignette();  // WW — must come after HUD creation so it overlays correctly
 createGhostPreview(ctx); // AAA — kit-placement preview ring + marker

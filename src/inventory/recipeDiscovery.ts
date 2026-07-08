@@ -1,34 +1,29 @@
-// Recipe registry + discovery state — Session TT.
+// Recipe registry + discovery state.
 //
-// Replaces the explicit `RECIPES` list UI from Session G with a
-// combine-to-discover model: the player throws up to 4 item-stacks
-// into the crafting menu's input slots; the system hashes the inputs
-// + looks up matching recipes; the player either sees the result (if
-// already discovered) or "?" (if undiscovered). Clicking CRAFT
-// consumes inputs + produces output. On first-time successful craft,
-// the recipe is added to `inventory.discoveredRecipes`.
+// Discovery is PICKUP-GATED (crafting rework, replacing the Session TT
+// combine-to-discover input slots): a recipe unlocks once the player has
+// ever collected all of its ingredient TYPES (tracked in
+// InventoryState.collectedItemTypes, updated on every addItem). Counts
+// don't gate the unlock — only whether the recipe can actually be crafted
+// once known. The crafting menu (craftingMenu.ts) renders each recipe as a
+// card with three states from recipeCardState():
+//   - cold     — no ingredient types collected yet ("?").
+//   - warm     — some collected (tease: known ingredients revealed, "?"
+//                for the rest); output still hidden.
+//   - unlocked — all ingredient types collected; full card + craftable
+//                when the bag holds the counts.
+// unlockNewlyEligible() runs on each acquire to append newly-satisfied
+// recipe ids to inventory.discoveredRecipes (the persisted ledger).
 //
 // Design constraints (from GDD pillars + D7/D9/D13):
-//   - Crafting is survival pressure, not a min-max vector. Keep the
-//     seed set tight (currently 9 recipes; resist sprawl).
-//   - The "discovery feel" matters more than recipe count — the player
-//     should feel like they figured something out, not like they
-//     unlocked a menu item.
+//   - Crafting is survival pressure, not a min-max vector. Keep the seed
+//     set tight; resist sprawl.
+//   - Discovery is coupled to gathering — scavenging rewards the player
+//     with knowledge, which fits the survival loop.
 //
-// Input matching:
-//   - Inputs are an unordered MULTISET of (itemId, count). The order
-//     the player places items in the input slots is irrelevant.
-//   - Match by canonical key: sort the inputs by itemId alphabetically,
-//     then serialize as "id:count,id:count,...". Same key → same recipe.
-//   - Counts matter. {cloth:1, branch:1} (torch) and {cloth:2, branch:1}
-//     (rope) are different recipes despite using the same item types.
-//
-// Recipe overlap (chooser case):
-//   - If two recipes hash to the same key (rare but allowed), the UI
-//     surfaces a chooser. `matchRecipes()` returns the array of matches
-//     so the UI can render the chooser.
-//   - None of the current 9 recipes overlap; the chooser exists for
-//     future recipes that might.
+// Recipe collisions (two recipes with the same input multiset, e.g.
+// fire_kit + signal_flare) are no longer special: each is an independent
+// card that unlocks on the same ingredient set. No chooser needed.
 
 import type { ItemId } from './types.ts';
 
@@ -332,41 +327,6 @@ export const CATEGORY_LABEL: Record<RecipeCategory, string> = {
  *  existing playtesters don't lose their recipe knowledge. */
 export const ALL_RECIPE_IDS: ReadonlyArray<number> = RECIPES.map((r) => r.id);
 
-/** Canonical hash of an input multiset — used as the recipe lookup
- *  key. Sorts inputs by id alphabetically, drops zero-count entries,
- *  serializes as `"id:count,id:count,..."`. Two inputs with the same
- *  multiset hash to the same key regardless of order. */
-export function canonicalInputKey(inputs: RecipeInput[]): string {
-  const sorted = inputs
-    .filter((i) => i.count > 0)
-    .map((i) => ({ id: i.id, count: i.count }))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return sorted.map((i) => `${i.id}:${i.count}`).join(',');
-}
-
-/** Pre-computed map from canonical input key → matching recipes.
- *  Built once at module load. */
-const _recipesByKey = (() => {
-  const m = new Map<string, Recipe[]>();
-  for (const r of RECIPES) {
-    const key = canonicalInputKey(r.inputs);
-    const existing = m.get(key);
-    if (existing) existing.push(r);
-    else m.set(key, [r]);
-  }
-  return m;
-})();
-
-/** Look up all recipes matching the given input multiset. Returns:
- *   - empty array if no recipe matches (invalid combination → "nothing happens")
- *   - single-entry array if exactly one matches (the common case)
- *   - multi-entry array if multiple recipes share the same input multiset
- *     (chooser UI surfaces this — none of the current 9 recipes overlap) */
-export function matchRecipes(inputs: RecipeInput[]): Recipe[] {
-  const key = canonicalInputKey(inputs);
-  return _recipesByKey.get(key) ?? [];
-}
-
 /** Find a recipe by its stable numeric id. Used by save/load on
  *  the `discoveredRecipes` ledger. */
 export function findRecipeById(id: number): Recipe | undefined {
@@ -374,91 +334,51 @@ export function findRecipeById(id: number): Recipe | undefined {
   return undefined;
 }
 
-/** ACAS B3 — TEST-ONLY: register a transient recipe at runtime so the multi-match
- *  CHOOSER path can be exercised without shipping a gameplay collision (the live
- *  recipe set has no input-multiset overlaps, so the chooser is otherwise dormant).
- *  Not called by production code — only the `craft-chooser` rig-shot verification. */
-export function __registerTestRecipe(r: Recipe): void {
-  RECIPES.push(r);
-  const key = canonicalInputKey(r.inputs);
-  const existing = _recipesByKey.get(key);
-  if (existing) existing.push(r);
-  else _recipesByKey.set(key, [r]);
-}
+// ── Pickup-gated discovery (crafting rework) ──────────────────────
+// Discovery is coupled to gathering, not to guessing an input combo:
+// a recipe unlocks once the player has ever collected all of its
+// ingredient TYPES (counts don't gate the unlock — only whether you
+// can actually craft it). The `collected` set is InventoryState.
+// collectedItemTypes, updated on every addItem (pickup / craft / loot).
 
-/** AAV — partial-match recipes for the "you're on the right track" hint
- *  system in the crafting UI. Returns recipes where the player's current
- *  inputs are a SUB-MULTISET of the recipe's input multiset (every item
- *  the player has appears in the recipe with at least the same count;
- *  no extra items not in the recipe).
- *
- *  Empty inputs return [] (otherwise everything would match every recipe).
- *  Exact matches are EXCLUDED — those are handled by matchRecipes.
- *
- *  Use case: player has dropped 1 branch + 1 cloth. A torch recipe
- *  needs 1 branch + 1 cloth — that's an exact match (matchRecipes).
- *  A tent_kit needs 3 branch + 2 cloth — player has 1/3 and 1/2,
- *  partial match. A rope needs 1 cloth + 2 branch — player has 1/1
- *  but only 1/2 branch — partial match too.
- *
- *  UI shows count of partial matches as "X possible recipes — add more
- *  ingredients" without revealing which (preserves discovery), but if
- *  ANY partial match is DISCOVERED the UI can name it + show what's
- *  missing.
- */
-export function partialMatchRecipes(inputs: RecipeInput[]): Recipe[] {
-  // Aggregate player's current inputs into a Map for fast lookup.
-  const playerCounts = new Map<ItemId, number>();
-  for (const inp of inputs) {
-    if (inp.count > 0) {
-      playerCounts.set(inp.id, (playerCounts.get(inp.id) ?? 0) + inp.count);
-    }
-  }
-  if (playerCounts.size === 0) return [];
-  const totalPlayer = Array.from(playerCounts.values()).reduce((a, b) => a + b, 0);
-  const matches: Recipe[] = [];
-  for (const r of RECIPES) {
-    // Build recipe count map.
-    const recipeCounts = new Map<ItemId, number>();
-    for (const inp of r.inputs) {
-      recipeCounts.set(inp.id, inp.count);
-    }
-    // Check player ⊆ recipe (every player item appears in recipe
-    // with count ≥ player's count; player has no items not in recipe).
-    let isSubset = true;
-    for (const [id, pCount] of playerCounts) {
-      const rCount = recipeCounts.get(id) ?? 0;
-      if (rCount === 0 || pCount > rCount) { isSubset = false; break; }
-    }
-    if (!isSubset) continue;
-    // Exclude exact matches (handled by matchRecipes).
-    const totalRecipe = r.inputs.reduce((a, b) => a + b.count, 0);
-    if (totalPlayer >= totalRecipe) continue;
-    matches.push(r);
-  }
-  return matches;
-}
-
-/** AAV — diff helper for partial-match UI hints. Given the player's
- *  current inputs + a target recipe, returns the list of (itemId,
- *  needed-more-count) that the player needs to add to complete it.
- *  Used for the "tent_kit needs 2 more branch + 1 more cloth" hint
- *  on DISCOVERED partial matches. */
-export function missingForRecipe(
-  inputs: RecipeInput[],
+/** Card state for a recipe given the player's ever-collected item-type
+ *  set:
+ *    - 'cold'     — none of the recipe's input types collected yet → "?".
+ *    - 'warm'     — some but not all input types collected → tease
+ *                   (output stays "?", collected ingredients revealed).
+ *    - 'unlocked' — every input type collected at least once → full card.
+ *  Monotonic: driven by the cumulative `collected` set, never by live
+ *  inventory counts, so a card never regresses once it warms/unlocks. */
+export function recipeCardState(
   recipe: Recipe,
-): Array<{ id: ItemId; count: number }> {
-  const playerCounts = new Map<ItemId, number>();
-  for (const inp of inputs) {
-    if (inp.count > 0) {
-      playerCounts.set(inp.id, (playerCounts.get(inp.id) ?? 0) + inp.count);
+  collected: ReadonlySet<ItemId>,
+): 'cold' | 'warm' | 'unlocked' {
+  const types = new Set(recipe.inputs.map((i) => i.id));
+  let have = 0;
+  for (const id of types) if (collected.has(id)) have++;
+  if (have === 0) return 'cold';
+  if (have === types.size) return 'unlocked';
+  return 'warm';
+}
+
+/** Scan every recipe not yet in `discovered` and, for any whose input
+ *  types are all present in `collected`, append its id to `discovered`
+ *  (mutating in place). Returns the newly-unlocked ids so the caller can
+ *  fire a discovery toast/chime. Called from inventory.addItem after each
+ *  successful acquire. */
+export function unlockNewlyEligible(
+  discovered: number[],
+  collected: ReadonlySet<ItemId>,
+): number[] {
+  const known = new Set(discovered);
+  const newly: number[] = [];
+  for (const r of RECIPES) {
+    if (known.has(r.id)) continue;
+    if (recipeCardState(r, collected) === 'unlocked') {
+      discovered.push(r.id);
+      newly.push(r.id);
     }
   }
-  const missing: Array<{ id: ItemId; count: number }> = [];
-  for (const inp of recipe.inputs) {
-    const have = playerCounts.get(inp.id) ?? 0;
-    const need = inp.count - have;
-    if (need > 0) missing.push({ id: inp.id, count: need });
-  }
-  return missing;
+  return newly;
 }
+

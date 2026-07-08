@@ -5,7 +5,8 @@
 // dunes. This module teaches the core CRAFT + SALVAGE loop on the player's OWN pod:
 //
 //   1. scrap + cloth are scattered around the crashed pod (the raw materials)
-//   2. the player combines them (C → crafting) into a scrap machete (the pry tool)
+//   2. gathering them unlocks the scrap-machete recipe (pickup-gated discovery);
+//      the player crafts it (C → crafting) — the pry tool
 //   3. they pry + strip the pod's back salvage panel with the machete
 //   4. the parachute that FAILED during the fall comically POPS OUT of the pod crown
 //      (the callback/comedy button on the whole opening)
@@ -62,9 +63,10 @@ export function startPodTutorial(ctx: GameContext, podX: number, podZ: number): 
   _podX = podX;
   _podZ = podZ;
   if (!alreadySeeded) scatterMaterials(ctx, podX, podZ);
-  // The first cue: point the player at the scattered scrap + the crafting menu. One-shot
-  //   (persisted so it doesn't re-nag on a resumed intro); resettable via __game.resetTutorial().
-  maybeShowEventHint(ctx, 'intro_craft', 'Scrap litters the sand — press C to combine scrap + cloth into a machete');
+  // The first cue: point the player at the scattered scrap + the crafting menu. Gathering the
+  //   scrap + cloth unlocks the machete recipe (pickup-gated discovery); then C to craft it.
+  //   One-shot (persisted so it doesn't re-nag on a resumed intro); resettable via __game.resetTutorial().
+  maybeShowEventHint(ctx, 'intro_craft', 'Scrap litters the sand — gather the scrap and cloth, then press C to craft a machete');
 }
 
 /** Scatter the raw materials the machete needs (scrap ×3, cloth ×2 — enough to craft

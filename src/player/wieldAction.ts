@@ -48,7 +48,6 @@ import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
-import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 
 function overlayOpen(): boolean {
   return isLootMenuOpen()
@@ -56,8 +55,7 @@ function overlayOpen(): boolean {
     || isCraftingMenuOpen()
     || isInventoryOverlayOpen()
     || isControlsPanelOpen()
-    || isJournalPanelOpen()
-    || isRecipeBookPanelOpen();
+    || isJournalPanelOpen();
 }
 
 export function updateWieldAction(ctx: GameContext, dt: number): void {

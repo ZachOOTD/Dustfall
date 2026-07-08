@@ -226,14 +226,23 @@ export interface InventoryState {
   selectedIdx: number;    // 0..3, indexes into slots only
   /** The pickup the player is currently aiming at (set by player/interaction). */
   hover: HoverState | null;
-  /** Session TT — set of Recipe.id numbers the player has personally
-   *  crafted at least once via the combine-to-discover UI. Persisted
-   *  across save/load. Used by `craftingMenu.ts` to decide whether to
-   *  show the actual output icon (discovered) or "?" (unknown) on the
-   *  output preview slot for a given input combination. Pre-v6 saves
-   *  get the full seed set on load (see save.ts) so existing
-   *  playtesters keep their accumulated recipe knowledge. */
+  /** Set of Recipe.id numbers the player has UNLOCKED. Crafting rework:
+   *  a recipe is added here by `unlockNewlyEligible` once every one of its
+   *  ingredient TYPES appears in `collectedItemTypes` (pickup-gated
+   *  discovery). `craftingMenu.ts` reads it (with collectedItemTypes) to
+   *  render each recipe's card as cold / warm / unlocked. Persisted across
+   *  save/load; pre-v6 saves get the full seed set on load (see save.ts) so
+   *  existing playtesters keep their accumulated recipe knowledge. */
   discoveredRecipes: number[];
+  /** Crafting rework (v16) — the monotonic set of item TYPES the player
+   *  has ever obtained (by pickup, craft, or loot — everything funnels
+   *  through `addItem`). Pickup-gated discovery: a recipe unlocks (its id
+   *  is appended to `discoveredRecipes`) once every one of its ingredient
+   *  types appears in this set. Drives the crafting card grid's cold /
+   *  warm-tease / unlocked states. Persisted across save/load; pre-v16
+   *  saves seed it from the ingredients of their already-discovered
+   *  recipes so nothing re-locks. See recipeCardState in recipeDiscovery.ts. */
+  collectedItemTypes: Set<ItemId>;
   /** Session ABJ (v11) — set of journal kinds the player has read at
    *  least once. Mutated by openJournalPanel; persisted across save/
    *  load as JournalKind[]. Used by HUD (interact prompt) to dim the

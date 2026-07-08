@@ -177,17 +177,23 @@ export function wireOverlays(ctx: GameContext): void {
     })();
   });
 
-  // AAA — TAB toggles the recipe book panel. Suppressed while death
-  // screen is up or game not yet started. e.preventDefault() so TAB
-  // doesn't escape pointer-lock or shift browser focus.
+  // TAB — also opens the crafting card grid. The crafting rework folded
+  // the old TAB recipe-book into the one card-grid screen, so TAB now
+  // mirrors C (muscle-memory continuity). Suppressed while death screen is
+  // up or game not yet started. e.preventDefault() so TAB doesn't escape
+  // pointer-lock or shift browser focus.
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Tab' || e.repeat) return;
     if (ctx.stats.dead || !ctx.flags.started) return;
     e.preventDefault();
-    void import('../ui/recipeBookPanel.ts').then((m) => {
-      if (m.isRecipeBookPanelOpen()) m.closeRecipeBookPanel(ctx);
-      else m.openRecipeBookPanel(ctx);
-    });
+    void (async () => {
+      const [inv, craft] = await Promise.all([
+        import('../ui/inventoryOverlay.ts'),
+        import('../ui/craftingMenu.ts'),
+      ]);
+      if (craft.isCraftingMenuOpen()) craft.closeCraftingMenu();
+      else if (!inv.isInventoryOverlayOpen()) craft.openCraftingMenu(ctx);
+    })();
   });
 
   // ABO A3 — F toggles 3rd-person camera. Pause-gated (no toggle while

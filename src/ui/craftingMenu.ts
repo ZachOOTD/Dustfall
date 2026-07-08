@@ -1,80 +1,47 @@
-// Crafting menu — opens on C. Session TT rewrite from explicit
-// recipe-list UI to a **combine-to-discover** model:
+// Crafting menu — opens on C (and TAB). Pickup-gated discovery rework:
+// discovery no longer happens by guessing an input combo — a recipe
+// unlocks when the player has collected all of its ingredient TYPES (see
+// inventory.addItem → unlockNewlyEligible). This menu is a browse-and-craft
+// CARD GRID, not the old combine-to-discover input slots.
 //
-//   - 4 input slots (multiset; order doesn't matter)
-//   - 1 output preview slot
-//   - CRAFT button
-//   - Player inventory column (click to add to inputs)
+// Card states (recipeCardState against inventory.collectedItemTypes):
+//   - cold     → "?" card, nothing revealed.
+//   - warm     → "?" output, but the collected ingredients are teased
+//                (still-uncollected ingredients show as "?").
+//   - unlocked → output icon + name + full have/need ingredient chips;
+//                CRAFT enabled iff the player holds the required counts.
 //
-// Output preview:
-//   - empty inputs   → empty preview
-//   - matches a discovered recipe → output icon + name
-//   - matches an undiscovered recipe → "?" (unknown)
-//   - matches multiple recipes → chooser (one button per match)
-//   - no match → "nothing happens" indicator
-//
-// Click an input slot to remove 1 from it (returned to inventory on
-// close + on individual remove). Clicking CRAFT consumes inputs +
-// adds output + (if undiscovered) marks the recipe as known with a
-// toast. None of the current 9 recipes overlap; the chooser exists
-// for future recipes that might.
+// Clicking a card selects it and fills the bottom detail footer
+// (ingredients → output, the item's description, CRAFT). Dev mode
+// (ctx.flags.devMode) treats every card as unlocked + free-crafts on
+// CRAFT (no material cost), so visual/verification passes can reach any
+// recipe with an empty bag.
 
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
-import type { ItemId, ItemMeta, Slot } from '../inventory/types.ts';
-import { addItem, countItems, removeItems } from '../inventory/inventory.ts';
+import type { ItemId, Slot } from '../inventory/types.ts';
+import { addItem, removeItems } from '../inventory/inventory.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';
 import {
   RECIPES,
-  matchRecipes,
-  partialMatchRecipes,
-  missingForRecipe,
+  recipeCardState,
   CATEGORY_ORDER,
   CATEGORY_LABEL,
   type Recipe,
-  type RecipeInput,
 } from '../inventory/recipeDiscovery.ts';
-import { playCraft, playUiClick, playUiHover, playRecipeDiscovery } from '../audio/audio.ts';
+import { playCraft, playUiClick, playUiHover } from '../audio/audio.ts';
 import { resumeFromPause } from './menus.ts';
 
-// ── Input-slot model. Each slot holds one ItemId + count. Meta is
-// preserved on the slot but ignored by recipe matching — if the
-// player drops a meta-bearing item (canteen, ammo'd gun) into an
-// input, its meta is lost on craft. Reasonable footgun; no recipe
-// currently consumes a meta-bearing item.
-interface InputSlot {
-  item: ItemId | null;
-  count: number;
-  meta?: ItemMeta;
-}
-const INPUT_SLOT_COUNT = 4;
-
 let _root: HTMLDivElement | null = null;
-let _inputsRow: HTMLDivElement | null = null;
-let _outputSlotEl: HTMLDivElement | null = null;
-let _outputLabelEl: HTMLDivElement | null = null;
-let _chooserEl: HTMLDivElement | null = null;
-let _craftBtn: HTMLButtonElement | null = null;
-let _bagRowsEl: HTMLDivElement | null = null;
-// AAW — recipe list panel on the right of the crafting menu. Lists every
-// recipe in `ctx.inventory.discoveredRecipes`, categorized CRAFTABLE vs
-// MISSING INGREDIENTS based on the player's current bag totals. Clicking a
-// CRAFTABLE row auto-fills the input slots so the player can hit CRAFT.
-let _recipesRowsEl: HTMLDivElement | null = null;
+let _gridEl: HTMLDivElement | null = null;
+let _detailEl: HTMLDivElement | null = null;
 let _ctx: GameContext | null = null;
 let _open = false;
 
-// Mutable input slots (reset on open + close).
-const _inputs: InputSlot[] = Array.from(
-  { length: INPUT_SLOT_COUNT },
-  () => ({ item: null, count: 0 }),
-);
-
-// When multiple recipes match the current inputs, the player picks
-// one via the chooser. Until they pick, CRAFT is disabled and the
-// preview shows the chooser.
-let _selectedRecipe: Recipe | null = null;
+// The card the player has clicked — drives the detail footer. Reset on
+// each open (no sticky selection across close/reopen).
+let _selected: Recipe | null = null;
 
 // ── DOM helpers ──────────────────────────────────────────────────
 
@@ -91,9 +58,8 @@ function clearChildren(el: HTMLElement): void {
   while (el.firstChild) el.removeChild(el.firstChild);
 }
 
-/** Build the icon-or-glyph element for a given item id. Standard
- *  pattern — defs may provide makeIcon() for SVG, else fall back to
- *  the single-char glyph. */
+/** Icon-or-glyph element for an item id (SVG makeIcon() if the def
+ *  provides one, else the single-char glyph). */
 function makeItemIcon(itemId: ItemId): HTMLDivElement {
   const def = getItemDef(itemId);
   const box = document.createElement('div');
@@ -101,6 +67,45 @@ function makeItemIcon(itemId: ItemId): HTMLDivElement {
   if (def.makeIcon) box.appendChild(def.makeIcon());
   else box.textContent = def.glyph;
   return box;
+}
+
+/** A "?" placeholder used for undiscovered outputs + un-collected
+ *  ingredient teases. */
+function makeUnknownIcon(): HTMLDivElement {
+  const box = document.createElement('div');
+  box.className = 'craft-icon unknown';
+  box.textContent = '?';
+  return box;
+}
+
+// ── Bag totals (shared craftability math) ────────────────────────
+
+/** Sum item totals across hotbar + backpack, skipping meta-bearing slots
+ *  (half-full canteens / loaded guns aren't crafting material — same
+ *  exclusion the old bag/recipe panels used). */
+function bagTotals(): Map<ItemId, number> {
+  const inv = _ctx!.inventory;
+  const totals = new Map<ItemId, number>();
+  const all: Slot[] = [...inv.slots, ...inv.backpack];
+  for (const s of all) {
+    if (!s.item || s.count <= 0 || s.meta) continue;
+    totals.set(s.item, (totals.get(s.item) ?? 0) + s.count);
+  }
+  return totals;
+}
+
+function canCraftRecipe(r: Recipe, totals: Map<ItemId, number>): boolean {
+  for (const inp of r.inputs) {
+    if ((totals.get(inp.id) ?? 0) < inp.count) return false;
+  }
+  return true;
+}
+
+/** Effective card state — dev mode reveals everything as unlocked so a
+ *  verification pass can browse/craft any recipe with an empty bag. */
+function cardStateOf(r: Recipe): 'cold' | 'warm' | 'unlocked' {
+  if (_ctx!.flags.devMode) return 'unlocked';
+  return recipeCardState(r, _ctx!.inventory.collectedItemTypes);
 }
 
 // ── Construction ────────────────────────────────────────────────
@@ -113,87 +118,22 @@ export function createCraftingMenu(ctx: GameContext): void {
 
   const title = document.createElement('div');
   title.className = 'title small';
-  title.textContent = 'CRAFT';
+  title.textContent = 'CRAFTING';
   root.appendChild(title);
 
-  // ── Top combine row: [in1][in2][in3][in4]  →  [out] ──
-  const combineRow = document.createElement('div');
-  combineRow.className = 'craft-combine-row';
-  root.appendChild(combineRow);
+  // Scrollable card grid (categories as full-width sub-headers).
+  const grid = document.createElement('div');
+  grid.className = 'craft-grid';
+  root.appendChild(grid);
+  _gridEl = grid;
 
-  const inputsRow = document.createElement('div');
-  inputsRow.className = 'craft-inputs-row';
-  combineRow.appendChild(inputsRow);
-  _inputsRow = inputsRow;
+  // Detail footer — ingredients → output + description + CRAFT for the
+  // selected recipe.
+  const detail = document.createElement('div');
+  detail.className = 'craft-detail';
+  root.appendChild(detail);
+  _detailEl = detail;
 
-  const arrow = document.createElement('div');
-  arrow.className = 'craft-flow-arrow';
-  arrow.textContent = '→';
-  combineRow.appendChild(arrow);
-
-  const outputSlot = document.createElement('div');
-  outputSlot.className = 'craft-output-slot empty';
-  combineRow.appendChild(outputSlot);
-  _outputSlotEl = outputSlot;
-
-  // Output label sits below the slot — name of the result, "?"
-  // for unknown, or "nothing happens".
-  const outputLabel = document.createElement('div');
-  outputLabel.className = 'craft-output-label';
-  outputLabel.textContent = '';
-  root.appendChild(outputLabel);
-  _outputLabelEl = outputLabel;
-
-  // Chooser row for multi-match recipes (hidden when not needed).
-  const chooser = document.createElement('div');
-  chooser.className = 'craft-chooser hidden';
-  root.appendChild(chooser);
-  _chooserEl = chooser;
-
-  // CRAFT button
-  const craftBtn = makeBtn('craft', performCraft);
-  craftBtn.classList.add('craft-go-btn');
-  craftBtn.disabled = true;
-  root.appendChild(craftBtn);
-  _craftBtn = craftBtn;
-
-  // ── AAW — Two-column row: YOUR BAG (left) + RECIPES (right) ──
-  // Each column owns its own header + scrollable rows list. The bag is
-  // still click-to-add-input as before; recipes is new and click-to-
-  // auto-fill (for CRAFTABLE rows; MISSING rows are read-only).
-  const twoCol = document.createElement('div');
-  twoCol.className = 'craft-two-col';
-  root.appendChild(twoCol);
-
-  // Left column: bag.
-  const bagCol = document.createElement('div');
-  bagCol.className = 'craft-col';
-  const bagHeader = document.createElement('div');
-  bagHeader.className = 'craft-col-header';
-  bagHeader.textContent = 'YOUR BAG';
-  bagCol.appendChild(bagHeader);
-
-  const bagRows = document.createElement('div');
-  bagRows.className = 'craft-bag-rows';
-  bagCol.appendChild(bagRows);
-  _bagRowsEl = bagRows;
-  twoCol.appendChild(bagCol);
-
-  // Right column: known recipes (categorized craftable / missing).
-  const recCol = document.createElement('div');
-  recCol.className = 'craft-col';
-  const recHeader = document.createElement('div');
-  recHeader.className = 'craft-col-header';
-  recHeader.textContent = 'RECIPES';
-  recCol.appendChild(recHeader);
-
-  const recRows = document.createElement('div');
-  recRows.className = 'craft-recipes-rows';
-  recCol.appendChild(recRows);
-  _recipesRowsEl = recRows;
-  twoCol.appendChild(recCol);
-
-  // Close button — returns any items still in input slots back to bag.
   root.appendChild(makeBtn('close', closeCraftingMenu));
   document.body.appendChild(root);
   _root = root;
@@ -201,525 +141,229 @@ export function createCraftingMenu(ctx: GameContext): void {
 
 // ── Rendering ────────────────────────────────────────────────────
 
-function renderInputs(): void {
-  if (!_inputsRow) return;
-  clearChildren(_inputsRow);
-  for (let i = 0; i < _inputs.length; i++) {
-    const s = _inputs[i];
-    const slot = document.createElement('button');
-    slot.className = 'craft-input-slot' + (s.item ? '' : ' empty');
-    if (s.item) {
-      slot.appendChild(makeItemIcon(s.item));
-      const count = document.createElement('div');
-      count.className = 'craft-input-count';
-      count.textContent = s.count > 1 ? `×${s.count}` : '';
-      slot.appendChild(count);
-      slot.addEventListener('mouseenter', playUiHover);
-      slot.addEventListener('click', () => removeFromInput(i));
-    }
-    _inputsRow.appendChild(slot);
+function renderGrid(): void {
+  if (!_gridEl || !_ctx) return;
+  const scroll = _gridEl.scrollTop;   // preserve scroll across rebuilds
+  clearChildren(_gridEl);
+  const totals = bagTotals();
+  for (const cat of CATEGORY_ORDER) {
+    const inCat = RECIPES
+      .filter((r) => r.category === cat)
+      .sort((a, b) => a.id - b.id);
+    if (inCat.length === 0) continue;
+    const header = document.createElement('div');
+    header.className = 'craft-cat-header';
+    header.textContent = CATEGORY_LABEL[cat];
+    _gridEl.appendChild(header);
+    for (const r of inCat) _gridEl.appendChild(buildCard(r, totals));
   }
+  _gridEl.scrollTop = scroll;
 }
 
-function renderOutputPreview(): void {
-  if (!_outputSlotEl || !_outputLabelEl || !_chooserEl || !_craftBtn) return;
+function buildCard(r: Recipe, totals: Map<ItemId, number>): HTMLButtonElement {
+  const state = cardStateOf(r);
+  const craftable = state === 'unlocked' && canCraftRecipe(r, totals);
+  const card = document.createElement('button');
+  card.className = 'craft-card ' + state + (craftable ? ' craftable' : '');
+  if (_selected === r) card.classList.add('selected');
 
-  clearChildren(_outputSlotEl);
-  clearChildren(_chooserEl);
-  _chooserEl.classList.add('hidden');
-  _outputSlotEl.classList.add('empty');
-  _craftBtn.disabled = true;
+  // Output icon (or "?").
+  const icon = document.createElement('div');
+  icon.className = 'craft-card-icon';
+  icon.appendChild(state === 'unlocked' ? makeItemIcon(r.output.id) : makeUnknownIcon());
+  card.appendChild(icon);
 
-  // Build the multiset from current input slots.
-  const inputs: RecipeInput[] = [];
-  const merged = new Map<ItemId, number>();
-  for (const s of _inputs) {
-    if (!s.item) continue;
-    merged.set(s.item, (merged.get(s.item) ?? 0) + s.count);
-  }
-  if (merged.size === 0) {
-    _outputLabelEl.textContent = '';
-    _selectedRecipe = null;
-    return;
-  }
-  for (const [id, count] of merged) inputs.push({ id, count });
-
-  const matches = matchRecipes(inputs);
-  if (matches.length === 0) {
-    // No exact recipe — but maybe the player is partway to one.
-    // AAV — partial-match suggestions: if the current inputs are a
-    // sub-multiset of any recipe's inputs, surface a hint. For
-    // DISCOVERED partial matches we can name the recipe + show what's
-    // missing ("tent_kit needs 2 more branch + 1 more cloth"). For
-    // UNDISCOVERED partial matches we only show the count ("3 possible
-    // recipes — keep adding ingredients") to preserve discovery.
-    const partials = partialMatchRecipes(inputs);
-    if (partials.length === 0) {
-      _outputLabelEl.textContent = 'nothing happens';
-    } else {
-      // Find the first DISCOVERED partial; if any, name it + show diff.
-      const discoveredPartial = partials.find((r) =>
-        _ctx!.inventory.discoveredRecipes.includes(r.id),
-      );
-      if (discoveredPartial) {
-        const missing = missingForRecipe(inputs, discoveredPartial);
-        const missStr = missing
-          .map((m) => `${m.count} ${getItemDef(m.id).name.toLowerCase()}`)
-          .join(' + ');
-        const others = partials.length - 1;
-        const tail = others > 0 ? ` (+ ${others} other possible)` : '';
-        _outputLabelEl.textContent = `${discoveredPartial.displayName}: need ${missStr}${tail}`;
-      } else {
-        // All partial matches are undiscovered — preserve discovery.
-        _outputLabelEl.textContent =
-          partials.length === 1
-            ? '1 possible recipe — add more ingredients'
-            : `${partials.length} possible recipes — add more ingredients`;
-      }
-    }
-    _selectedRecipe = null;
-    return;
-  }
-
-  if (matches.length === 1) {
-    // Single match — preview directly.
-    _selectedRecipe = matches[0];
-    showOutputForRecipe(_selectedRecipe);
-    return;
-  }
-
-  // Multi-match — show chooser. Players must pick one before
-  // CRAFT is enabled.
-  if (!_selectedRecipe || !matches.includes(_selectedRecipe)) {
-    _selectedRecipe = null;
-  }
-  _chooserEl.classList.remove('hidden');
-  for (const r of matches) {
-    // ACAS B3 — respect discovery: an undiscovered option shows "?" (not its name)
-    // so the chooser doesn't SPOIL the combine-to-discover mystery — consistent with
-    // showOutputForRecipe. (The chooser fires for real: scrap×2+branch×1 → sled_kit
-    // OR scrap_bar, ids 9/15 — a live early-game choice.)
-    const known = _ctx?.inventory.discoveredRecipes.includes(r.id) ?? false;
-    const btn = makeBtn(known ? r.displayName : '?', () => {
-      _selectedRecipe = r;
-      renderOutputPreview();
-    });
-    btn.classList.add('craft-chooser-btn');
-    if (!known) btn.classList.add('craft-chooser-unknown');
-    if (_selectedRecipe === r) btn.classList.add('selected');
-    _chooserEl.appendChild(btn);
-  }
-  if (_selectedRecipe) {
-    showOutputForRecipe(_selectedRecipe);
-  } else {
-    _outputLabelEl.textContent = 'choose what to make';
-  }
-}
-
-/** Show the preview for a single, settled recipe (post-chooser if
- *  applicable). Honors discovery state — "?" if undiscovered. */
-function showOutputForRecipe(recipe: Recipe): void {
-  if (!_outputSlotEl || !_outputLabelEl || !_craftBtn || !_ctx) return;
-  const discovered = _ctx.inventory.discoveredRecipes.includes(recipe.id);
-  _outputSlotEl.classList.remove('empty');
-  if (discovered) {
-    _outputSlotEl.appendChild(makeItemIcon(recipe.output.id));
-    if (recipe.output.count > 1) {
-      const count = document.createElement('div');
-      count.className = 'craft-input-count';
-      count.textContent = `×${recipe.output.count}`;
-      _outputSlotEl.appendChild(count);
-    }
-    _outputLabelEl.textContent = recipe.displayName;
-  } else {
-    const q = document.createElement('div');
-    q.className = 'craft-output-unknown';
-    q.textContent = '?';
-    _outputSlotEl.appendChild(q);
-    _outputLabelEl.textContent = 'unknown — try crafting';
-  }
-  _craftBtn.disabled = false;
-}
-
-function renderBag(): void {
-  if (!_bagRowsEl || !_ctx) return;
-  clearChildren(_bagRowsEl);
-  const inv = _ctx.inventory;
-  const allSlots: Slot[] = [...inv.slots, ...inv.backpack];
-
-  // Aggregate item totals across all slots so the bag shows ONE row
-  // per item type with the summed count (mirroring how the player
-  // thinks about their materials — "I have 4 cloth", not "I have 1
-  // cloth in slot 3 and 3 in slot 11").
-  const totals = new Map<ItemId, number>();
-  for (const s of allSlots) {
-    if (!s.item || s.count <= 0) continue;
-    // Skip meta-bearing slots — they shouldn't be merged or auto-
-    // selected as inputs (canteens with fillLevel etc.). Still
-    // clickable individually below.
-    if (s.meta) continue;
-    totals.set(s.item, (totals.get(s.item) ?? 0) + s.count);
-  }
-
-  if (totals.size === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'subtitle';
-    empty.style.opacity = '0.6';
-    empty.textContent = 'your bag is empty';
-    _bagRowsEl.appendChild(empty);
-    return;
-  }
-
-  // Sort alphabetically by item name for stable display.
-  const entries = Array.from(totals.entries()).sort((a, b) => {
-    const aName = getItemDef(a[0]).name;
-    const bName = getItemDef(b[0]).name;
-    return aName < bName ? -1 : aName > bName ? 1 : 0;
-  });
-
-  for (const [itemId, count] of entries) {
-    const def = getItemDef(itemId);
-    const row = document.createElement('button');
-    row.className = 'craft-bag-row';
-    row.addEventListener('mouseenter', playUiHover);
-
-    row.appendChild(makeItemIcon(itemId));
-    const name = document.createElement('div');
-    name.className = 'craft-bag-name';
-    name.textContent = def.name + (count > 1 ? ` ×${count}` : '');
-    row.appendChild(name);
-    row.addEventListener('click', () => addToInput(itemId));
-    _bagRowsEl.appendChild(row);
-  }
-}
-
-/** AAW — render the right-side recipe list. Categorizes every discovered
- *  recipe as CRAFTABLE (player has all ingredients) or MISSING INGREDIENTS,
- *  and lets the player click a CRAFTABLE row to auto-fill the inputs. Pre-AAW
- *  the only place to see discovered recipes was the TAB-key recipe book, which
- *  was a separate screen — players had to remember ingredients while crafting. */
-function renderRecipes(): void {
-  if (!_recipesRowsEl || !_ctx) return;
-  clearChildren(_recipesRowsEl);
-  const inv = _ctx.inventory;
-  const known = inv.discoveredRecipes;
-  if (known.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'craft-recipes-empty';
-    empty.textContent = '(no recipes discovered yet — combine items in the input slots to learn one)';
-    _recipesRowsEl.appendChild(empty);
-    return;
-  }
-
-  // Aggregate player inventory totals once (same exclusion rule as renderBag —
-  // skip meta-bearing slots so canteens / loaded guns don't count as crafting
-  // material).
-  const allSlots: Slot[] = [...inv.slots, ...inv.backpack];
-  const totals = new Map<ItemId, number>();
-  for (const s of allSlots) {
-    if (!s.item || s.count <= 0 || s.meta) continue;
-    totals.set(s.item, (totals.get(s.item) ?? 0) + s.count);
-  }
-
-  // Partition discovered recipes into craftable vs missing buckets. Sort each
-  // bucket by recipe id (stable display order as new recipes get added).
-  const craftable: Recipe[] = [];
-  const missing: Recipe[] = [];
-  const sortedKnown = [...known].sort((a, b) => a - b);
-  for (const id of sortedKnown) {
-    const recipe = RECIPES.find((r) => r.id === id);
-    if (!recipe) continue;
-    let canCraft = true;
-    for (const inp of recipe.inputs) {
-      if ((totals.get(inp.id) ?? 0) < inp.count) { canCraft = false; break; }
-    }
-    (canCraft ? craftable : missing).push(recipe);
-  }
-
-  // Session ABE — within each (craftable / missing) bucket, group by
-  // category in CATEGORY_ORDER. Sub-headers render between categories
-  // when more than one category has entries in that bucket; single-
-  // category buckets skip the sub-header to avoid noise.
-  const rowsEl = _recipesRowsEl;       // local non-null capture for the closure
-  const renderBucket = (
-    bucket: Recipe[],
-    canCraft: boolean,
-    headerText: string,
-    headerCls: string,
-  ): void => {
-    if (bucket.length === 0) return;
-    const h = document.createElement('div');
-    h.className = 'craft-recipes-category' + (headerCls ? ' ' + headerCls : '');
-    h.textContent = `${headerText} (${bucket.length})`;
-    rowsEl.appendChild(h);
-    // Partition by category.
-    const byCat = new Map<string, Recipe[]>();
-    for (const r of bucket) {
-      const arr = byCat.get(r.category) ?? [];
-      arr.push(r);
-      byCat.set(r.category, arr);
-    }
-    const presentCats = CATEGORY_ORDER.filter((c) => byCat.has(c));
-    const showSubHeaders = presentCats.length > 1;
-    for (const cat of presentCats) {
-      if (showSubHeaders) {
-        const sh = document.createElement('div');
-        sh.className = 'craft-recipes-subcategory';
-        sh.textContent = CATEGORY_LABEL[cat];
-        rowsEl.appendChild(sh);
-      }
-      for (const r of byCat.get(cat)!) {
-        rowsEl.appendChild(buildRecipeRow(r, canCraft, totals));
-      }
-    }
-  };
-  renderBucket(craftable, true,  'CRAFTABLE', '');
-  renderBucket(missing,   false, 'MISSING INGREDIENTS', 'missing');
-}
-
-/** AAW — build a single recipe row for the right-side panel. CRAFTABLE
- *  rows hover-react + click to auto-fill; MISSING rows are visually muted
- *  and (in vanilla play) not clickable. Per-ingredient `have/need` is
- *  displayed inline; the missing ones tint red so the eye lands on what's
- *  still needed.
- *
- *  AAZ — in dev mode (`ctx.flags.devMode === true`), every row becomes
- *  clickable AND the click skips the input-slot auto-fill in favor of
- *  `directCraft` which produces the output immediately without consuming
- *  any materials. The CRAFTABLE / MISSING categorization is kept for
- *  reference but doesn't gate the click. */
-function buildRecipeRow(
-  recipe: Recipe,
-  canCraft: boolean,
-  totals: Map<ItemId, number>,
-): HTMLButtonElement {
-  const row = document.createElement('button');
-  const devMode = _ctx?.flags.devMode ?? false;
-  // In dev mode, treat every row as clickable — the styled "insufficient"
-  // muting still surfaces so the dev can see at a glance which recipes
-  // would require materials in vanilla play.
-  const effectiveCraftable = canCraft || devMode;
-  row.className = 'craft-recipe-row' + (canCraft ? '' : ' insufficient');
-  row.disabled = !effectiveCraftable;
-
-  // Output icon (compact — 28px).
-  const outIcon = makeItemIcon(recipe.output.id);
-  outIcon.classList.add('craft-recipe-output-icon');
-  row.appendChild(outIcon);
-
-  // Name + ingredient line stacked in a vertical sub-column.
-  const nameCol = document.createElement('div');
-  nameCol.className = 'craft-recipe-name-col';
+  // Name (or "???").
   const name = document.createElement('div');
-  name.className = 'craft-recipe-name';
-  const cnt = recipe.output.count > 1 ? ` ×${recipe.output.count}` : '';
-  name.textContent = recipe.displayName + cnt;
-  nameCol.appendChild(name);
+  name.className = 'craft-card-name';
+  name.textContent = state === 'unlocked'
+    ? r.displayName + (r.output.count > 1 ? ` ×${r.output.count}` : '')
+    : '???';
+  card.appendChild(name);
+
+  // Ingredient tease chips — icons only (counts live in the detail
+  // footer). Warm reveals just the ingredients already collected (others
+  // show "?"); unlocked shows every ingredient icon. A short ingredient
+  // (unlocked, not enough in the bag) tints red so the eye lands on it.
+  if (state !== 'cold') {
+    const chips = document.createElement('div');
+    chips.className = 'craft-card-chips';
+    const collected = _ctx!.inventory.collectedItemTypes;
+    for (const inp of r.inputs) {
+      const known = state === 'unlocked' || collected.has(inp.id);
+      const chip = document.createElement('div');
+      chip.className = 'craft-card-chip';
+      if (known) {
+        const short = state === 'unlocked' && (totals.get(inp.id) ?? 0) < inp.count;
+        if (short) chip.classList.add('short');
+        chip.appendChild(makeItemIcon(inp.id));
+      } else {
+        const q = document.createElement('span');
+        q.className = 'craft-card-chip-q';
+        q.textContent = '?';
+        chip.appendChild(q);
+      }
+      chips.appendChild(chip);
+    }
+    card.appendChild(chips);
+  }
+
+  card.addEventListener('mouseenter', playUiHover);
+  card.addEventListener('click', () => { playUiClick(); selectRecipe(r); });
+  return card;
+}
+
+function renderDetail(): void {
+  if (!_detailEl || !_ctx) return;
+  clearChildren(_detailEl);
+
+  if (!_selected) {
+    const hint = document.createElement('div');
+    hint.className = 'craft-detail-hint';
+    hint.textContent = 'select a recipe';
+    _detailEl.appendChild(hint);
+    return;
+  }
+
+  const r = _selected;
+  const state = cardStateOf(r);
+  const totals = bagTotals();
+  const collected = _ctx.inventory.collectedItemTypes;
+
+  // Flow row: [ingredient chips]  →  [output].
+  const flow = document.createElement('div');
+  flow.className = 'craft-detail-flow';
 
   const ings = document.createElement('div');
-  ings.className = 'craft-recipe-ings';
-  for (const inp of recipe.inputs) {
-    const def = getItemDef(inp.id);
-    const have = totals.get(inp.id) ?? 0;
-    const ok = have >= inp.count;
-    const span = document.createElement('span');
-    span.className = 'craft-recipe-ing' + (ok ? '' : ' missing');
-    span.textContent = `${have}/${inp.count} ${def.name.toLowerCase()}`;
-    ings.appendChild(span);
+  ings.className = 'craft-detail-ings';
+  for (const inp of r.inputs) {
+    const known = state === 'unlocked' || collected.has(inp.id);
+    const ing = document.createElement('div');
+    ing.className = 'craft-detail-ing';
+    if (known) {
+      ing.appendChild(makeItemIcon(inp.id));
+      const label = document.createElement('div');
+      const have = totals.get(inp.id) ?? 0;
+      const ok = have >= inp.count;
+      label.className = 'craft-detail-ing-label' + (state === 'unlocked' && !ok ? ' missing' : '');
+      label.textContent = state === 'unlocked'
+        ? `${have}/${inp.count} ${getItemDef(inp.id).name.toLowerCase()}`
+        : getItemDef(inp.id).name.toLowerCase();
+      ing.appendChild(label);
+    } else {
+      ing.appendChild(makeUnknownIcon());
+      const label = document.createElement('div');
+      label.className = 'craft-detail-ing-label';
+      label.textContent = '???';
+      ing.appendChild(label);
+    }
+    ings.appendChild(ing);
   }
-  nameCol.appendChild(ings);
-  row.appendChild(nameCol);
+  flow.appendChild(ings);
 
-  if (effectiveCraftable) {
-    row.addEventListener('mouseenter', playUiHover);
-    row.addEventListener('click', () => {
-      if (devMode) directCraft(recipe);
-      else autoFillFromRecipe(recipe);
-    });
+  const arrow = document.createElement('div');
+  arrow.className = 'craft-detail-arrow';
+  arrow.textContent = '→';
+  flow.appendChild(arrow);
+
+  const out = document.createElement('div');
+  out.className = 'craft-detail-output';
+  out.appendChild(state === 'unlocked' ? makeItemIcon(r.output.id) : makeUnknownIcon());
+  const outName = document.createElement('div');
+  outName.className = 'craft-detail-output-name';
+  outName.textContent = state === 'unlocked'
+    ? r.displayName + (r.output.count > 1 ? ` ×${r.output.count}` : '')
+    : '???';
+  out.appendChild(outName);
+  flow.appendChild(out);
+  _detailEl.appendChild(flow);
+
+  // Flavor / tease line.
+  const desc = document.createElement('div');
+  desc.className = 'craft-detail-desc';
+  if (state === 'unlocked') {
+    desc.textContent = getItemDef(r.output.id).description;
+  } else if (state === 'warm') {
+    desc.textContent = 'you have some of what this takes — scavenge the rest to reveal it';
+  } else {
+    desc.textContent = 'unknown — scavenge its materials to work out what it makes';
   }
-  return row;
+  _detailEl.appendChild(desc);
+
+  // CRAFT button.
+  const craftable = state === 'unlocked' && canCraftRecipe(r, totals);
+  const devMode = _ctx.flags.devMode;
+  const btn = makeBtn('craft', () => {
+    if (devMode && !canCraftRecipe(r, totals)) directCraft(r);
+    else performCraft(r);
+  });
+  btn.classList.add('craft-go-btn');
+  btn.disabled = !(craftable || devMode);
+  _detailEl.appendChild(btn);
 }
 
 function renderAll(): void {
-  renderInputs();
-  renderOutputPreview();
-  renderBag();
-  renderRecipes();
+  renderGrid();
+  renderDetail();
 }
 
-// ── Input-slot mutation ──────────────────────────────────────────
-
-/** Core stacking logic — extracted in AAW so the auto-fill from a recipe
- *  click can drive N additions without paying N renderAll() + N playUiClick
- *  costs. Returns true if the item was added, false if the player has
- *  none of it OR all input slots are full. */
-function addToInputCore(itemId: ItemId): boolean {
-  if (!_ctx) return false;
-  if (countItems(_ctx.inventory, itemId) <= 0) return false;
-  let slot = _inputs.find((s) => s.item === itemId);
-  if (!slot) {
-    slot = _inputs.find((s) => s.item === null);
-    if (!slot) return false;
-    slot.item = itemId;
-    slot.count = 0;
-  }
-  slot.count++;
-  removeItems(_ctx.inventory, itemId, 1);
-  return true;
-}
-
-/** Add 1 of `itemId` to the input slots. Stacks onto an existing
- *  input slot of the same item if one exists, otherwise occupies
- *  the first empty input slot. Removes 1 from the player's inventory.
- *  Refuses if all input slots are full + the item isn't already
- *  represented, or if the player has none of the item available. */
-function addToInput(itemId: ItemId): void {
-  if (!_ctx) return;
-  if (countItems(_ctx.inventory, itemId) <= 0) return;
-  if (!addToInputCore(itemId)) {
-    _ctx.ui.showToast('input slots full');
-    return;
-  }
-  playUiClick();
+function selectRecipe(r: Recipe): void {
+  _selected = r;
   renderAll();
-}
-
-/** AAW — auto-fill the input slots with all ingredients for `recipe`.
- *  Used by the right-side recipe list — click a CRAFTABLE recipe and
- *  the inputs jump straight to the ready-to-craft configuration. The
- *  caller is responsible for ensuring the player actually has the
- *  ingredients (the row click handler hides this behind the CRAFTABLE
- *  predicate). Returns silently if a partial fill happens; CRAFT button
- *  gating still keeps the craft from firing in that edge case. */
-function autoFillFromRecipe(recipe: Recipe): void {
-  if (!_ctx) return;
-  flushInputsToBag();
-  for (const inp of recipe.inputs) {
-    for (let i = 0; i < inp.count; i++) {
-      if (!addToInputCore(inp.id)) break;
-    }
-  }
-  playUiClick();
-  renderAll();
-}
-
-/** AAZ — dev-mode free-craft path. Produces `recipe.output` directly,
- *  no input consumption, no input-slot mutation. Used by the recipe
- *  panel when ctx.flags.devMode is true — one click on any discovered
- *  recipe produces the item even with empty inventory. Mirrors
- *  performCraft's drop-on-full + SFX + toast paths so the feedback
- *  matches a normal craft. */
-function directCraft(recipe: Recipe): void {
-  if (!_ctx) return;
-  const ctx = _ctx;
-  let added = 0;
-  for (let i = 0; i < recipe.output.count; i++) {
-    const result = addItem(ctx.inventory, recipe.output.id, undefined, ctx);
-    if (result < 0) break;
-    added++;
-  }
-  const dropped = recipe.output.count - added;
-  if (dropped > 0) {
-    // Drop overflow at the player's feet (same path as performCraft).
-    const cam = ctx.three.camera;
-    const fwd = new THREE.Vector3();
-    cam.getWorldDirection(fwd);
-    fwd.y = 0;
-    if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
-    fwd.normalize();
-    const dx = cam.position.x + fwd.x * 0.8;
-    const dz = cam.position.z + fwd.z * 0.8;
-    for (let i = 0; i < dropped; i++) {
-      // ABM (B7) — craft overflow drops with physics so the items
-      // scatter across the ground instead of stacking at one point.
-      const p = spawnDroppedPickup(
-        ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id,
-        undefined,
-        {
-          world: ctx.physics.world,
-          initialVel: { x: (Math.random() - 0.5) * 0.6, y: 0.5, z: (Math.random() - 0.5) * 0.6 },
-        },
-      );
-      ctx.pickups.list.push(p);
-    }
-    ctx.ui.showToast(
-      added === 0
-        ? `${recipe.displayName} dropped at your feet — bag full`
-        : `${recipe.displayName} (dev) — partial drop at your feet`,
-    );
-  } else {
-    ctx.ui.showToast(`${recipe.displayName} (dev craft)`);
-  }
-  playCraft();
-  renderAll();
-}
-
-/** Remove 1 from the given input slot index — returns the item to
- *  the player's inventory. If the slot empties, it's reset for
- *  reuse. */
-function removeFromInput(idx: number): void {
-  if (!_ctx) return;
-  const s = _inputs[idx];
-  if (!s.item || s.count <= 0) return;
-  addItem(_ctx.inventory, s.item, s.meta, _ctx);
-  s.count--;
-  if (s.count <= 0) {
-    s.item = null;
-    s.count = 0;
-    s.meta = undefined;
-  }
-  playUiClick();
-  renderAll();
-}
-
-/** Return every remaining input-slot item to the player's bag.
- *  Called on close so the player doesn't lose materials accidentally. */
-function flushInputsToBag(): void {
-  if (!_ctx) return;
-  for (const s of _inputs) {
-    while (s.item && s.count > 0) {
-      addItem(_ctx.inventory, s.item, s.meta, _ctx);
-      s.count--;
-    }
-    s.item = null;
-    s.count = 0;
-    s.meta = undefined;
-  }
-  _selectedRecipe = null;
 }
 
 // ── Craft execution ──────────────────────────────────────────────
 
-function performCraft(): void {
-  if (!_ctx || !_selectedRecipe) return;
+/** Consume the recipe's inputs from the bag + add the output; overflow
+ *  drops at the player's feet (bag full). Discovery already happened at
+ *  pickup, so this just plays the craft tick + a "crafted X" toast. */
+function performCraft(r: Recipe): void {
+  if (!_ctx) return;
   const ctx = _ctx;
-  const recipe = _selectedRecipe;
+  const totals = bagTotals();
+  if (!canCraftRecipe(r, totals)) return;   // gated by the disabled button, but re-check
 
-  // The input slots are the source of truth — recipe.inputs is
-  // just a multiset definition. Consume from the input slots.
-  // (We could also verify inputs match again, but renderOutputPreview
-  // already gated this — if _selectedRecipe is set, inputs match.)
-  for (const slot of _inputs) {
-    slot.item = null;
-    slot.count = 0;
-    slot.meta = undefined;
+  for (const inp of r.inputs) removeItems(ctx.inventory, inp.id, inp.count);
+
+  const dropped = addOutputWithOverflow(ctx, r);
+  playCraft();
+  if (dropped > 0) {
+    ctx.ui.showToast(
+      dropped === r.output.count
+        ? `crafted ${r.displayName} — dropped at your feet (bag full)`
+        : `crafted ${r.displayName} — partial drop at your feet`,
+    );
+  } else {
+    ctx.ui.showToast(`crafted ${r.displayName}`);
   }
+  renderAll();
+}
 
-  // Add the output to the player's bag.
+/** Dev free-craft — produce the output with no input consumption. Wired
+ *  to the CRAFT button when devMode is on and the player lacks materials
+ *  (a real craft still runs when they have them, keeping the dev flow
+ *  faithful when possible). */
+function directCraft(r: Recipe): void {
+  if (!_ctx) return;
+  const ctx = _ctx;
+  const dropped = addOutputWithOverflow(ctx, r);
+  playCraft();
+  ctx.ui.showToast(
+    dropped > 0 ? `${r.displayName} (dev) — dropped at your feet` : `${r.displayName} (dev craft)`,
+  );
+  renderAll();
+}
+
+/** Add the recipe output to the bag; whatever doesn't fit scatters at the
+ *  player's feet with a physics body (ABM B7). Returns the dropped count. */
+function addOutputWithOverflow(ctx: GameContext, r: Recipe): number {
   let added = 0;
-  for (let i = 0; i < recipe.output.count; i++) {
-    const result = addItem(ctx.inventory, recipe.output.id, undefined, ctx);
-    if (result < 0) break;
+  for (let i = 0; i < r.output.count; i++) {
+    if (addItem(ctx.inventory, r.output.id, undefined, ctx) < 0) break;
     added++;
   }
-  // AAV — if some/all of the output didn't fit, DROP the overflow at
-  // the player's feet instead of the pre-AAV "refund inputs + abort"
-  // path. Player keeps the craft progress; bag is just full and the
-  // result lands on the ground for them to pick up later. Inputs are
-  // already consumed at this point (line 405-409 above).
-  const dropped = recipe.output.count - added;
+  const dropped = r.output.count - added;
   if (dropped > 0) {
-    // Drop position: ~0.8m in front of camera, projected to terrain.
     const cam = ctx.three.camera;
     const fwd = new THREE.Vector3();
     cam.getWorldDirection(fwd);
@@ -729,10 +373,8 @@ function performCraft(): void {
     const dx = cam.position.x + fwd.x * 0.8;
     const dz = cam.position.z + fwd.z * 0.8;
     for (let i = 0; i < dropped; i++) {
-      // ABM (B7) — craft overflow drops with physics so the items
-      // scatter across the ground instead of stacking at one point.
       const p = spawnDroppedPickup(
-        ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id,
+        ctx.three.scene, ctx.terrain, { x: dx, z: dz }, r.output.id,
         undefined,
         {
           world: ctx.physics.world,
@@ -741,31 +383,8 @@ function performCraft(): void {
       );
       ctx.pickups.list.push(p);
     }
-    if (added === 0) {
-      ctx.ui.showToast(`crafted ${recipe.displayName} — dropped at your feet (bag full)`);
-    } else {
-      ctx.ui.showToast(`crafted ${recipe.displayName} — partial drop at your feet`);
-    }
   }
-
-  const wasDiscovered = ctx.inventory.discoveredRecipes.includes(recipe.id);
-  if (!wasDiscovered) {
-    // AAN — first-time discovery is a moment: distinct rising-arp chime
-    // (not the routine playCraft tick) + larger, warm-gold toast held
-    // longer. Subsequent crafts of the same recipe fall back to the
-    // standard playCraft + muted toast.
-    ctx.inventory.discoveredRecipes.push(recipe.id);
-    playRecipeDiscovery();
-    ctx.ui.showToast(
-      `you've figured out how to make ${recipe.displayName}`,
-      { kind: 'discovery' },
-    );
-  } else {
-    playCraft();
-    ctx.ui.showToast(`crafted ${recipe.displayName}`);
-  }
-  _selectedRecipe = null;
-  renderAll();
+  return dropped;
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────
@@ -774,17 +393,14 @@ export function openCraftingMenu(ctx: GameContext): void {
   if (!_root || _open) return;
   _open = true;
   ctx.input.controls.unlock();
-  // Seed an empty input state on each open (player doesn't carry
-  // mid-craft inputs across close/reopen).
-  for (const s of _inputs) { s.item = null; s.count = 0; s.meta = undefined; }
-  _selectedRecipe = null;
+  _selected = null;
   renderAll();
   _root.classList.remove('hidden');
 }
 
 export function closeCraftingMenu(): void {
   if (!_root) return;
-  flushInputsToBag();
+  _selected = null;
   _root.classList.add('hidden');
   _open = false;
   resumeFromPause();
@@ -794,30 +410,5 @@ export function isCraftingMenuOpen(): boolean {
   return _open;
 }
 
-/** ACAS B3 — TEST hook: force the input slots to a multiset, render the output
- *  preview, and report the resulting chooser state (button labels + craft-enabled).
- *  Verifies the multi-match chooser path end-to-end (real DOM) without driving
- *  inventory/DOM clicks. Returns null if the menu DOM isn't built yet. */
-export function __craftChooserTest(
-  ctx: GameContext,
-  items: Array<{ id: ItemId; count: number }>,
-): { buttons: string[]; craftDisabled: boolean; label: string } | null {
-  if (!_chooserEl || !_craftBtn || !_outputLabelEl) return null;
-  _ctx = ctx;
-  for (const s of _inputs) { s.item = null; s.count = 0; s.meta = undefined; }
-  let slot = 0;
-  for (const it of items) {
-    if (slot >= _inputs.length) break;
-    _inputs[slot].item = it.id;
-    _inputs[slot].count = it.count;
-    slot++;
-  }
-  renderOutputPreview();
-  const buttons = Array.from(_chooserEl.children).map((b) => (b as HTMLElement).textContent ?? '');
-  return { buttons, craftDisabled: _craftBtn.disabled, label: _outputLabelEl.textContent ?? '' };
-}
-
-// Re-export so callers can introspect (used by an upcoming Recipe Book
-// stretch goal). RECIPES is the canonical list for any other code that
-// needs to enumerate.
+// Canonical recipe list re-export for any other code that enumerates.
 export { RECIPES };

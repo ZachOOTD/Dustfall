@@ -895,7 +895,7 @@ canvas {
 }
 
 /* ──────────────────────────────────────────────────────────
-   Crafting menu — recipe rows showing result ← ingredients
+   Crafting menu — shared overlay chrome (grid styles below)
    ────────────────────────────────────────────────────────── */
 #crafting-menu, #sleep-overlay {
   z-index: 200;
@@ -904,203 +904,215 @@ canvas {
   gap: 14px;
 }
 
-.craft-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 24px;
-  margin-bottom: 24px;
-  width: 460px;
+/* ──────────────────────────────────────────────────────────
+   Crafting menu — pickup-gated card grid (crafting rework).
+   Discovery is coupled to gathering: a recipe warms (some ingredient
+   types collected) then unlocks (all collected). Cold "?" cards tease
+   what's left to find.
+   ────────────────────────────────────────────────────────── */
+/* Anchor the crafting menu to the top so the grid uses vertical space
+   instead of floating dead-centre with big margins. */
+#crafting-menu {
+  justify-content: flex-start;
+  padding: 3.5vh 0 2vh;
+  gap: 10px;
+}
+
+.craft-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 96px);
+  justify-content: center;
+  gap: 10px;
+  width: min(580px, 92vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 2px 12px 2px 6px;
   pointer-events: auto;
 }
+/* Themed, slim scrollbar (was a stark white browser default). */
+.craft-grid::-webkit-scrollbar { width: 8px; }
+.craft-grid::-webkit-scrollbar-track { background: rgba(232, 220, 192, 0.04); }
+.craft-grid::-webkit-scrollbar-thumb {
+  background: rgba(200, 168, 104, 0.32);
+  border-radius: 4px;
+}
+.craft-grid::-webkit-scrollbar-thumb:hover { background: rgba(200, 168, 104, 0.55); }
 
-.craft-row {
-  display: grid;
-  grid-template-columns: 36px 1fr 18px 1fr;
+.craft-cat-header {
+  grid-column: 1 / -1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #8a7a5e;
+  padding: 12px 0 3px 2px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.14);
+}
+.craft-cat-header:first-child { padding-top: 2px; }
+
+.craft-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  background: rgba(232, 220, 192, 0.04);
-  border: 1px solid rgba(232, 220, 192, 0.25);
+  gap: 5px;
+  width: 96px;
+  height: 96px;
+  padding: 9px 5px 7px;
+  background: rgba(232, 220, 192, 0.035);
+  border: 1px solid rgba(232, 220, 192, 0.16);
   color: #e8dcc0;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 2px;
-  padding: 10px 14px;
   cursor: pointer;
-  transition: border-color 0.18s, background 0.18s;
-  text-align: left;
-}
-
-.craft-row:hover:not(.insufficient) {
-  border-color: #e8dcc0;
-  background: rgba(232, 220, 192, 0.10);
-}
-
-.craft-row.insufficient {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-.craft-result-icon, .craft-ing-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: rgba(232, 220, 192, 0.85);
-}
-
-.craft-result-icon svg, .craft-ing-icon svg {
-  width: 22px;
-  height: 22px;
-  display: block;
-}
-
-.craft-result-name {
-  color: #e8dcc0;
-}
-
-.craft-arrow {
-  color: rgba(232, 220, 192, 0.45);
-  text-align: center;
-}
-
-.craft-ingredients {
-  display: flex;
-  flex-direction: row;
-  gap: 14px;
-  align-items: center;
-}
-
-.craft-ing {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #b8a888;
-}
-
-.craft-ing.missing {
-  color: #c84a3a;
-}
-
-.craft-ing-label {
-  font-size: 10px;
-  letter-spacing: 0;
-}
-
-/* ──────────────────────────────────────────────────────────
-   Crafting menu — combine-to-discover (Session TT)
-   ────────────────────────────────────────────────────────── */
-.craft-combine-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 16px;
-  margin-bottom: 8px;
-}
-
-.craft-inputs-row {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-}
-
-.craft-input-slot,
-.craft-output-slot {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  background: rgba(232, 220, 192, 0.06);
-  border: 1px solid rgba(232, 220, 192, 0.35);
-  color: #e8dcc0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
   transition: border-color 0.15s, background 0.15s;
 }
-
-.craft-input-slot.empty {
-  background: rgba(232, 220, 192, 0.02);
-  border-color: rgba(232, 220, 192, 0.18);
-  border-style: dashed;
-  cursor: default;
+.craft-card:hover {
+  border-color: rgba(232, 220, 192, 0.55);
+  background: rgba(232, 220, 192, 0.08);
+}
+.craft-card.selected {
+  border-color: #c8a868;
+  background: rgba(200, 168, 104, 0.11);
+}
+/* cold — nothing collected yet; muted, just a "?". */
+.craft-card.cold { opacity: 0.6; }
+/* warm — some ingredient types collected; faint gold "you're close". */
+.craft-card.warm { border-color: rgba(200, 168, 104, 0.30); }
+/* craftable now — brighter gold rim. */
+.craft-card.craftable {
+  border-color: rgba(200, 168, 104, 0.72);
+  background: rgba(200, 168, 104, 0.07);
 }
 
-.craft-input-slot:hover:not(.empty) {
-  border-color: #e8dcc0;
-  background: rgba(232, 220, 192, 0.14);
+.craft-card-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
-.craft-input-count {
-  position: absolute;
-  bottom: 2px;
-  right: 4px;
+.craft-card-icon .craft-icon { width: 34px; height: 34px; }
+.craft-card-icon .craft-icon svg { width: 30px; height: 30px; }
+.craft-icon.unknown {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #b8a888;
-  letter-spacing: 1px;
-}
-
-.craft-flow-arrow {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 18px;
-  color: #8a7a5e;
-  padding: 0 6px;
-}
-
-.craft-output-slot {
-  border-color: #c8a868;             /* warmer rim — reads as the result */
-  background: rgba(200, 168, 104, 0.06);
-  cursor: default;
-}
-
-.craft-output-slot.empty {
-  background: rgba(200, 168, 104, 0.02);
-  border-color: rgba(200, 168, 104, 0.18);
-  border-style: dashed;
-}
-
-.craft-output-unknown {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 28px;
+  font-size: 24px;
   color: #c8a868;
 }
 
-.craft-output-label {
+.craft-card-name {
+  font-size: 9px;
+  letter-spacing: 0.5px;
   text-align: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 3px;
-  color: #b8a888;
-  min-height: 14px;
-  margin-bottom: 12px;
+  line-height: 1.15;
+  color: #cabfa2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+.craft-card.unlocked .craft-card-name { color: #e8dcc0; }
 
-.craft-chooser {
+.craft-card-chips {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 5px;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  margin-top: auto;
 }
-
-.craft-chooser.hidden {
-  display: none;
+.craft-card-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: rgba(232, 220, 192, 0.05);
+  border-radius: 2px;
 }
+.craft-card-chip .craft-icon { width: 18px; height: 18px; color: #c2b592; }
+.craft-card-chip .craft-icon svg { width: 15px; height: 15px; }
+.craft-card-chip.short { background: rgba(200, 74, 58, 0.14); }
+.craft-card-chip.short .craft-icon { color: #d06a58; }
+.craft-card-chip-q { font-size: 12px; color: #8a7a5e; }
 
-.craft-chooser-btn {
+/* Detail footer — ingredients → output + description + CRAFT. */
+.craft-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(580px, 92vw);
+  min-height: 92px;
+  padding: 12px 16px 4px;
+  border-top: 1px solid rgba(232, 220, 192, 0.14);
+  pointer-events: auto;
+}
+.craft-detail-hint {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: #6e6149;
+  padding: 16px 0;
+}
+.craft-detail-flow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+}
+.craft-detail-ings {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  align-items: flex-start;
+}
+.craft-detail-ing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 62px;
+}
+.craft-detail-ing .craft-icon { width: 30px; height: 30px; }
+.craft-detail-ing .craft-icon svg { width: 26px; height: 26px; }
+.craft-detail-ing-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0;
+  color: #b8a888;
+  text-align: center;
+  line-height: 1.2;
+}
+.craft-detail-ing-label.missing { color: #c84a3a; }
+.craft-detail-arrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
+  color: #8a7a5e;
+}
+.craft-detail-output {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 78px;
+}
+.craft-detail-output .craft-icon { width: 40px; height: 40px; }
+.craft-detail-output .craft-icon svg { width: 34px; height: 34px; }
+.craft-detail-output-name {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  letter-spacing: 1px;
-  padding: 6px 10px;
+  letter-spacing: 2px;
+  color: #e8dcc0;
+  text-align: center;
 }
-
-.craft-chooser-btn.selected {
-  border-color: #c8a868;
-  color: #f0e4c8;
+.craft-detail-desc {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: #9a8c6e;
+  text-align: center;
+  max-width: 440px;
+  line-height: 1.35;
 }
 
 .craft-go-btn {
@@ -1112,181 +1124,6 @@ canvas {
 .craft-go-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-}
-
-.craft-col-header {
-  color: #8a7a5e;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 3px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(232, 220, 192, 0.18);
-  width: 320px;
-}
-
-/* AAW — two-column row inside the crafting menu (YOUR BAG | RECIPES).
-   Replaces the pre-AAW vertical bag-only column. Each column owns its
-   own header + scrollable rows, side-by-side under the combine row. */
-.craft-two-col {
-  display: flex;
-  flex-direction: row;
-  gap: 28px;
-  align-items: flex-start;
-  margin-top: 8px;
-  margin-bottom: 16px;
-}
-
-.craft-col {
-  display: flex;
-  flex-direction: column;
-}
-
-.craft-bag-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 320px;
-  margin-top: 8px;
-  pointer-events: auto;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-/* AAW — recipe-list panel on the right. Slightly wider than the bag so
-   the per-ingredient have/need readout fits without wrapping. */
-.craft-recipes-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 360px;
-  margin-top: 8px;
-  pointer-events: auto;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.craft-recipes-empty {
-  font-family: 'Cormorant Garamond', serif;
-  font-style: italic;
-  font-size: 13px;
-  color: #6e6149;
-  padding: 14px 4px;
-  text-align: center;
-}
-
-.craft-recipes-category {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 3px;
-  color: #c9a26a;
-  padding: 8px 0 4px 2px;
-  border-bottom: 1px solid rgba(201, 162, 106, 0.22);
-  margin-top: 4px;
-}
-.craft-recipes-category.missing {
-  color: #6e6149;
-  border-bottom-color: rgba(110, 97, 73, 0.30);
-}
-
-/* Session ABE — sub-category header within a craftable / missing bucket.
-   Smaller + dimmer than the primary CRAFTABLE/MISSING heading; gives a
-   visual hierarchy without competing with the bucket header. */
-.craft-recipes-subcategory {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: rgba(201, 162, 106, 0.65);
-  padding: 6px 0 2px 6px;
-  margin-top: 2px;
-}
-
-.craft-recipe-row {
-  display: grid;
-  grid-template-columns: 30px 1fr;
-  align-items: center;
-  gap: 10px;
-  background: rgba(232, 220, 192, 0.04);
-  border: 1px solid rgba(232, 220, 192, 0.25);
-  color: #e8dcc0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 1px;
-  padding: 6px 10px;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, background 0.15s;
-}
-.craft-recipe-row:hover:not(:disabled) {
-  border-color: #e8dcc0;
-  background: rgba(232, 220, 192, 0.10);
-}
-.craft-recipe-row.insufficient {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.craft-recipe-output-icon {
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.craft-recipe-output-icon svg {
-  width: 22px;
-  height: 22px;
-  display: block;
-}
-
-.craft-recipe-name-col {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.craft-recipe-name {
-  color: #e8dcc0;
-  letter-spacing: 2px;
-}
-.craft-recipe-ings {
-  display: flex;
-  flex-direction: row;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.craft-recipe-ing {
-  font-size: 10px;
-  letter-spacing: 0;
-  color: #b8a888;
-}
-.craft-recipe-ing.missing {
-  color: #c84a3a;
-}
-
-.craft-bag-row {
-  display: grid;
-  grid-template-columns: 32px 1fr;
-  align-items: center;
-  gap: 12px;
-  background: rgba(232, 220, 192, 0.04);
-  border: 1px solid rgba(232, 220, 192, 0.25);
-  color: #e8dcc0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 2px;
-  padding: 8px 12px;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.craft-bag-row:hover {
-  border-color: #e8dcc0;
-  background: rgba(232, 220, 192, 0.10);
-}
-
-.craft-bag-name {
-  color: #e8dcc0;
 }
 
 .craft-icon {
@@ -1503,22 +1340,6 @@ canvas {
 /* ──────────────────────────────────────────────────────────
    Crafting progress fill — appears on the in-progress row
    ────────────────────────────────────────────────────────── */
-.craft-row {
-  position: relative;
-  overflow: hidden;
-}
-
-.craft-progress {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 2px;
-  background: #e8dcc0;
-  width: 0;
-  transition: width 0.05s linear;
-  pointer-events: none;
-}
-
 /* ──────────────────────────────────────────────────────────
    Controls / help panel (first-boot + H-key, Session L)
    ────────────────────────────────────────────────────────── */

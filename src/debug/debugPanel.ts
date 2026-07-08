@@ -43,8 +43,8 @@ import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook
-import { __craftChooserTest } from '../ui/craftingMenu.ts';   // ACAS B3 — chooser verification hook
-import { __registerTestRecipe } from '../inventory/recipeDiscovery.ts';   // ACAS B3 — transient test-recipe injector
+import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
+import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 
 declare global {
   interface Window {
@@ -118,6 +118,10 @@ interface DebugApi {
   /** Write the game to the single save slot (dev/rig — the menu Save path without the UI).
    *  Used by the pod-persistence-reload rig scenario to save mid-game before a page reload. */
   saveGame: () => { ok: boolean; error?: string };
+  /** Load the single save slot into the live ctx (dev/rig — the menu Continue path without the
+   *  UI). Companion to saveGame; used to verify save-schema migrations (e.g. the crafting-rework
+   *  pre-v16 collectedItemTypes seed) headlessly. */
+  loadGame: () => { ok: boolean; error?: string };
   /** Escape-pod SAVE/LOAD — smoke the enterable-pod persistence round-trip headlessly:
    *  run the intro to step-out (unify the ONE walk-in pod), mutate its salvage/chute state, SAVE,
    *  simulate a fresh-boot teardown (disposePodScene → the pod is gone, PROVING the bug), then run
@@ -287,12 +291,17 @@ interface DebugApi {
    *  player so the per-item collider SHAPE (capsule/sphere/box) can be smoke-tested.
    *  Returns the new pickup id. */
   dropTestItem: (itemId: string) => number;
-  /** ACAS (B3) — DEV-only: force the crafting input slots to a multiset + report the
-   *  multi-match chooser state (button labels, craft-enabled). Verifies the chooser. */
-  craftChooserTest: (items: Array<{ id: string; count: number }>) => { buttons: string[]; craftDisabled: boolean; label: string } | null;
-  /** ACAS (B3) — DEV/TEST-only: inject a transient recipe colliding with scrap_bar
-   *  so the multi-match chooser path can be exercised end-to-end. */
-  injectTestRecipe: () => void;
+  /** Crafting rework — DEV/TEST-only: add `n` (default 1) of `itemId` to the
+   *  inventory via the REAL acquire path (updates the collected-type ledger +
+   *  fires pickup-gated recipe unlocks), so the unlock flow can be verified. */
+  giveItem: (itemId: string, n?: number) => void;
+  /** Crafting rework — DEV/TEST-only: report a recipe's card state
+   *  ('cold' | 'warm' | 'unlocked') + whether it's in discoveredRecipes, for the
+   *  pickup-unlock rig-shot gate. Null if the id is unknown. */
+  craftCardState: (recipeId: number) => { state: 'cold' | 'warm' | 'unlocked'; discovered: boolean } | null;
+  /** Crafting rework — DEV-only: open the crafting card grid (for visual
+   *  verification / screenshots without driving the C-key toggle). */
+  openCrafting: () => void;
   /** ACH (Cycle 2) — DEV-only: enter gameplay HEADLESS, bypassing the title
    *  button + pointer-lock. The normal handoff only clears `flags.paused` via
    *  the pointer-lock 'lock' event (input.ts), which never fires for an
@@ -398,6 +407,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     chutePopT: () => chuteLifecyclePhase(),
     tickChute: (dt, wind, elapsed, dirX, dirZ) => advanceChuteDbg(dt, wind, elapsed, dirX, dirZ),
     saveGame: () => saveGameState(ctx),
+    loadGame: () => loadGameState(ctx),
     smokePodTutorial: () => smokePodTutorial(ctx),
     smokeExposureConstant: () => smokeExposureConstant(ctx),
     probeEyeInCabin: (eye) => probeEyeInCabin(eye),
@@ -818,17 +828,19 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.pickups.list.push(p);
       return p.id;
     },
-    craftChooserTest(items) {
-      return __craftChooserTest(ctx, items as Array<{ id: ItemId; count: number }>);
+    giveItem(itemId, n = 1) {
+      for (let i = 0; i < n; i++) addItem(ctx.inventory, itemId as ItemId, undefined, ctx);
     },
-    injectTestRecipe() {
-      // Register a transient recipe colliding with scrap_bar (scrap×2+branch×1) so
-      // the multi-match chooser can be verified end-to-end.
-      __registerTestRecipe({
-        id: 9001, displayName: 'test alt', category: 'tool',
-        inputs: [{ id: 'scrap', count: 2 }, { id: 'branch', count: 1 }],
-        output: { id: 'scrap_bullet', count: 1 },
-      });
+    craftCardState(recipeId) {
+      const r = findRecipeById(recipeId);
+      if (!r) return null;
+      return {
+        state: recipeCardState(r, ctx.inventory.collectedItemTypes),
+        discovered: ctx.inventory.discoveredRecipes.includes(recipeId),
+      };
+    },
+    openCrafting() {
+      void import('../ui/craftingMenu.ts').then((m) => m.openCraftingMenu(ctx));
     },
     enterGame(dev) {
       if (hooks.enterGame) hooks.enterGame(dev);

@@ -5,8 +5,9 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import type { InventoryState, ItemId, ItemMeta, Slot } from './types.ts';
 import { getItemDef } from './items.ts';
+import { unlockNewlyEligible, findRecipeById } from './recipeDiscovery.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';
-import { playDrop } from '../audio/audio.ts';
+import { playDrop, playRecipeDiscovery } from '../audio/audio.ts';
 import { Tuning } from '../config/tuning.ts';
 
 // AAV — slot counts lifted to Tuning. Hotbar stays at 4 (UI is laid
@@ -22,11 +23,16 @@ export function createInventory(): InventoryState {
     backpack: Array.from({ length: BACKPACK_SLOT_COUNT }, empty),
     selectedIdx: 0,
     hover: null,
-    // TT — Empty on fresh game; the combine-to-discover UI populates
-    // this as the player crafts. Save load may seed it with the full
-    // recipe set on v5→v6 migration so existing playtesters keep
-    // their recipe knowledge.
+    // Empty on a fresh game; pickup-gated discovery populates this as the
+    // player collects ingredient types (unlockNewlyEligible, from addItem).
+    // Save load may seed it with the full recipe set on v5→v6 migration so
+    // existing playtesters keep their recipe knowledge.
     discoveredRecipes: [],
+    // Crafting rework (v16) — the ever-collected item-type ledger that
+    // drives pickup-gated recipe discovery. Empty on a fresh game; grows
+    // via addItem as the player scavenges/crafts, unlocking recipes whose
+    // ingredient types are all present.
+    collectedItemTypes: new Set(),
     // ABJ (v11) — populated as the player reads journals. Per-kind
     // (not per-id) since journal ids regenerate per-seed but the 6
     // JournalKind variants are stable across worlds.
@@ -54,7 +60,7 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta, ctx?: 
       const s = inv.slots[i];
       if (s.item === id && s.count < def.maxStack && !s.meta) {
         s.count++;
-        if (ctx) maybeFireHint(ctx, id);
+        if (ctx) noteAcquired(ctx, inv, id);
         return i;
       }
     }
@@ -63,7 +69,7 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta, ctx?: 
       const s = inv.backpack[i];
       if (s.item === id && s.count < def.maxStack && !s.meta) {
         s.count++;
-        if (ctx) maybeFireHint(ctx, id);
+        if (ctx) noteAcquired(ctx, inv, id);
         return 100 + i;
       }
     }
@@ -77,7 +83,7 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta, ctx?: 
       s.count = 1;
       if (meta) s.meta = { ...meta };
       else delete s.meta;
-      if (ctx) maybeFireHint(ctx, id);
+      if (ctx) noteAcquired(ctx, inv, id);
       return i;
     }
   }
@@ -90,12 +96,48 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta, ctx?: 
       s.count = 1;
       if (meta) s.meta = { ...meta };
       else delete s.meta;
-      if (ctx) maybeFireHint(ctx, id);
+      if (ctx) noteAcquired(ctx, inv, id);
       return 100 + i;
     }
   }
 
   return -1;
+}
+
+/** Crafting rework — called on every successful acquire (pickup / craft /
+ *  loot; all route through addItem). Records the item type in the ever-
+ *  collected ledger, unlocks any recipe whose ingredient types are now all
+ *  collected, and fires the discovery beat. When a recipe unlocks on this
+ *  acquire the unlock toast supersedes the generic one-time item hint —
+ *  they'd otherwise collide on the same toast channel (e.g. picking up the
+ *  first cloth both unlocks the machete AND wants to show the "press C"
+ *  hint; the unlock wins, the hint fires on a later cloth pickup). */
+function noteAcquired(ctx: GameContext, inv: InventoryState, id: ItemId): void {
+  let announced = false;
+  if (!inv.collectedItemTypes.has(id)) {
+    inv.collectedItemTypes.add(id);
+    const newly = unlockNewlyEligible(inv.discoveredRecipes, inv.collectedItemTypes);
+    if (newly.length > 0) {
+      announceUnlocks(ctx, newly);
+      announced = true;
+    }
+  }
+  if (!announced) maybeFireHint(ctx, id);
+}
+
+/** Crafting rework — the recipe-unlock "moment": a rising discovery chime +
+ *  a warm-gold held toast, staggered ~0.9s so it follows the "taken — X"
+ *  pickup toast rather than overwriting it (mirrors maybeShowItemHint's
+ *  delay). Batches simultaneous unlocks (one pickup can complete several
+ *  recipes at once) into a single beat to avoid toast spam. */
+function announceUnlocks(ctx: GameContext, ids: number[]): void {
+  const msg = ids.length === 1
+    ? `you've figured out how to make ${findRecipeById(ids[0])?.displayName ?? 'something'}`
+    : `you've figured out ${ids.length} new recipes`;
+  setTimeout(() => {
+    playRecipeDiscovery();
+    ctx.ui.showToast(msg, { kind: 'discovery' });
+  }, 900);
 }
 
 /** Lazy-load the tutorial module so inventory.ts doesn't grow a static dep

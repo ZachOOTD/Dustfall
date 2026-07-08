@@ -12,8 +12,8 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
-import type { Slot } from '../inventory/types.ts';
-import { ALL_RECIPE_IDS } from '../inventory/recipeDiscovery.ts';
+import type { Slot, ItemId } from '../inventory/types.ts';
+import { ALL_RECIPE_IDS, findRecipeById } from '../inventory/recipeDiscovery.ts';
 import type { LootEntry } from '../world/lootContainers.ts';
 
 import { despawnPickup, spawnDroppedPickup } from '../pickups/pickups.ts';
@@ -102,12 +102,17 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // pre-v14 saves load with them absent (shrews rebuild from procgen; the wall
 // defaults to the dormant struct from createWeather and re-derives intensity
 // on the first updateWeather tick).
-export const SAVE_VERSION = 15;
+// Crafting rework — v16 adds `inventory.collectedItemTypes?: ItemId[]`, the
+// ever-collected item-type ledger that drives pickup-gated recipe discovery.
+// Additive/optional per D81. Pre-v16 saves arrive without it; the loader seeds
+// it from the ingredient types of their already-discovered recipes so no
+// known recipe re-locks and the card-grid tease/unlock baseline is sane.
+export const SAVE_VERSION = 16;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -139,6 +144,12 @@ export interface SaveV1 {
      *  it with ALL_RECIPE_IDS so existing playtesters keep their
      *  recipe knowledge across the migration. */
     discoveredRecipes?: number[];
+    /** Crafting rework — v16: the ever-collected item-type ledger for
+     *  pickup-gated recipe discovery, serialized as an ItemId[]. Pre-v16
+     *  saves arrive without this field; the loader seeds it from the
+     *  ingredient types of the already-discovered recipes so nothing
+     *  re-locks. */
+    collectedItemTypes?: ItemId[];
     /** ABJ — v11: set of journal kinds the player has read at least
      *  once. Compact per-kind (not per-id since ids regenerate per-
      *  seed). Pre-v11 saves arrive without this field; loader seeds
@@ -449,6 +460,9 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         // mutate ctx.inventory.discoveredRecipes without affecting
         // the just-written save.
         discoveredRecipes: ctx.inventory.discoveredRecipes.slice(),
+        // Crafting rework — v16: serialize the ever-collected item-type
+        // ledger as an ItemId[]. Empty array on a brand-new game.
+        collectedItemTypes: Array.from(ctx.inventory.collectedItemTypes),
         // ABJ — v11: serialize the per-kind journal-read set as an
         // array. Empty array if no journals have been opened.
         journalReadKinds: Array.from(ctx.inventory.journalReadKinds),
@@ -782,6 +796,22 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     ctx.inventory.discoveredRecipes = save.inventory.discoveredRecipes.slice();
   } else {
     ctx.inventory.discoveredRecipes = ALL_RECIPE_IDS.slice();
+  }
+  // Crafting rework — v16: collectedItemTypes restore. v16+ persists the
+  // array verbatim. Pre-v16 saves (no field) seed it from the ingredient
+  // types of the just-restored discovered recipes, so every already-known
+  // recipe stays 'unlocked' (never regresses to a "?" card) and further
+  // pickups keep extending the ledger normally.
+  ctx.inventory.collectedItemTypes.clear();
+  if (save.inventory.collectedItemTypes !== undefined) {
+    for (const id of save.inventory.collectedItemTypes) {
+      ctx.inventory.collectedItemTypes.add(id);
+    }
+  } else {
+    for (const rid of ctx.inventory.discoveredRecipes) {
+      const r = findRecipeById(rid);
+      if (r) for (const inp of r.inputs) ctx.inventory.collectedItemTypes.add(inp.id);
+    }
   }
   // ABJ — v11: journalReadKinds. Pre-v11 saves arrive without this
   // field; seed an empty set so all journals read as unread.
