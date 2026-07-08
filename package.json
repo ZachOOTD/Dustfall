@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "build:intro": "tsc && vite build --mode intro",
     "preview:intro": "npm run build:intro && vite preview --mode intro",
+    "build:desktop": "tsc && cross-env VITE_BASE=/ vite build",
     "typecheck": "tsc --noEmit",
     "verify": "tsc --noEmit",
     "verify:all": "npm run verify && npm run verify:placement && npm run verify:colliders",
@@ -17,10 +18,15 @@
     "verify:intro": "node scripts/rig-shot.mjs --scenario=smoke-intro",
     "bench:intro": "node scripts/bench-intro.mjs",
     "rig-shot": "node scripts/rig-shot.mjs",
-    "reap": "powershell -ExecutionPolicy Bypass -File scripts/reap-dev.ps1"
+    "reap": "powershell -ExecutionPolicy Bypass -File scripts/reap-dev.ps1",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/three": "^0.184.1",
+    "cross-env": "^10.1.0",
     "playwright": "^1.60.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"

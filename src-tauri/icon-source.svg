@@ -1,0 +1,40 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#160d08"/>
+      <stop offset="0.55" stop-color="#3a1508"/>
+      <stop offset="1" stop-color="#7a2a10"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffcf7a"/>
+      <stop offset="0.45" stop-color="#f0932e"/>
+      <stop offset="1" stop-color="#c23616"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e86a24" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#e86a24" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="frame">
+      <rect x="0" y="0" width="1024" height="1024" rx="160" ry="160"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <!-- sky -->
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#sky)"/>
+
+    <!-- sun glow + disc, sitting low so the front dune eats its base -->
+    <circle cx="512" cy="600" r="430" fill="url(#glow)"/>
+    <circle cx="512" cy="600" r="232" fill="url(#sun)"/>
+
+    <!-- distant dune ridge -->
+    <path d="M0 704 C 220 632, 430 700, 560 676 C 720 646, 900 690, 1024 662 L 1024 1024 L 0 1024 Z"
+          fill="#5a2812"/>
+    <!-- mid dune -->
+    <path d="M0 792 C 250 724, 470 800, 660 764 C 820 734, 940 772, 1024 758 L 1024 1024 L 0 1024 Z"
+          fill="#3d1c0d"/>
+    <!-- front dune (darkest) -->
+    <path d="M0 892 C 300 828, 520 900, 720 872 C 860 852, 960 880, 1024 870 L 1024 1024 L 0 1024 Z"
+          fill="#231007"/>
+  </g>
+</svg>
