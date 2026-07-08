@@ -1,61 +1,37 @@
-# Next session — resume the live-feedback loop (after round ABQ, 2026-07-07)
+# Next session — Kickoff Brief (after 2026-07-08: crafting rework + desktop packaging)
 
-The user is live-testing the escape-pod intro in `npm run dev` and filing per-issue fixes.
-Round ABQ (2026-07-07) landed a big cockpit/pod/audio/airlock fix batch — see
-[changelog.md](changelog.md) 2026-07-07 + D272-D276. Just keep taking their feedback and
-fixing, probe-/render-verifying each via the ship-shot + pod harnesses.
+## Read these first (in order)
+1. `CLAUDE.md` (auto-loaded) — "Where we are now".
+2. `docs/session-end-report.md` — cumulative state.
+3. `docs/backlog.md` — **⚠ known-stale** (it even lists "full roadmap refresh" as an open item); many 2026-06 triage items already shipped. **Verify each candidate against the actual code before proposing it** — the last session found the worm overhaul, reload SFX, and the cave rework all already shipped.
+4. `docs/decisions.md` (recent tail + friction-grep) + `docs/roadmap.md` + `docs/architecture.md`.
 
-## What shipped in round ABQ (2026-07-07; `f17fce6` + the ABQ commit)
-- **Cockpit console** rebuilt as 3 angular panels off the dome sill (mitred deck/folded fascia,
-  proud instruments) + moved closer to the glass (`INSET 0.24`; clutter re-anchored to track it).
-- **Pod interior**: the "brown floor" was the charred `baseCap` poking above the deck (dropped
-  below, D273); white splotches = shader flecks (zeroed, interior + exterior); floor z-fight
-  flicker (deck/sub-floor split 1cm, D274) + streak layers stripped; footwell disc removed;
-  eject lever → a simple pull-down handle.
-- **Rounded airlock → plain hallway** (bellows + mating shroud removed; also cleared the
-  pre-eject porthole bands). Pod door confirmed ONE unified model.
-- **Audio**: desert wind + ship hum muted reversibly. **Cockpit glass**: sill gap closed + slight
-  haze added. **Airlock corner z-fight**: `--probe`-confirmed pair → polygonOffset (D275/D276).
+## What's built
+The full game loop ships: procedural 2400m seeded desert, survival stats + the 7-day Long-Storm countdown, wrecks/salvage/POIs (socket-grammar procgen fleet + hand flagships + the wreck-yard biome + Sarlacc pit), creatures (lizard/shrew/vulture/sandworm/companion), sled+rope, hover speeder, procedural audio (wind + music) + weather/sky. The **escape-pod intro is the released opening** (2026-07-05, live). Crafting is now **pickup-gated** (collect ingredient TYPES → a card unlocks; card-grid UI). The game is also an **installable Tauri desktop app** (`npm run tauri:build` → Dustfall.exe + NSIS installer).
 
-## FIRST THING next session (owed live-motion checks)
-- **Confirm the airlock-corner z-fight is gone IN MOTION** (polygonOffset can't be verified by the
-  probe/still render — see backlog + [[ship-zfight-probe-first]]). If it still flickers, fall back
-  to a geometry fix (pull the collar wall back). Also eyeball: the cockpit glass haze amount, the
-  crashed-pod exterior (did zeroing flecks make it too clean?).
+## This session's focus: the user picks the direction
+There is no single mandated next thing — the escape-pod campaign is complete and the backlog is thin/stale. Surface a curated set and let the user steer. **Verified-open** (checked in code 2026-07-08):
+- `[perf]` **Pickup instancing** — no `InstancedMesh` in `src/pickups/pickups.ts`; ~382 world pickups ≈ 75% of draw calls. Measured plan in backlog §A. Build human-attended (the interaction raycast needs an `instanceId` resolver — confirm every pickup still collects).
+- `[polish]` **Ambient life beds are silent** — `soundscape.ts` loads `day-bed`/`night-bed` from an empty `/audio/*.ogg` → silence. Synthesize procedural day-bird / night-insect beds (the project's no-sample ethos; wind + music already sound).
 
-## Older deferred items (lower priority)
-1. **The descent METAL-CRAWL** (the user's live report): a dynamic-texture "swim" on the DOOR /
-   LEVER / CONSOLE metal, visible only while the pod MOVES during descent. NOT the plasma (that's
-   separate + fixed). NOT the classic localSpace world-space crawl — every pod createRustedHullMaterial
-   ALREADY has `localSpace: true`, and the pod stays LEVEL (no tumble) during descent, so the two
-   obvious mechanisms are ruled out. Leading suspects: z-fighting on those pieces that shifts with
-   the view, or a view-dependent specular/env sweep on the metal. A reproduction agent was mid-hunt
-   when paused (no diagnosis yet); a `crawl-probe` rig scenario it left (in rig-shot.mjs, `86fa769`)
-   drives the descent motion + captures the interior metal — reuse it. Reproduce → name the exact
-   mechanism → fix (podScene.ts; do NOT edit the SHARED hullMaterial.ts blind — report if the root
-   cause is there).
-2. **The systemic SWIM-GUARD** (the user's architecture ask: "make sure texture swim never happens
-   on any texture ever again, even moving"): (a) flip createRustedHullMaterial's default to swim-safe
-   (local-space) so new materials are protected by default — VERIFY the static desert wrecks/terrain
-   don't lose cross-seam grime tiling; (b) add a MACHINE GUARD rig gate that translates each object a
-   test delta + asserts the surface pattern doesn't slide (catches existing + new, forever); (c)
-   document the convention. Fold #1's actual mechanism into the guard so it covers that class too.
+Bigger net-new (scope first): **endgame goal arc** (turn the Long-Storm countdown into a real finale + days-lasted ledger); a **new enterable hero wreck** (Skyfall — research-first); the **deep-cave multi-chamber expansion** (gated on a sub-heightfield-collision walk-test).
 
-## Open flags for the user's eyes (their call)
-- The cockpit glass HAZE level (now that the glass actually renders — tune up/down to taste).
-- Whether the descent STREAKS read better now (plasma slowed) — the metal-crawl (#1) is separate + deferred.
-- The cockpit floor-overshoot (agent applied the geometrically-correct inset but couldn't frame the
-  user's exact screenshot angle — confirm in-build).
+**Desktop follow-ups** (from D278, if shipping-polish is wanted): Windows code signing (kills the SmartScreen warning), file-based saves via the Tauri `fs` API (localStorage is wiped on uninstall), tighten `csp: null` → a scoped policy, re-profile under WebView2.
 
-## Keeping the machine fast (SOLVED this session — automatic)
-Long sessions used to accumulate orphaned Vite dev servers (each agent/rig-shot spawns its own;
-completed ones leaked). FIXED at the source: `vite.config.ts` now has an `autoShutdownIdle` plugin —
-every dev server terminates ITSELF once no browser has been connected for ~8 min (or ~20 min if never
-used), safe because an in-use rig-shot/bench keeps its page attached so it never dies mid-run. So
-servers self-clean; no command needed. `npm run reap` (scripts/reap-dev.ps1) remains the manual
-force-clean for immediate relief; `DUSTFALL_NO_AUTOSHUTDOWN=1` opts a server out.
-VERIFIED (2026-07-06): the auto-shutdown fires — a server with no browser self-exited at ~11s under a
-short test threshold ("auto-shutdown: unused for 0m — freeing this idle dev server"), reading a real
-client-count of 0 (the same path the "don't kill an active run" safety relies on). Thresholds are env-
-overridable (DUSTFALL_AUTOSHUTDOWN_{IDLE,NEVER,CHECK}_MS). Also PORTED into the gamedev-framework
-(shared-memory/dev-server-auto-shutdown.md + the project skeleton) so every new game inherits it.
+## Owed human walk-tests (yours, headless can't judge)
+The big pile in backlog §A (survival-curve feel, diegetic-HUD, salvage pry-feel, sandworm attack feel, speeder handling, 3P camera, the wreck-yard/Sarlacc/mega-wreck reads). Plus this session's: the desktop app's NEW GAME → intro → play click-through in the native window (the runtime is proven — title renders, WASM boots — but the full play pass wants a human).
+
+## Autonomy contract
+When a call is ambiguous and reversible, pick the sensible default, log a D-entry with a friction-score, and continue — don't block on the user for low-stakes choices. Surface only genuine forks (a save-schema change, a destructive action, a direction the user must own).
+
+## Stop conditions
+All-picked-work shipped · 3 consecutive fix walls on one gate · a destructive-action need · a catastrophic block. On stop: run `/session-end` (verify → changelog → CLAUDE.md → roadmap → decisions → backlog → report → this file → commit hand-off).
+
+## Verification protocol
+Dustfall opts out of the tier-ladder. `npm run verify` (= `tsc --noEmit`) is the baseline; add `npm run verify:all` (placement + colliders) for world/POI work. Visual/feel work: `npm run dev` + the preview MCP (DOM overlays) or the rig-shot / ship-shot / model-stage harnesses — NEVER ship visual work on `tsc`-clean alone (CLAUDE.md rule 8). Desktop: `npm run tauri:build` (needs cargo on PATH: `export PATH="$HOME/.cargo/bin:$PATH"`).
+
+## Notable footguns
+- `vite.config.ts` reads `process.env.VITE_BASE` directly (no `loadEnv`) — a `.env.<mode>` file does NOT reach `base`; use a real shell env var (D278).
+- SAVE_VERSION is **16** now; any save touch is additive-only (D81) + needs a pre-v16-style migration.
+- `src-tauri/target/` (1.3 GB) is gitignored — never stage it.
+- The crafting `?`-card grid reveals the total recipe count; if it reads as a grind-checklist, dim far-off cold cards (D277 knob).
