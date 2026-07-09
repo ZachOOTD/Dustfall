@@ -1,40 +1,46 @@
-# Campaign — Dustfall: Escape-Pod Intro
+# Campaign — Dustfall "Sharpen & Deepen"
 
-**Goal:** build the game's opening — the first-person escape-pod intro sequence — to a
-world-class, shippable bar, exactly as captured in `docs/feature-escape-pod-intro.md`
-(vision + approved enrichments E1-E10 + the phased BUILD PLAN). **Definition of Done:** a new
-game plays the entire sequence (Beats 0-11: cockpit → disaster → escape → eject → ship explosion →
-beautiful descent → parachute gag → crash → wake → desert reveal → craft+salvage tutorial → the
-chute-pop payoff) hero-quality, behind `FEATURES.escapePodIntro`.
+**Goal:** Deepen the EXISTING game so its content bites, breathes, and rewards exploration — no new content pillars, no tone change, no endgame. "Done enough" = the 7-milestone ladder below is built + green, ready for one end review.
+**Started:** 2026-07-09
+**Branch:** `campaign/2026-07-09` (every cycle commits here; never pushed; merged at end review)
+**Budget:** max-cycles **50** (hard stop) · soft ceiling ~10M output tokens (self-estimate; cycle count is the real bound)
+**Checkpoint policy:** `none` (unattended run-to-completion) — **with two sanctioned exceptions that DO pause** (below)
+**Self-author policy:** `propose` (if the ladder empties before max-cycles, propose more from the GDD and wait — do NOT auto-add)
+**Verify gate (per cycle):** `npm run verify:all` (tsc + placement + colliders) **plus** the intro/tutorial smoke suite (`smoke-intro` / `smoke-pod-tutorial`) — a cycle that breaks the released opening does NOT pass. Visual/feel cycles also run the adversarial appearance gate (`--visual-gate=auto`).
+**Status:** active
 
-**Started:** 2026-06-28
-**Branch:** `campaign/escape-pod-intro` (off `master`; commits every cycle)
-**Budget:** max-cycles **150** (a high safety backstop, NOT a target) · `until: roadmap-empty`
-(build the whole plan) · no soft token ceiling (the user opted into a large, quality-maxed run).
-**Checkpoint policy:** **milestone** — markers sit at **PHASE boundaries** (Phase 0 greybox spine →
-1 pod → 2 descent → 3 ship → 4 crash/tutorial → 5 audio). The loop pauses after each phase for the
-user's **walk-test** (this is a feel/look-critical feature — feel/audio can't be self-verified).
-**Self-author policy:** propose.
-**Status:** active.
+## Locked design constraints (do NOT violate autonomously)
+- **No endgame / no Long-Storm finale** — forbidden by the 2026-06-18 user directive; the game stays open-ended "days survived." (The stale "endgame finale" candidate line is scrubbed from CLAUDE.md/roadmap/next-session-prompt in M1.)
+- **No tone change / no pruning** — the user confirmed the current spectacle, 6 flagship journals, and combat/weapon surface are INTENDED. Do not treat them as debt; do not quarantine the raider/combat surface. GDD stays as-is.
+- **Additive-save-only (D81)** — if a unit genuinely needs a `SAVE_VERSION` bump, **PAUSE and surface it** (sanctioned exception below); never cut around it, never ship an unreviewed migration.
+- **No new content pillars** — this campaign sharpens/deepens what exists (plus the ONE new hero wreck, M7). The Phase-A feel-pile (worm/vulture/speeder/atmosphere feel-tunes) is EXCLUDED — reserved for attended sessions.
 
-## Operating rules (this campaign)
-- **ENRICH-NOT-CUT.** The scope-cut list in the feature doc is a TRUE-TECHNICAL-WALL safety net
-  ONLY — never a target, always surfaced to the user before any cut. The spine + pod + descent +
-  tutorial are NOT cuttable. If anything, propose enrichments (self-author=propose).
-- **Hero geometry/FX → the `procedural-modeler` agent**, iterated to a quality BAR (5-8 rounds new
-  hero elements). **Real first-person in-game-view** visual gate (not an isolated rig). **Anti-punt.**
-- Behind `FEATURES.escapePodIntro` (default off until shipped). **No `SAVE_VERSION` bump** unless
-  unavoidable (D81) — the `introComplete` save marker is additive (legacy = true).
-- New game → the intro; the old spawn → **dev-mode only**.
-- Verify gate each cycle: `npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40) + the new
-  `feature-escape-pod-intro` sequence smoke check. Per-phase: the user's walk-test.
+## Sanctioned pauses (the only two things that stop the unattended run before max-cycles)
+1. **Skyfall pre-detail (M7 `[feel-critical]`)** — build the blockout (scale, shell, interior layout, colliders, enterability) autonomously, then **PAUSE** for the human to walk it (enter it; verify collision + intro-ship scale) before the hero-detail pass.
+2. **Any `SAVE_VERSION` bump** (D81) — surface for approval, do not proceed.
+
+Otherwise: no mid-checkpoints. Review async via `campaign-log.md`; redirect via `steering.md`.
+
+## The milestone ladder (authoritative queue — traverse in order)
+
+- **M1 — Perf + housekeeping** `[auto]`
+  - `pickup-instancing` — `InstancedMesh` in `src/pickups/pickups.ts` + an `instanceId→pickupId` resolver in the interaction raycast (`src/player/interaction.ts`); precedent `src/world/footprints.ts`. Verify: perf-probe drawcalls before/after + an eval take-loop confirms every pickup still collects. (Scope-cut #1 if it regresses: revert to merged-mesh pooling.)
+  - `decisions-archival` — roll the oldest ~15 (D207→) into `docs/decisions-archive.md` verbatim, never renumber, update both headers; conserve the count (C43 precedent).
+  - `panel-deadcode-cleanup` — strip superseded panel/greeble builders + dead fields (ACAX list). tsc/build-verifiable.
+  - `survival-probe-crashheat-guard` — one-line determinism assert in the survival probe.
+  - `doc-scrub` — remove the stale "endgame/Long-Storm finale" candidate from CLAUDE.md + `docs/roadmap.md` + `docs/next-session-prompt.md`.
+- **M2 — Survival curve** `[auto + evidence]` — build a headless time-to-death sim harness (minutes-to-death under {open-midday / shade / sheltered / watered}); tune drain/damage/regen bands in `src/config/tuning.ts` to a defensible curve; **enable survival in the REAL new-game path** (currently suspended by the intro) **behind a `FEATURES` flag** so it's one-line reversible at end review. Verify: the evidence table + the flag path.
+- **M3 — Survival depth** `[auto]` — `sun-shade-exposure` (position-aware heat: open sun vs wreck-shadow/hull; decouple the occluder-height threshold per C31) + water-scarcity/exposure (deferred half of iteration-plan Arc C1). Builds on M2's flagged curve. Verify via the sim harness.
+- **M4 — Ambient life beds** `[auto]` — procedural day + night ambient beds synthesized in `src/audio/soundscape.ts` (zero-asset per D3). **Wind STAYS muted** (user). Verify: audio-state gains > 0 across day/night/storm.
+- **M5 — Living world (diurnal-cycle)** `[auto]` — bind lizards/shrews/vultures/worms to day/night activity (iteration-plan M5b). Verify: assert creature activity by time-of-day.
+- **M6 — POI breadth** `[gate-verified]` — 2-3 new procgen wreck/POI archetypes via the `src/world/poiComponents.ts` socket grammar (+ `poiArchetypes.ts` biome weighting). Verify: `verify:placement` (0 occlusion/terrain fails ×5 seeds) + `verify:colliders`.
+- **M7 — Skyfall enterable hero wreck** `[feel-critical]` — a NEW enterable hero wreck at intro-ship scale (exterior) with an enterable interior of similar-or-larger scale. **Build ON the intro-ship interior tech** (`src/world/escapePodIntro/shipScene.ts`: D-section hull, room colliders, doorways, rule-9 collider discipline) — reuse guarantees the scale-match + de-risks collision. Research-first → blockout → **PAUSE for human walk-test** → hero-detail via the procedural-modeler loop + adversarial-visual gate.
+
+## Scope-cut order (if verify fails 3× or budget pressure trips)
+Per GDD §12 + this ladder: `pickup-instancing` raycast (→ merged-mesh fallback) → optional M6 archetype count (3→2→1) → M3 water-scarcity breadth → M5 per-species diurnal nuance. **Never cut:** any save-touching change (pause instead, D81); the M2 curve *evidence* (surface it, don't guess); M7 collision correctness (revert to last-green, don't half-ship).
 
 ## How to steer this campaign
-- Watch progress: read `campaign-log.md` or run `/campaign-status`.
-- Redirect: write a note in `steering.md` — picked up at the next cycle boundary (no need to stop the loop).
-- At a PHASE checkpoint: walk-test the build (`npm run dev`), then `/campaign-approve` to release the next phase.
-- Stop: write "pause" in `steering.md`, or stop the `/loop`.
-
-## Prior campaign
-The M11→M13 review-fix pass (campaign `campaign/2026-06-18`, 69 cycles, ~18.5M tokens) COMPLETED +
-was user-approved. Its chronicle is archived at `campaign-log-2026-06-18-m1-m13.md`.
+- **Watch progress:** read `campaign-log.md` or run `/campaign-status`.
+- **Redirect:** write a note in `steering.md` — picked up at the next cycle boundary.
+- **At a sanctioned pause:** review + (for M7) walk the build, then `/campaign-approve` to release the next unit.
+- **Stop:** `/campaign-status --stop`, or delete `.gamedev-framework/overnight.lock`, or write "pause" in `steering.md`.
