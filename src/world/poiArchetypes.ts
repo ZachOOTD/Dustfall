@@ -16,7 +16,7 @@ import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
   noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead, latticeMast,
-  pipeSegment, pipeJunction,
+  pipeSegment, pipeJunction, crawlerBody,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -535,8 +535,45 @@ function assembleBuriedPipeline(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// CARGO CRAWLER (M6 POI-breadth A3, campaign 2026-07-09 cycle 7) — a tracked desert hauler
+// wreck (cab + cargo bed on two track bogies) with 1-2 spilled cargo containers. The
+// BULKY-GROUND-VEHICLE silhouette (contrast to the mast + pipeline). ONE seedOf draw.
+// ════════════════════════════════════════════════════════════════════
+function assembleCargoCrawler(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const s = seedOf(rand);
+  const body = crawlerBody(s);
+  a.place(body, liftToGround(body));
+  // 1-2 cargo containers spilled off the bed, self-seated + tumbled (reuse debrisPiece box
+  // chunks — the same rust-metal vocab). Scattered to the −Z (rear) + a side, clear of the hull.
+  const nSpill = 1 + Math.floor(phash(s, 40) * 2);
+  for (let i = 0; i < nSpill; i++) {
+    const container = debrisPiece(s + 500 + i * 71, 2, false, 1.15 + phash(s, 41 + i) * 0.3);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      (phash(s, 50 + i) - 0.5) * 0.7,
+      phash(s, 55 + i) * Math.PI * 2,
+      (phash(s, 60 + i) - 0.5) * 0.7,
+    ));
+    const ang = phash(s, 65 + i) * Math.PI * 2;
+    const dist = 3.2 + phash(s, 70 + i) * 1.8;
+    const px = Math.cos(ang) * dist, pz = -3.0 - Math.abs(Math.sin(ang)) * dist;   // biased to the rear
+    const sink = 0.15 + phash(s, 75 + i) * 0.25;
+    a.place(container, new THREE.Matrix4().compose(
+      new THREE.Vector3(px, -rotatedMinY(container.bbox, q) - sink, pz), q, _ONE_SCALE));
+  }
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
+  cargo_crawler: {
+    id: 'cargo_crawler',
+    // A bogged/derelict hauler — the TRACKS must stay VISIBLE (they're the silhouette), so only
+    // a shallow seatSink beds the lower tread into the sand; a modest derelict cant. No burySink.
+    params: { bucket: 'warm', burySink: false, bury: 0, list: 0.10, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.16, salvageKind: 'cargo_container' },
+    assemble: assembleCargoCrawler,
+  },
   buried_pipeline: {
     id: 'buried_pipeline',
     // A surface RUN (burySink false); the undulation + dive are baked into the segments, so a
@@ -639,10 +676,12 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // rocky/dune weighted a hair higher (exposed highlands where you'd site a relay).
   // M6 A2 (cycle 6) — buried_pipeline added ~0.05-0.07 (favor salt/dune: old freight lines);
   // `derelict` shaved again to keep each table summing ≈1.0 (the tail 'ship' fallback stays live).
-  salt:       [['ship', 0.24], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05]],
-  rocky:      [['ship', 0.19], ['derelict', 0.09], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04]],
-  dune:       [['ship', 0.17], ['derelict', 0.09], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06]],
-  wreck_yard: [['ship', 0.15], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05]],
+  // M6 A3 (cycle 7) — cargo_crawler added ~0.04-0.06 (favor rocky/wreck_yard: hauler routes +
+  // the graveyard); `ship`/`derelict` shaved to keep each table summing ≈1.0.
+  salt:       [['ship', 0.21], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04]],
+  rocky:      [['ship', 0.16], ['derelict', 0.09], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06]],
+  dune:       [['ship', 0.14], ['derelict', 0.09], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06]],
+  wreck_yard: [['ship', 0.12], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

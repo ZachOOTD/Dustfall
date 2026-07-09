@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 7 — 2026-07-09 — M6 POI breadth [3/3, COMPLETE]: the cargo-crawler archetype OK all gates + visual
+
+`verified` — `verify:all` PASS (tsc + placement 5-seed 0-fails + colliders **55** audits incl. cargo_crawler 5-6/5-6 x4 seeds); all 6 rig gates PASS; VISUAL gate rendered + iterated (routine bar, no sev>=2). One cycle commit. D287. **M6 COMPLETE — 3 distinct archetypes** (exceeds the 2-3 DoD).
+
+- **cargo_crawler archetype (D287)** — a tracked desert HAULER wreck: the bulky-ground-vehicle silhouette (nothing else in the POI set is a vehicle). NEW `crawlerBody` component (`poiComponents.ts`): a cab (with a dark windscreen recess + an exhaust stack) + an open cargo bed with side-wall ribs, riding on two track bogies (frame + rounded end drums + road wheels + tread lugs). `assembleCargoCrawler` adds 1-2 spilled cargo containers (reused `debrisPiece` chunks). Cab-box + bed-box + 2 bogie-box colliders (wheels/lugs/drums are decoration). Registry (`warm` bucket) + `ARCH_WEIGHTS` all 4 biomes (~0.04-0.06, favor rocky/wreck_yard; `ship`/`derelict` shaved to keep sums ~1.0). One `seedOf` draw, phash rest.
+- **Visual gate rework** — round 1 buried the vehicle to the roofline (`seatSink` 0.45), hiding the TRACKS — the defining feature — so it read as a box pile. Round 2 dropped `seatSink` to 0.16: the tread lugs + road wheels + end drums now read clearly (a tracked hauler half-sunk in the sand). The tracks-must-stay-visible lesson.
+- **Gate coverage** — added `cargo_crawler` to the `verify:colliders` default list (50->55 audits).
+- **M6 CLOSED** — 3 archetypes across cycles 5-7 (relay_mast vertical / buried_pipeline horizontal / cargo_crawler vehicle). Next milestone: **M7 Skyfall `[feel-critical]`** — the loop PAUSES for human plan-review before building (per campaign-cycle 4a).
+
 ## Campaign "Sharpen & Deepen" cycle 6 — 2026-07-09 — M6 POI breadth [2/2-3]: the buried-pipeline archetype OK all gates + visual
 
 `verified` — `verify:all` PASS (tsc + placement 5-seed + colliders **50** audits incl. buried_pipeline 7-8/7-8 x4 seeds); all 6 rig gates PASS; VISUAL gate rendered + reworked (routine bar, no sev>=2). One cycle commit. D286. **M6 DoD now MET (2 distinct archetypes)**; A3 cargo_crawler queued as an optional stretch for cycle 7.

@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-09",
-  "cycles_completed": 6,
-  "current_tier": "M6 - POI breadth (DoD met 2/2-3; A3 cargo_crawler optional stretch next)",
+  "cycles_completed": 7,
+  "current_tier": "M7 - Skyfall [feel-critical] (next cycle: feature-slice + PAUSE for plan-review)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -25,7 +25,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 2450000
+    "total": 3050000
   },
   "ladder": [
     {
@@ -62,7 +62,7 @@
       "id": "M6",
       "name": "POI breadth (new archetypes)",
       "kind": "gate-verified",
-      "status": "DoD-met (2/2-3: relay_mast + buried_pipeline; A3 optional stretch)"
+      "status": "COMPLETE (3/3: relay_mast + buried_pipeline + cargo_crawler)"
     },
     {
       "id": "M7",
@@ -130,6 +130,14 @@
       "outcome": "SHIPPED (M6 DoD met at 2 archetypes)",
       "spend_estimate": 550000,
       "verify": "verify:all PASS (placement 5-seed + colliders 50) - all 6 rig gates PASS - visual gate PASS (routine bar, 1 rework round)"
+    },
+    {
+      "n": 7,
+      "date": "2026-07-09",
+      "focus": "M6 A3 - cargo_crawler archetype (M6 complete, 3 archetypes)",
+      "outcome": "SHIPPED (M6 COMPLETE)",
+      "spend_estimate": 600000,
+      "verify": "verify:all PASS (placement 5-seed + colliders 55) - all 6 rig gates PASS - visual gate PASS (routine bar, 1 rework round)"
     }
   ]
 }

@@ -5,6 +5,17 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 7 — M6 POI breadth A3: cargo_crawler (2026-07-09) — SHIPPED (M6 COMPLETE, 3/3)
+
+- **Planned:** M6 A3 cargo_crawler (optional stretch; DoD already met at 2) — the tracked-vehicle silhouette.
+- **Shipped (D287, A3):** `crawlerBody` component (cab + exhaust stack + open cargo bed + two track bogies with wheels/drums/lugs); `assembleCargoCrawler` adds 1-2 spilled containers (reused debrisPiece). Cab/bed/2-bogie box colliders. Registry (`warm` bucket) + `ARCH_WEIGHTS` all biomes. Added to verify:colliders default list (50->55 audits).
+- **Visual gate rework:** round 1 (seatSink 0.45) buried the tracks -> box pile; round 2 (seatSink 0.16) made the tread/wheels/drums read as a tracked hauler. The defining feature must stay visible.
+- **Verify:** verify:all PASS (tsc + placement 5-seed 0-fails + colliders 55 audits, cargo_crawler 5-6/5-6 x4 seeds) - all 6 rig gates PASS.
+- **Visual iteration:** rendered via the procgen framer (3q natural + pinyaw broadside + zoom); routine bar (no sev>=2); 1 rework round. Clean tracked-hauler read.
+- **Spend:** ~600K est. (campaign total ~3.05M / 10M; cycle 7/50).
+- **M6 CLOSED:** 3 distinct archetypes (vertical mast / horizontal pipeline / ground vehicle).
+- **Next:** cycle 8 -> M7 Skyfall [feel-critical] — feature-slice it, then PAUSE (plan-review) for the human to approve the plan before building.
+
 ## Cycle 6 — M6 POI breadth A2: buried_pipeline (2026-07-09) — SHIPPED (M6 DoD met, 2/2-3)
 
 - **Planned:** M6 A2 buried_pipeline — a surfacing/diving pipe run (the low-horizontal silhouette).

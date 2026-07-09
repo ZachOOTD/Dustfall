@@ -989,4 +989,89 @@ export function pipeJunction(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }
 
+/** M6 POI-breadth A3 (campaign 2026-07-09 cycle 7) — CARGO CRAWLER body: a tracked desert
+ *  hauler wreck (cab + cargo bed riding on two track bogies), the BULKY-GROUND-VEHICLE
+ *  silhouette (contrast to the vertical mast + horizontal pipeline). Built facing +Z; the
+ *  archetype cants + beds it (bogged/toppled). Colliders: cab box + bed box + 2 bogie boxes;
+ *  road wheels + tread lugs are decoration. Salvage panel on the cab flank. phash only. */
+export function crawlerBody(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const colliders: ColliderSpec[] = [];
+  const bodyW = 2.2 + phash(seed, 1) * 0.5;       // hull width (between the tracks)
+  const bedLen = 4.0 + phash(seed, 2) * 1.4;      // cargo bed length
+  const cabLen = 1.8 + phash(seed, 3) * 0.5;
+  const trackH = 0.72, trackW = 0.62;
+  const bogieLen = bedLen + cabLen * 0.7;
+  const hullY = trackH;                             // hull rides on top of the tracks
+
+  // ── two track bogies (±X), each a frame box + rounded end drums + road wheels + tread lugs ──
+  const halfTrack = bodyW / 2 + trackW / 2 - 0.05;
+  for (const sx of [-1, 1]) {
+    const bx = sx * halfTrack;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(trackW, trackH, bogieLen), _hullDarkMat);
+    frame.position.set(bx, trackH / 2, bedLen * 0.5 - bogieLen * 0.5 + cabLen * 0.5); g.add(frame);
+    const cz = frame.position.z;
+    colliders.push({ kind: 'box', half: { x: trackW / 2, y: trackH / 2, z: bogieLen / 2 }, pos: { x: bx, y: trackH / 2, z: cz } });
+    // rounded end drums (idler/sprocket) — axis along X (transverse), decoration
+    for (const ez of [-bogieLen / 2, bogieLen / 2]) {
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(trackH / 2, trackH / 2, trackW, 12), _hullDarkMat);
+      drum.rotation.z = Math.PI / 2; drum.position.set(bx, trackH / 2, cz + ez);
+      drum.userData.isWreckDecoration = true; g.add(drum);
+    }
+    // road wheels along the bottom (decoration)
+    const nWheel = 4 + Math.floor(phash(seed, 10 + sx) * 2);
+    for (let w = 0; w < nWheel; w++) {
+      const wz = cz - bogieLen / 2 + bogieLen * (w + 0.5) / nWheel;
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(trackH * 0.42, trackH * 0.42, trackW * 1.05, 10), _rustMat);
+      wheel.rotation.z = Math.PI / 2; wheel.position.set(bx, trackH * 0.42, wz);
+      wheel.userData.isWreckDecoration = true; g.add(wheel);
+    }
+    // tread lugs around the visible top run (decoration — thin bars give the track texture)
+    const nLug = 8;
+    for (let k = 0; k < nLug; k++) {
+      const lz = cz - bogieLen / 2 + bogieLen * (k + 0.5) / nLug;
+      const lug = new THREE.Mesh(new THREE.BoxGeometry(trackW * 1.08, 0.1, 0.22), _rustMat);
+      lug.position.set(bx, trackH - 0.03, lz); lug.userData.isWreckDecoration = true; g.add(lug);
+    }
+  }
+
+  // ── cargo bed (rear) — an open-topped hauler bed with low side walls ──
+  const bedH = 1.05 + phash(seed, 4) * 0.4;
+  const bedZ = -cabLen * 0.5;
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bedH, bedLen), _hullMat);
+  bed.position.set(0, hullY + bedH / 2, bedZ); g.add(bed);
+  colliders.push({ kind: 'box', half: { x: bodyW / 2, y: bedH / 2, z: bedLen / 2 }, pos: { x: 0, y: hullY + bedH / 2, z: bedZ } });
+  // bed side-wall ribs (decoration, ≥10cm)
+  for (const sx of [-1, 1]) {
+    for (let k = 0; k < 4; k++) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.12, bedH * 0.7, 0.16), _hullDarkMat);
+      rib.position.set(sx * (bodyW / 2 - 0.02), hullY + bedH * 0.6, bedZ - bedLen / 2 + bedLen * (k + 0.5) / 4);
+      rib.userData.isWreckDecoration = true; g.add(rib);
+    }
+  }
+
+  // ── cab (front, +Z) — a taller boxy cab with a dark windscreen recess ──
+  const cabH = 1.5 + phash(seed, 5) * 0.4;
+  const cabZ = bedZ + bedLen / 2 + cabLen / 2;
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.92, cabH, cabLen), _hullMat);
+  cab.position.set(0, hullY + cabH / 2, cabZ); g.add(cab);
+  colliders.push({ kind: 'box', half: { x: bodyW * 0.46, y: cabH / 2, z: cabLen / 2 }, pos: { x: 0, y: hullY + cabH / 2, z: cabZ } });
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.7, cabH * 0.42, 0.14), _hullDarkMat);
+  glass.position.set(0, hullY + cabH * 0.62, cabZ + cabLen / 2 - 0.02); glass.userData.isWreckDecoration = true; g.add(glass);
+  // exhaust stack + a roof vent (decoration)
+  const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.9, 8), _rustMat);
+  stack.position.set(bodyW * 0.3, hullY + cabH + 0.35, cabZ - cabLen * 0.3); stack.userData.isWreckDecoration = true; g.add(stack);
+
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(bodyW * 0.46, hullY + cabH * 0.45, cabZ), quat: FACE.posX(), kind: 'cargo_container' },
+  ];
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negY(), radius: bodyW * 0.6, tag: 'base' }];
+  const topY = hullY + Math.max(bedH, cabH) + 0.8;
+  const bbox = new THREE.Box3(
+    new THREE.Vector3(-halfTrack - trackW, 0, bedZ - bedLen / 2 - 0.5),
+    new THREE.Vector3(halfTrack + trackW, topY, cabZ + cabLen / 2 + 0.3),
+  );
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement
