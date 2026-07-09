@@ -791,4 +791,120 @@ export function wellHead(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }
 
+/** M6 POI-breadth (campaign 2026-07-09, cycle 5) — LATTICE COMMS MAST: a tall square-section
+ *  guyed truss tower, the one silhouette absent from the POI set (everything else is a hull,
+ *  a barrel, a bus, or scatter — nothing is TALL + THIN). Built along +Y so a standalone
+ *  assembler `liftToGround`s it standing; the archetype gives it a hard crash-LEAN (a felled
+ *  relay tower). Collision = an envelope CYLINDER over the truss + a base-housing box (mirrors
+ *  dorsalMast: the individual lattice members are decoration/structural covered by the
+ *  envelope, so the player bumps the tower as one solid mast). Determinism: phash only. */
+export function latticeMast(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const H = 5.5 + phash(seed, 1) * 2.5;        // 5.5–8.0m — the tall read
+  const hw = 0.30 + phash(seed, 2) * 0.10;     // truss half-width (0.30–0.40) at the corners
+  const chordR = 0.055;                         // corner-chord half-thickness
+  const baseH = 0.55 + phash(seed, 3) * 0.25;  // equipment housing height
+  const baseHW = hw + 0.32;                     // housing wider than the truss foot
+  const colliders: ColliderSpec[] = [];
+
+  // ── base equipment housing (collidable) ──
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(baseHW * 2, baseH, baseHW * 2), _hullMat);
+  housing.position.y = baseH / 2; g.add(housing);
+  colliders.push({ kind: 'box', half: { x: baseHW, y: baseH / 2, z: baseHW }, pos: { x: 0, y: baseH / 2, z: 0 } });
+  // a couple of louvre/box greebles on the housing (decoration — thin)
+  for (let i = 0; i < 3; i++) {
+    const lv = new THREE.Mesh(new THREE.BoxGeometry(baseHW * 1.4, 0.06, 0.14), _hullDarkMat);
+    lv.position.set(0, baseH * (0.3 + i * 0.22), baseHW + 0.02);
+    lv.userData.isWreckDecoration = true; g.add(lv);
+  }
+
+  // ── 4 vertical corner chords (structural — covered by the envelope cylinder) ──
+  const mastBase = baseH, mastH = H - baseH;
+  const corners: Array<[number, number]> = [[hw, hw], [hw, -hw], [-hw, hw], [-hw, -hw]];
+  for (const [cx, cz] of corners) {
+    const chord = new THREE.Mesh(new THREE.BoxGeometry(chordR * 2, mastH, chordR * 2), _hullMat);
+    chord.position.set(cx, mastBase + mastH / 2, cz);
+    g.add(chord);
+  }
+  // ── bay bracing: per bay, a horizontal ring + a zig-zag diagonal on each face (decoration) ──
+  const nBays = Math.max(5, Math.round(mastH / 1.0));
+  const bayH = mastH / nBays;
+  const faces: Array<[number, number, number, number]> = [
+    [hw, hw, hw, -hw], [hw, -hw, -hw, -hw], [-hw, -hw, -hw, hw], [-hw, hw, hw, hw],   // 4 side faces (a→b corners)
+  ];
+  for (let b = 0; b < nBays; b++) {
+    const y0 = mastBase + b * bayH, y1 = y0 + bayH;
+    // horizontal ring at the top of every bay (4 short bars)
+    for (const [ax, az, bx, bz] of faces) {
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+      const len = Math.hypot(bx - ax, bz - az);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(len, chordR * 1.5, chordR * 1.5), _hullDarkMat);
+      bar.position.set(mx, y1, mz);
+      bar.rotation.y = -Math.atan2(bz - az, bx - ax);
+      bar.userData.isWreckDecoration = true; g.add(bar);
+    }
+    // one diagonal per face, alternating direction per bay (the lattice zig-zag)
+    for (const [ax, az, bx, bz] of faces) {
+      const up = (b % 2 === 0);
+      const p0y = up ? y0 : y1, p1y = up ? y1 : y0;
+      const midX = (ax + bx) / 2, midZ = (az + bz) / 2, midY = (p0y + p1y) / 2;
+      const dLen = Math.hypot(bx - ax, bz - az, bayH);
+      const diag = new THREE.Mesh(new THREE.BoxGeometry(chordR * 1.4, dLen, chordR * 1.4), _hullDarkMat);
+      const dir = new THREE.Vector3(bx - ax, p1y - p0y, bz - az).normalize();
+      diag.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      diag.position.set(midX, midY, midZ);
+      diag.userData.isWreckDecoration = true; g.add(diag);
+    }
+  }
+  // envelope cylinder covering the 4 chords (corner distance hw·√2)
+  colliders.push({ kind: 'cylinder', halfHeight: mastH / 2, radius: hw * 1.52 + chordR, pos: { x: 0, y: mastBase + mastH / 2, z: 0 } });
+
+  // ── top gear: a crossarm with a dish + two whip antennae (decoration) ──
+  const armLen = 1.1 + phash(seed, 5) * 0.6;
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(armLen, 0.12, 0.12), _hullMat);
+  arm.position.set(0, H - 0.35, 0); arm.userData.isWreckDecoration = true; g.add(arm);
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.09, 14), _rustMat);
+  dish.rotation.set(Math.PI / 2.3, 0, 0);
+  dish.position.set(armLen * 0.42, H - 0.35, 0.14); dish.userData.isWreckDecoration = true; g.add(dish);
+  for (const sx of [-1, 1]) {
+    const whipLen = 1.1 + phash(seed, 6 + sx) * 0.7;
+    const whip = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.03, whipLen, 6), _hullDarkMat);
+    // weathered lean (per side, phash-varied) so they don't read as pristine goalposts;
+    // the pivot is the crossarm mount so the base stays put and the tip splays outward.
+    whip.rotation.z = sx * (0.12 + phash(seed, 8 + sx) * 0.18);
+    whip.rotation.x = (phash(seed, 12 + sx) - 0.5) * 0.16;
+    whip.position.set(sx * armLen * 0.4, H - 0.35 + whipLen / 2, 0);
+    whip.userData.isWreckDecoration = true; g.add(whip);
+  }
+  // a small beacon drum at the very top
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.2, 8), _rustMat);
+  beacon.position.y = H + 0.02; beacon.userData.isWreckDecoration = true; g.add(beacon);
+
+  // ── 3 slack guy wires from ~0.66·H down to ground anchors (decoration) ──
+  const guyY = mastBase + mastH * 0.62;
+  for (let i = 0; i < 3; i++) {
+    const ang = (i / 3) * Math.PI * 2 + phash(seed, 20) * Math.PI;
+    const ax = Math.cos(ang) * 1.9, az = Math.sin(ang) * 1.9;
+    const from = new THREE.Vector3(0, guyY, 0), to = new THREE.Vector3(ax, 0.05, az);
+    const mid = from.clone().lerp(to, 0.5); mid.y -= 0.18;   // slight catenary sag
+    const len = from.distanceTo(to);
+    const guy = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, len, 4), _hullDarkMat);
+    guy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+    guy.position.copy(from.clone().lerp(to, 0.5)); guy.userData.isWreckDecoration = true; g.add(guy);
+    // a small ground anchor block
+    const anc = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.22), _hullMat);
+    anc.position.set(ax, 0.08, az); anc.userData.isWreckDecoration = true; g.add(anc);
+  }
+
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negY(), radius: baseHW, tag: 'base' }];
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(0, baseH * 0.5, baseHW), quat: FACE.posZ(), kind: 'escape_pod' },
+  ];
+  const bbox = new THREE.Box3(
+    new THREE.Vector3(-2.1, 0, -2.1),
+    new THREE.Vector3(2.1, H + 0.4, 2.1),
+  );
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement

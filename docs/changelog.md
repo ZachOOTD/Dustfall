@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 5 — 2026-07-09 — M6 POI breadth [1/2-3]: the relay-mast archetype OK all gates + visual
+
+`verified` — `verify:all` PASS (tsc + placement 5-seed PASS + colliders **45** audits incl. relay_mast 5/5 x4 seeds); all 6 rig gates PASS (smoke-intro/pod, pickup-take-sweep, survival-probe, ambient-beds, diurnal-probe); VISUAL gate rendered + iterated (routine bar, no sev>=2). One cycle commit. D285.
+
+- **relay_mast archetype (D285)** — a fallen guyed lattice COMMS TOWER: the one silhouette the POI set lacked (everything else is a hull/barrel/bus/scatter — nothing TALL + THIN). NEW `latticeMast` component (`poiComponents.ts`): square-section truss (4 corner chords + per-bay zig-zag diagonals + ring braces), base equipment housing, top crossarm with a dish + weathered splayed whip antennae + a beacon, 3 slack guy wires to ground anchors. Collision = an envelope cylinder over the truss + a base box (mirrors `dorsalMast`; the lattice reads solid). `assembleRelayMast` + registry entry (`cool` bucket, list 0.42 for the felled-tower lean, a salvage panel on the housing) + `ARCH_WEIGHTS` in all 4 biomes (~0.06-0.07; shaved `derelict` to keep sums ~1.0). Determinism: one `seedOf` draw, phash rest.
+- **Gate coverage** — added `relay_mast` to the `verify:colliders` default archetype list (40->45 audits) so the permanent gate covers it.
+- **M6 is a MULTI-archetype feature** — decomposed via `docs/feature-poi-archetypes.md` (DoD = 2-3 distinct archetypes, one per cycle to depth — anti-punt). A1 relay_mast shipped; A2 buried_pipeline + A3 cargo_crawler (scope-cuttable) queued. M6 stays the current tier.
+
 ## Campaign "Sharpen & Deepen" cycle 4 — 2026-07-09 — M5 living world: creatures bind to the clock ✓ all gates + NEW diurnal-probe
 
 `verified` — `verify:all` PASS; both smokes PASS; `pickup-take-sweep` PASS; `survival-probe` PASS; `ambient-beds` PASS; NEW **`diurnal-probe`** PASS (activity curve exact at noon/midnight/dawn + a perched vulture STAYS asleep at midnight when the player walks up but launches by day). One cycle commit. D284.

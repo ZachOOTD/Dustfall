@@ -5,6 +5,15 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 5 — M6 POI breadth A1: relay_mast (2026-07-09) — SHIPPED (partial 1/2-3)
+
+- **Planned:** M6 = 2-3 new procgen archetypes. DECOMPOSED (multi-part feature, anti-punt) into `docs/feature-poi-archetypes.md` — one archetype per cycle to depth.
+- **Shipped (D285, A1):** `relay_mast` — a fallen guyed lattice comms tower (the missing TALL+THIN silhouette). NEW `latticeMast` component (truss + housing + crossarm/dish/whip antennae/beacon + guy wires); `assembleRelayMast`; registry (`cool` bucket, list 0.42); `ARCH_WEIGHTS` all biomes (derelict shaved to keep sums ~1.0). Envelope-cylinder + base-box collision. Added to the verify:colliders default list (40->45 audits).
+- **Verify:** verify:all PASS (tsc + placement 5-seed 0-fails + colliders 45 audits 0-fails, relay_mast 5/5 x4 seeds) - all 6 rig gates PASS.
+- **Visual iteration:** rendered via the procgen framer at real placement (3q + tight zoom, 2 seeds); routine bar (no sev>=2); 1 polish round (weathered splayed whip antennae). Reads as a distinct, tone-appropriate leaning comms tower.
+- **Spend:** ~500K est. (campaign total ~1.9M / 10M; cycle 5/50).
+- **Next:** cycle 6 -> M6 A2 buried_pipeline (a surfacing/sinking pipe run — the low horizontal silhouette).
+
 ## Cycle 4 — M5 diurnal-cycle (2026-07-09) — SHIPPED
 
 - **Planned:** bind lizards/shrews/vultures/worms to time-of-day (feature-audit first).

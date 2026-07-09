@@ -15,7 +15,7 @@ import type { ColliderSpec } from '../physics/bodies.ts';
 import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
-  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead,
+  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead, latticeMast,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -474,8 +474,28 @@ function assembleDebrisTrail(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// RELAY MAST (M6 POI-breadth, campaign 2026-07-09 cycle 5) — a fallen guyed lattice
+// comms tower. The one silhouette the POI set lacked: TALL + THIN. Stands where it
+// landed, given a hard crash-LEAN by the archetype (felled relay). ONE seedOf draw.
+// ════════════════════════════════════════════════════════════════════
+function assembleRelayMast(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const mast = latticeMast(seedOf(rand));
+  a.place(mast, liftToGround(mast));
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
+  relay_mast: {
+    id: 'relay_mast',
+    // Stands (burySink false) but LEANS hard — a felled comms tower caught mid-fall. The
+    // base housing beds a little; a windward drift banks its foot. A salvage panel on the
+    // housing. cool bucket (weathered relay metal).
+    params: { bucket: 'cool', burySink: false, bury: 0, list: 0.42, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.22, salvageKind: 'escape_pod' },
+    assemble: assembleRelayMast,
+  },
   well: {
     id: 'well',
     // M7 ⑥ (C43; re-scoped C44, D252) — a long-DRY RUINED well; stands ~level (the curb beds
@@ -558,10 +578,13 @@ export type ArchetypeId = 'ship' | keyof typeof ARCHETYPES;
 // RENORMALIZED to sum to 1.0 (the old rows summed to ~1.04, compressing the reachable tail);
 // the slack came mostly off the legacy linear `ship` tube (the C41/D249 de-emphasis direction).
 const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
-  salt:       [['ship', 0.24], ['derelict', 0.21], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05]],
-  rocky:      [['ship', 0.19], ['derelict', 0.20], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04]],
-  dune:       [['ship', 0.17], ['derelict', 0.22], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03]],
-  wreck_yard: [['ship', 0.15], ['derelict', 0.19], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07]],
+  // M6 (campaign 2026-07-09 cycle 5) — relay_mast added at ~0.06; `derelict` shaved by the
+  // same so each biome's table still sums ≈1.0 (the tail 'ship' fallback stays reachable).
+  // rocky/dune weighted a hair higher (exposed highlands where you'd site a relay).
+  salt:       [['ship', 0.24], ['derelict', 0.15], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06]],
+  rocky:      [['ship', 0.19], ['derelict', 0.13], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07]],
+  dune:       [['ship', 0.17], ['derelict', 0.15], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07]],
+  wreck_yard: [['ship', 0.15], ['derelict', 0.13], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

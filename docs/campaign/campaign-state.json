@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-09",
-  "cycles_completed": 4,
-  "current_tier": "M6 \u2014 POI breadth (new archetypes)",
+  "cycles_completed": 5,
+  "current_tier": "M6 \u2014 POI breadth (A2 buried_pipeline; A1 relay_mast shipped)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -25,7 +25,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 1400000
+    "total": 1900000
   },
   "ladder": [
     {
@@ -62,7 +62,7 @@
       "id": "M6",
       "name": "POI breadth (new archetypes)",
       "kind": "gate-verified",
-      "status": "pending"
+      "status": "in-progress (1/2-3: relay_mast shipped)"
     },
     {
       "id": "M7",
@@ -114,6 +114,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 250000,
       "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS \u00b7 ambient-beds PASS \u00b7 NEW diurnal-probe PASS"
+    },
+    {
+      "n": 5,
+      "date": "2026-07-09",
+      "focus": "M6 A1 - relay_mast archetype (POI breadth)",
+      "outcome": "SHIPPED (partial - 1 of 2-3 archetypes)",
+      "spend_estimate": 500000,
+      "verify": "verify:all PASS (placement 5-seed + colliders 45) - all 6 rig gates PASS - visual gate PASS (routine bar)"
     }
   ]
 }
