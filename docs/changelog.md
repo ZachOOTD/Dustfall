@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Cockpit-glass playtest fixes — 2026-07-08 (attended, round ACN) — seal + clean the intro cockpit dome glass ✓ tsc clean
+
+`verified` — `npm run verify` (tsc) clean; every fix render-verified via `scripts/ship-shot.mjs` from the seated, back-left, and look-up vantages (incl. cranked-opacity coverage passes to confirm sealing) — the preview MCP wedges on this scene, so the ship-shot harness is the gate. All fixes in `src/world/escapePodIntro/shipScene.ts`; one commit (`07a818d`). D279-D280.
+
+- **Removed the floating hazard placard** on the port collar foot — read as an out-of-place yellow rectangle from the seated/standing view (cosmetic decal, no collider).
+- **Side-closure glass now CONNECTS to the hull (no gap).** Root cause: its collar-side edge landed 0.04m *inboard* of the collar profile + forward of the collar plane → a see-through wedge to the hull. FIX: land it on the collar/shell ring with a small overlap (`CLOSURE_OUT`/`CLOSURE_AFT`), and route it through the flat DoubleSide roof material so it never back-face-culls from the back-of-cockpit vantage (the original "gap" was also a FrontSide cull).
+- **Added a crown ROOF CAP.** The dome was open above the crown ring (looking up showed space between the mullions). Glass panes now loft from the crown ring to the shell forward ring (sampled by x so they meet the opaque ceiling exactly — no top-corner slivers), framed by NEW roof meridian ribs so every pane edge lands on a mullion.
+- **All "wrap" glass (side closures + roof) uses a flat unlit tint (`_glassRoof`)** so it reads uniform from every angle; the sheen-tuned `_glass` is kept ONLY for the face-on front window. Fixes the view-dependent bright-triangle "streak" artifacts on the tilted overhead panes (D279).
+- Iteration: heavily screenshot-iterated with the user in the loop (well beyond the rule-8 5-8 rounds) — placard → side gap → roof open → top slivers → sheen artifacts, each diagnosed with cyan/magenta/opacity-crank diagnostics before the fix. No ship-after-one-edit.
+
 ## Display-mode settings — 2026-07-08 (attended) — fullscreen / windowed / borderless ✓ tsc clean · desktop runtime-verified
 
 `verified` — tsc clean; the web dropdown + localStorage round-trip verified in the preview; the desktop borderless path proven at runtime (a temp-default build launched maximized + undecorated), then the final windowed-default app rebuilt.
