@@ -12,6 +12,7 @@ import { updateStatVignette } from '../ui/statVignette.ts';   // M6 ④ (C40) �
 import { setDiegeticActive } from '../ui/diegeticMode.ts';
 import { setStatsBarsVisible } from '../ui/hud.ts';
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
+import { diurnalActivity01 } from '../enemies/diurnal.ts';   // M5 — __game.diurnalInfo
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
 import { updateStats, die } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe; C38 — triggerDeath
@@ -228,6 +229,8 @@ interface DebugApi {
    *  fully shaded) + the registered sun-occluder wreck boxes (their ground shadows
    *  relieve heat). For the sun-shade walk-test + headless verification. */
   sunInfo: () => { exposure: number; occluders: number; boxes: Array<{ cx: number; cy: number; cz: number; hx: number; hy: number; hz: number }> };
+  /** M5 diurnal-cycle — per-profile creature activity at the current sun height. */
+  diurnalInfo: () => { sunHeight: number; lizard: number; shrew: number; vulture: number };
   /** ACBE (D1) — DEV-only: force a crashing-wreck event now (optionally at x,z); returns
    *  the impact point + the rolled ship role. */
   triggerCrash: (x?: number, z?: number) => { x: number; z: number; role: CrashRole } | null;
@@ -537,6 +540,12 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     planetApproachCurve: (progress) => planetApproachCurve(progress),   // W6 item 3 — the two-phase approach curve (rig mirror)
     setShipAlert: (level, strobe) => { setShipRedAlert(level, strobe); },
     setEngineFire: (intensity, t) => { setShipEngineFire(intensity, t); },
+    diurnalInfo: () => ({
+      sunHeight: ctx.time.sunHeight,
+      lizard: diurnalActivity01(ctx, 'diurnal'),
+      shrew: diurnalActivity01(ctx, 'crepuscular'),
+      vulture: diurnalActivity01(ctx, 'dayflier'),
+    }),
     sunInfo: () => ({
       exposure: ctx.player.sunExposure01,
       occluders: getSunOccluders().length,

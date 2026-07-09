@@ -1549,6 +1549,57 @@ const SCENARIOS = {
     if (!ok) throw new Error(`ambient-beds GATE FAILED: ${JSON.stringify(r)}`);
   },
 
+  // M5 diurnal-cycle GATE (campaign 2026-07-09) — creature activity binds to time of
+  // day: lizard DIURNAL (≈1 noon / floor at midnight), shrew CREPUSCULAR (peaks at the
+  // dawn band, quiet at noon+midnight), vulture DAY-FLIER (0 = roosting at night; a
+  // perched bird must NOT launch at midnight when the player walks up, but MUST by day).
+  // Asserts the activity curve via __game.diurnalInfo + the perched-launch behavior.
+  'diurnal-probe': async (page) => {
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      g.enterGame(true);
+      ctx.input.controls.isLocked = true; ctx.flags.paused = false;
+      await frames(10);
+      const at = async (t) => { g.setTime(t); await frames(3); return g.diurnalInfo(); };
+      const noon = await at(0.42);
+      const midnight = await at(0.0);
+      // Find DAWN: sweep dayTime for sunHeight nearest the crepuscular peak (0.08).
+      let dawnT = 0.25, best = 1e9;
+      for (let t = 0.1; t < 0.45; t += 0.01) {
+        const d = await at(t);
+        const err = Math.abs(d.sunHeight - 0.08);
+        if (err < best) { best = err; dawnT = t; }
+      }
+      const dawn = await at(dawnT);
+      // Behavioral: a perched vulture must stay perched at midnight, launch by day.
+      let perchTest = 'no-perched-vulture';
+      const v = (ctx.vultures.list || []).find((x) => x.state === 'perched');
+      if (v) {
+        const pb = ctx.player.body;
+        await at(0.0);   // midnight
+        pb.body.setTranslation({ x: v.pos.x + 1.5, y: v.pos.y + 1, z: v.pos.z }, true);
+        await frames(60);
+        const stayed = v.state === 'perched';
+        await at(0.42);  // day
+        await frames(180);
+        const launched = v.state !== 'perched';
+        perchTest = `stayedAtNight=${stayed} launchedByDay=${launched}`;
+        if (!stayed || !launched) perchTest = 'FAIL ' + perchTest;
+      }
+      return { noon, midnight, dawnT: +dawnT.toFixed(2), dawn, perchTest };
+    });
+    console.log('[diurnal-probe] ' + JSON.stringify(r));
+    const ok =
+      r.noon.lizard > 0.9 && r.noon.vulture > 0.9 && r.noon.shrew < 0.5
+      && Math.abs(r.midnight.lizard - 0.15) < 0.03 && r.midnight.vulture === 0 && r.midnight.shrew < 0.35
+      && r.dawn.shrew > 0.85 && r.dawn.shrew > r.noon.shrew && r.dawn.shrew > r.midnight.shrew
+      && !String(r.perchTest).startsWith('FAIL');
+    console.log(`[diurnal-probe] ${ok ? 'PASS' : 'FAIL'}`);
+    if (!ok) throw new Error(`diurnal-probe GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/
   // lantern) in a row so the procedural-material swaps are visible, frame them in good front
   // light, and report the shader-PROGRAM count (must stay at baseline — the audit reuses the

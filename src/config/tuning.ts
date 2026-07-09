@@ -76,6 +76,12 @@ export const Tuning = {
   // shade-seeking a WATER decision, not just a heat one. ×this at full shade, lerped to ×1 in full
   // sun; gated on daytime + !inShelter so the C38 probe bands stay byte-identical by construction.
   THIRST_SHADE_RELIEF: 0.8,          // thirst drain in full open-air shade = ×this (daytime only)
+  // M5 diurnal-cycle (campaign 2026-07-09) — creature activity by sun height (enemies/diurnal.ts).
+  DIURNAL_NIGHT_FLOOR: 0.15,         // lizard activity floor at night (asleep, barely reactive)
+  CREPUSCULAR_FLOOR: 0.25,           // shrew activity in the midday/midnight tails
+  CREPUSCULAR_PEAK_SY: 0.08,         // sun height at the dawn/dusk activity peak
+  CREPUSCULAR_SIGMA: 0.22,           // width of the crepuscular bell (in sun-height units)
+  VULTURE_ROOST_BELOW_SY: 0.05,      // below this sun height vultures roost (perched, no launch, no hunt dives)
   SHADE_COOL_PER_SEC: 1 / 95,        // gentle pull toward 0 when mostly shaded + hot (weaker than a full shelter)
   SUN_EXPOSURE_INTERVAL_S: 0.25,     // how often to re-raymarch the sun occlusion (throttled; cheap)
   SUN_EXPOSURE_STEP_M: 2.5,          // raymarch step toward the sun

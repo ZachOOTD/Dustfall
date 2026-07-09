@@ -5,6 +5,16 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 4 — M5 diurnal-cycle (2026-07-09) — SHIPPED
+
+- **Planned:** bind lizards/shrews/vultures/worms to time-of-day (feature-audit first).
+- **Audit:** worms ALREADY fully twilight-bound (ACC twilightActivityMultiplier + ambient breach, D121) → verify-only. Lizard/shrew/vulture had zero time hooks → built.
+- **Shipped (D284):** NEW `enemies/diurnal.ts` — one pure `diurnalActivity01(ctx, profile)`. Lizards diurnal (spot radius + flee speed scaled, night bob suppressed); shrews crepuscular (idle time ÷ activity bell, wander pace eased); vultures day-fliers (no perch launch + no hunt dives below the roost line). Scalars on existing FSMs — no new states, no save fields. `__game.diurnalInfo()` + NEW permanent `diurnal-probe` gate (dawn found by sunHeight sweep; curve + perched-launch behavior asserted).
+- **Verify:** all 7 gates PASS (verify:all · smoke-intro · smoke-pod-tutorial · pickup-take-sweep · survival-probe · ambient-beds · diurnal-probe — noon 1/.25/1, midnight .15/.25/0, dawn shrew .998, vulture stayed-then-launched).
+- **Visual iteration:** N/A — behavior scalars; the night-read (sleeping lizards/roosting vultures) is an end-review walk item.
+- **Spend:** ~250K est. (campaign total ~1.4M / 10M; cycle 4/50).
+- **Next:** cycle 5 → M6 POI breadth (2-3 new socket-grammar archetypes; verify:placement + verify:colliders gates).
+
 ## Cycle 3 — M4 ambient life beds (2026-07-09) — SHIPPED
 
 - **Planned:** M4 — procedural day/night ambient beds (wind stays muted).

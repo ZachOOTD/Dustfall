@@ -27,6 +27,7 @@ import { createSkinMaterial } from '../world/skinMaterial.ts';
 import type { Terrain } from '../world/terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { gaitPhase, legPose } from './creatureGait.ts';
+import { diurnalActivity01 } from './diurnal.ts';   // M5 — shrews are CREPUSCULAR
 import {
   createParticleTrail, emitBurst, updateParticleTrail, disposeParticleTrail,
   type ParticleTrail,
@@ -510,7 +511,11 @@ export function updateShrews(ctx: GameContext, dt: number): void {
       animateShrewLegs(s, elapsed, false); // ACW B5 — legs at rest
 
       if (s.idleUntil === 0) {
-        s.idleUntil = elapsed + IDLE_MIN + Math.random() * (IDLE_MAX - IDLE_MIN);
+        // M5 diurnal-cycle — shrews are CREPUSCULAR: idle stretches lengthen outside
+        // the dawn/dusk bands (activity divides the idle time → fewer wanders at
+        // midday/midnight, a flurry at twilight). Transient; same single rand draw.
+        const act = diurnalActivity01(ctx, 'crepuscular');
+        s.idleUntil = elapsed + (IDLE_MIN + Math.random() * (IDLE_MAX - IDLE_MIN)) / Math.max(0.2, act);
       }
       if (elapsed > s.idleUntil) {
         // Pick a nearby wander target.
@@ -527,7 +532,9 @@ export function updateShrews(ctx: GameContext, dt: number): void {
         s.state = 'idle';
       } else {
         _toTarget.divideScalar(distTarget); // normalize
-        const step = Math.min(WANDER_SPEED * dt, distTarget);
+        // M5 — wander pace eases outside the twilight bands (0.6..1.0 × by activity).
+        const wanderV = WANDER_SPEED * (0.6 + 0.4 * diurnalActivity01(ctx, 'crepuscular'));
+        const step = Math.min(wanderV * dt, distTarget);
         s.pos.x += _toTarget.x * step;
         s.pos.z += _toTarget.z * step;
         const groundY = ctx.terrain.heightAt(s.pos.x, s.pos.z);

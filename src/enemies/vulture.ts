@@ -30,6 +30,7 @@ import type { TreePerch } from '../world/deadTree.ts';
 import { lootLizard } from './lizard.ts';
 import { lootShrew, alertShrewToSwoop } from './shrew.ts';
 import { despawnPickup } from '../pickups/pickups.ts';
+import { diurnalActivity01 } from './diurnal.ts';   // M5 — vultures are DAY-FLIERS (roost at night)
 
 export type VultureState =
   | 'perched' | 'flying' | 'landing' | 'dead'
@@ -811,8 +812,10 @@ export function updateVultures(ctx: GameContext, dt: number): void {
     switch (v.state) {
       case 'perched': {
         v.mesh.position.y = v.perch.y;   // seated; idle motion is the rig neck-bob (animateVulture)
-        // Player got close → launch off the perch.
-        if (horizDistSq < spotRSq) {
+        // Player got close → launch off the perch. M5 diurnal-cycle: below the roost
+        // line (night) the bird is ASLEEP — it does not launch (a sleeping vulture is
+        // the night read; it still dies to combat via the normal damage path).
+        if (horizDistSq < spotRSq && diurnalActivity01(ctx, 'dayflier') > 0) {
           v.state = 'flying';
           v.velocity.set(0, Tuning.VULTURE_CLIMB_RATE, 0);
           // Prefer relocating to another tree; fall back to a straight flee if
@@ -902,8 +905,10 @@ export function updateVultures(ctx: GameContext, dt: number): void {
         v.heading = Math.atan2(-Math.sin(v.circlePhase), Math.cos(v.circlePhase));
         applyFlightOrientation(v, dt);
         // E3 — occasionally swoop at prey gathered below (filled in below).
+        // M5 diurnal-cycle: no hunt dives after the roost line — a night circler keeps
+        // its wheel (it's over a carcass) but doesn't dive-hunt in the dark.
         v.huntCooldown -= dt;
-        maybeStartSwoop(ctx, v);
+        if (diurnalActivity01(ctx, 'dayflier') > 0) maybeStartSwoop(ctx, v);
         break;
       }
       case 'swooping': {

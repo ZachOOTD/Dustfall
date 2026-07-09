@@ -1,28 +1,29 @@
-# Campaign cycle 4 — Kickoff Brief (Sharpen & Deepen · after cycle 3: M4 shipped)
+# Campaign cycle 5 — Kickoff Brief (Sharpen & Deepen · after cycle 4: M5 shipped)
 
 **A campaign is ACTIVE** — boot from `docs/campaign/campaign-state.json` + `campaign.md`. Charter wins on conflict.
 
 ## Read these first
 1. `CLAUDE.md` + `docs/campaign/campaign.md` + `campaign-state.json` + `steering.md` (inbox).
-2. `docs/campaign/campaign-log.md` cycles 1-3.
+2. `docs/campaign/campaign-log.md` cycles 1-4.
 
-## Cycle 4 focus: M5 — Living world (diurnal-cycle)
-Bind the existing fauna to time-of-day (iteration-plan M5b `diurnal-cycle`): lizards DIURNAL (active by day, sheltering/still at night), shrews CREPUSCULAR (dawn/dusk activity peaks), vultures circle by DAY (grounded/absent at night), worms stir at TWILIGHT (the twilight-breach ambient already exists — `_isTwilightBreach`, D121 — verify + extend activity gating, don't duplicate it). **Feature-audit first**: grep each creature's update for existing time-of-day hooks before building — C-series cycles may have partial diurnal behavior already (the cycle-1 lesson: the code never lies).
+## Cycle 5 focus: M6 — POI breadth (2-3 new procgen archetypes)
+Add 2-3 NEW wreck/POI archetypes via the socket-component grammar (`src/world/poiComponents.ts` Socket + `mate()`; `src/world/poiArchetypes.ts` grammar + `pickArchetype` biome weighting; assembled by `poiAssembler.placeProcgenPOI`). Existing archetypes: ship (legacy delegate), satellite, tank_cluster, debris_field, hollow husk — study 1-2 before designing (ACBA is the precedent: satellite = foil bus + crash-banked wings + dish + hatch).
 
-Implementation shape: per-creature activity gate/scalar driven by `ctx.time.sunHeight` (spawn rates, movement speed, or state-machine biases — pick the lightest lever per creature that reads clearly). All tuning constants → `tuning.ts`. NO save-schema changes expected (transient behavior); if one becomes necessary ⇒ PAUSE (D81).
+Candidate directions (pick 2-3 that read DISTINCT at silhouette level, fit the tone, and reuse the component/material vocabulary): a crashed CARGO CRAWLER (tracked hauler wreck — treads + cab + spilled containers), an ANTENNA/RELAY MAST field (guyed lattice masts, one toppled), a BURIED PIPELINE run (surfacing/sinking pipe segments + a junction hub), a LANDING PAD ruin (cracked pad + skeletal gantry). Each: declared `ColliderSpec` colliders (exact primitives — D228, no AABB fallback), ZERO rand draws outside the phash discipline (D226), biome weights in the field mix, decorations rule-7 depth (≥10cm), salvage panel(s) where sensible via the standard registration.
 
-**Verify** (headless): a NEW rig-shot `diurnal-probe` scenario — `setTime` across {noon, midnight, dawn} and assert measurable activity deltas per species (e.g. lizard mean speed / active-state fraction over N sim frames; vulture airborne count; shrew activity at dawn > noon). Plus the standing suite.
+**Verify:** `verify:placement` (0 occlusion/terrain fails ×5 seeds) + `verify:colliders` (coverage audits — new archetypes get audited automatically) + the standing 7-gate suite. Visual: this IS visual work — render each new archetype via the rig-shot procgen framer (`--scenario` used by ACBA/ACAZ — grep rig-shot for `procgen` / `--archetype`) and run a LIGHT appearance pass (1-2 critics, routine bar: no sev≥2) per the charter's visual_gate=auto. Iterate to the bar; sand-bedding (makeSandMound `proud`) + weathering bucket cohesion (D234 getBucketMats) are the known quality traps.
 
 ## Gates (every cycle)
-`npm run verify:all` + `smoke-intro` + `smoke-pod-tutorial` + `pickup-take-sweep` + `survival-probe` + `ambient-beds`. rig-shot `--port=52xx`.
+`verify:all` + `smoke-intro` + `smoke-pod-tutorial` + `pickup-take-sweep` + `survival-probe` + `ambient-beds` + `diurnal-probe`. rig-shot `--port=52xx`.
 
 ## Constraints
-No endgame · no tone change · additive-save-only (bump ⇒ PAUSE) · no new pillars · wind muted · Phase-A feel-pile excluded (this is ACTIVITY gating, not the worm charge-dive/vulture-motion FEEL work — don't drift into it).
+No endgame · no tone change · additive-save-only (bump ⇒ PAUSE) · no new pillars (archetypes = breadth of an EXISTING pillar, sanctioned M6) · wind muted · feel-pile excluded.
 
 ## Footguns
-- The worm twilight-breach flag bypasses combat side-effects (D121) — reuse its pattern for non-hostile ambient behavior.
-- `ctx.player.body` rebuilt by `enterGame(dev)`; live-scenario boots default 3P; `__interactionDebug` taps the ray (cycle-1 lessons).
-- Sim-frame probes: drive time with `g.setTime`, tick via rAF frames; read state, don't screenshot.
+- Archetype rand discipline: phash-only, zero stream draws (D226) — verify:placement across 5 seeds catches drift.
+- Colliders: declared exact primitives per component (D228); the collider-audit gate fails <40% coverage.
+- New POIs auto-register as sun occluders via the cycle-2 hook in procgenPoi.ts (no action needed — but don't double-register).
+- `ctx.player.body` rebuilt by enterGame(dev); live boots default 3P (cycle-1 lessons).
 
 ## On stop
-Session-end docs → cycle commit on `campaign/2026-07-09` → verdict → ScheduleWakeup if CONTINUE.
+Session-end docs → cycle commit → verdict → ScheduleWakeup if CONTINUE.

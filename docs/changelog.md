@@ -3,6 +3,13 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 4 — 2026-07-09 — M5 living world: creatures bind to the clock ✓ all gates + NEW diurnal-probe
+
+`verified` — `verify:all` PASS; both smokes PASS; `pickup-take-sweep` PASS; `survival-probe` PASS; `ambient-beds` PASS; NEW **`diurnal-probe`** PASS (activity curve exact at noon/midnight/dawn + a perched vulture STAYS asleep at midnight when the player walks up but launches by day). One cycle commit. D284.
+
+- **Diurnal-cycle (D284, iteration-plan M5b)** — NEW `src/enemies/diurnal.ts`: one pure `diurnalActivity01(ctx, profile)` (sunHeight only — deterministic, transient, no save). **Lizards DIURNAL**: spot radius ×(0.35..1) and flee speed ×(0.6..1) by activity; idle bob suppressed at night (they read asleep, floor `DIURNAL_NIGHT_FLOOR` 0.15). **Shrews CREPUSCULAR**: idle stretches divide by a dawn/dusk activity bell (`CREPUSCULAR_*` — a flurry at twilight, quiet at noon/midnight); wander pace eases in the tails. **Vultures DAY-FLIERS**: below `VULTURE_ROOST_BELOW_SY` a perched bird does NOT launch (sleeping) and circlers stop dive-hunting; day behavior unchanged. **Worms**: already twilight-bound (ACC/D121) — verified, NOT duplicated.
+- **Hook + gate** — `__game.diurnalInfo()` exposes per-profile activity; NEW permanent `diurnal-probe` gate sweeps dayTime to FIND dawn (sunHeight ≈ the crepuscular peak — robust to the sky model) and asserts the curve + the perched-launch behavior end-to-end.
+
 ## Campaign "Sharpen & Deepen" cycle 3 — 2026-07-09 — M4 ambient life beds: the desert finally makes sound ✓ all gates + NEW ambient-beds gate
 
 `verified` — `verify:all` PASS; both intro smokes PASS; `pickup-take-sweep` PASS; `survival-probe` PASS; NEW **`ambient-beds`** gate PASS (day bed 0.35 at noon / night bed 0.35 at midnight / both ducked to 0 by a REAL armed storm / wind masters stay 0). One cycle commit. D283.

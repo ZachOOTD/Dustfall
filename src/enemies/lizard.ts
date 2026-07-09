@@ -13,6 +13,7 @@ import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { gaitPhase, legPose } from './creatureGait.ts';
+import { diurnalActivity01 } from './diurnal.ts';   // M5 — lizards are DIURNAL
 import type { Terrain } from '../world/terrain.ts';
 
 export type LizardState = 'idle' | 'flee' | 'dead';
@@ -463,12 +464,17 @@ export function updateLizards(ctx: GameContext, dt: number): void {
     _toPlayer.y = 0;
     const distSq = _toPlayer.lengthSq();
 
+    // M5 diurnal-cycle — lizards are DIURNAL: full activity by day, a low floor at
+    // night (asleep: no bob, short spot radius, sluggish flee). Transient, no rand.
+    const act = diurnalActivity01(ctx, 'diurnal');
     if (l.state === 'idle') {
-      // Idle bob — vertical sin wave on mesh only, not on AI position.
-      l.mesh.position.y = l.pos.y + Math.sin(elapsed * 2 + l.id) * 0.005;
+      // Idle bob — vertical sin wave on mesh only, not on AI position. Suppressed
+      // while asleep (low activity) so night lizards read still.
+      l.mesh.position.y = l.pos.y + (act > 0.3 ? Math.sin(elapsed * 2 + l.id) * 0.005 : 0);
       // ACW B4 — legs at rest (subtle settle); gait only runs while fleeing.
       animateLizardLegs(l, elapsed, false);
-      if (distSq < SPOT_DISTANCE * SPOT_DISTANCE) {
+      const spotR = SPOT_DISTANCE * (0.35 + 0.65 * act);   // sleeping lizards notice you late
+      if (distSq < spotR * spotR) {
         // Flee — pick a direction opposite the player + small jitter.
         l.fleeDir.copy(_toPlayer).normalize().multiplyScalar(-1);
         const jitter = (Math.random() - 0.5) * 0.6;
@@ -481,9 +487,10 @@ export function updateLizards(ctx: GameContext, dt: number): void {
         // (mesh.rotation.y is updated each frame in the flee branch below)
       }
     } else if (l.state === 'flee') {
-      // Move
-      const stepX = l.fleeDir.x * FLEE_SPEED * dt;
-      const stepZ = l.fleeDir.z * FLEE_SPEED * dt;
+      // Move — sluggish at night (M5: 0.6..1.0 × by activity).
+      const fleeV = FLEE_SPEED * (0.6 + 0.4 * act);
+      const stepX = l.fleeDir.x * fleeV * dt;
+      const stepZ = l.fleeDir.z * fleeV * dt;
       l.pos.x += stepX;
       l.pos.z += stepZ;
       const groundY = ctx.terrain.heightAt(l.pos.x, l.pos.z);
