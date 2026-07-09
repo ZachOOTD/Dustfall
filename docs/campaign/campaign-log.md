@@ -5,6 +5,15 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 3 — M4 ambient life beds (2026-07-09) — SHIPPED
+
+- **Planned:** M4 — procedural day/night ambient beds (wind stays muted).
+- **Shipped (D283):** `makeNightBedBuffer` (sparse cricket chirp-trains, ~22s loop) + `makeDayBedBuffer` (breathing heat-shimmer + 1-2 distant falling cries, ~26s) attached as SAMPLE-FALLBACK sources on the existing silent `ambient.day/night` stems (`attachProceduralBed`) — full mixer reuse (crossfade/storm-mask/masters/suppression); real samples auto-win if they land. Sparseness baked into the buffers. Snapshot gains `bedSrc` + `bedTargets`; NEW permanent `ambient-beds` gate (attach + crossfade + REAL-storm duck via triggerStorm + wind-still-muted).
+- **Verify:** verify:all PASS · smoke-intro {ok,beats:12} · smoke-pod-tutorial ok · pickup-take-sweep PASS · survival-probe PASS · ambient-beds PASS (noon day 0.35/night 0; midnight flipped; storm 0/0; pwind 0).
+- **Visual iteration:** N/A (audio) — tone FEEL (lonely vs annoying) is an end-review item; density conservative by construction.
+- **Spend:** ~250K est. (campaign total ~1.15M / 10M; cycle 3/50).
+- **Next:** cycle 4 → M5 living world (diurnal creature activity).
+
 ## Cycle 2 — M3 survival depth (2026-07-09) — SHIPPED
 
 - **Planned:** M3 as re-scoped in cycle 1 — (a) C31 sun-occluder decouple + coverage, (b) water-scarcity/exposure.

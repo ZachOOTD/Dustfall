@@ -1493,6 +1493,62 @@ const SCENARIOS = {
     if (!pass) throw new Error('survival-probe GATE FAILED');
   },
 
+  // M4 (campaign 2026-07-09) — PROCEDURAL AMBIENT LIFE BEDS gate. The day/night bed
+  // stems were structurally silent (empty /public/audio/); the procedural fallback must
+  // attach sources AND the existing mixer must drive them: day bed up in daytime, night
+  // bed up at night, both storm-ducked, and the WIND stays muted (user call). Asserts
+  // via bedSrc/bedTargets in audioState() (targets are ramp-free). THROWS on failure.
+  'ambient-beds': async (page) => {
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      g.enterGame(true);
+      ctx.input.controls.isLocked = true; ctx.flags.paused = false;
+      // Wait for the sample-preload .then to attach the procedural beds (async).
+      let snap = null;
+      for (let i = 0; i < 600; i++) {
+        snap = g.audioState();
+        if (snap && snap.bedSrc && snap.bedSrc.day && snap.bedSrc.night) break;
+        await raf();
+      }
+      if (!snap || !snap.bedSrc || !snap.bedSrc.day || !snap.bedSrc.night) {
+        return { fail: `beds never attached: ${JSON.stringify(snap && snap.bedSrc)}` };
+      }
+      const read = async (time) => {
+        g.setTime(time);
+        await frames(8);   // let updateSoundscape recompute targets
+        const s = g.audioState();
+        return { day: +s.bedTargets.day.toFixed(3), night: +s.bedTargets.night.toFixed(3), pwindBody: s.pwind ? +s.pwind.bodyGain.toFixed(3) : -1, storm: +s.storm.toFixed(2) };
+      };
+      const noon  = await read(0.42);
+      const night = await read(0.0);
+      // Storm duck: ARM a REAL storm via the weather system (updateWeather recomputes
+      // perceivedIntensity every frame, so injected values get overwritten — diagnosed).
+      g.setTime(0.42);
+      g.triggerStorm();
+      let storm = null;
+      for (let i = 0; i < 3600; i++) {          // the armed storm ramps in over ~seconds
+        await raf();
+        const s = g.audioState();
+        if (s.storm > 0.5) { storm = { day: +s.bedTargets.day.toFixed(3), night: +s.bedTargets.night.toFixed(3), pwindBody: s.pwind ? +s.pwind.bodyGain.toFixed(3) : -1, storm: +s.storm.toFixed(2) }; break; }
+      }
+      if (!storm) return { fail: 'storm never ramped past 0.5', noon, night };
+      await frames(8);
+      const s2 = g.audioState();
+      storm.day = +s2.bedTargets.day.toFixed(3); storm.night = +s2.bedTargets.night.toFixed(3);
+      return { noon, night, storm };
+    });
+    console.log('[ambient-beds] ' + JSON.stringify(r));
+    const ok = !r.fail
+      && r.noon.day > 0.02 && r.noon.day > r.night.day && r.noon.night < 0.005
+      && r.night.night > 0.02 && r.night.night > r.noon.night && r.night.day < 0.005
+      && r.storm.day < 0.01 && r.storm.night < 0.01            // a real armed storm ducks the life beds
+      && r.noon.pwindBody < 0.005 && r.night.pwindBody < 0.005; // wind STAYS muted (user)
+    console.log(`[ambient-beds] ${ok ? 'PASS' : 'FAIL'}`);
+    if (!ok) throw new Error(`ambient-beds GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/
   // lantern) in a row so the procedural-material swaps are visible, frame them in good front
   // light, and report the shader-PROGRAM count (must stay at baseline — the audit reuses the

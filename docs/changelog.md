@@ -3,6 +3,13 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 3 — 2026-07-09 — M4 ambient life beds: the desert finally makes sound ✓ all gates + NEW ambient-beds gate
+
+`verified` — `verify:all` PASS; both intro smokes PASS; `pickup-take-sweep` PASS; `survival-probe` PASS; NEW **`ambient-beds`** gate PASS (day bed 0.35 at noon / night bed 0.35 at midnight / both ducked to 0 by a REAL armed storm / wind masters stay 0). One cycle commit. D283.
+
+- **Procedural ambient life beds (D283)** — the day-bed/night-bed stems had been structurally SILENT since Session X (`/public/audio/` empty). Following the C33 procedural-wind precedent: `makeNightBedBuffer` (a ~22s loop of 5-7 lone cricket chirp-trains — 4.1-4.6kHz AM pulses, long silences) + `makeDayBedBuffer` (~26s: a faint breathing heat-shimmer + 1-2 distant falling bird cries with baked echoes) attach to the EXISTING ambient stems as a sample-fallback (`attachProceduralBed`) — the entire mixer (day/night crossfade, storm lifeMask, `AMBIENT_LIFE_MASTER`, suppression, master gating) is reused unchanged; if real samples ever land they win automatically. Tone: sparse/melancholy by construction (long silences). **Wind stays muted** (user call — `WIND_*_MASTER` 0 untouched).
+- **Snapshot + gate growth** — `AudioStateSnapshot` gains `bedSrc` (source attached?) + `bedTargets` (ramp-free mixer targets); NEW rig-shot `ambient-beds` gate asserts attach + crossfade + storm-duck (arms a REAL storm via `triggerStorm` — injected `perceivedIntensity` is overwritten by the weather tick, diagnosed) + wind-still-muted. Audio FEEL (lonely vs annoying) = campaign end-review item; density kept conservative by construction.
+
 ## Campaign "Sharpen & Deepen" cycle 2 — 2026-07-09 — M3 survival depth: shade coverage + water/exposure ✓ all gates
 
 `verified` — `verify:all` PASS; `smoke-intro` {ok,beats:12}; `smoke-pod-tutorial` ok; `pickup-take-sweep` PASS; **`survival-probe` PASS with the C38 bands BYTE-IDENTICAL** (heat 7.54 / cold 8.67 / thirst 10 / hunger 15 min) + two NEW assertions: `heat-shade` (midday sun, fully occluded → SURVIVES, minHealth ≥0.95 — shade saves your life) and occluder coverage ≥20 (measured **51**, was ~3). One cycle commit on `campaign/2026-07-09`. D282.

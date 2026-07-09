@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-09",
-  "cycles_completed": 2,
-  "current_tier": "M4 \u2014 Ambient life beds",
+  "cycles_completed": 3,
+  "current_tier": "M5 \u2014 Living world (diurnal-cycle)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -25,7 +25,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 900000
+    "total": 1150000
   },
   "ladder": [
     {
@@ -50,7 +50,7 @@
       "id": "M4",
       "name": "Ambient life beds",
       "kind": "auto",
-      "status": "pending"
+      "status": "shipped"
     },
     {
       "id": "M5",
@@ -98,6 +98,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 300000,
       "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS (bands identical; heat-shade survives; occluders 51)"
+    },
+    {
+      "n": 3,
+      "date": "2026-07-09",
+      "focus": "M4 ambient life beds (procedural day/night sources)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS \u00b7 NEW ambient-beds PASS"
     }
   ]
 }
