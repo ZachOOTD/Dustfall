@@ -231,6 +231,9 @@ interface DebugApi {
   sunInfo: () => { exposure: number; occluders: number; boxes: Array<{ cx: number; cy: number; cz: number; hx: number; hy: number; hz: number }> };
   /** M5 diurnal-cycle — per-profile creature activity at the current sun height. */
   diurnalInfo: () => { sunHeight: number; lizard: number; shrew: number; vulture: number };
+  /** Dev-test — drop the 3 new M6 archetypes in a row near the player (real world,
+   *  real terrain seating + colliders) so they can be walked around. Returns positions. */
+  spawnTestArchetypes: () => { placed: Array<{ archetype: string; x: number; z: number }> };
   /** ACBE (D1) — DEV-only: force a crashing-wreck event now (optionally at x,z); returns
    *  the impact point + the rolled ship role. */
   triggerCrash: (x?: number, z?: number) => { x: number; z: number; role: CrashRole } | null;
@@ -551,6 +554,32 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       occluders: getSunOccluders().length,
       boxes: getSunOccluders().map((o) => ({ cx: o.cx, cy: o.cy, cz: o.cz, hx: o.hx, hy: o.hy, hz: o.hz })),
     }),
+    spawnTestArchetypes: () => {
+      // Drop the 3 new M6 archetypes in a row ~18m in front of the player (spaced clear
+      // of each other — the pipeline is ~17m long), on the REAL terrain with real colliders
+      // + salvage panels, so they can be walked around at player scale. Deterministic seed.
+      const bp = ctx.player.body.body.translation();
+      const fwd = new THREE.Vector3();
+      ctx.three.camera.getWorldDirection(fwd); fwd.y = 0;
+      if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1); else fwd.normalize();
+      const right = new THREE.Vector3(-fwd.z, 0, fwd.x);   // player's +X (strafe axis)
+      const list: Array<{ archetype: string; x: number; z: number }> = [];
+      const archs = ['relay_mast', 'buried_pipeline', 'cargo_crawler'] as const;
+      const rand = makeRng(4242);
+      archs.forEach((archetype, i) => {
+        const off = (i - 1) * 24;                          // -24 / 0 / +24 m along the strafe axis
+        const x = bp.x + fwd.x * 18 + right.x * off;
+        const z = bp.z + fwd.z * 18 + right.z * off;
+        const y = ctx.terrain.heightAt(x, z);
+        placeProcgenPOI(
+          ctx.three.scene, ctx.physics.world, ctx.terrain,
+          new THREE.Vector3(x, y, z), rand, ctx.salvageables, { archetype },
+        );
+        list.push({ archetype, x: +x.toFixed(1), z: +z.toFixed(1) });
+      });
+      ctx.ui.showToast?.('spawned 3 test wrecks ahead — walk forward');
+      return { placed: list };
+    },
     triggerCrash: (x, z) => triggerCrash(ctx, x, z),
     crashState: () => crashState(),
     advanceCrash: (seconds, substeps) => advanceCrash(ctx, seconds, substeps),
