@@ -32,10 +32,12 @@ import { Tuning } from '../config/tuning.ts';
 // like ground props than hero silhouettes. JJ — 'antenna_spire' dropped
 // too (per backlog "remove antenna tower landmarks"). The hand-placed
 // `antenna_outpost` anchor POI is the only remaining antenna spire.
+// 2026-07-09 (user request) — 'engine_bell' + 'engine_cluster' dropped from the
+// procgen scatter (lone-thruster / thruster-on-a-box reads the user disliked). The
+// meshes/type remain for salvage flavors + deliberate scenes; they just don't scatter.
 const PROCGEN_WRECK_KINDS: ReadonlyArray<WreckKind> = [
-  'engine_bell',
   'fuselage',
-  'engine_cluster',
+  'cargo_container',
 ];
 
 export function placeProcgenPOIs(

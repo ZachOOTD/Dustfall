@@ -21,7 +21,8 @@ import { placeRibcage } from './heroLandmarks.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
 import { Tuning } from '../config/tuning.ts';
 
-const BIG_KINDS: ReadonlyArray<WreckKind> = ['engine_cluster', 'fuselage', 'cargo_container'];
+// 2026-07-09 (user request) — 'engine_cluster' dropped (thruster-on-a-box read the user disliked).
+const BIG_KINDS: ReadonlyArray<WreckKind> = ['fuselage', 'cargo_container'];
 
 /** Place the dense wreck-yard graveyard centered on `anchor` within `radius`.
  *  Returns the ribcage carcass positions (for the vulture ecology, Y5). */

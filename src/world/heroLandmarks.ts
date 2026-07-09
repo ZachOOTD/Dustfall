@@ -91,11 +91,15 @@ export function placeRibcage(
 // JJ — 'antenna_spire' dropped from hero-landmark rotation (per backlog
 // "remove antenna tower landmarks"). The hand-placed `antenna_outpost`
 // anchor POI in poi.ts still uses the spire mesh — that single one stays.
+// 2026-07-09 (user request) — 'engine_bell' (a lone thruster) + 'engine_cluster'
+// (a thruster + box) DROPPED from the scatter rotation: they're the earliest,
+// weakest wreck reads and read as isolated engine props. Meshes + the WreckKind
+// type stay (still valid salvage-panel flavors + deliberate structural uses); they
+// just no longer spawn as standalone landmark wrecks. (Same pattern as the
+// antenna_spire drop above.)
 const HERO_WRECK_TYPES: ReadonlyArray<WreckKind> = [
-  'engine_cluster',
   'fuselage',
   'cargo_container',
-  'engine_bell',
 ];
 const RIBCAGE_PROBABILITY = 0.15;  // ribcages sprinkled in; most spots are wrecks
 
