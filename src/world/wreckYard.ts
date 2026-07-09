@@ -15,6 +15,7 @@ import type { Terrain } from './terrain.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';   // ACAS A4 — register big-wreck panels as loot
 import { pruneBuriedPanels } from './procgenWreck.ts';
 import { placeProcgenPOI } from './poiAssembler.ts';
+import { addHorizonSilhouette } from './horizonSilhouettes.ts';   // M3 — yard hulks register as sun occluders (shade)
 import { placeWreck, placeDebrisField, type WreckKind } from './wrecks.ts';
 import { placeRibcage } from './heroLandmarks.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
@@ -75,11 +76,12 @@ export function placeWreckYard(
     const pos = tryPos(radius * 0.92, 5.0, 0.7);   // pack toward center (the pit moved to its own dune anchor)
     if (!pos) continue;
     const y = terrain.heightAt(pos.x, pos.z);
-    placeProcgenPOI(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
+    const hulk = placeProcgenPOI(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
       buryY: 0.5 + rand() * 0.55,        // deep ancient burial (ship delegate only)
       biome: 'wreck_yard',
       parent: yardGroup,   // ACAS A1 — the POI AND its sand mound land in the yard merge
     });
+    addHorizonSilhouette(scene, new THREE.Box3().setFromObject(hulk));   // M3 — yard hulks cast shade (post-placement bbox, no rand)
   }
 
   // ── 2. A few BIG tilted hand-wreck silhouettes (the graveyard's skyline). ──

@@ -1470,6 +1470,12 @@ const SCENARIOS = {
         thirst: g.survivalProbe('thirst'),
         hunger: g.survivalProbe('hunger'),
         prepared: g.survivalProbe('prepared'),
+        // M3 (campaign 2026-07-09) — the SHADE payoff: midday sun, fully occluded.
+        // Open sun kills in ~7.5 min; a wreck's shadow must keep you alive.
+        heatShade: g.survivalProbe('heat-shade'),
+        // M3 occluder-coverage: the decoupled threshold + procgen registration must
+        // yield far more shade sources than the ~3 hand flagships of C31.
+        occluders: g.sunInfo ? g.sunInfo().occluders : -1,
       };
     });
     // Death→overlay path (dormant under GOD_MODE for a long time): force a real death LAST
@@ -1479,9 +1485,12 @@ const SCENARIOS = {
     const urgent = ['heat', 'cold', 'thirst'].every((k) => r[k].died && inBand(r[k].timeToDeathMin, 7, 13));
     const hungerOk = r.hunger.died && inBand(r.hunger.timeToDeathMin, 12, 18);
     const preparedOk = !r.prepared.died && r.prepared.finalHealth >= 0.95;
+    const shadeOk = !r.heatShade.died && r.heatShade.minHealth >= 0.95;   // shade SAVES you at midday
+    const coverOk = r.occluders >= 20;                                     // decoupled threshold → wide shade coverage
     const deathOk = deathUi.dead === true && deathUi.overlayShown === true;
-    const pass = urgent && hungerOk && preparedOk && deathOk;
-    console.log(`[survival-probe] ${pass ? 'PASS' : 'FAIL'} (urgent=${urgent} hunger=${hungerOk} prepared=${preparedOk} deathUi=${deathOk}) ${JSON.stringify({ ...r, deathUi })}`);
+    const pass = urgent && hungerOk && preparedOk && shadeOk && coverOk && deathOk;
+    console.log(`[survival-probe] ${pass ? 'PASS' : 'FAIL'} (urgent=${urgent} hunger=${hungerOk} prepared=${preparedOk} shade=${shadeOk} occluders=${r.occluders} deathUi=${deathOk}) ${JSON.stringify({ ...r, deathUi })}`);
+    if (!pass) throw new Error('survival-probe GATE FAILED');
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/

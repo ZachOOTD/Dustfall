@@ -260,7 +260,7 @@ interface DebugApi {
    *  env: 'heat' (full noon sun) | 'cold' (night) | 'thirst' (sheltered, no water) |
    *  'hunger' (sheltered+hydrated, no food) | 'prepared' (sheltered+fed+watered, starts
    *  hurt → must HEAL + never die). Restores all state afterward. For the survival-probe gate. */
-  survivalProbe: (env: 'heat' | 'cold' | 'thirst' | 'hunger' | 'prepared', maxSeconds?: number) =>
+  survivalProbe: (env: 'heat' | 'cold' | 'thirst' | 'hunger' | 'prepared' | 'heat-shade', maxSeconds?: number) =>
     { env: string; died: boolean; timeToDeathMin: number | null; finalHealth: number; minHealth: number };
   /** M6 ② (C38) — DEV-only: force the REAL death path (bypassing the dev-mode godmode floor)
    *  and report whether it fired + the death overlay un-hid. Verifies the death→Continue UI
@@ -629,6 +629,10 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       s.thirst = 1; s.hunger = 1; s.temperature = 0; s.health = 1; s.dead = false;
       w.intensity = 0; f.paused = false; f.devMode = false;
       if (env === 'heat') { tm.sunHeight = 1.0; p.sunExposure01 = 1; p.inShelter = false; }
+      // M3 (campaign 2026-07-09) — the SHADE payoff case: midday sun but fully occluded
+      // (a wreck's shadow). SHADE_HEAT_FLOOR + shade-cool should keep you alive where
+      // open sun (env 'heat') kills in ~7.5 min; THIRST_SHADE_RELIEF slows water loss.
+      else if (env === 'heat-shade') { tm.sunHeight = 1.0; p.sunExposure01 = 0; p.inShelter = false; }
       else if (env === 'cold') { tm.sunHeight = -0.5; p.sunExposure01 = 0; p.inShelter = false; }
       else { tm.sunHeight = 0.3; p.sunExposure01 = 0; p.inShelter = true; }   // thirst/hunger/prepared: shelter neutralizes temperature
       if (env === 'prepared') s.health = 0.3;   // start hurt → must heal back + never die
@@ -639,6 +643,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         if (env === 'thirst') s.hunger = 1;
         else if (env === 'hunger') s.thirst = 1;
         else if (env === 'prepared') { s.thirst = 1; s.hunger = 1; }
+        // M3 heat-shade isolates the TEMPERATURE path (does shade prevent heatstroke?) —
+        // without topping, a 25-min hold at midday correctly kills via thirst instead.
+        else if (env === 'heat-shade') { s.thirst = 1; s.hunger = 1; }
         updateStats(ctx, dt);
         minHealth = Math.min(minHealth, s.health);
         if (s.dead) { died = true; elapsed += dt; break; }

@@ -22,6 +22,7 @@ import type { BiomeSampler } from './biomes.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
+import { addHorizonSilhouette } from './horizonSilhouettes.ts';   // M3 — procgen POIs register as sun occluders (shade)
 import { pruneBuriedPanels } from './procgenWreck.ts';
 import { placeProcgenPOI } from './poiAssembler.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -104,7 +105,11 @@ export function placeProcgenPOIs(
       // ACBA — placeProcgenPOI rolls an ARCHETYPE (ship / satellite / tank_cluster / …);
       // `ship` delegates to the legacy linear assembler, so the field now mixes genuinely
       // different POIs (vertical tank farms, fallen satellites) among the hull wrecks.
-      placeProcgenPOI(scene, world, terrain, pos, rand, salvageables, { buryY, biome });
+      const poiGroup = placeProcgenPOI(scene, world, terrain, pos, rand, salvageables, { buryY, biome });
+      // M3 (campaign 2026-07-09) — every placed POI ≥ SUN_OCCLUDER_MIN_HEIGHT casts shade
+      // (C31 coverage follow-up: only ~3 hand flagships registered before). Post-placement
+      // bbox, no rand draw → the seeded stream is untouched.
+      addHorizonSilhouette(scene, new THREE.Box3().setFromObject(poiGroup));
     } else {
       const kind = PROCGEN_WRECK_KINDS[Math.floor(rand() * PROCGEN_WRECK_KINDS.length)];
       // Modest size + bury variation so procgen POIs read as varied silhouettes
@@ -115,6 +120,7 @@ export function placeProcgenPOIs(
       const group = placeWreck(scene, world, terrain, pos, kind, rand, {
         scale, buryY, tiltZ,
       });
+      addHorizonSilhouette(scene, new THREE.Box3().setFromObject(group));   // M3 — legacy wrecks cast shade too
       if (salvageables) {
         // Use the wreck kind directly — registerSalvageable accepts the
         // same union as placeWreck.

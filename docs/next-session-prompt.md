@@ -1,30 +1,31 @@
-# Campaign cycle 2 — Kickoff Brief (Sharpen & Deepen · after cycle 1: M1 shipped, M2 verify-only-done)
+# Campaign cycle 3 — Kickoff Brief (Sharpen & Deepen · after cycle 2: M3 shipped)
 
-**A campaign is ACTIVE** — boot from `docs/campaign/campaign-state.json` + `campaign.md` (the charter holds the ladder + locked constraints + sanctioned pauses). This brief is the cycle-2 hint; the roadmap/charter win on conflict.
+**A campaign is ACTIVE** — boot from `docs/campaign/campaign-state.json` + `campaign.md` (charter: ladder, locked constraints, sanctioned pauses). This brief is the cycle-3 hint; charter/roadmap win on conflict.
 
 ## Read these first
-1. `CLAUDE.md` (auto-loaded) — campaign status in "Where we are now".
-2. `docs/campaign/campaign.md` (charter: ladder + constraints) + `campaign-state.json` + `steering.md` (inbox).
-3. `docs/campaign/campaign-log.md` cycle-1 entry — incl. the M2/M3 already-shipped discovery.
-4. `docs/backlog.md` — ⚠ verify every candidate against code first (cycle 1 found 3 stale entries; C31/C38 items were already built).
+1. `CLAUDE.md` (auto-loaded) + `docs/campaign/campaign.md` + `campaign-state.json` + `steering.md` (inbox).
+2. `docs/campaign/campaign-log.md` cycles 1-2.
 
-## Cycle 2 focus: M3 — Survival depth
-Sun-shade-exposure + the survival curve ALREADY EXIST (C31 + C38 — verified green cycle 1). What M3 actually builds:
+## Cycle 3 focus: M4 — Ambient life beds
+The desert is near-silent: `public/audio/` is EMPTY, so `soundscape.ts`'s sample stems (`day-bed`/`night-bed`/`music-*`) play silence, and the procedural wind is deliberately MUTED (`WIND_BODY_MASTER=0`, user's call — KEEP IT MUTED). Build **procedural** (zero-asset, D3 ethos) day + night ambient life beds synthesized in `src/audio/soundscape.ts` / `src/audio/audio.ts`:
 
-1. **Sun-occluder decouple + coverage (C31 follow-up, backlog §"Sun-shade-exposure")** — occluders are coupled to the C28 horizon-silhouette set (only wrecks ≥ `HORIZON_SILHOUETTE_MIN_HEIGHT` 8m), so sub-8m wrecks cast NO shade; only ~3 boxes registered at boot in the probe seed. Decouple the occluder height threshold (own tuning constant), register procgen POIs + large rocks as occluders. Files: `src/world/sunExposure.ts`, registration call sites in world build. Verify: `__game.sunInfo()` occluder count ≫ 3; survival-probe bands unchanged (shade paths still measured); a shade-time-to-death sim case (stand in a wreck's shadow → measurably longer than open sun).
-2. **Water-scarcity/exposure (Arc C1 deferred half)** — make open-desert traverse a real WATER decision. Scope judiciously (no save bump without a pause — D81): e.g. thirst drain scales with sun exposure/activity (`survival.ts` reading `sunExposure01`), water-source scarcity tiers by distance from spawn, canteen-sip discipline. NO new items unless truly needed (no-new-pillars constraint). Verify: survival-probe new case(s) (watered vs unwatered traverse deltas); tsc; the existing bands stay within tolerance.
+- **Night bed** — sparse desert insects (filtered-noise chirps/trills, randomized intervals + pan; think lone cricket, not a chorus).
+- **Day bed** — faint heat-shimmer texture + occasional distant bird call (a thin lonely cry fits the tone; sparse).
+- **Crossfade by time-of-day** (`ctx.time`), duck under storms (`weather.intensity` — the existing stem-mixer logic may already provide the mix scaffolding — reuse `makeStem`/mixer gains if sensible).
+- **Tone constraint**: melancholy, sparse, lonely — "audible loneliness" (GDD §9/§15). No wall-of-sound.
+
+**Verify** (headless): `getAudioStateSnapshot()` / `__game.audioState()` — assert the new bed gains > 0 at day and night respectively, crossfade flips with `setTime`, storm ducks them; wind masters STAY 0. Consider a small rig-shot scenario (`ambient-beds`) asserting those gain states so it joins the permanent gate suite. AUDIO FEEL (does it read lonely vs annoying) = end-review human item — but keep density conservative by construction (long silences).
 
 ## Gates (every cycle)
-`npm run verify:all` + `smoke-intro` + `smoke-pod-tutorial` + `pickup-take-sweep` (NEW, keep green) + `survival-probe`. Ports: rig-shot `--port=52xx` to avoid collisions.
+`npm run verify:all` + `smoke-intro` + `smoke-pod-tutorial` + `pickup-take-sweep` + `survival-probe` (now asserts shade + coverage). rig-shot `--port=52xx`.
 
-## Constraints (from the charter — do not violate)
-No endgame · no tone change · additive-save-only (SAVE_VERSION bump ⇒ PAUSE) · no new content pillars · wind stays muted. The Phase-A feel-pile is EXCLUDED.
+## Constraints
+No endgame · no tone change · additive-save-only (bump ⇒ PAUSE) · no new pillars · **wind stays muted** · Phase-A feel-pile excluded.
 
 ## Footguns
-- `enterGame(dev)` REBUILDS the player body — read `ctx.player.body` LIVE in harness code (cycle-1 diagnosis; see the `pickup-take-sweep` scenario's comments for the settle/aim idioms).
-- rig-shot live scenarios boot THIRD-PERSON by default (`enterLive(page, true)`) — force `ctx.flags.thirdPerson=false` if your scenario needs the FP eye-ray.
-- The `__interactionDebug` window flag taps the game ray's raw hits (interaction.ts) — use it before guessing at raycast failures.
-- Instanced pickups: `Pickup.inst` set ⇒ `mesh` IS the shared imesh — never scene.remove it; despawn via `despawnPickup` only (D281).
+- Audio autoplay: headless pages need the gesture-init pattern — the harness's `enterGame(true)` path handles it; assert via the state snapshot, not by "listening".
+- `ctx.player.body` is REBUILT by `enterGame(dev)` — read live in harness code.
+- Keep new gains wired through the existing mixer/master graph so the pause/menu mute paths still gate them.
 
 ## On stop
-Session-end (changelog + CLAUDE.md + campaign log/state + this brief for cycle 3) → one cycle commit on `campaign/2026-07-09` → verdict → ScheduleWakeup if CONTINUE.
+Session-end docs → cycle commit on `campaign/2026-07-09` → verdict → ScheduleWakeup if CONTINUE.

@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 2 — 2026-07-09 — M3 survival depth: shade coverage + water/exposure ✓ all gates
+
+`verified` — `verify:all` PASS; `smoke-intro` {ok,beats:12}; `smoke-pod-tutorial` ok; `pickup-take-sweep` PASS; **`survival-probe` PASS with the C38 bands BYTE-IDENTICAL** (heat 7.54 / cold 8.67 / thirst 10 / hunger 15 min) + two NEW assertions: `heat-shade` (midday sun, fully occluded → SURVIVES, minHealth ≥0.95 — shade saves your life) and occluder coverage ≥20 (measured **51**, was ~3). One cycle commit on `campaign/2026-07-09`. D282.
+
+- **Sun-occluder decouple + coverage (C31 follow-up, D282)** — NEW `SUN_OCCLUDER_MIN_HEIGHT` (2.5m) replaces the 8m `HORIZON_SILHOUETTE_MIN_HEIGHT` coupling in `addHorizonSilhouette` (a 3m wreck casts shade you can stand in); procgen POIs (both placement branches) + wreck-yard hulks now register post-placement bboxes as occluders (no rand draw — seeded stream untouched). Occluders 3 → **51** in the probe seed.
+- **Water/exposure (Arc C1 deferred half, D282)** — NEW `THIRST_SHADE_RELIEF` (0.8): open-air shade slows water loss (lerped ×0.8 full-shade → ×1 full-sun), gated on daytime + NOT-in-shelter so all four C38 probe bands stay byte-identical **by construction** (the probe envs run sheltered / full-sun / at-night). Shade-seeking is now a water decision, not just a heat one; the FEEL of both knobs is ratified at the campaign end review.
+- **Probe growth** — `survivalProbe` gains the `heat-shade` env (tops thirst/hunger to isolate the temperature path); the rig-shot `survival-probe` gate now asserts shade-survival + occluder coverage and THROWS on failure.
+
 ## Campaign "Sharpen & Deepen" cycle 1 — 2026-07-09 — M1 perf + housekeeping (pickup instancing) + the M2 already-shipped discovery ✓ verify:all + smokes + NEW take-sweep gate
 
 `verified` — `verify:all` (tsc + placement 0-fails + colliders 40-audits 0-fails) PASS; `smoke-intro` {ok,beats:12} PASS; `smoke-pod-tutorial` PASS; NEW **`pickup-take-sweep`** gate PASS (6 end-to-end E-takes through the real interaction path, incl. the swap-with-last index-fixup case); `survival-probe` PASS with the new crash-heat guard (bands byte-identical to C38: heat 7.54 / cold 8.67 / thirst 10 / hunger 15 min). Campaign branch `campaign/2026-07-09`, one cycle commit. D281.

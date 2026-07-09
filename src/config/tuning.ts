@@ -71,6 +71,11 @@ export const Tuning = {
   // sunExposure01 (1 = full sun, 0 = terrain-occluded); shade reduces heat GAIN +
   // (when mostly shaded) gently cools a hot player. Rates are FEEL → walk-test.
   SHADE_HEAT_FLOOR: 0.35,            // heat gain in full shade = ×this (deep shade still warms slightly midday)
+  // M3 (campaign 2026-07-09, Arc C1 water/exposure) — SHADE also relieves THIRST drain: open-air
+  // shade (NOT a shelter zone — shelters neutralize temperature already) slows water loss, making
+  // shade-seeking a WATER decision, not just a heat one. ×this at full shade, lerped to ×1 in full
+  // sun; gated on daytime + !inShelter so the C38 probe bands stay byte-identical by construction.
+  THIRST_SHADE_RELIEF: 0.8,          // thirst drain in full open-air shade = ×this (daytime only)
   SHADE_COOL_PER_SEC: 1 / 95,        // gentle pull toward 0 when mostly shaded + hot (weaker than a full shelter)
   SUN_EXPOSURE_INTERVAL_S: 0.25,     // how often to re-raymarch the sun occlusion (throttled; cheap)
   SUN_EXPOSURE_STEP_M: 2.5,          // raymarch step toward the sun
@@ -855,6 +860,10 @@ export const Tuning = {
   // tall landmark that fades IN as the real model fogs OUT, so distant landmarks read
   // as skyline NAVIGATION cues (the FogExp2 otherwise blends them into the sky).
   HORIZON_SILHOUETTE_MIN_HEIGHT: 8,    // m — only landmarks at least this tall get a skyline silhouette
+  // M3 (campaign 2026-07-09) — sun-OCCLUDER height threshold DECOUPLED from the silhouette one
+  // (C31 follow-up): a sub-8m wreck casts real shade you can stand in; 2.5m ≈ taller than the
+  // player. Used by horizonSilhouettes.addHorizonSilhouette for shade registration.
+  SUN_OCCLUDER_MIN_HEIGHT: 2.5,        // m — a structure at least this tall registers as a sun occluder (shade)
   HORIZON_SILHOUETTE_WIDTH_MULT: 0.85, // billboard width = max(bbox x,z) × this (narrower than the full footprint reads truer)
   HORIZON_SILHOUETTE_COLOR: 0x262320,  // C28 r2 — darker (r1 read ~10% contrast at far; needs to clearly punch out vs the sky)
   HORIZON_SILHOUETTE_OPACITY: 0.85,    // C28 r2 — bolder so the FAR silhouette (the sole nav cue once the model fogs) reads

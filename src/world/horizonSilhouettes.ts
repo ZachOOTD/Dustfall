@@ -23,13 +23,15 @@ const _occluders: SunOccluder[] = [];
 export function getSunOccluders(): ReadonlyArray<SunOccluder> { return _occluders; }
 
 /** Register a major landmark as a sun occluder. `box` is the landmark's world-space
- *  bounding box. Short landmarks (below HORIZON_SILHOUETTE_MIN_HEIGHT) are skipped —
- *  only tall wrecks cast a shade worth standing in. (`_scene` is unused now that the
- *  billboard mesh is gone; kept so callers don't change.) */
+ *  bounding box. Short structures (below SUN_OCCLUDER_MIN_HEIGHT) are skipped.
+ *  M3 (campaign 2026-07-09): threshold DECOUPLED from HORIZON_SILHOUETTE_MIN_HEIGHT
+ *  (8m — a C28 silhouette-era coupling): a 3m wreck casts real shade you can stand
+ *  in even though it never earned a skyline silhouette. (`_scene` is unused now that
+ *  the billboard mesh is gone; kept so callers don't change.) */
 export function addHorizonSilhouette(_scene: THREE.Scene, box: THREE.Box3): void {
   const size = new THREE.Vector3();
   box.getSize(size);
-  if (size.y < Tuning.HORIZON_SILHOUETTE_MIN_HEIGHT) return;
+  if (size.y < Tuning.SUN_OCCLUDER_MIN_HEIGHT) return;
   _occluders.push({
     cx: (box.min.x + box.max.x) * 0.5,
     cz: (box.min.z + box.max.z) * 0.5,

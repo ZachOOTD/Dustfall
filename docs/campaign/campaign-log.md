@@ -5,6 +5,16 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 2 — M3 survival depth (2026-07-09) — SHIPPED
+
+- **Planned:** M3 as re-scoped in cycle 1 — (a) C31 sun-occluder decouple + coverage, (b) water-scarcity/exposure.
+- **Shipped (D282):** `SUN_OCCLUDER_MIN_HEIGHT` (2.5m) decoupled from the 8m silhouette constant; procgen POIs (both branches) + wreck-yard hulks register post-placement bboxes as occluders → **3→51** in the probe seed (static boot sites only — meteor/debug spawns excluded to avoid stale-occluder leaks). `THIRST_SHADE_RELIEF` (0.8): open-air daytime shade slows water loss, gated (!inShelter + daytime) so all four C38 bands stay byte-identical BY CONSTRUCTION (design chosen over sun-drives-thirst precisely to avoid autonomous drift of the human-ratified curve). NEW `heat-shade` probe env (tops thirst/hunger to isolate temperature) + gate assertions: shade SURVIVES midday (minHealth ≥0.95) and occluder coverage ≥20; the gate now throws on failure.
+- **Verify:** verify:all PASS · smoke-intro {ok,beats:12} · smoke-pod-tutorial ok · pickup-take-sweep PASS · survival-probe PASS (7.54/8.67/10/15 unchanged; shade=true; occluders=51).
+- **Visual iteration:** N/A — pure systems/tuning cycle.
+- **Spend:** ~300K est. (campaign total ~900K / 10M; cycle 2/50).
+- **Commit:** (this cycle's commit — SHA in git log)
+- **Next:** cycle 3 → M4 ambient life beds (procedural day/night synthesis in soundscape.ts; wind STAYS muted).
+
 ## Cycle 1 — M1 perf + housekeeping (2026-07-09) — SHIPPED
 
 - **Planned:** M1 (pickup-instancing, decisions-archival, panel-deadcode, crash-heat guard, doc-scrub).

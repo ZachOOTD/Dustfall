@@ -82,10 +82,19 @@ export function updateStats(ctx: GameContext, dt: number): void {
   // Thirst — sandstorms + sprint + heat all accelerate.
   const stormFactor = 1 + ctx.weather.intensity * 0.30;
   const heatBoost = Math.max(0, t.temperature); // only positive temp drives thirst
+  // M3 (campaign 2026-07-09, Arc C1 water/exposure) — open-air SHADE slows water loss:
+  // daytime + NOT in a shelter zone (shelters already neutralize temperature; this models
+  // the drier maths of standing in a wreck's shadow). Lerp ×THIRST_SHADE_RELIEF (full
+  // shade) → ×1 (full sun). Gating keeps the C38 probe bands byte-identical: the probe's
+  // thirst/hunger/prepared envs run inShelter=true, heat runs sun01=1, cold runs at night.
+  const shadeRelief = (exposure > 0.2 && !ctx.player.inShelter)
+    ? Tuning.THIRST_SHADE_RELIEF + (1 - Tuning.THIRST_SHADE_RELIEF) * ctx.player.sunExposure01
+    : 1;
   const thirstMul =
     (sprinting ? Tuning.THIRST_SPRINT_FACTOR : 1) *
     (1 + heatBoost * (Tuning.THIRST_HEAT_FACTOR - 1)) *
-    stormFactor;
+    stormFactor *
+    shadeRelief;
   t.thirst = Math.max(0, t.thirst - Tuning.THIRST_DRAIN_PER_SEC * dt * thirstMul);
 
   // Hunger — steady drain regardless of activity.

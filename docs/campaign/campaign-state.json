@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-09",
-  "cycles_completed": 1,
-  "current_tier": "M3 \u2014 Survival depth (occluder decouple + water-scarcity)",
+  "cycles_completed": 2,
+  "current_tier": "M4 \u2014 Ambient life beds",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -25,7 +25,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 600000
+    "total": 900000
   },
   "ladder": [
     {
@@ -44,7 +44,7 @@
       "id": "M3",
       "name": "Survival depth (C31 occluder decouple + water-scarcity)",
       "kind": "auto",
-      "status": "pending"
+      "status": "shipped"
     },
     {
       "id": "M4",
@@ -90,6 +90,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 600000,
       "verify": "verify:all PASS \u00b7 smoke-intro PASS \u00b7 smoke-pod-tutorial PASS \u00b7 NEW pickup-take-sweep PASS \u00b7 survival-probe PASS (guarded)"
+    },
+    {
+      "n": 2,
+      "date": "2026-07-09",
+      "focus": "M3 survival depth (occluder decouple + shade-thirst relief)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 300000,
+      "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS (bands identical; heat-shade survives; occluders 51)"
     }
   ]
 }
