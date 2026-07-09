@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 6 — 2026-07-09 — M6 POI breadth [2/2-3]: the buried-pipeline archetype OK all gates + visual
+
+`verified` — `verify:all` PASS (tsc + placement 5-seed + colliders **50** audits incl. buried_pipeline 7-8/7-8 x4 seeds); all 6 rig gates PASS; VISUAL gate rendered + reworked (routine bar, no sev>=2). One cycle commit. D286. **M6 DoD now MET (2 distinct archetypes)**; A3 cargo_crawler queued as an optional stretch for cycle 7.
+
+- **buried_pipeline archetype (D286)** — a bedded freight/coolant PIPE RUN: the LOW HORIZONTAL segmented silhouette (deliberate contrast to A1's vertical mast). NEW `pipeSegment` + `pipeJunction` components (`poiComponents.ts`): 4-5 pipe cylinders laid along a line — lower third bedded in the sand, ONE segment surfacing (a proud hump), the FAR end pitching down + diving under, one ruptured joint — tied into a manifold hub (vertical drum + valve handwheel + hoop bands + cardinal flange stubs + an access housing carrying the salvage panel, kept proud for the terrain-audit). `assembleBuriedPipeline` + registry (`dark` bucket) + `ARCH_WEIGHTS` all 4 biomes (~0.04-0.06, favor salt/dune; `derelict` shaved again to keep sums ~1.0). Determinism: one `seedOf` draw, phash rest.
+- **Design rework (visual gate caught it)** — the first pass used a sine undulation that floated crests ~1.5m proud (a rigid POI group has NO terrain access, so it can't weave under the real heightfield). Reworked to a robust FIXED-bedding-depth run (lower third buried + one hump + a diving far end) — reads as an old pipeline half-swallowed by the desert at any anchor.
+- **Gate coverage** — added `buried_pipeline` to the `verify:colliders` default list (45->50 audits).
+
 ## Campaign "Sharpen & Deepen" cycle 5 — 2026-07-09 — M6 POI breadth [1/2-3]: the relay-mast archetype OK all gates + visual
 
 `verified` — `verify:all` PASS (tsc + placement 5-seed PASS + colliders **45** audits incl. relay_mast 5/5 x4 seeds); all 6 rig gates PASS (smoke-intro/pod, pickup-take-sweep, survival-probe, ambient-beds, diurnal-probe); VISUAL gate rendered + iterated (routine bar, no sev>=2). One cycle commit. D285.

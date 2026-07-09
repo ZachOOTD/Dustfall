@@ -5,6 +5,16 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 6 — M6 POI breadth A2: buried_pipeline (2026-07-09) — SHIPPED (M6 DoD met, 2/2-3)
+
+- **Planned:** M6 A2 buried_pipeline — a surfacing/diving pipe run (the low-horizontal silhouette).
+- **Shipped (D286, A2):** `pipeSegment` + `pipeJunction` components; `assembleBuriedPipeline` — 4-5 bedded pipe cylinders (lower third in sand, one surfacing hump, a diving far end, a ruptured joint) tied into a manifold hub (drum + valve handwheel + flange stubs + proud access housing/panel). Registry (`dark` bucket) + `ARCH_WEIGHTS` all biomes (derelict shaved to keep sums ~1.0). Added to verify:colliders default list (45->50 audits).
+- **Design rework (visual gate):** the first sine-undulation pass floated crests ~1.5m proud — a rigid POI group has NO terrain access, so it can't weave under the real heightfield. Reworked to a fixed shallow-bedding run (robust at any anchor). This is the value of rendering before declaring done.
+- **Verify:** verify:all PASS (tsc + placement 5-seed 0-fails + colliders 50 audits, buried_pipeline 7-8/7-8 x4 seeds) - all 6 rig gates PASS.
+- **Visual iteration:** rendered via the procgen framer (3q + zoom, 2 seeds); routine bar (no sev>=2); 1 rework round (float -> bedded). Seed 1337 broadside confirms a clean half-buried pipeline + manifold read.
+- **Spend:** ~550K est. (campaign total ~2.45M / 10M; cycle 6/50).
+- **Next:** cycle 7 -> M6 A3 cargo_crawler (optional stretch; DoD already met) — the last autonomous content before M7 Skyfall pauses for human plan-review.
+
 ## Cycle 5 — M6 POI breadth A1: relay_mast (2026-07-09) — SHIPPED (partial 1/2-3)
 
 - **Planned:** M6 = 2-3 new procgen archetypes. DECOMPOSED (multi-part feature, anti-punt) into `docs/feature-poi-archetypes.md` — one archetype per cycle to depth.

@@ -16,6 +16,7 @@ import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
   noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead, latticeMast,
+  pipeSegment, pipeJunction,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -486,8 +487,63 @@ function assembleRelayMast(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// BURIED PIPELINE (M6 POI-breadth A2, campaign 2026-07-09 cycle 6) — a big freight/coolant
+// PIPE RUN that surfaces + dives under the sand along a line, tied into a manifold hub. The
+// LOW HORIZONTAL segmented silhouette (contrast to relay_mast's vertical). ONE seedOf draw.
+// ════════════════════════════════════════════════════════════════════
+function assembleBuriedPipeline(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const s = seedOf(rand);
+  const r = 0.62 + phash(s, 10) * 0.22;                 // pipe radius
+  const nSeg = 4 + Math.floor(phash(s, 1) * 2);         // 4-5 segments
+  const segLen = 3.0 + phash(s, 2) * 0.7;               // ~3.0-3.7m each
+  // A rigid POI group can't weave under the REAL heightfield (the assembler has no terrain),
+  // so the "buried/surfacing" read is baked at a fixed bedding depth: the run rests with its
+  // lower ~third IN the sand (bedY), ONE middle segment humps proud (surfaces), and the FAR
+  // segment PITCHES down + sinks (dives back under). Robust at any anchor — pipes only breach
+  // ~half a radius, which the local terrain supports (unlike a 1.5m sine crest that floated).
+  const bedY = -r * 0.35;                                // pipe axis below the group plane → lower third buried
+  const humpIdx = 1 + Math.floor(phash(s, 4) * Math.max(1, nSeg - 2));   // the one segment that surfaces
+  const brokenIdx = (humpIdx + 1) % nSeg;               // a ruptured joint, distinct from the hump
+
+  const hub = pipeJunction(s);
+  a.place(hub, liftToGround(hub));
+  const hubHalf = 1.1;
+
+  // Segments along +X (built along +Z → Ry(-90°) lays them along +X; Rz(pitch) tilts vertically).
+  for (let i = 0; i < nSeg; i++) {
+    const cx = hubHalf + segLen * (i + 0.5) + i * 0.1;
+    let yc = bedY, pitch = 0, roll = 0, thisLen = segLen;
+    if (i === humpIdx) { yc = r * 0.55; }                                   // surfaces (proud crest)
+    if (i === nSeg - 1) { pitch = -0.55 - phash(s, 6) * 0.3; yc = bedY - r * 0.9; }  // far end DIVES under
+    if (i === brokenIdx && i !== nSeg - 1) {                                // a ruptured, collapsed joint
+      pitch += (phash(s, 30) - 0.5) * 1.1;
+      roll = (phash(s, 31) - 0.5) * 0.9;
+      yc -= r * 0.5;
+      thisLen = segLen * (0.55 + phash(s, 32) * 0.25);
+    }
+    const seg = pipeSegment(s + 100 + i * 61, thisLen, r);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(roll, -Math.PI / 2, pitch, 'ZYX'));
+    a.place(seg, new THREE.Matrix4().compose(new THREE.Vector3(cx, yc, 0), q, _ONE_SCALE));
+  }
+  // A short perpendicular tie-in off the hub's FAR (−Z) flange — reads as a real junction, and
+  // sits away from the camera-facing run so the hub doesn't clutter. Bedded like the main run.
+  const branch = pipeSegment(s + 900, segLen * 0.75, r * 0.88);
+  a.place(branch, new THREE.Matrix4().compose(
+    new THREE.Vector3(0, bedY, -(hubHalf + segLen * 0.35)), new THREE.Quaternion(), _ONE_SCALE));
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
+  buried_pipeline: {
+    id: 'buried_pipeline',
+    // A surface RUN (burySink false); the undulation + dive are baked into the segments, so a
+    // tiny seatSink beds the hub, no crash-list (a pipe run doesn't topple). A drift banks it.
+    params: { bucket: 'dark', burySink: false, bury: 0, list: 0, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.18, salvageKind: 'cargo_container' },
+    assemble: assembleBuriedPipeline,
+  },
   relay_mast: {
     id: 'relay_mast',
     // Stands (burySink false) but LEANS hard — a felled comms tower caught mid-fall. The
@@ -581,10 +637,12 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // M6 (campaign 2026-07-09 cycle 5) — relay_mast added at ~0.06; `derelict` shaved by the
   // same so each biome's table still sums ≈1.0 (the tail 'ship' fallback stays reachable).
   // rocky/dune weighted a hair higher (exposed highlands where you'd site a relay).
-  salt:       [['ship', 0.24], ['derelict', 0.15], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06]],
-  rocky:      [['ship', 0.19], ['derelict', 0.13], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07]],
-  dune:       [['ship', 0.17], ['derelict', 0.15], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07]],
-  wreck_yard: [['ship', 0.15], ['derelict', 0.13], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06]],
+  // M6 A2 (cycle 6) — buried_pipeline added ~0.05-0.07 (favor salt/dune: old freight lines);
+  // `derelict` shaved again to keep each table summing ≈1.0 (the tail 'ship' fallback stays live).
+  salt:       [['ship', 0.24], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05]],
+  rocky:      [['ship', 0.19], ['derelict', 0.09], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04]],
+  dune:       [['ship', 0.17], ['derelict', 0.09], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06]],
+  wreck_yard: [['ship', 0.15], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

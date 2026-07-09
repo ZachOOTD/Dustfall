@@ -907,4 +907,86 @@ export function latticeMast(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }
 
+/** M6 POI-breadth A2 (campaign 2026-07-09 cycle 6) — PIPE SEGMENT: one length of a big
+ *  buried freight/coolant pipeline. Built along +Z (like hullBarrel) so the assembler lays
+ *  a run along a line + undulates each segment above/below the sand (surfacing/diving). A
+ *  bolted flange ring at each end + a weld seam + a valve stub greeble. Collision = the
+ *  segment cylinder (flanges/greebles are decoration). Determinism: phash only. */
+export function pipeSegment(seed: number, len: number, r: number): BuiltComponent {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), _hullMat);
+  body.rotation.x = Math.PI / 2; g.add(body);   // axis along +Z
+  // bolted flange rings at both ends (the joint collars) — decoration, but real depth
+  for (const ez of [-len / 2, len / 2]) {
+    const flange = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.18, r * 1.18, 0.14, 14), _hullDarkMat);
+    flange.rotation.x = Math.PI / 2; flange.position.z = ez; flange.userData.isWreckDecoration = true; g.add(flange);
+  }
+  // a mid weld seam + a corroded valve stub on top (≥10cm depth, rule 7)
+  const seam = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.06, 0.12, 12), _hullDarkMat);
+  seam.rotation.x = Math.PI / 2; seam.position.z = len * (phash(seed, 3) - 0.5) * 0.4;
+  seam.userData.isWreckDecoration = true; g.add(seam);
+  const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.4, 8), _rustMat);
+  stub.position.set(0, r + 0.14, len * (phash(seed, 4) - 0.5) * 0.5);
+  stub.userData.isWreckDecoration = true; g.add(stub);
+  const colliders: ColliderSpec[] = [
+    { kind: 'cylinder', halfHeight: len / 2, radius: r, pos: { x: 0, y: 0, z: 0 }, quat: FACE.posY() },
+  ];
+  const sockets: Socket[] = [
+    { name: 'aft', pos: new THREE.Vector3(0, 0, -len / 2), quat: FACE.negZ(), radius: r, tag: 'axialIn' },
+    { name: 'fwd', pos: new THREE.Vector3(0, 0, len / 2), quat: FACE.posZ(), radius: r, tag: 'axialOut' },
+  ];
+  const bbox = new THREE.Box3(new THREE.Vector3(-r * 1.2, -r * 1.2, -len / 2), new THREE.Vector3(r * 1.2, r * 1.2, len / 2));
+  return { mesh: g, sockets, colliders, panelMounts: [], bbox };
+}
+
+/** M6 A2 — PIPE JUNCTION: the manifold hub where the run ties in. A vertical drum + flange
+ *  stubs on the cardinal faces (pipe tie-ins) + a valve handwheel on top + an access housing
+ *  carrying the salvage panel (kept PROUD so the terrain-audit sees it). Built at ground with
+ *  the drum along +Y. Collision = the drum cylinder + the housing box. */
+export function pipeJunction(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const R = 0.95 + phash(seed, 1) * 0.3;        // drum radius
+  const H = 1.5 + phash(seed, 2) * 0.5;         // drum height
+  const colliders: ColliderSpec[] = [];
+  // manifold drum (vertical)
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 1.05, H, 16), _hullMat);
+  drum.position.y = H / 2; g.add(drum);
+  colliders.push({ kind: 'cylinder', halfHeight: H / 2, radius: R * 1.05, pos: { x: 0, y: H / 2, z: 0 } });
+  // hoop bands on the drum
+  for (const ty of [0.28, 0.62]) {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(R + 0.03, 0.06, 6, 18), _hullDarkMat);
+    hoop.rotation.x = Math.PI / 2; hoop.position.y = H * ty; hoop.userData.isWreckDecoration = true; g.add(hoop);
+  }
+  // flange tie-in stubs on ±X and ±Z (short fat pipes) — decoration
+  const stubR = R * 0.5;
+  for (const [dx, dz, ry] of [[1, 0, 0], [-1, 0, 0], [0, 1, Math.PI / 2], [0, -1, Math.PI / 2]] as Array<[number, number, number]>) {
+    const stub = new THREE.Mesh(new THREE.CylinderGeometry(stubR, stubR, R * 1.4, 12), _hullDarkMat);
+    stub.rotation.z = Math.PI / 2; stub.rotation.y = ry;
+    stub.position.set(dx * R * 1.1, H * 0.42, dz * R * 1.1);
+    stub.userData.isWreckDecoration = true; g.add(stub);
+  }
+  // valve handwheel on top (a torus + spokes) — decoration
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 20), _rustMat);
+  wheel.position.y = H + 0.28; g.add(wheel);
+  wheel.userData.isWreckDecoration = true;
+  for (let i = 0; i < 3; i++) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.05, 0.05), _rustMat);
+    spoke.rotation.y = (i / 3) * Math.PI; spoke.position.y = H + 0.28;
+    spoke.userData.isWreckDecoration = true; g.add(spoke);
+  }
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 8), _hullDarkMat);
+  stem.position.y = H + 0.05; stem.userData.isWreckDecoration = true; g.add(stem);
+  // access housing box carrying the salvage panel (kept proud)
+  const boxW = R * 1.1, boxH = 0.9, boxD = 0.4;
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxD), _hullMat);
+  housing.position.set(0, boxH / 2, R + boxD / 2 - 0.05); g.add(housing);
+  colliders.push({ kind: 'box', half: { x: boxW / 2, y: boxH / 2, z: boxD / 2 }, pos: { x: 0, y: boxH / 2, z: R + boxD / 2 - 0.05 } });
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(0, boxH * 0.55, R + boxD - 0.05), quat: FACE.posZ(), kind: 'cargo_container' },
+  ];
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negY(), radius: R, tag: 'base' }];
+  const bbox = new THREE.Box3(new THREE.Vector3(-R * 1.2, 0, -R * 1.2), new THREE.Vector3(R * 1.2, H + 0.6, R + boxD));
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement
