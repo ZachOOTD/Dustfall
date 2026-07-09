@@ -3,30 +3,93 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-09",
-  "cycles_completed": 0,
-  "current_tier": "M1 — Perf + housekeeping",
+  "cycles_completed": 1,
+  "current_tier": "M3 \u2014 Survival depth (occluder decouple + water-scarcity)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
-  "smoke_gate": ["smoke-intro", "smoke-pod-tutorial"],
+  "smoke_gate": [
+    "smoke-intro",
+    "smoke-pod-tutorial"
+  ],
   "visual_gate": "auto",
   "until": "ladder-complete",
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
-  "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 0 },
+  "ceiling": {
+    "max_cycles": 50,
+    "total": 10000000,
+    "per_cycle": null,
+    "unit": "tokens"
+  },
+  "spend": {
+    "total": 600000
+  },
   "ladder": [
-    { "id": "M1", "name": "Perf + housekeeping", "kind": "auto", "status": "pending" },
-    { "id": "M2", "name": "Survival curve (flagged)", "kind": "auto+evidence", "status": "pending" },
-    { "id": "M3", "name": "Survival depth (sun-shade + water)", "kind": "auto", "status": "pending" },
-    { "id": "M4", "name": "Ambient life beds", "kind": "auto", "status": "pending" },
-    { "id": "M5", "name": "Living world (diurnal-cycle)", "kind": "auto", "status": "pending" },
-    { "id": "M6", "name": "POI breadth (new archetypes)", "kind": "gate-verified", "status": "pending" },
-    { "id": "M7", "name": "Skyfall enterable hero wreck", "kind": "feel-critical", "status": "pending", "pause_before": "hero-detail" }
+    {
+      "id": "M1",
+      "name": "Perf + housekeeping",
+      "kind": "auto",
+      "status": "shipped"
+    },
+    {
+      "id": "M2",
+      "name": "Survival curve (flagged)",
+      "kind": "auto+evidence",
+      "status": "shipped-preexisting (verify-only done; FEEL walk-test at end review)"
+    },
+    {
+      "id": "M3",
+      "name": "Survival depth (C31 occluder decouple + water-scarcity)",
+      "kind": "auto",
+      "status": "pending"
+    },
+    {
+      "id": "M4",
+      "name": "Ambient life beds",
+      "kind": "auto",
+      "status": "pending"
+    },
+    {
+      "id": "M5",
+      "name": "Living world (diurnal-cycle)",
+      "kind": "auto",
+      "status": "pending"
+    },
+    {
+      "id": "M6",
+      "name": "POI breadth (new archetypes)",
+      "kind": "gate-verified",
+      "status": "pending"
+    },
+    {
+      "id": "M7",
+      "name": "Skyfall enterable hero wreck",
+      "kind": "feel-critical",
+      "status": "pending",
+      "pause_before": "hero-detail"
+    }
   ],
-  "sanctioned_pauses": ["skyfall-pre-detail", "save-version-bump"],
-  "locked_constraints": ["no-endgame", "no-tone-change", "additive-save-only", "no-new-pillars"],
-  "cycles": []
+  "sanctioned_pauses": [
+    "skyfall-pre-detail",
+    "save-version-bump"
+  ],
+  "locked_constraints": [
+    "no-endgame",
+    "no-tone-change",
+    "additive-save-only",
+    "no-new-pillars"
+  ],
+  "cycles": [
+    {
+      "n": 1,
+      "date": "2026-07-09",
+      "focus": "M1 perf+housekeeping (+M2 verify-only discovery)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 600000,
+      "verify": "verify:all PASS \u00b7 smoke-intro PASS \u00b7 smoke-pod-tutorial PASS \u00b7 NEW pickup-take-sweep PASS \u00b7 survival-probe PASS (guarded)"
+    }
+  ]
 }

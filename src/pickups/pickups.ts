@@ -54,7 +54,7 @@ function _scrapGeometry(): THREE.BufferGeometry {
   if (!_scrapGeo) _scrapGeo = mergeGroupToGeometry(buildScrapMesh(_worldScrapMat, _worldScrapAccentMat));
   return _scrapGeo;
 }
-function _branchGeometry(rand: Rng): THREE.BufferGeometry {
+function _ensureBranchGeos(): void {
   if (_branchGeos.length === 0) {
     // buildBranchMesh is deterministic without an RNG → a few (len, twigs)
     // variants give shape variety; per-spawn yaw + terrain-align do the rest.
@@ -62,8 +62,102 @@ function _branchGeometry(rand: Rng): THREE.BufferGeometry {
       _branchGeos.push(mergeGroupToGeometry(buildBranchMesh(_worldBranchMat, { len, twigs })));
     }
   }
-  return _branchGeos[Math.floor(rand() * _branchGeos.length)];
 }
+// M1 pickup-instancing — variant picked by INDEX so the spawn can route to the
+// per-variant instanced pool (same single rand draw as the old _branchGeometry(rand);
+// the fallback path indexes _branchGeos[variant] directly).
+function _branchVariantIndex(rand: Rng): number {
+  _ensureBranchGeos();
+  return Math.floor(rand() * _branchGeos.length);
+}
+
+// ────────────────────────────────────────────────────────────────
+// M1 pickup-instancing (campaign 2026-07-09) — seed-spawned branch + scrap
+// rendered via shared InstancedMesh POOLS instead of ~367 individual Meshes.
+// The ACAH merged-geometry pooling had already collapsed the GEOMETRY cost;
+// this collapses the DRAW-CALL cost (1 call per pool vs 1 per pickup: probe
+// baseline 852 drawCalls with pickups ≈ 43% of them). Only STATIC seed spawns
+// are instanced (branch/scrap: body=null, never bob, never ride sleds);
+// canteens/relics/dropped items keep individual meshes (few, or dynamic).
+//   - The raycast resolves instanced hits via intersection.instanceId →
+//     imesh.userData.instanceToPickupId[instanceId] (interaction.ts), NOT the
+//     per-mesh userData.pickupId parent-walk — the shared imesh is never
+//     tagged with a single pickupId (it would alias every instance).
+//   - despawnPickup FREES the instance slot (swap-with-last, dense [0,count))
+//     instead of scene.remove — removing the shared imesh would kill them all.
+//   - Pool overflow falls back to the legacy individual-Mesh path (logged),
+//     so a seed with unusual scatter counts can never lose pickups.
+// ────────────────────────────────────────────────────────────────
+export interface PickupInstPool {
+  imesh: THREE.InstancedMesh;
+  capacity: number;
+  count: number;
+  /** instance index → pickupId (same array as imesh.userData.instanceToPickupId). */
+  ids: number[];
+}
+const _instPools: PickupInstPool[] = [];
+let _scrapPool: PickupInstPool | null = null;
+const _branchPools: (PickupInstPool | null)[] = [null, null, null, null, null];
+const SCRAP_POOL_CAP = 384;    // probe baseline 227 scrap — generous headroom, 64B/instance
+const BRANCH_POOL_CAP = 96;    // per geometry variant (5 pools; baseline 140 total ≈ 28/variant)
+
+function _makeInstPool(scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material, capacity: number): PickupInstPool {
+  const imesh = new THREE.InstancedMesh(geo, mat, capacity);
+  imesh.count = 0;
+  imesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);  // slots free on take → matrix rewrites
+  imesh.castShadow = false;      // pickups never cast (matches the per-mesh rule below)
+  imesh.receiveShadow = true;
+  imesh.frustumCulled = false;   // instances span the whole world — no meaningful whole-pool cull
+  imesh.userData.noShadow = true;
+  const ids: number[] = [];
+  imesh.userData.instanceToPickupId = ids;   // the interaction.ts instanceId resolver reads this
+  scene.add(imesh);
+  const pool: PickupInstPool = { imesh, capacity, count: 0, ids };
+  _instPools.push(pool);
+  return pool;
+}
+
+function _poolAlloc(pool: PickupInstPool, pickupId: number, matrix: THREE.Matrix4): number | null {
+  if (pool.count >= pool.capacity) return null;   // full → caller falls back to a legacy Mesh
+  const i = pool.count;
+  pool.count += 1;
+  pool.imesh.count = pool.count;
+  pool.imesh.setMatrixAt(i, matrix);
+  pool.imesh.instanceMatrix.needsUpdate = true;
+  pool.ids[i] = pickupId;
+  return i;
+}
+
+const _poolFreeMat = new THREE.Matrix4();
+/** Free an instance slot (swap-with-last so [0, count) stays dense). Returns the
+ *  pickupId whose instance MOVED into the freed slot (its Pickup.inst.index must
+ *  be updated by the caller), or null if nothing moved. */
+function _poolFree(pool: PickupInstPool, index: number): number | null {
+  const last = pool.count - 1;
+  let movedId: number | null = null;
+  if (index !== last) {
+    pool.imesh.getMatrixAt(last, _poolFreeMat);
+    pool.imesh.setMatrixAt(index, _poolFreeMat);
+    pool.ids[index] = pool.ids[last];
+    movedId = pool.ids[index];
+  }
+  pool.ids.length = last;
+  pool.count = last;
+  pool.imesh.count = last;
+  pool.imesh.instanceMatrix.needsUpdate = true;
+  return movedId;
+}
+
+/** The instanced-pool meshes, for interaction.ts to push ONCE each into the raycast
+ *  target list (instanced pickups are NOT pushed per-pickup — that would raycast the
+ *  same imesh hundreds of times). */
+export function getPickupInstancedMeshes(): THREE.Object3D[] {
+  return _instPools.map((p) => p.imesh);
+}
+
+// Scratch for composing a spawn transform (position + yaw + terrain-align) into an
+// instance matrix without allocating a Mesh.
+const _instScratch = new THREE.Object3D();
 
 // ACAE — ONE shared wood-grain material for every world branch (~200
 // instances → 1 program, world-space grain so it varies per branch). Aged
@@ -113,6 +207,11 @@ export interface Pickup {
    *  local coords. Re-applied each frame to compute world pose. */
   ridingLocalPos?: THREE.Vector3;
   ridingLocalQuat?: THREE.Quaternion;
+  /** M1 pickup-instancing — set when this pickup renders as an instance in a
+   *  shared InstancedMesh pool (seed-spawned branch/scrap). `mesh` then points
+   *  at the SHARED imesh: never scene.remove it, never tag it with pickupId;
+   *  despawnPickup frees the slot via _poolFree instead. */
+  inst?: { pool: PickupInstPool; index: number };
 }
 
 let _nextId = 1;
@@ -254,17 +353,11 @@ export function spawnCanteens(
 // ────────────────────────────────────────────────────────────────
 // Branch pickup — small brown stick scattered across the world.
 // Used as fire fuel (aim at fire + E with branch selected adds 30s).
+// ACAE/ACAH history: shared wood-grain material + pooled merged geometries.
+// M1 pickup-instancing: rendered via the per-variant InstancedMesh pools in
+// spawnBranchAt (the old makePrimitiveBranch per-pickup Mesh path is gone;
+// _branchGeometry survives for the pool-overflow legacy fallback).
 // ────────────────────────────────────────────────────────────────
-function makePrimitiveBranch(rand: Rng): THREE.Mesh {
-  // ACAE — shares the held-item branch shape (buildBranchMesh) AND now its dark
-  // wood-grain look. The material is built ONCE (_worldBranchMat) and shared
-  // across all ~200 in-world branches — one program, world-space grain that
-  // varies per-position — so it stays cheap (ABL perf note) while reading as
-  // aged deadwood that matches the dead trees, not a flat grey dowel.
-  // ACAH perf — share one of a few pooled merged branch geometries (was a fresh
-  // buildBranchMesh + merge per branch). Per-spawn yaw + terrain-align give variety.
-  return new THREE.Mesh(_branchGeometry(rand), _worldBranchMat);
-}
 
 /** Spawn a single branch pickup at a specific (x, z) world position.
  *  Aligns to terrain normal, applies the same no-shadow + pickup tagging.
@@ -279,24 +372,44 @@ export function spawnBranchAt(
   list: Pickup[],
 ): Pickup {
   const groundY = terrain.heightAt(x, z);
-  const mesh = makePrimitiveBranch(rand);
   const restY = groundY + 0.012;
-  mesh.position.set(x, restY, z);
-  mesh.rotation.y = rand() * Math.PI * 2;
-  alignToTerrainNormal(mesh, terrain, x, z);
-
-  mesh.userData.noShadow = true;
-  mesh.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) {
-      m.castShadow = false;
-      m.receiveShadow = true;
-    }
-  });
+  // M1 pickup-instancing — SAME rand-draw order as the legacy path (variant, yaw,
+  // bobPhase) so seeded worldgen stays byte-identical across the pool/legacy split.
+  const variant = _branchVariantIndex(rand);
+  const yaw = rand() * Math.PI * 2;
 
   const pickupId = _nextId++;
-  tagPickupMeshes(mesh, pickupId);
-  scene.add(mesh);
+  // Try the per-variant instanced pool first; overflow falls back to a legacy Mesh.
+  let pool = _branchPools[variant];
+  if (!pool) {
+    pool = _makeInstPool(scene, _branchGeos[variant], _worldBranchMat, BRANCH_POOL_CAP);
+    _branchPools[variant] = pool;
+  }
+  _instScratch.position.set(x, restY, z);
+  _instScratch.rotation.set(0, yaw, 0);
+  alignToTerrainNormal(_instScratch, terrain, x, z);
+  _instScratch.updateMatrix();
+  const slot = _poolAlloc(pool, pickupId, _instScratch.matrix);
+
+  let mesh: THREE.Object3D;
+  let inst: Pickup['inst'];
+  if (slot !== null) {
+    mesh = pool.imesh;   // shared — despawn frees the slot, never scene.remove's this
+    inst = { pool, index: slot };
+  } else {
+    // Pool full (unusual seed) — legacy individual mesh so the pickup still exists.
+    console.warn(`[pickups] branch pool ${variant} full (${pool.capacity}) — legacy mesh fallback`);
+    const m = new THREE.Mesh(_branchGeos[variant], _worldBranchMat);
+    m.position.set(x, restY, z);
+    m.rotation.set(0, yaw, 0);
+    alignToTerrainNormal(m, terrain, x, z);
+    m.userData.noShadow = true;
+    m.castShadow = false;
+    m.receiveShadow = true;
+    tagPickupMeshes(m, pickupId);
+    scene.add(m);
+    mesh = m;
+  }
 
   const pickup: Pickup = {
     id: pickupId,
@@ -307,6 +420,7 @@ export function spawnBranchAt(
     hovered: false,
     body: null,  // ABM (B7) — seed-spawned branches stay static
     ridingSledId: null,
+    inst,
   };
   list.push(pickup);
   return pickup;
@@ -340,24 +454,38 @@ export function spawnScrapAt(
   list: Pickup[],
 ): Pickup {
   const groundY = terrain.heightAt(x, z);
-  const mesh = makePrimitiveScrap();
   const restY = groundY + 0.02;
-  mesh.position.set(x, restY, z);
-  mesh.rotation.y = rand() * Math.PI * 2;
-  alignToTerrainNormal(mesh, terrain, x, z);
-
-  mesh.userData.noShadow = true;
-  mesh.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) {
-      m.castShadow = false;
-      m.receiveShadow = true;
-    }
-  });
+  // M1 pickup-instancing — same rand-draw order as legacy (yaw, bobPhase).
+  const yaw = rand() * Math.PI * 2;
 
   const pickupId = _nextId++;
-  tagPickupMeshes(mesh, pickupId);
-  scene.add(mesh);
+  if (!_scrapPool) {
+    _scrapPool = _makeInstPool(scene, _scrapGeometry(), _worldScrapMat, SCRAP_POOL_CAP);
+  }
+  _instScratch.position.set(x, restY, z);
+  _instScratch.rotation.set(0, yaw, 0);
+  alignToTerrainNormal(_instScratch, terrain, x, z);
+  _instScratch.updateMatrix();
+  const slot = _poolAlloc(_scrapPool, pickupId, _instScratch.matrix);
+
+  let mesh: THREE.Object3D;
+  let inst: Pickup['inst'];
+  if (slot !== null) {
+    mesh = _scrapPool.imesh;
+    inst = { pool: _scrapPool, index: slot };
+  } else {
+    console.warn(`[pickups] scrap pool full (${_scrapPool.capacity}) — legacy mesh fallback`);
+    const m = makePrimitiveScrap();
+    m.position.set(x, restY, z);
+    m.rotation.set(0, yaw, 0);
+    alignToTerrainNormal(m, terrain, x, z);
+    m.userData.noShadow = true;
+    m.castShadow = false;
+    m.receiveShadow = true;
+    tagPickupMeshes(m, pickupId);
+    scene.add(m);
+    mesh = m;
+  }
 
   const pickup: Pickup = {
     id: pickupId,
@@ -368,6 +496,7 @@ export function spawnScrapAt(
     hovered: false,
     body: null,   // seed-spawned, static (like branches)
     ridingSledId: null,
+    inst,
   };
   list.push(pickup);
   return pickup;
@@ -617,7 +746,20 @@ export function despawnPickup(
   ctx: import('../GameContext.ts').GameContext,
   pickup: Pickup,
 ): void {
-  ctx.three.scene.remove(pickup.mesh);
+  if (pickup.inst) {
+    // M1 pickup-instancing — free the instance slot; pickup.mesh is the SHARED
+    // imesh (removing it would erase every instanced pickup of this kind). The
+    // swap-with-last may relocate another pickup's instance: fix its index.
+    const freedIndex = pickup.inst.index;
+    const movedId = _poolFree(pickup.inst.pool, freedIndex);
+    if (movedId !== null) {
+      const moved = findPickupById(ctx.pickups.list, movedId);
+      if (moved?.inst) moved.inst.index = freedIndex;
+    }
+    pickup.inst = undefined;
+  } else {
+    ctx.three.scene.remove(pickup.mesh);
+  }
   if (pickup.body) {
     ctx.physics.world.removeRigidBody(pickup.body);
     pickup.body = null;

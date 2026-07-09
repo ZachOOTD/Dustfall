@@ -23,14 +23,14 @@ Otherwise: no mid-checkpoints. Review async via `campaign-log.md`; redirect via 
 
 ## The milestone ladder (authoritative queue — traverse in order)
 
-- **M1 — Perf + housekeeping** `[auto]`
+- **M1 — Perf + housekeeping** `[auto]` — ✅ SHIPPED cycle 1 (2026-07-09, D281)
   - `pickup-instancing` — `InstancedMesh` in `src/pickups/pickups.ts` + an `instanceId→pickupId` resolver in the interaction raycast (`src/player/interaction.ts`); precedent `src/world/footprints.ts`. Verify: perf-probe drawcalls before/after + an eval take-loop confirms every pickup still collects. (Scope-cut #1 if it regresses: revert to merged-mesh pooling.)
   - `decisions-archival` — roll the oldest ~15 (D207→) into `docs/decisions-archive.md` verbatim, never renumber, update both headers; conserve the count (C43 precedent).
   - `panel-deadcode-cleanup` — strip superseded panel/greeble builders + dead fields (ACAX list). tsc/build-verifiable.
   - `survival-probe-crashheat-guard` — one-line determinism assert in the survival probe.
   - `doc-scrub` — remove the stale "endgame/Long-Storm finale" candidate from CLAUDE.md + `docs/roadmap.md` + `docs/next-session-prompt.md`.
-- **M2 — Survival curve** `[auto + evidence]` — build a headless time-to-death sim harness (minutes-to-death under {open-midday / shade / sheltered / watered}); tune drain/damage/regen bands in `src/config/tuning.ts` to a defensible curve; **enable survival in the REAL new-game path** (currently suspended by the intro) **behind a `FEATURES` flag** so it's one-line reversible at end review. Verify: the evidence table + the flag path.
-- **M3 — Survival depth** `[auto]` — `sun-shade-exposure` (position-aware heat: open sun vs wreck-shadow/hull; decouple the occluder-height threshold per C31) + water-scarcity/exposure (deferred half of iteration-plan Arc C1). Builds on M2's flagged curve. Verify via the sim harness.
+- **M2 — Survival curve** `[auto + evidence]` — ✅ ALREADY SHIPPED pre-campaign (C38/D246; probe re-verified green cycle 1; the FEEL walk-test stays an end-review item; the "enable in new-game" premise was stale — survival IS live post-intro) — build a headless time-to-death sim harness (minutes-to-death under {open-midday / shade / sheltered / watered}); tune drain/damage/regen bands in `src/config/tuning.ts` to a defensible curve; **enable survival in the REAL new-game path** (currently suspended by the intro) **behind a `FEATURES` flag** so it's one-line reversible at end review. Verify: the evidence table + the flag path.
+- **M3 — Survival depth** `[auto]` — RE-SCOPED cycle 1: sun-shade-exposure ALREADY SHIPPED (C31); remaining = (a) decouple the sun-occluder height threshold from the C28 silhouette threshold + register more occluders (procgen POIs / rocks — coverage is sparse), (b) water-scarcity/exposure (the deferred Arc C1 half). Verify via survival-probe + __game.sunInfo().
 - **M4 — Ambient life beds** `[auto]` — procedural day + night ambient beds synthesized in `src/audio/soundscape.ts` (zero-asset per D3). **Wind STAYS muted** (user). Verify: audio-state gains > 0 across day/night/storm.
 - **M5 — Living world (diurnal-cycle)** `[auto]` — bind lizards/shrews/vultures/worms to day/night activity (iteration-plan M5b). Verify: assert creature activity by time-of-day.
 - **M6 — POI breadth** `[gate-verified]` — 2-3 new procgen wreck/POI archetypes via the `src/world/poiComponents.ts` socket grammar (+ `poiArchetypes.ts` biome weighting). Verify: `verify:placement` (0 occlusion/terrain fails ×5 seeds) + `verify:colliders`.

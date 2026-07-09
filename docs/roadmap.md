@@ -136,8 +136,9 @@ and promotes the second.
 > shipped + released (2026-07-05). Standalone sessions since (crafting rework, desktop packaging) are in
 > "Recently shipped" above. **There is no single mandated next thing** — the genuinely-open work is a
 > user-picked direction. See [next-session-prompt.md](next-session-prompt.md) for the curated set
-> (verified-open: pickup-instancing, ambient life beds; net-new: endgame goal arc, a new enterable hero
-> wreck, cave multi-chamber; desktop follow-ups: signing / file-saves / CSP). ⚠ [backlog.md](backlog.md)
+> (verified-open: pickup-instancing, ambient life beds; net-new: a new enterable hero
+> wreck, cave multi-chamber; desktop follow-ups: signing / file-saves / CSP — endgame/finale: not pursued
+> per the 2026-06-18 open-ended directive). ⚠ [backlog.md](backlog.md)
 > is stale — verify candidates against the code first (last session found several "pending" items already
 > shipped). The escape-pod campaign detail below + the M11→M13 tiers are SHIPPED history.
 

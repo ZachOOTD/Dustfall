@@ -610,6 +610,13 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     survivalProbe: (env, maxSeconds = 1500) => {
       const s = ctx.stats, p = ctx.player, tm = ctx.time, w = ctx.weather, f = ctx.flags;
+      // C38 sev3 determinism guard (campaign 2026-07-09 M1): a live meteor-crash site
+      // near the player perturbs temperature via crashHeatAt → the heat/cold bands would
+      // mismeasure. Fresh enterGame boots have zero crashes; assert it stays that way
+      // rather than silently returning skewed numbers.
+      if (crashSites().length > 0) {
+        throw new Error(`survivalProbe: ${crashSites().length} live crash site(s) would perturb crashHeatAt — reset (resetMeteorCrash) or move the probe`);
+      }
       // Snapshot everything updateStats reads/writes.
       const snap = {
         thirst: s.thirst, hunger: s.hunger, temperature: s.temperature, health: s.health,

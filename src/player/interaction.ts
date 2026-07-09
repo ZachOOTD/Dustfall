@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { addItem, countItems } from '../inventory/inventory.ts';
-import { despawnPickup, findPickupById, spawnDroppedPickup } from '../pickups/pickups.ts';
+import { despawnPickup, findPickupById, spawnDroppedPickup, getPickupInstancedMeshes } from '../pickups/pickups.ts';
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
@@ -257,7 +257,11 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
 
   // Union target list — only meshes we tagged as interactable.
   const targets: THREE.Object3D[] = [];
-  for (const p of ctx.pickups.list) targets.push(p.mesh);
+  // M1 pickup-instancing — instanced pickups share ONE InstancedMesh per pool;
+  // push each pool once (not once per pickup — that would raycast the same imesh
+  // hundreds of times). Hits on a pool resolve via intersection.instanceId below.
+  for (const p of ctx.pickups.list) if (!p.inst) targets.push(p.mesh);
+  for (const im of getPickupInstancedMeshes()) targets.push(im);
   for (const w of ctx.waterSources.list) targets.push(w.mesh);
   for (const c of ctx.cacti.list) if (!c.harvested) targets.push(c.mesh);
   for (const l of ctx.lizards) targets.push(l.mesh);
@@ -309,6 +313,24 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   }
 
   const hits = _ray.intersectObjects(targets, true);
+  // Harness-only debug tap (pickup-take-sweep): dump this frame's raw hits when the
+  // page sets __interactionDebug. Gated → zero cost in normal play.
+  if ((window as unknown as { __interactionDebug?: boolean }).__interactionDebug) {
+    (window as unknown as { __lastHits?: unknown }).__lastHits = {
+      hits: hits.slice(0, 4).map((h) => ({
+        d: +h.distance.toFixed(2),
+        inst: h.instanceId,
+        name: h.object.name || h.object.type,
+        pk: h.object.userData.pickupId,
+        map: !!h.object.userData.instanceToPickupId,
+      })),
+      nTargets: targets.length,
+      nPools: targets.filter((t) => !!t.userData.instanceToPickupId).length,
+      from: [+_rayFrom.x.toFixed(2), +_rayFrom.y.toFixed(2), +_rayFrom.z.toFixed(2)],
+      dir: [+_dir.x.toFixed(3), +_dir.y.toFixed(3), +_dir.z.toFixed(3)],
+      far: _ray.far,
+    };
+  }
   if (hits.length === 0) {
     if (_salvaging) cancelSalvage();
     // ACU #50 tuning — the old LMB-on-empty-ground "drop rope at feet"
@@ -319,7 +341,18 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   }
 
   const hit = hits[0];
-  const info = resolveInteractable(hit.object);
+  // M1 pickup-instancing — an instanced-pool hit carries an instanceId; the shared
+  // imesh has NO per-pickup userData.pickupId (it would alias every instance), so
+  // resolve via the pool's instance→pickupId map instead of the parent-chain walk.
+  let info: InteractHit | null = null;
+  if (hit.instanceId !== undefined) {
+    const instMap = hit.object.userData.instanceToPickupId as number[] | undefined;
+    if (instMap) {
+      const pid = instMap[hit.instanceId];
+      if (pid !== undefined) info = { type: 'take', id: pid, registry: 'pickups', distance: 0 };
+    }
+  }
+  if (!info) info = resolveInteractable(hit.object);
   if (!info) {
     if (_salvaging) cancelSalvage();
     return;

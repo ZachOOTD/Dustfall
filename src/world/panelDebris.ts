@@ -97,13 +97,3 @@ export function updatePanelDebris(_ctx: GameContext, _dt: number): void {
 export function panelDebrisInfo(): { count: number; doors: Array<{ y: number; sleeping: boolean }> } {
   return { count: _debris.length, doors: _debris.map((d) => ({ y: d.mesh.position.y, sleeping: d.body.isSleeping() })) };
 }
-
-/** Remove all popped doors (mesh + body) — call on world reset/new-game so debris
- *  from a prior run doesn't leak into the next. */
-export function clearPanelDebris(ctx: GameContext): void {
-  for (const d of _debris) {
-    ctx.three.scene.remove(d.mesh);
-    ctx.physics.world.removeRigidBody(d.body);
-  }
-  _debris.length = 0;
-}

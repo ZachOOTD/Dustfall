@@ -6639,6 +6639,198 @@ const SCENARIOS = {
     console.log('[perf-probe] ' + JSON.stringify(r));
   },
 
+  // M1 pickup-instancing GATE (campaign 2026-07-09) — proves the instanced pickups
+  // still COLLECT through the real interaction path end-to-end: teleport the player
+  // to a pickup, aim the camera at it, let updateInteraction raycast it (the
+  // intersection.instanceId → instanceToPickupId resolver), dispatch a REAL KeyE,
+  // and assert the pickup left the list + the pool slot freed. Exercises the
+  // swap-with-last index-fixup explicitly (take a MIDDLE instance, then take the
+  // pickup whose instance was MOVED into the freed slot). THROWS on failure.
+  'pickup-take-sweep': async (page) => {
+    await page.waitForTimeout(2000);
+    const r = await page.evaluate(async () => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      g.enterGame(true);                 // dev handoff (skips the intro) so updateInteraction ticks
+      ctx.input.controls.isLocked = true; // isPlaying() gate — no real pointer lock headless (enterLive idiom)
+      ctx.flags.paused = false;
+      // The live-scenario boot (enterLive) defaults to THIRD PERSON, parking the camera
+      // on a spring-arm ~1.8m behind the body (diagnosed: cam static 1.87m off the eye).
+      // This sweep aims with cam.lookAt + expects the FP eye-origin ray → force FP.
+      ctx.flags.thirdPerson = false;
+      // Remove the companion: she's an interact TARGET that follows the player, and she
+      // intercepts the ray while the sweep loiters at a pickup cluster (diagnosed: the
+      // direct imesh raycast hits; the game ray loses to a nearer target — Pebble).
+      if (ctx.companion) {
+        ctx.three.scene.remove(ctx.companion.group);
+        ctx.companion = null;
+      }
+      window.__interactionDebug = true;   // tap the game's raw raycast hits (fail diagnostics)
+      // NOTE: read ctx.player.body LIVE (via pb()) — enterGame(dev) rebuilds the
+      // player body, so a reference captured before it is a STALE body (diagnosed:
+      // teleports moved the stale body while the camera followed the real one).
+      const pb = () => ctx.player.body;
+      const cam = ctx.three.camera;
+      const out = { takes: [], fails: [], invariant: 'unchecked' };
+      // Wait until the camera sits at the body eye before sweeping/aiming.
+      let _settleDbg = '';
+      const camSettled = async (maxFrames) => {
+        let d = -1;
+        const c0 = cam.position.clone();
+        for (let i = 0; i < maxFrames; i++) {
+          const t = pb().body.translation();
+          d = Math.hypot(cam.position.x - t.x, cam.position.y - (t.y + 1.2), cam.position.z - t.z);
+          if (d < 1.6) return true;
+          await raf();
+        }
+        const t = pb().body.translation();
+        _settleDbg = `d=${d.toFixed(2)} cam=(${cam.position.x.toFixed(1)},${cam.position.y.toFixed(1)},${cam.position.z.toFixed(1)})`
+          + ` camMoved=${cam.position.distanceTo(c0).toFixed(2)} body=(${t.x.toFixed(1)},${t.y.toFixed(1)},${t.z.toFixed(1)})`
+          + ` title=${ctx.flags.titleActive} intro=${ctx.intro ? ctx.intro.mode : 'none'} locked=${ctx.input.controls.isLocked}`;
+        return false;
+      };
+      if (!(await camSettled(600))) {
+        out.fails.push(`camera never settled onto the player after enterGame: ${_settleDbg}`);
+        return out;
+      }
+
+      const takeOne = async (p) => {
+        const label = `${p.itemId}#${p.id}` + (p.inst ? `@i${p.inst.index}` : '(mesh)');
+        // Stand CLOSE (eye-to-pickup must be < the 2.5m ray reach; the standing eye
+        // sits ~1.9m above a ground pickup, so keep the horizontal standoff tight).
+        // Order matters (diagnosed): teleport body → let the controller re-seat the
+        // camera onto the body eye (position is controller-owned) → THEN aim (the
+        // look direction persists; aiming before the re-seat left a ~6° error).
+        const dx = 0.55, dz = 0.35;
+        const b = pb();
+        b.body.setTranslation({ x: p.pos.x + dx, y: p.pos.y + b.halfHeight + b.radius + 0.05, z: p.pos.z + dz }, true);
+        if (!(await camSettled(120))) {     // camera follow may EASE across the teleport
+          out.fails.push(`${label}: camera never settled at the teleport`);
+          return false;
+        }
+        // Aim at the instance's ACTUAL world bbox centre (a branch is a thin stick
+        // extending away from its origin — an exact-origin ray passes through air;
+        // diagnosed: perfect aim at p.pos, no hit). Then wiggle a small pattern.
+        const T = window.__game.THREE;
+        let aimC = new T.Vector3(p.pos.x, p.pos.y, p.pos.z);
+        if (p.inst) {
+          const geo = p.inst.pool.imesh.geometry;
+          if (!geo.boundingBox) geo.computeBoundingBox();
+          const m = new T.Matrix4();
+          p.inst.pool.imesh.getMatrixAt(p.inst.index, m);
+          aimC = geo.boundingBox.getCenter(new T.Vector3()).applyMatrix4(m);
+        }
+        // Union of aim candidates: the bbox centre can sit in a twig-fork GAP for some
+        // variants while the origin misses for others — sweep around BOTH anchors.
+        const pat = [[0, 0, 0], [0.08, 0.02, 0], [-0.08, 0.02, 0], [0, 0.02, 0.08], [0, 0.02, -0.08],
+                     [0.16, 0.03, 0], [-0.16, 0.03, 0], [0, 0.03, 0.16], [0, 0.03, -0.16]];
+        const anchors = [aimC, new T.Vector3(p.pos.x, p.pos.y + 0.02, p.pos.z)];
+        let hover = null;
+        const aimTaps = [];
+        outer: for (const a of anchors) {
+          for (const [ax, ay, az] of pat) {
+            // Re-pin the aim EVERY frame: the teleported body keeps settling under
+            // gravity for a few frames, dropping the eye ~cm after a one-shot lookAt
+            // (diagnosed: the tick's ray ran ~2° off ≈ 6cm at range — fatal for a
+            // 2cm-thick stick, tolerable for a 15cm scrap chunk).
+            for (let k = 0; k < 3; k++) {
+              cam.lookAt(a.x + ax, a.y + ay, a.z + az);
+              await raf();
+            }
+            hover = ctx.inventory.hover;
+            aimTaps.push(window.__lastHits ?? null);
+            if (hover && hover.type === 'take') break outer;
+          }
+        }
+        if (!hover || hover.type !== 'take') {
+          const d = cam.getWorldDirection(new T.Vector3());
+          const to = new T.Vector3(p.pos.x - cam.position.x, p.pos.y - cam.position.y, p.pos.z - cam.position.z);
+          const dist = to.length(); to.normalize();
+          const t = pb().body.translation();
+          let deep = '';
+          if (p.inst) {
+            // Direct raycast at the pool imesh (no game code) — does three even see it?
+            const rc = new T.Raycaster(cam.position.clone(), new T.Vector3().subVectors(aimC, cam.position).normalize());
+            rc.camera = cam;   // Sprite.raycast requires it (scene-wide pass hits sprites)
+            const ih = rc.intersectObject(p.inst.pool.imesh, false);
+            const m = new T.Matrix4(); p.inst.pool.imesh.getMatrixAt(p.inst.index, m);
+            const mp = new T.Vector3().setFromMatrixPosition(m);
+            const sh = rc.intersectObjects(ctx.three.scene.children, true).slice(0, 4)
+              .map((h) => `${h.object.name || h.object.type}@${h.distance.toFixed(2)}${h.instanceId !== undefined ? `#i${h.instanceId}` : ''}${h.object.userData.pickupId !== undefined ? `(pk${h.object.userData.pickupId})` : ''}`);
+            deep = ` [direct: ${ih.length} hits${ih.length ? ` d=${ih[0].distance.toFixed(2)} inst=${ih[0].instanceId}` : ''};`
+              + ` matPos=(${mp.x.toFixed(2)},${mp.y.toFixed(2)},${mp.z.toFixed(2)}) poolCount=${p.inst.pool.count} idx=${p.inst.index}`
+              + ` inScene=${!!p.inst.pool.imesh.parent}; sceneRay=${sh.join(' | ')};`
+              + ` aim0Tap=${JSON.stringify(aimTaps[0] ?? null)}]`;
+          }
+          out.fails.push(`${label}: no take-hover (got ${hover ? hover.type : 'none'}) `
+            + `dist=${dist.toFixed(2)} aimDot=${d.dot(to).toFixed(3)} cam=(${cam.position.x.toFixed(1)},${cam.position.y.toFixed(1)},${cam.position.z.toFixed(1)}) `
+            + `body=(${t.x.toFixed(1)},${t.y.toFixed(1)},${t.z.toFixed(1)}) pickup=(${p.pos.x.toFixed(1)},${p.pos.y.toFixed(1)},${p.pos.z.toFixed(1)})${deep}`);
+          return false;
+        }
+        const before = ctx.pickups.list.length;
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
+        await frames(2);
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
+        await frames(2);
+        const gone = !ctx.pickups.list.includes(p);
+        if (!gone || ctx.pickups.list.length !== before - 1) {
+          out.fails.push(`${label}: E-take did not despawn (len ${before}→${ctx.pickups.list.length})`);
+          return false;
+        }
+        out.takes.push(label);
+        return true;
+      };
+
+      const scraps = ctx.pickups.list.filter((p) => p.itemId === 'scrap' && p.inst);
+      const branches = ctx.pickups.list.filter((p) => p.itemId === 'branch' && p.inst);
+      if (scraps.length < 5 || branches.length < 3) {
+        out.fails.push(`too few instanced pickups (scrap ${scraps.length}, branch ${branches.length}) — instancing not active?`);
+        return out;
+      }
+
+      // 1. Take a MIDDLE scrap instance → forces swap-with-last.
+      const pool = scraps[0].inst.pool;
+      const midIndex = Math.floor(pool.count / 2);
+      const midPickupId = pool.ids[midIndex];
+      const midPickup = ctx.pickups.list.find((p) => p.id === midPickupId);
+      const lastPickupId = pool.ids[pool.count - 1];   // this instance will MOVE into midIndex
+      if (midPickup) await takeOne(midPickup);
+      // 2. Take the MOVED pickup (its inst.index must have been fixed up to midIndex).
+      const moved = ctx.pickups.list.find((p) => p.id === lastPickupId);
+      if (moved) {
+        if (!moved.inst || moved.inst.index !== midIndex) {
+          out.fails.push(`swap-fixup: moved pickup #${lastPickupId} index ${moved.inst ? moved.inst.index : 'none'} != freed ${midIndex}`);
+        }
+        await takeOne(moved);
+      }
+      // 3. Take instance 0 (head) + a branch sample (one per available variant pool).
+      const head = ctx.pickups.list.find((p) => p.inst && p.inst.pool === pool && p.inst.index === 0);
+      if (head) await takeOne(head);
+      const seenPools = new Set();
+      for (const b of branches) {
+        if (!ctx.pickups.list.includes(b) || !b.inst) continue;
+        if (seenPools.has(b.inst.pool)) continue;
+        seenPools.add(b.inst.pool);
+        await takeOne(b);
+        if (seenPools.size >= 3) break;
+      }
+
+      // 4. Global invariant: every remaining instanced pickup's slot maps back to it.
+      let bad = 0;
+      for (const p of ctx.pickups.list) {
+        if (!p.inst) continue;
+        if (p.inst.index >= p.inst.pool.count || p.inst.pool.ids[p.inst.index] !== p.id) bad++;
+      }
+      out.invariant = bad === 0 ? 'ok' : `${bad} stale instance mappings`;
+      return out;
+    });
+    console.log('[pickup-take-sweep] ' + JSON.stringify(r));
+    const pass = r.fails.length === 0 && r.invariant === 'ok' && r.takes.length >= 6;
+    if (!pass) throw new Error(`pickup-take-sweep GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
   // Branch-match (ACAF f/u): FP held branch + a world branch in ONE frame under
   // the SAME lighting, to verify they read identical (vm scene now mirrors the
   // world sun/moon/ambient). Runs LIVE (not paused) so updateViewModel tracks
