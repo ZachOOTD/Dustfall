@@ -800,22 +800,33 @@ export function wellHead(seed: number): BuiltComponent {
  *  envelope, so the player bumps the tower as one solid mast). Determinism: phash only. */
 export function latticeMast(seed: number): BuiltComponent {
   const g = new THREE.Group();
-  const H = 5.5 + phash(seed, 1) * 2.5;        // 5.5–8.0m — the tall read
+  const H = 5.8 + phash(seed, 1) * 2.5;        // 5.8–8.3m — the tall read
   const hw = 0.30 + phash(seed, 2) * 0.10;     // truss half-width (0.30–0.40) at the corners
   const chordR = 0.055;                         // corner-chord half-thickness
-  const baseH = 0.55 + phash(seed, 3) * 0.25;  // equipment housing height
-  const baseHW = hw + 0.32;                     // housing wider than the truss foot
+  // Equipment housing — TALL + wide enough to carry the salvage panel (0.45×0.70m) on a
+  // CLEAN front face with margin (the panel was overhanging a short housing + colliding with
+  // the front louvres). Louvres now live on the SIDE faces; the front +Z is the panel bay.
+  const baseH = 1.05 + phash(seed, 3) * 0.25;  // 1.05–1.30m
+  const baseHW = hw + 0.42;                     // ~0.72–0.82 half → ~1.5m wide face
   const colliders: ColliderSpec[] = [];
 
   // ── base equipment housing (collidable) ──
   const housing = new THREE.Mesh(new THREE.BoxGeometry(baseHW * 2, baseH, baseHW * 2), _hullMat);
   housing.position.y = baseH / 2; g.add(housing);
   colliders.push({ kind: 'box', half: { x: baseHW, y: baseH / 2, z: baseHW }, pos: { x: 0, y: baseH / 2, z: 0 } });
-  // a couple of louvre/box greebles on the housing (decoration — thin)
-  for (let i = 0; i < 3; i++) {
-    const lv = new THREE.Mesh(new THREE.BoxGeometry(baseHW * 1.4, 0.06, 0.14), _hullDarkMat);
-    lv.position.set(0, baseH * (0.3 + i * 0.22), baseHW + 0.02);
-    lv.userData.isWreckDecoration = true; g.add(lv);
+  // a plinth skirt at the foot (reads as a poured base, hides the sand seam) — decoration
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(baseHW * 2.18, 0.16, baseHW * 2.18), _hullDarkMat);
+  plinth.position.y = 0.08; plinth.userData.isWreckDecoration = true; g.add(plinth);
+  // a shallow RECESSED bay framing the salvage panel on the clean front (+Z) face — decoration.
+  const bay = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.9, 0.06), _hullDarkMat);
+  bay.position.set(0, baseH * 0.52, baseHW + 0.01); bay.userData.isWreckDecoration = true; g.add(bay);
+  // vent louvres on the SIDE faces (±X), clear of the front panel bay — decoration.
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const lv = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, baseHW * 1.2), _hullDarkMat);
+      lv.position.set(sx * (baseHW + 0.02), baseH * (0.32 + i * 0.2), 0);
+      lv.userData.isWreckDecoration = true; g.add(lv);
+    }
   }
 
   // ── 4 vertical corner chords (structural — covered by the envelope cylinder) ──
@@ -898,7 +909,8 @@ export function latticeMast(seed: number): BuiltComponent {
 
   const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negY(), radius: baseHW, tag: 'base' }];
   const panelMounts: PanelMount[] = [
-    { pos: new THREE.Vector3(0, baseH * 0.5, baseHW), quat: FACE.posZ(), kind: 'escape_pod' },
+    // centered on the clean front (+Z) panel bay — fits with margin now the housing is taller.
+    { pos: new THREE.Vector3(0, baseH * 0.52, baseHW), quat: FACE.posZ(), kind: 'escape_pod' },
   ];
   const bbox = new THREE.Box3(
     new THREE.Vector3(-2.1, 0, -2.1),
@@ -1061,6 +1073,67 @@ export function crawlerBody(seed: number): BuiltComponent {
   // exhaust stack + a roof vent (decoration)
   const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.9, 8), _rustMat);
   stack.position.set(bodyW * 0.3, hullY + cabH + 0.35, cabZ - cabLen * 0.3); stack.userData.isWreckDecoration = true; g.add(stack);
+
+  // ══ M6 A3 DETAIL PASS (2026-07-09) — de-blockify: fenders, running boards, a truck cab face
+  //    (grille/headlights/bumper/pushbar/doors), a cargo frame (posts/rail/crates/tailgate), and
+  //    panel seams. ALL thin/brushable DECORATION (isWreckDecoration) so the cab/bed/bogie box
+  //    colliders stay exact (rule 9) — like the mast lattice + tank ribs, surface detail only. ══
+  const bogieCz = bedLen * 0.5 - bogieLen * 0.5 + cabLen * 0.5;
+  const dec = (m: THREE.Mesh) => { m.userData.isWreckDecoration = true; g.add(m); return m; };
+  const frontZ = cabZ + cabLen / 2;
+
+  for (const sx of [-1, 1]) {
+    // track FENDER (guard over the tread) + a running board below the cab door
+    dec(new THREE.Mesh(new THREE.BoxGeometry(trackW + 0.26, 0.13, bogieLen * 0.94), _hullMat))
+      .position.set(sx * halfTrack, trackH + 0.05, bogieCz);
+    dec(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, cabLen * 0.8), _hullDarkMat))
+      .position.set(sx * (bodyW * 0.46 + 0.13), hullY + 0.05, cabZ);
+    // door outline on each cab flank
+    dec(new THREE.Mesh(new THREE.BoxGeometry(0.05, cabH * 0.62, cabLen * 0.62), _hullDarkMat))
+      .position.set(sx * bodyW * 0.46, hullY + cabH * 0.42, cabZ);
+    // vertical panel seams breaking up the long bed flank
+    dec(new THREE.Mesh(new THREE.BoxGeometry(0.04, bedH * 0.86, 0.05), _hullDarkMat))
+      .position.set(sx * (bodyW / 2 - 0.01), hullY + bedH * 0.5, bedZ);
+  }
+
+  // CAB FRONT — a grille + headlights + a bumper/pushbar (windscreen stays the upper band)
+  const grille = dec(new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.6, cabH * 0.3, 0.06), _hullDarkMat));
+  grille.position.set(0, hullY + cabH * 0.27, frontZ + 0.01);
+  for (let s = 0; s < 4; s++) {
+    dec(new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.58, 0.03, 0.1), _rustMat))
+      .position.set(0, hullY + cabH * (0.17 + s * 0.06), frontZ + 0.02);
+  }
+  for (const sx of [-1, 1]) {
+    dec(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.1), _rustMat))
+      .position.set(sx * bodyW * 0.34, hullY + cabH * 0.46, frontZ + 0.03);          // headlight
+    dec(new THREE.Mesh(new THREE.BoxGeometry(0.1, cabH * 0.5, 0.1), _hullDarkMat))
+      .position.set(sx * bodyW * 0.36, hullY + cabH * 0.3, frontZ + 0.11);           // pushbar upright
+  }
+  dec(new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.98, 0.16, 0.16), _hullDarkMat))
+    .position.set(0, hullY + 0.2, frontZ + 0.08);                                     // front bumper/pushbar
+
+  // roof beacon
+  dec(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.14, 8), _rustMat))
+    .position.set(-bodyW * 0.28, hullY + cabH + 0.07, cabZ + cabLen * 0.2);
+
+  // CARGO FRAME on the bed — 4 corner posts + top rails + a dropped tailgate + a couple crates
+  const bedTopY = hullY + bedH, postH = 0.68;
+  const bedFrontZ = bedZ + bedLen / 2, bedBackZ = bedZ - bedLen / 2;
+  for (const sx of [-1, 1]) {
+    for (const pz of [bedBackZ + 0.1, bedFrontZ - 0.1]) {
+      dec(new THREE.Mesh(new THREE.BoxGeometry(0.1, postH, 0.1), _hullDarkMat))
+        .position.set(sx * (bodyW / 2 - 0.06), bedTopY + postH / 2, pz);
+    }
+    dec(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, bedLen - 0.2), _hullDarkMat))
+      .position.set(sx * (bodyW / 2 - 0.06), bedTopY + postH, bedZ);                   // top rail
+  }
+  const tailgate = dec(new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.96, bedH * 0.6, 0.1), _hullMat));
+  tailgate.position.set(0, hullY + bedH * 0.3, bedBackZ - 0.16); tailgate.rotation.x = -0.6;   // dropped open
+  for (let c = 0; c < 2; c++) {
+    const crate = dec(new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.58, 0.66), _rustMat));
+    crate.position.set((phash(seed, 60 + c) - 0.5) * bodyW * 0.45, bedTopY + 0.31, bedZ + (phash(seed, 62 + c) - 0.5) * bedLen * 0.5);
+    crate.rotation.set((phash(seed, 64 + c) - 0.5) * 0.35, phash(seed, 66 + c) * Math.PI, (phash(seed, 68 + c) - 0.5) * 0.35);
+  }
 
   const panelMounts: PanelMount[] = [
     { pos: new THREE.Vector3(bodyW * 0.46, hullY + cabH * 0.45, cabZ), quat: FACE.posX(), kind: 'cargo_container' },
