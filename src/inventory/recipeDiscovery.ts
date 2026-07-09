@@ -25,7 +25,7 @@
 // fire_kit + signal_flare) are no longer special: each is an independent
 // card that unlocks on the same ingredient set. No chooser needed.
 
-import type { ItemId } from './types.ts';
+import type { ItemId, ItemMeta } from './types.ts';
 
 /** A single input stack — `count` of a given ItemId. */
 export interface RecipeInput {
@@ -37,6 +37,10 @@ export interface RecipeInput {
 export interface RecipeOutput {
   id: ItemId;
   count: number;
+  /** Optional per-slot metadata stamped on the crafted item (e.g. a crafted
+   *  canteen starts EMPTY, fillLevel 0, so it must be filled at a water source
+   *  rather than granting free water). Applied via addItem's meta param. */
+  meta?: ItemMeta;
 }
 
 /** Session ABE — recipe category for UI grouping. Persisted nowhere
@@ -299,6 +303,20 @@ export const RECIPES: Recipe[] = [
       { id: 'cloth', count: 1 },
     ],
     output: { id: 'scrap_machete', count: 1 },
+    category: 'tool',
+  },
+  {
+    // 2026-07-09 (user request) — a craftable canteen. Starts EMPTY (fillLevel 0):
+    // a hammered-scrap flask with a cloth strap/seal; the player fills it at a water
+    // source. Empty-by-construction so crafting isn't free water (would undercut the
+    // M3 thirst curve). Unlocks once scrap + cloth have been collected.
+    id: 20,
+    displayName: 'canteen',
+    inputs: [
+      { id: 'scrap', count: 2 },
+      { id: 'cloth', count: 1 },
+    ],
+    output: { id: 'canteen', count: 1, meta: { fillLevel: 0 } },
     category: 'tool',
   },
 ];

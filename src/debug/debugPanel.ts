@@ -234,6 +234,9 @@ interface DebugApi {
   /** Dev-test — drop the 3 new M6 archetypes in a row near the player (real world,
    *  real terrain seating + colliders) so they can be walked around. Returns positions. */
   spawnTestArchetypes: () => { placed: Array<{ archetype: string; x: number; z: number }> };
+  /** Dev — aim the crosshair at a wreck + call this to identify it (archetype / name /
+   *  distance). The reliable way to name a specific procgen read for removal/tuning. */
+  identifyWreck: () => { hit: boolean; archetype?: string; name?: string; dist?: number; userDataKeys?: string[] };
   /** ACBE (D1) — DEV-only: force a crashing-wreck event now (optionally at x,z); returns
    *  the impact point + the rolled ship role. */
   triggerCrash: (x?: number, z?: number) => { x: number; z: number; role: CrashRole } | null;
@@ -579,6 +582,31 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       });
       ctx.ui.showToast?.('spawned 3 test wrecks ahead — walk forward');
       return { placed: list };
+    },
+    identifyWreck: () => {
+      // Raycast from the camera along the look direction; find the first wreck-ish hit
+      // and walk UP to the group carrying identifying info (poiArchetype / a name).
+      const cam = ctx.three.camera;
+      const dir = new THREE.Vector3(); cam.getWorldDirection(dir);
+      const rc = new THREE.Raycaster(cam.position.clone(), dir, 0.1, 120);
+      rc.camera = cam;
+      const hits = rc.intersectObjects(ctx.three.scene.children, true);
+      for (const h of hits) {
+        // Skip terrain/sky/player.
+        const topName = (() => { let n: THREE.Object3D | null = h.object; while (n) { if (n.name) return n.name; n = n.parent; } return ''; })();
+        if (/terrain|sky|player|__|footprint|cloud/i.test(topName)) continue;
+        // Walk up to a group with poiArchetype or a meaningful name.
+        let node: THREE.Object3D | null = h.object;
+        let arch: string | undefined, name: string | undefined, keys: string[] = [];
+        while (node && node !== ctx.three.scene) {
+          if (node.userData?.poiArchetype && !arch) arch = String(node.userData.poiArchetype);
+          if (node.name && !name) name = node.name;
+          if (node.userData && Object.keys(node.userData).length) keys = keys.concat(Object.keys(node.userData));
+          node = node.parent;
+        }
+        return { hit: true, archetype: arch, name, dist: +h.distance.toFixed(1), userDataKeys: Array.from(new Set(keys)).slice(0, 12) };
+      }
+      return { hit: false };
     },
     triggerCrash: (x, z) => triggerCrash(ctx, x, z),
     crashState: () => crashState(),

@@ -258,8 +258,52 @@ function fireMelee(ctx: GameContext, spec: WeaponSpec): void {
     undefined,
     ctx.player.body.collider,
   );
-  if (!hit) return;
-  dispatchHit(ctx, hit.collider, spec, spec.damage);
+  if (hit) { dispatchHit(ctx, hit.collider, spec, spec.damage); return; }
+  // Ground-critter HUNTING assist (2026-07-09): the sweep originates at the camera
+  // (~1.6m eye height), so it passes clean OVER a lizard/shrew sitting ~0.1m off the
+  // sand unless the player aims straight down — which read as "the machete does no
+  // damage". When the sweep misses, hit the NEAREST live lizard/shrew within a hair
+  // over melee range inside the forward arc. Lets a swing near a critter kill it +
+  // yield meat (dead body → E collects raw_lizard_meat) without pixel-perfect aim.
+  meleeGroundCritterHit(ctx, spec);
+}
+
+/** Hit the nearest live lizard/shrew within (melee range + a small margin) inside the
+ *  forward horizontal arc. The forgiving fallback for the eye-height capsule sweep. */
+function meleeGroundCritterHit(ctx: GameContext, spec: WeaponSpec): void {
+  const t = ctx.player.body.body.translation();
+  const flen = Math.hypot(_fwd.x, _fwd.z) || 1;
+  const nfx = _fwd.x / flen, nfz = _fwd.z / flen;
+  const reach = spec.range + 0.6;             // a touch generous for the low ground swing
+  const reachSq = reach * reach;
+  const inArc = (px: number, pz: number): number => {
+    const dx = px - t.x, dz = pz - t.z;
+    const dSq = dx * dx + dz * dz;
+    if (dSq > reachSq) return -1;
+    const dlen = Math.sqrt(dSq) || 1;
+    if ((dx / dlen) * nfx + (dz / dlen) * nfz < 0.35) return -1;   // ~roughly in front (±70°)
+    return dSq;
+  };
+  let bestD = reachSq + 1;
+  let bestLizard: import('../enemies/lizard.ts').Lizard | null = null;
+  let bestShrew: import('../enemies/shrew.ts').Shrew | null = null;
+  for (const l of ctx.lizards) {
+    if (l.state === 'dead') continue;
+    const d = inArc(l.pos.x, l.pos.z);
+    if (d >= 0 && d < bestD) { bestD = d; bestLizard = l; bestShrew = null; }
+  }
+  for (const s of ctx.shrews.list) {
+    if (s.state === 'dead') continue;
+    const d = inArc(s.pos.x, s.pos.z);
+    if (d >= 0 && d < bestD) { bestD = d; bestShrew = s; bestLizard = null; }
+  }
+  if (bestLizard) {
+    playLizardSquish();
+    damageLizard(bestLizard, Math.max(1.0, spec.damage), ctx);
+  } else if (bestShrew) {
+    playLizardSquish();
+    damageShrew(bestShrew, Math.max(1.0, spec.damage), ctx);
+  }
 }
 
 /** Ranged shot — raycast from camera N meters forward. Charged

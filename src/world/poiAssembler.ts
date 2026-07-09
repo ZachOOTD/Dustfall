@@ -86,6 +86,9 @@ export function placeProcgenPOI(
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
+  // Stamp the archetype id on the group so __game.identifyWreck() (dev) can name what
+  // the player is looking at — the only reliable way to identify a specific procgen read.
+  group.userData.poiArchetype = which;
   (opts.parent ?? scene).add(group);
 
   // Declared colliders → exact Rapier primitives at the placed world transform. Stash the

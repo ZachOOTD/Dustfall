@@ -908,6 +908,12 @@ export const Tuning = {
   // out of the immediate viewshed so the opening cinematic isn't crowded.
   OPENING_SCENE_ANCHOR_X: -50,
   OPENING_SCENE_ANCHOR_Z: 0,
+  // 2026-07-09 (user request) — the skeleton+journal opening wreck used to sit right ON the
+  // player spawn (you woke/stepped-out beside it). Offset it so it's a VISIBLE LANDMARK to walk
+  // to, not adjacent. The player + speeder + companion stay at the spawn anchor; only the wreck
+  // (+ skeleton + journal + its shelter zone) moves by this offset. ~110m ENE — its own flat spot.
+  OPENING_WRECK_OFFSET_X: 100,
+  OPENING_WRECK_OFFSET_Z: 45,
   PLAYER_SPAWN_EXCLUSION_RADIUS: 80,   // m — no procgen wrecks within this of anchor
 
   // AAK — multi-seed playtest of AAI surfaced three issues:

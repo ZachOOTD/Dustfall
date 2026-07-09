@@ -359,7 +359,9 @@ function directCraft(r: Recipe): void {
 function addOutputWithOverflow(ctx: GameContext, r: Recipe): number {
   let added = 0;
   for (let i = 0; i < r.output.count; i++) {
-    if (addItem(ctx.inventory, r.output.id, undefined, ctx) < 0) break;
+    // clone the recipe's output meta per stack so slots don't share a meta object
+    const meta = r.output.meta ? { ...r.output.meta } : undefined;
+    if (addItem(ctx.inventory, r.output.id, meta, ctx) < 0) break;
     added++;
   }
   const dropped = r.output.count - added;
@@ -375,7 +377,7 @@ function addOutputWithOverflow(ctx: GameContext, r: Recipe): number {
     for (let i = 0; i < dropped; i++) {
       const p = spawnDroppedPickup(
         ctx.three.scene, ctx.terrain, { x: dx, z: dz }, r.output.id,
-        undefined,
+        r.output.meta ? { ...r.output.meta } : undefined,
         {
           world: ctx.physics.world,
           initialVel: { x: (Math.random() - 0.5) * 0.6, y: 0.5, z: (Math.random() - 0.5) * 0.6 },

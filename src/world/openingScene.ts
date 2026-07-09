@@ -129,7 +129,16 @@ export function setupOpeningScene(
   // can cover the journal). 5cm clearance keeps the autostep tractable
   // when the player enters from outside. ──────────────────────────────
   const E = OPENING_WRECK_EXTENTS;
-  const flat = findFlattestSpot(terrain, WRECK_SEARCH_CENTER);
+  // The PLAYER spawns at the flat anchor (near WRECK_SEARCH_CENTER) — this is what the
+  // escape-pod intro captures as returnPos (the pod crash / step-out spot). The skeleton+
+  // journal WRECK no longer sits here; it's offset to its own flat spot ~110m away so it
+  // reads as a landmark to walk to, not right beside the player (user request 2026-07-09).
+  const spawnAnchor = findFlattestSpot(terrain, WRECK_SEARCH_CENTER);
+  const wreckSearch = new THREE.Vector3(
+    spawnAnchor.x + Tuning.OPENING_WRECK_OFFSET_X, 0,
+    spawnAnchor.z + Tuning.OPENING_WRECK_OFFSET_Z,
+  );
+  const flat = findFlattestSpot(terrain, wreckSearch);
   const maxFootprintY = maxTerrainInFootprint(
     terrain, flat.x, flat.z, E.halfX + 0.3, E.halfZ + 0.3,
   );
@@ -187,17 +196,13 @@ export function setupOpeningScene(
   const entranceLocal = new THREE.Vector3(0, E.halfY, -E.halfZ);
   const entranceWorld = entranceLocal.clone().applyEuler(yawRot).add(wreckOrigin);
 
-  // ── Teleport the player to a spot in front of the entrance, on the same
-  // Z line as the wreck so they face the entrance squarely. The Y is the
-  // terrain height at that spot + capsule offset. Done after wreck
-  // placement (which can drift ±16m via findFlattestSpot) so the player
-  // always lands the right distance from the entrance regardless. ──────
-  // "In front of the entrance" = on the side the entrance opens toward.
-  // With yaw=π/2, the entrance's outward direction is world -X, so the
-  // player goes further -X from the entrance.
-  const entranceOutward = new THREE.Vector3(0, 0, -1).applyEuler(yawRot);
-  const spawnX = entranceWorld.x + entranceOutward.x * PLAYER_SPAWN_OFFSET_FROM_ENTRANCE;
-  const spawnZ = entranceWorld.z + entranceOutward.z * PLAYER_SPAWN_OFFSET_FROM_ENTRANCE;
+  // ── Player spawn: at the flat anchor (the wreck no longer sits here — it's the
+  // landmark ~110m away). Facing toward the distant wreck so the journal reads as a
+  // visible goal on first look. (PLAYER_SPAWN_OFFSET_FROM_ENTRANCE is retained for the
+  // legacy no-intro path's framing but the spawn is now anchor-based, not wreck-relative.) ──
+  void PLAYER_SPAWN_OFFSET_FROM_ENTRANCE;
+  const spawnX = spawnAnchor.x;
+  const spawnZ = spawnAnchor.z;
   const spawnGroundY = terrain.heightAt(spawnX, spawnZ);
   const spawnY = spawnGroundY + Tuning.PLAYER_CAPSULE_HALF_HEIGHT + Tuning.PLAYER_CAPSULE_RADIUS;
   // JJ-3 — use setTranslation (immediate) rather than setNextKinematicTranslation
@@ -222,13 +227,11 @@ export function setupOpeningScene(
   // entrance arch being above eye height).
   camera.lookAt(entranceWorld.x, spawnY, entranceWorld.z);
 
-  // ── Speeder (Session CC) — spawn 8m to the side of the wreck so it's
-  // visible from the entrance but not in the player's spawn path.
-  // Position perpendicular to the wreck-entrance axis. With yaw=π/2 the
-  // entrance opens toward -X; perpendicular = ±Z. Pick +Z so the
-  // speeder ends up south of the wreck (player sees it as they emerge).
-  const speederLocal = new THREE.Vector3(0, 0, E.halfZ + 4.5);
-  const speederWorld = speederLocal.clone().applyEuler(yawRot).add(wreckOrigin);
+  // ── Speeder (Session CC) — now that the wreck is a distant landmark, spawn the
+  // speeder ~6m to the side of the PLAYER SPAWN so the player still finds their bike at
+  // start (was 8m off the wreck, which would now be ~110m away). Offset in +Z so it's
+  // beside, not in, the spawn path.
+  const speederWorld = new THREE.Vector3(spawnX, 0, spawnZ + 6);
   // Heading: face roughly toward the mega-wreck SW so the player can hop
   // on and accelerate in the natural exploration direction.
   const speederYaw = Math.atan2(-180 - speederWorld.x, -130 - speederWorld.z);

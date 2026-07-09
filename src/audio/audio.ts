@@ -5,6 +5,7 @@
 // `ensureAudioStarted()` from the "click to begin" overlay handler.
 
 import { Tuning } from '../config/tuning.ts'; // ACL WORM-ROAR-ATTENUATION integration
+import { loadSettings } from '../core/settings.ts';   // master volume persisted setting
 
 let _ctx: AudioContext | null = null;
 let _master: GainNode | null = null;
@@ -724,7 +725,11 @@ export function ensureAudioStarted(): void {
   }
 
   _master = _ctx.createGain();
-  _master.gain.value = 0.55;
+  // Init from the PERSISTED master-volume setting (not a hardcoded 0.55). createMenus runs
+  // applySettings at boot BEFORE audio exists, so setMasterVolume no-ops there; without this
+  // the saved volume (e.g. a user's 0 = muted) was lost and master defaulted to 0.55 → "volume
+  // 0 doesn't mute". Live drags still work via setMasterVolume once _master exists.
+  _master.gain.value = loadSettings().masterVolume;
   // ACW E (#134) — master → storm low-pass → destination. Cutoff defaults
   // fully open (transparent) and is ramped down by setStormMuffle during a storm.
   _stormLP = _ctx.createBiquadFilter();
