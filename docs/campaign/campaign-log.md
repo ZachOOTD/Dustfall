@@ -5,6 +5,16 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 
 ---
 
+## Cycle 8 — M7 Skyfall feature-slice (2026-07-09) — PAUSED (plan-review)
+
+- **Planned:** M7 Skyfall is `[feel-critical]` -> feature-slice + PAUSE for human plan-review (no autonomous build on a hero asset).
+- **Did:** 2 read-only code-map agents (intro-ship interior tech + hero-landmark/enterable/save). Wrote `docs/feature-skyfall.md`: DoD, 6 sub-tasks, reuse map, the post-blockout walk-test pause, scope-cut order, 4 open questions.
+- **Key finding:** NO SAVE_VERSION bump needed (additive; fixed landmark rebuilds from seed, salvageables/journals auto-persist on v16). Save-bump pause NOT triggered.
+- **Verify:** n/a (plan-only; no code changed).
+- **Spend:** ~150K est. (campaign total ~3.2M / 10M; cycle 8/50).
+- **STATUS: PAUSED — awaiting_approval, stop_reasons [plan-review].** Human action: review `docs/feature-skyfall.md`, optionally answer the 4 open questions in `steering.md`, then `/campaign-approve` to release S1 (research + exterior blockout). The loop is STOPPED (no wakeup scheduled).
+- **Next (after approval):** S1 exterior blockout -> S2 interior+colliders -> walk-test pause -> hero-detail.
+
 ## Cycle 7 — M6 POI breadth A3: cargo_crawler (2026-07-09) — SHIPPED (M6 COMPLETE, 3/3)
 
 - **Planned:** M6 A3 cargo_crawler (optional stretch; DoD already met at 2) — the tracked-vehicle silhouette.

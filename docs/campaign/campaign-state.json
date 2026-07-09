@@ -1,12 +1,14 @@
 {
   "campaign": "Sharpen & Deepen",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-09",
-  "cycles_completed": 7,
-  "current_tier": "M7 - Skyfall [feel-critical] (next cycle: feature-slice + PAUSE for plan-review)",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 8,
+  "current_tier": "M7 - Skyfall [feel-critical] (PLAN-REVIEW pause: approve docs/feature-skyfall.md)",
+  "awaiting_approval": true,
+  "stop_reasons": [
+    "plan-review"
+  ],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
@@ -25,7 +27,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 3050000
+    "total": 3200000
   },
   "ladder": [
     {
@@ -68,7 +70,7 @@
       "id": "M7",
       "name": "Skyfall enterable hero wreck",
       "kind": "feel-critical",
-      "status": "pending",
+      "status": "plan-review pause (docs/feature-skyfall.md written; awaiting /campaign-approve)",
       "pause_before": "hero-detail"
     }
   ],
@@ -138,6 +140,14 @@
       "outcome": "SHIPPED (M6 COMPLETE)",
       "spend_estimate": 600000,
       "verify": "verify:all PASS (placement 5-seed + colliders 55) - all 6 rig gates PASS - visual gate PASS (routine bar, 1 rework round)"
+    },
+    {
+      "n": 8,
+      "date": "2026-07-09",
+      "focus": "M7 Skyfall feature-slice (plan-review pause)",
+      "outcome": "PAUSED (plan-review)",
+      "spend_estimate": 150000,
+      "verify": "n/a (plan-only cycle; no code changed)"
     }
   ]
 }

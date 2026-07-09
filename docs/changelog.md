@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 8 — 2026-07-09 — M7 Skyfall feature-slice -> PLAN-REVIEW PAUSE (no build)
+
+`plan-only` — M7 Skyfall is `[feel-critical]`, so per campaign-cycle 4a this cycle PLANS and PAUSES rather than building. Wrote `docs/feature-skyfall.md` (DoD + 6 sub-tasks + reuse map + the post-blockout walk-test pause), grounded in a 2-agent read-only code map. **No code changed.** Campaign status -> `paused` / `awaiting_approval` / `stop_reasons: [plan-review]`. Resume: review `docs/feature-skyfall.md` + `/campaign-approve`.
+
+- **Load-bearing finding**: a new fixed enterable hero wreck is **ADDITIVE to SAVE_VERSION 16 — NO bump required** (fixed landmarks rebuild from seed; salvageables/journals auto-persist). So the save-bump sanctioned pause does NOT trigger; only the plan-review (now) + the post-blockout walk-test pauses apply.
+- **Reuse map**: exterior via `makeLoftedHull` + a bespoke `hullProfile`-style station generator (mega-wreck precedent); interior collision via the `shipScene.ts` BoxSpec+makeStaticBox pattern + threshold-sills + doorway jamb/lintel discipline; enterable mechanism from `huskShell`/`dressCrashInterior`; placement by cloning `leviathanLandmark.ts`.
+- **Plan shape**: S1 research+exterior blockout -> S2 enterable interior + colliders + a NEW `skyfall-walk` real-motion probe -> ⏸ walk-test pause -> S3-S5 hero-detail (procedural-modeler + adversarial gate, HERO bar) -> S6 loot/integration. 4 open questions for the human (placement distance, interior scale, ship archetype, FEATURES flag).
+
 ## Campaign "Sharpen & Deepen" cycle 7 — 2026-07-09 — M6 POI breadth [3/3, COMPLETE]: the cargo-crawler archetype OK all gates + visual
 
 `verified` — `verify:all` PASS (tsc + placement 5-seed 0-fails + colliders **55** audits incl. cargo_crawler 5-6/5-6 x4 seeds); all 6 rig gates PASS; VISUAL gate rendered + iterated (routine bar, no sev>=2). One cycle commit. D287. **M6 COMPLETE — 3 distinct archetypes** (exceeds the 2-3 DoD).
