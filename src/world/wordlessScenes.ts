@@ -139,26 +139,10 @@ function sceneWatcher(rand: () => number): THREE.Group {
   return g;
 }
 
-/** "The pair" — two who sheltered together, slumped toward a dead fire between them. */
-function scenePair(rand: () => number): THREE.Group {
-  const g = new THREE.Group();
-  const a = makeSkeleton();
-  a.position.set(-0.85, 0, 0);
-  a.rotation.set(0.18, Math.PI * 0.5, 0);    // faces +X (toward the fire) + slumped inward
-  g.add(a);
-  const b = makeSkeleton();
-  b.position.set(0.85, 0, 0.04);
-  b.rotation.set(0.18, -Math.PI * 0.5, 0);   // faces -X (toward the fire) + slumped inward
-  g.add(b);
-  const fire = makeColdFirePit(rand);        // dead-centre shared anchor
-  g.add(fire);
-  const canteen = makeFallenCanteen();
-  canteen.position.set(0.0, 0, 0.85);
-  g.add(canteen);
-  return g;
-}
+// ("The pair" — two skeletons slumped toward a shared dead fire — REMOVED 2026-07-09
+// per user request. The single-figure vignettes below remain.)
 
-const ARCHETYPES = [sceneLastFire, sceneWatcher, scenePair];
+const ARCHETYPES = [sceneLastFire, sceneWatcher];
 
 // ── Placement ───────────────────────────────────────────────────────────────
 
@@ -192,7 +176,7 @@ export function placeWordlessScenes(
         }
       }
     }
-    // Cycle archetypes so the first three are distinct (one of each) before repeating.
+    // Cycle archetypes so consecutive scenes alternate (one of each) before repeating.
     const tableau = ARCHETYPES[i % ARCHETYPES.length](rand);
     tableau.name = 'wordlessScene';
     tableau.position.set(x, y, z);
