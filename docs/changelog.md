@@ -3,6 +3,10 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Ambient life beds REMOVED — 2026-07-09 (user feel-veto) ✓ tsc clean
+
+`verified` — `npm run verify` (tsc) clean; dev-server HMR reloaded `soundscape.ts` with no errors. The M4 procedural ambient life beds (D283 — night crickets, day heat-shimmer + distant bird cries) are REMOVED at the user's request: the hiss + high-pitched tones read as unpleasant, not the intended "audible loneliness". Reverts to the pre-M4 state — the day-bed/night-bed sample stems are SILENT again (ready to carry real CC0 samples if they ever land). Removed: `makeNightBedBuffer`/`makeDayBedBuffer`/`attachProceduralBed` + the `bedSrc`/`bedTargets` snapshot fields (`soundscape.ts`) + the `ambient-beds` rig-shot gate. **Wind stays muted** (unchanged). Permanent gate suite 7→6. D283 SUPERSEDED (see below).
+
 ## Campaign "Sharpen & Deepen" cycle 8 — 2026-07-09 — M7 Skyfall feature-slice -> PLAN-REVIEW PAUSE (no build)
 
 `plan-only` — M7 Skyfall is `[feel-critical]`, so per campaign-cycle 4a this cycle PLANS and PAUSES rather than building. Wrote `docs/feature-skyfall.md` (DoD + 6 sub-tasks + reuse map + the post-blockout walk-test pause), grounded in a 2-agent read-only code map. **No code changed.** Campaign status -> `paused` / `awaiting_approval` / `stop_reasons: [plan-review]`. Resume: review `docs/feature-skyfall.md` + `/campaign-approve`.

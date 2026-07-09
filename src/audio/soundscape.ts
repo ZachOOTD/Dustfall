@@ -60,101 +60,11 @@ function makeWindNoiseBuffer(ctx: AudioContext, seconds = 5): AudioBuffer {
   return buf;
 }
 
-// ─────────────────────────────────────────────────────────────
-// M4 (campaign 2026-07-09) — PROCEDURAL ambient life beds. /public/audio/ is
-// empty (the CC0 pack never landed), so the day-bed/night-bed stems have been
-// silent since Session X. Following the C33 procedural-wind precedent, these
-// synthesize the two beds as looping buffers and attach them to the EXISTING
-// ambient stems when the sample is missing — reusing the whole mixer (day/night
-// crossfade, storm lifeMask, AMBIENT_LIFE_MASTER, pause/master gating, the
-// audioState snapshot) unchanged. Zero-asset (D3). Tone: melancholy + SPARSE —
-// long silences, a lone insect, a distant cry — "audible loneliness", not a
-// nature-documentary chorus. (The procedural WIND stays muted per the user:
-// WIND_BODY_MASTER/WIND_WHISTLE_MASTER are 0 in tuning.ts — untouched here.)
-// Math.random is fine: audio buffers are outside the seeded worldgen stream
-// (same as makeWindNoiseBuffer).
-// ─────────────────────────────────────────────────────────────
-
-/** NIGHT bed — sparse desert insects. A ~22s loop: 5-7 lone cricket chirp-trains
- *  (a few 4.1-4.6kHz pulses with a soft attack), long silences between. */
-function makeNightBedBuffer(ctx: AudioContext, seconds = 22): AudioBuffer {
-  const sr = ctx.sampleRate;
-  const n = Math.floor(sr * seconds);
-  const buf = ctx.createBuffer(1, n, sr);
-  const d = buf.getChannelData(0);
-  const chirps = 5 + Math.floor(Math.random() * 3);
-  for (let c = 0; c < chirps; c++) {
-    const at = Math.floor(Math.random() * (n - sr));            // chirp-train start
-    const pulses = 3 + Math.floor(Math.random() * 4);           // pulses per train
-    const f = 4100 + Math.random() * 500;                        // carrier Hz (per train)
-    const pulseLen = Math.floor(sr * 0.055);
-    const gap = Math.floor(sr * (0.06 + Math.random() * 0.03));
-    for (let p = 0; p < pulses; p++) {
-      const start = at + p * (pulseLen + gap);
-      if (start + pulseLen >= n) break;
-      for (let i = 0; i < pulseLen; i++) {
-        const t = i / sr;
-        const env = Math.sin((i / pulseLen) * Math.PI);          // soft in/out per pulse
-        // AM at ~26Hz gives the stridulation texture; amplitude kept LOW (sparse, distant).
-        d[start + i] += Math.sin(2 * Math.PI * f * t) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 26 * t)) * env * 0.16;
-      }
-    }
-  }
-  return buf;
-}
-
-/** DAY bed — near-silence with life at the edges: a faint heat-shimmer breath
- *  (very quiet high-band noise, slow AM) + 1-2 distant lonely bird cries per
- *  ~26s loop (a thin downward glide with vibrato + a fading echo). */
-function makeDayBedBuffer(ctx: AudioContext, seconds = 26): AudioBuffer {
-  const sr = ctx.sampleRate;
-  const n = Math.floor(sr * seconds);
-  const buf = ctx.createBuffer(1, n, sr);
-  const d = buf.getChannelData(0);
-  // (1) heat-shimmer: band-ish noise via differenced one-pole (crude high-pass),
-  //     breathing on a ~9s cycle. Peak ~0.02 — felt more than heard.
-  let last = 0;
-  for (let i = 0; i < n; i++) {
-    const white = Math.random() * 2 - 1;
-    const hp = white - last * 0.97;                              // high-tilted
-    last = last * 0.97 + white * 0.03;
-    const breathe = 0.5 + 0.5 * Math.sin((i / sr) * (2 * Math.PI / 9));
-    d[i] += hp * 0.02 * breathe;
-  }
-  // (2) distant cries: 1-2 per loop, never near the loop seam.
-  const cries = 1 + Math.floor(Math.random() * 2);
-  for (let c = 0; c < cries; c++) {
-    const at = Math.floor((0.12 + 0.7 * Math.random()) * n);
-    const len = Math.floor(sr * (0.7 + Math.random() * 0.4));
-    const f0 = 1350 + Math.random() * 250;                       // glide start Hz
-    const f1 = f0 * 0.62;                                        // glide end (a falling cry)
-    for (let e = 0; e < 3; e++) {                                // dry + two fading echoes
-      const eAt = at + Math.floor(e * sr * 0.42);
-      const eAmp = 0.11 * Math.pow(0.42, e);
-      if (eAt + len >= n) break;
-      let ph = 0;
-      for (let i = 0; i < len; i++) {
-        const t = i / len;
-        const f = f0 + (f1 - f0) * t + Math.sin(2 * Math.PI * 5.5 * (i / sr)) * 28;   // vibrato
-        ph += (2 * Math.PI * f) / sr;
-        const env = Math.sin(t * Math.PI) * (1 - t * 0.35);      // swell then fade
-        d[eAt + i] += Math.sin(ph) * env * eAmp;
-      }
-    }
-  }
-  return buf;
-}
-
-/** Attach a procedural looping buffer to an existing (silent) stem — the sample
- *  fallback path. The stem's gain/mixing stays exactly as-is. */
-function attachProceduralBed(stem: StemNodes, buf: AudioBuffer, ctx: AudioContext): void {
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-  src.connect(stem.gain);
-  src.start(0, Math.random() * Math.min(buf.duration, 5));   // stagger (matches makeStem)
-  stem.src = src;
-}
+// M4 (campaign 2026-07-09) — procedural ambient life beds (crickets/heat-shimmer/
+// bird cries) were REMOVED per user feel-veto 2026-07-09 (the hiss + high-pitched
+// tones read as unpleasant, not "audible loneliness"). The day-bed/night-bed sample
+// stems below stay SILENT (as they were pre-M4: /public/audio/ is empty) — ready to
+// carry real CC0 samples if they ever land, no procedural synthesis in between.
 
 let _state: SoundscapeState | null = null;
 
@@ -323,11 +233,7 @@ export function startSoundscape(): void {
     _state.ambient.night = makeStem(a.ctx, a.ambient, 'night-bed');
     _state.music.calm  = makeStem(a.ctx, musicBus, 'music-calm');
     _state.music.tense = makeStem(a.ctx, musicBus, 'music-tense');
-    // M4 — the sample pack never landed (/public/audio/ empty) so the life-bed stems
-    // come back srcless → attach the PROCEDURAL beds instead. If real samples ever
-    // land, they win (src non-null) and the procedural path never runs.
-    if (!_state.ambient.day.src)   attachProceduralBed(_state.ambient.day,   makeDayBedBuffer(a.ctx),   a.ctx);
-    if (!_state.ambient.night.src) attachProceduralBed(_state.ambient.night, makeNightBedBuffer(a.ctx), a.ctx);
+    // (M4 procedural life beds removed per user feel-veto — day/night stems stay silent.)
   });
 }
 
@@ -432,12 +338,6 @@ export interface AudioStateSnapshot {
   };
   // C33 — procedural wind (the audible bed; the sample stems above are silent).
   pwind: { bodyCutoff: number; bodyGain: number; whistleFreq: number; whistleGain: number } | null;
-  // M4 — whether the ambient life-bed stems have a live SOURCE attached (procedural
-  // fallback or a real sample). false = that bed is structurally silent.
-  bedSrc: { day: boolean; night: boolean };
-  // M4 — the mixer's requested per-stem targets (gain.value lags by the ramp; targets
-  // assert the mixing logic instantly in headless probes).
-  bedTargets: { day: number; night: number };
   loaded: Record<SampleId, boolean>;
 }
 
@@ -473,8 +373,6 @@ export function getAudioStateSnapshot(ctx: GameContext): AudioStateSnapshot | nu
       whistleFreq: s.pwind.whistle.frequency.value,
       whistleGain: s.pwind.whistleGain.gain.value,
     } : null,
-    bedSrc: { day: s.ambient.day.src !== null, night: s.ambient.night.src !== null },
-    bedTargets: { day: s.ambient.day.target, night: s.ambient.night.target },
     loaded: {
       'wind-calm':   getSample('wind-calm')   !== null,
       'wind-mid':    getSample('wind-mid')    !== null,
