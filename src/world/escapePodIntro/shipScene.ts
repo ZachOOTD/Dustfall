@@ -506,6 +506,16 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
   );
 };
 
+// ── CROWN-ROOF glass — a FLAT, view-independent dark tint (user playtest 2026-07-08: one overhead pane read
+//    as a "weird brighter triangle"). Root cause: `_glass`'s view/grazing-angle SHEEN term (tuned for the
+//    face-on FRONT panes) spikes on the steeply-tilted roof panes when you look straight up, lighting a
+//    single pane. The roof doesn't need that presence cue (you look through it at the stars), so it uses an
+//    unlit MeshBasic tint — identical from every angle → every roof cell reads the same, no bright triangle.
+//    DoubleSide so winding never culls it; depthWrite:false + renderOrder 2 keep the transparent sort clean.
+const _glassRoof = new THREE.MeshBasicMaterial({
+  color: 0x1c2a34, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide,
+});
+
 
 /** A box's dimensions + centre: [w, h, d, centerX, centerY, centerZ] (LOCAL). */
 type BoxSpec = [number, number, number, number, number, number];
@@ -1672,21 +1682,35 @@ function buildGlazedDome(group: THREE.Group): void {
   //    back to the COLLAR arch (matched by height) per ring, per side, so the glass wraps all the way to
   //    the shoulder line + seals to the collar by construction. The player looks 9/3-o'clock -> glass.
   const cprof = hullProfile(COLLAR_Z);
+  // user playtest 2026-07-08: the side-closure glass STOPPED SHORT of the hull arch, leaving a black
+  //   see-through wedge between the glass edge and the hull ("make the glass connect to the hull"). The
+  //   collar-side edge was landing 0.04 INBOARD of the collar profile at z=COLLAR_Z−0.02 (forward of the
+  //   collar plane) → a radial+depth gap to the actual hull surface. FIX: push the edge OUTBOARD past the
+  //   profile (into/behind the collar hull) and AFT to the collar plane so the glass OVERLAPS the hull with
+  //   no daylight. Tunables (iterated visually with the magenta closure diagnostic):
+  const CLOSURE_OUT = 0.05;   // small OUTBOARD overlap onto the collar/shell inner face (0.22 over-pushed PAST it → top-corner slivers)
+  const CLOSURE_AFT = 0.03;   // a hair AFT of the collar ring → glass tucks just under the shell forward edge (seals, no z-fight)
   const collarPtAtY = (side: number, y: number): THREE.Vector3 => {
-    // walk the collar half-profile, interpolate x by y; inset a hair inboard of the ring's inboard face.
-    //   LIVE-fix (2026-07-05): the aft edge now lands ON the collar ring plane (z=COLLAR_Z) instead of
-    //   0.14 short of it (z=0.20) — that 0.14 stand-off was the "aft edge floats past the hull arch"
-    //   star-gap. The collar ring is at z=COLLAR_Z with 0.16 half-depth, so a hair inside (−0.02) keeps
-    //   the glass edge tucked just under the collar flange (no z-fight, no gap).
     for (let i = 0; i < cprof.length - 1; i++) {
       const A = cprof[i], B = cprof[i + 1];
       if ((y >= A.y && y <= B.y) || (y >= B.y && y <= A.y)) {
         const t = (y - A.y) / ((B.y - A.y) || 1e-6);
-        return new THREE.Vector3(side * (A.x + (B.x - A.x) * t - 0.04), y, COLLAR_Z - 0.02);
+        return new THREE.Vector3(side * (A.x + (B.x - A.x) * t + CLOSURE_OUT), y, COLLAR_Z + CLOSURE_AFT);
       }
     }
     const P = cprof[cprof.length - 1];
-    return new THREE.Vector3(side * (P.x - 0.04), Math.min(y, P.y), COLLAR_Z - 0.02);
+    return new THREE.Vector3(side * (P.x + CLOSURE_OUT), Math.min(y, P.y), COLLAR_Z + CLOSURE_AFT);
+  };
+  // The side closures + the crown roof are the "WRAP" glass (peripheral, steeply tilted). They go in ONE
+  //   buffer with the FLAT _glassRoof tint — NOT the sheen-y _glass — because _glass's view/grazing sheen
+  //   (tuned for the face-on FRONT window) spikes on these tilted panes when you look up, lighting single
+  //   panes as bright triangles (user playtest 2026-07-08). _glassRoof is unlit → uniform from every angle,
+  //   and DoubleSide → the side closures still render from the back-of-cockpit vantage (the no-cull fix that
+  //   sealed the original "gap"), without needing hand-wound double faces. Front panes keep _glass (sheen).
+  const roofV: number[] = [];
+  const pushRoofQuad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3): void => {
+    roofV.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    roofV.push(c.x, c.y, c.z, b.x, b.y, b.z, d.x, d.y, d.z);
   };
   for (const side of [-1, 1]) {
     const mi = side < 0 ? 0 : _DOME_M.length - 1;   // the outer meridian for this side
@@ -1697,12 +1721,57 @@ function buildGlazedDome(group: THREE.Group): void {
       const cHi = collarPtAtY(side, dHi.y);
       // recess the glass a hair outboard so the frame reads proud (match the pane IN)
       for (const v of [dLo, dHi]) v.add(outward(v).multiplyScalar(IN));
-      // closure quad (cLo, cHi collar-side; dLo, dHi dome-side); _pushInboardQuad forces the front face
-      //   inboard for BOTH sides by construction (no hand winding flip → no per-side/per-band mismatch).
-      _pushInboardQuad(cLo, cHi, dLo, dHi, [0, 0], [0, 1], [1, 0], [1, 1]);
+      // closure quad (cLo, cHi collar-side; dLo, dHi dome-side). cLo/cHi reach the hull (CLOSURE_OUT/AFT) so
+      //   the glass connects with no gap; the DoubleSide _glassRoof means it never culls to a hole.
+      pushRoofQuad(cLo, cHi, dLo, dHi);
     }
   }
+  // -- CROWN ROOF CAP (user playtest 2026-07-08: "no glass on the top of the cockpit between the mullions",
+  //    then "streaks / doesn't line up with the mullions — make it cleaner"). The dome's crown ring (t=1.0)
+  //    is only the FORWARD-upper edge; the ROOF over the pilot — between the crown ring and the collar,
+  //    split by the keel — had no glass. Fill it with CLEAN SINGLE-FACED panes: the roof is only ever seen
+  //    from BELOW, so _pushInboardQuad's inboard winding + per-pane 0..1 UVs read exactly like the front
+  //    panes (the first attempt's DOUBLE-faced fan with ad-hoc UVs is what produced the sheen "streaks").
+  //    Each pane lofts a crown-ring SEGMENT back to the collar arch (collarPtAtY samples the real curve, so
+  //    no chord-gap slivers). Every pane edge lands on a mullion: crown ring (front), keel (centre), closure
+  //    bow (outer), collar hoop (aft), + a roof MERIDIAN RIB at each intermediate crown node (_roofRibs,
+  //    built in the skeleton section below) so the two panes per side meet on a real frame member.
+  const crownNode = (mi: number): THREE.Vector3 => {
+    const p = _domeNode(_DOME_M[mi], _DOME_T[_DOME_T.length - 1]);
+    return p.add(outward(p).multiplyScalar(IN));
+  };
+  // The roof AFT boundary must land on the SHELL FORWARD RING (the opaque ceiling's forward edge =
+  //   hullProfile(COLLAR_Z) = cprof), matched by X to each crown node, so the roof glass MEETS the ceiling
+  //   exactly along that ring — no top-corner sliver. (Sampling by fraction/collarPtAtY instead left the
+  //   outer corners short of the ceiling, the user's circled hairline gaps.) z sits a hair aft of the ring
+  //   so the glass tucks just under the shell forward edge.
+  const roofAftPt = (side: number, ax: number): THREE.Vector3 => {
+    for (let i = cprof.length - 1; i > 0; i--) {   // walk crown → foot down the profile
+      const A = cprof[i], B = cprof[i - 1];
+      const lo = Math.min(A.x, B.x), hi = Math.max(A.x, B.x);
+      if (ax >= lo - 1e-4 && ax <= hi + 1e-4) {
+        const t = (ax - A.x) / ((B.x - A.x) || 1e-6);
+        return new THREE.Vector3(side * ax, A.y + (B.y - A.y) * t, COLLAR_Z + 0.02);
+      }
+    }
+    const P = cprof[cprof.length - 1];   // ax beyond the profile → clamp to the crown
+    return new THREE.Vector3(side * Math.min(ax, P.x), P.y, COLLAR_Z + 0.02);
+  };
+  const _roofRibs: Array<[THREE.Vector3, THREE.Vector3]> = [];   // intermediate roof mullions (consumed by the skeleton)
+  // roof panes share the same flat _glassRoof buffer (roofV/pushRoofQuad) as the side closures above.
+  for (const side of [-1, 1]) {
+    const seq = side < 0 ? [0, 1, 2] : [4, 3, 2];   // crown-ring nodes OUTER → centre
+    const front = seq.map(crownNode);
+    const aft = front.map((n) => roofAftPt(side, Math.abs(n.x)));   // shell-ring point directly aft of each crown node
+    for (let i = 0; i < front.length - 1; i++) pushRoofQuad(front[i], aft[i], front[i + 1], aft[i + 1]);
+    _roofRibs.push([front[1], aft[1]]);   // rib at the intermediate crown node → its shell-ring point
+  }
+  const roofSheet = _skin(roofV, _glassRoof);
+  roofSheet.name = 'domeGlassRoof';
+  roofSheet.renderOrder = 2;
+  group.add(roofSheet);
   const glassSheet = _skinUV(glassV, glassUV, _glass);
+  glassSheet.name = 'domeGlassSheet';
   glassSheet.renderOrder = 2;    // transparent - draw after the opaque hull/collar
   group.add(glassSheet);
 
@@ -1805,6 +1874,11 @@ function buildGlazedDome(group: THREE.Group): void {
       addBeamNoBoss(N(mi, ti), collarPt(side, N(mi, ti).y), heavy ? HW : MW, heavy ? HD : MD);
     }
   }
+  // (4b) ROOF MERIDIAN RIBS — a slim mullion at each intermediate crown node running aft to its collar
+  //   point, so the crown ROOF panes (added in the glass section) meet on a real frame member instead of a
+  //   bare glass seam (user playtest 2026-07-08: "connect cleanly with the mullions"). The dome-side end
+  //   lands on the existing crown node boss; addBeamNoBoss keeps the collar end tucked (no loose tab).
+  for (const [p, q] of _roofRibs) addBeamNoBoss(p, q, MW, MD);
 
   // (5) NODE BOSSES — drop a beveled hub at every point where ≥2 members meet, sized to swallow the
   //     thickest member entering it (+ the 7cm short we cut). This is what makes the joints read CLEAN:
@@ -1950,10 +2024,11 @@ function buildCollar(group: THREE.Group): void {
     gus.position.set(foot.x - side * 0.05, 0.13, COLLAR_Z);
     group.add(gus);
   }
-  // (2) a stencilled placard low on the collar foot (lived-in)
-  const plac = _box(0.28, 0.06, 0.012, _hazard);
-  plac.position.set(-prof[0].x + 0.34, 0.30, COLLAR_Z - 0.10);
-  group.add(plac);
+  // (2) REMOVED (user playtest 2026-07-08): the stencilled hazard placard low on the port collar foot
+  //   read as a "floating yellow rectangle" from the seated forward view (its 0.28m width foreshortened
+  //   into an isolated bright bar hanging on the dark hull, disconnected from any panel it labelled). The
+  //   lived-in detail wasn't worth the visual noise at the game's first beat. Placard was cosmetic only
+  //   (unlit _hazard decal, no collider) — pure-visual delete, no rule-9 collider sweep needed.
 }
 
 /** The aft doorway — a fitted channel-steel bulkhead door frame (jambs + header + rivets +
