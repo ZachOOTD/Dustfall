@@ -483,16 +483,19 @@ const _DEFS: Record<ItemId, ItemDef> = {
     id: 'scrap_machete',
     name: 'SCRAP MACHETE',
     glyph: '|',
-    description: 'a crude blade beaten from scrap — bites panels open',
+    description: 'a crude blade beaten from scrap — swings for meat, bites panels open',
     stackable: false,
     maxStack: 1,
-    wieldLmb: 'click_use',
+    // 2026-07-09 — now a real WEAPON: LMB swings + damages wildlife (registered in
+    // combat.ts _WEAPON_SPECS, uses the melee proximity assist). Prying is UNCHANGED —
+    // it's E-triggered + gated on the item id in interaction.ts, independent of wieldLmb.
+    wieldLmb: 'attack',
     thirdPersonScale: 1.35,
     // 3P grip: blade is mesh +Y (machete convention) → -90° X points it forward.
     handAttachTransform: { pos: [0, 0, 0], rot: [-1.571, 0, 0] },
     onUse(_ctx, _slot) {
-      // Pry logic lives in interaction.ts's 'salvageables' case (hover-aware), same
-      // as scrap_bar. LMB without a salvageable hovered is a no-op.
+      // The swing is handled by updateCombat (melee spec). Prying is E-triggered in
+      // interaction.ts. onUse (LMB fallback) is a no-op.
       return { consumed: false };
     },
     makeViewModel() {

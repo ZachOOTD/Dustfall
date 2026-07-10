@@ -65,6 +65,15 @@ const _WEAPON_SPECS: Partial<Record<ItemId, WeaponSpec>> = {
     damage: Tuning.WEAPON_MACHETE_DAMAGE,
     cooldown: Tuning.WEAPON_MACHETE_COOLDOWN,
   },
+  // 2026-07-09 — the crafted scrap machete swings too (a hair slower/weaker than the
+  // found machete). Lizards/shrews are 1-HP so it 1-shots them for meat; the damage
+  // value only differentiates vs raiders. Still prys panels via E (interaction.ts).
+  scrap_machete: {
+    kind: 'melee',
+    range: Tuning.WEAPON_MACHETE_RANGE,
+    damage: Tuning.WEAPON_MACHETE_DAMAGE * 0.8,
+    cooldown: Tuning.WEAPON_MACHETE_COOLDOWN * 1.15,
+  },
   pipe_staff: {
     kind: 'melee',
     range: Tuning.WEAPON_PIPE_STAFF_RANGE,

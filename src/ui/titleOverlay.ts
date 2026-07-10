@@ -5,6 +5,7 @@
 
 import type { GameContext } from '../GameContext.ts';
 import { playUiHover, playUiClick } from '../audio/audio.ts';
+import { quitApp } from '../core/displayMode.ts';
 
 export interface TitleOverlayApi {
   show(): void;
@@ -134,6 +135,19 @@ export function createTitleOverlay(
 
   advWrap.appendChild(advPanel);
   panel.appendChild(advWrap);
+
+  // EXIT GAME — quits the desktop app (best-effort no-op on web, where a tab can't
+  // self-close). Placed last + styled muted so it reads as the terminal action, well
+  // clear of NEW GAME / CONTINUE. 2026-07-09 (user request).
+  const exitBtn = document.createElement('button');
+  exitBtn.className = 'title-new-game title-exit-game';
+  exitBtn.textContent = 'EXIT GAME';
+  exitBtn.addEventListener('mouseenter', playUiHover);
+  exitBtn.addEventListener('click', () => {
+    playUiClick();
+    void quitApp();
+  });
+  panel.appendChild(exitBtn);
 
   advToggle.addEventListener('click', () => {
     const hidden = advPanel.classList.toggle('hidden');

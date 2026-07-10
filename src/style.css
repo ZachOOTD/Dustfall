@@ -1531,6 +1531,22 @@ button.title-new-game.title-dev-mode:hover {
   color: #f0e2c4;
 }
 
+/* EXIT GAME — terminal action; muted with a faint warm/danger tint, set below the
+ * advanced disclosure and clearly separated from NEW GAME / CONTINUE. */
+button.title-new-game.title-exit-game {
+  margin-top: 28px;
+  padding: 12px 44px;
+  letter-spacing: 6px;
+  border-color: rgba(200, 120, 90, 0.40);
+  color: rgba(220, 170, 150, 0.62);
+}
+button.title-new-game.title-exit-game:hover {
+  border-color: rgba(210, 130, 100, 0.85);
+  background: rgba(200, 100, 70, 0.10);
+  color: #e8b6a2;
+  letter-spacing: 8px;
+}
+
 /* AAI — Advanced disclosure under the title buttons (seed entry). */
 .title-advanced {
   margin-top: 24px;

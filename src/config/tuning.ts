@@ -120,6 +120,10 @@ export const Tuning = {
   STAMINA_DRAIN_SPRINT: 1 / 6,       // 6s of sprint at full
   STAMINA_RECOVER_PER_SEC: 1 / 9,    // 9s recovery from empty
   STAMINA_SPRINT_THRESHOLD: 0.05,    // can't initiate sprint below this
+  // 2026-07-09 (user) — sprint LOCKOUT hysteresis: once stamina bottoms out, sprint is
+  // disabled (forced walk) until stamina recharges to this level. Kills the stuttery
+  // walk/sprint flicker from holding Shift at empty around STAMINA_SPRINT_THRESHOLD.
+  STAMINA_SPRINT_RELOCK: 0.25,       // recharge to 25% before sprint re-enables
   // Cold (negative side of temperature)
   COLD_NIGHT_DRAIN: 1 / 420,         // ~7 min to freeze at night without shelter (was 1/120); a fire/tent warms ~14× faster
   COLD_SHELTER_RECOVER: 1 / 30,      // recover toward 0 in shelter (unchanged — shelter must out-pace the drain)

@@ -59,6 +59,9 @@ const STORM_PENALTY_INTENSITY_THRESHOLD = Tuning.STORM_PENALTY_INTENSITY_THRESHO
 const STORM_PENALTY_MAX_WALK_SLOWDOWN = Tuning.STORM_PENALTY_MAX_WALK_SLOWDOWN;    // fraction of walk speed shaved at full intensity (→ 0.7x)
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
+// Sprint lockout hysteresis (user 2026-07-09): true once stamina bottoms out; forces
+// walking until stamina recharges to STAMINA_SPRINT_RELOCK. Transient (resets on reload).
+let _sprintLocked = false;
 // ACE Tier 4A — step-count driven footstep cadence. Pre-ACE: _stepAccum
 // (distance accumulator in controller.ts) and rig.stepCount (gait-phase
 // counter in playerRig.ts) ran on independent timers — visually a
@@ -152,10 +155,15 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
         : 1;
   }
   const sprintBlockedByStorm = stormPenaltyT > 0; // ACL — any storm penalty clamps to walk
+  // Sprint LOCKOUT hysteresis: bottoming out latches _sprintLocked (forced walk) until
+  // stamina recharges to STAMINA_SPRINT_RELOCK — no walk/sprint stutter at empty.
+  if (ctx.stats.stamina <= Tuning.STAMINA_SPRINT_THRESHOLD) _sprintLocked = true;
+  else if (ctx.stats.stamina >= Tuning.STAMINA_SPRINT_RELOCK) _sprintLocked = false;
   const sprinting =
     !ctx.player.crouching &&
     !sprintBlockedByTow &&
     !sprintBlockedByStorm &&
+    !_sprintLocked &&
     (keys['ShiftLeft'] || keys['ShiftRight']) &&
     ctx.stats.thirst > 0.02 &&
     ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&

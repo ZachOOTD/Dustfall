@@ -20,6 +20,7 @@ interface TauriWindow {
   setDecorations(v: boolean): Promise<void>;
   maximize(): Promise<void>;
   unmaximize(): Promise<void>;
+  close(): Promise<void>;
 }
 interface TauriGlobal {
   window?: { getCurrentWindow(): TauriWindow };
@@ -34,6 +35,18 @@ function tauri(): Required<TauriGlobal> | null {
  *  Used by the settings UI to decide whether to offer `borderless`. */
 export function isDesktopApp(): boolean {
   return tauri() !== null;
+}
+
+/** Quit the app. Desktop (Tauri): close the window → the app exits. Web: best-effort
+ *  window.close() — browsers block closing a tab they didn't script-open, so it's a
+ *  no-op there (a browser tab has no real "exit"; the Exit button is a desktop affordance). */
+export async function quitApp(): Promise<void> {
+  const t = tauri();
+  if (t) {
+    try { await t.window.getCurrentWindow().close(); } catch (e) { console.warn('[quitApp] tauri close failed', e); }
+    return;
+  }
+  try { window.close(); } catch { /* browsers block programmatic tab close */ }
 }
 
 /** Apply a display mode. Async (both backends are async). Safe to call from a
