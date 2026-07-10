@@ -500,57 +500,79 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // A crude bolo: a rough scrap-steel plate (wide belly, blunt angled tip), a
-      // chipped edge, a bolted iron tang + rivets, and a cloth-wrapped grip. Dirtier
-      // + simpler than the honed `machete` so the two read as distinct items.
-      const bladeMat = vmMetal(0x6b5f51, { scratchAngle: Math.PI / 2, wornScale: 4.5, scratchStrength: 0.14 });
+      // A crude improvised machete: a heavy blade HACKED FROM SCRAP PLATE (chipped edge
+      // with a real nick, a thick proud spine), a rough welded bolster wrapped in wire +
+      // rivets, and a cord/tape-wrapped tang over a SOLID grip core. Cruder + heavier than
+      // the honed `machete` so the two read as distinct — but structurally solid, not a
+      // flat plate with floating detail.
+      const bladeMat = vmMetal(0x6a5e50, { scratchAngle: Math.PI / 2, wornScale: 3.6, scratchStrength: 0.2 });
       bladeMat.emissive = new THREE.Color(0x0a0806);               // dark oxidized scrap steel
-      const edgeMat = vmMetal(0xa1937b, { wornScale: 5.0 });        // worn-bright sharpened edge (only the honed bevel catches light)
-      const ironMat = vmMetal(0x34302a, { wornScale: 5.0 });        // dark iron tang / rivets
+      const edgeMat = vmMetal(0xad9f85, { wornScale: 5.0 });        // worn-bright honed edge
+      const ironMat = vmMetal(0x322e28, { wornScale: 5.0 });        // dark iron bolster / tang butt
       ironMat.emissive = new THREE.Color(0x070605);
-      const gripMat = createFabricMaterial(0x3a2b1e, undefined, { disableShimmer: true });
-      const rivetMat = vmMetal(0x968d80, { wornScale: 3.0 });
+      const cordMat = createFabricMaterial(0x2e2318, undefined, { disableShimmer: true });  // tape/cord grip wrap
+      const rivetMat = vmMetal(0x9a9184, { wornScale: 3.0 });
 
-      // --- Blade: extruded crude bolo profile (flat in XY, thickness in Z) ---
+      // --- Blade: heavy cleaver-bolo profile hacked from plate, with an edge NICK cut
+      //     INTO the shape (not a box stuck on) — reads as real chopping damage. ---
       const bs = new THREE.Shape();
-      bs.moveTo(-0.013, 0.0);                       // spine at the ricasso
-      bs.lineTo(-0.017, 0.165);                     // up the slightly-irregular spine
-      bs.lineTo(-0.011, 0.224);                     // spine near the tip
-      bs.lineTo(0.012, 0.236);                      // blunt angled chopping tip
-      bs.lineTo(0.024, 0.12);                       // fat bolo belly
-      bs.lineTo(0.014, 0.0);                        // cutting edge at the ricasso
-      bs.lineTo(-0.013, 0.0);
+      bs.moveTo(-0.014, 0.0);          // spine at the ricasso
+      bs.lineTo(-0.020, 0.10);         // spine bulges (rough uneven plate)
+      bs.lineTo(-0.016, 0.205);        // up the spine
+      bs.lineTo(-0.006, 0.250);        // spine to the tip shoulder
+      bs.lineTo(0.020, 0.243);         // blunt angled chopping tip
+      bs.lineTo(0.030, 0.145);         // fat chopping belly
+      bs.lineTo(0.031, 0.100);         // belly max
+      bs.lineTo(0.024, 0.084);         // down the edge
+      bs.lineTo(0.016, 0.077);         // NICK bites inward (a chip out of the edge)
+      bs.lineTo(0.024, 0.067);         // edge steps back out
+      bs.lineTo(0.017, 0.0);           // cutting edge at the ricasso
+      bs.lineTo(-0.014, 0.0);
       const bladeGeo = new THREE.ExtrudeGeometry(bs, {
-        depth: 0.006, bevelEnabled: true, bevelThickness: 0.0014, bevelSize: 0.0013, bevelSegments: 1, steps: 1,
+        depth: 0.008, bevelEnabled: true, bevelThickness: 0.0018, bevelSize: 0.0016, bevelSegments: 1, steps: 1,
       });
-      bladeGeo.translate(0, 0, -0.003);
+      bladeGeo.translate(0, 0, -0.004);
       group.add(new THREE.Mesh(bladeGeo, bladeMat));
 
-      // Honed edge strip — a thin worn-bright bevel along the belly.
-      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.2, 0.0085), edgeMat);
-      edge.position.set(0.015, 0.1, 0); edge.rotation.z = 0.06; group.add(edge);
+      // Proud thick SPINE — a hacked plate keeps a heavy back. Gives a real cross-section
+      // from 3q instead of reading as a flat sheet.
+      const spine = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.235, 0.013), bladeMat);
+      spine.position.set(-0.016, 0.12, 0); spine.rotation.z = 0.012; group.add(spine);
 
-      // Chips knocked out of the edge (dark notch boxes) — improvised, damaged.
-      const chip1 = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.014, 0.012), ironMat);
-      chip1.position.set(0.02, 0.072, 0); group.add(chip1);
-      const chip2 = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.011, 0.012), ironMat);
-      chip2.position.set(0.013, 0.155, 0); group.add(chip2);
-      const chip3 = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.009, 0.012), ironMat);
-      chip3.position.set(0.022, 0.105, 0); group.add(chip3);
+      // Honed edge bevel — a thin worn-bright strip following the belly (angled flush,
+      // not floating). Only the sharpened bevel catches light on a dark scrap blade.
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.17, 0.010), edgeMat);
+      edge.position.set(0.023, 0.105, 0); edge.rotation.z = 0.10; group.add(edge);
 
-      // Bolted iron tang/bolster where the blade meets the grip.
-      const tang = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.045, 0.016), ironMat);
-      tang.position.set(0.0, -0.02, 0); group.add(tang);
-      for (let i = 0; i < 2; i++) {
-        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.02, 6), rivetMat);
-        rivet.rotation.x = Math.PI / 2; rivet.position.set(0, -0.01 - i * 0.022, 0); group.add(rivet);
+      // --- Crude welded bolster: a rough iron block + a wire wrap + two proud rivets
+      //     (improvised, not a clean crossguard) ---
+      const bolster = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.032, 0.024), ironMat);
+      bolster.position.set(0.002, -0.018, 0); bolster.rotation.z = 0.06; group.add(bolster);
+      for (let i = 0; i < 3; i++) {
+        const wire = new THREE.Mesh(new THREE.TorusGeometry(0.0155, 0.0022, 5, 12), rivetMat);
+        wire.rotation.x = Math.PI / 2; wire.position.y = -0.009 - i * 0.0085; group.add(wire);
+      }
+      for (const z of [0.010, -0.010]) {
+        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0038, 0.026, 6), rivetMat);
+        rivet.rotation.x = Math.PI / 2; rivet.position.set(0.002, -0.02, z); group.add(rivet);
       }
 
-      // Cloth-wrapped grip (bands straddling the hand origin).
-      for (let i = 0; i < 6; i++) {
-        const band = new THREE.Mesh(new THREE.TorusGeometry(0.0135, 0.0032, 6, 14), gripMat);
-        band.rotation.x = Math.PI / 2; band.position.y = -0.045 - i * 0.016; group.add(band);
+      // --- Grip: a SOLID tapered tang core, cord/tape-wrapped (over the core so no gaps
+      //     show through), an exposed rough iron butt + a lanyard loop ---
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0152, 0.09, 8), cordMat);
+      core.position.y = -0.08; group.add(core);
+      for (let i = 0; i < 5; i++) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.0146 - i * 0.0004, 0.0035, 6, 12), cordMat);
+        band.rotation.x = Math.PI / 2;
+        band.position.y = -0.047 - i * 0.0172;
+        band.rotation.z = (i % 2) * 0.16;   // slightly uneven improvised wrap
+        group.add(band);
       }
+      const butt = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.009, 0.016, 8), ironMat);
+      butt.position.y = -0.129; group.add(butt);
+      const lanyard = new THREE.Mesh(new THREE.TorusGeometry(0.0062, 0.0018, 5, 10), rivetMat);
+      lanyard.rotation.x = Math.PI / 2; lanyard.position.y = -0.139; group.add(lanyard);
+
       group.rotation.set(-0.15, 0.0, 0.10);
       return group;
     },
