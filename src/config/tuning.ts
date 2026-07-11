@@ -320,6 +320,13 @@ export const Tuning = {
   // straddling can never thrash a 37k-vertex tile rebuild.
   TERRAIN_TILE_RADIUS: 1,
   TERRAIN_ANCHOR_MARGIN_M: 24,
+  // Infinite Sands S6 — sliced background tile builds: rows of the
+  // 193×193 vertex fill processed per frame (the fill is the dominant
+  // bake cost; ~SLICE_ROWS/193 of it per frame). The anchor tile still
+  // builds synchronously (fall-through protection). Measured (cycle 5,
+  // headless swiftshader): 24 rows ≈ 19ms → 12 rows ≈ ~10ms per step;
+  // the one-frame computeVertexNormals stage is ~18ms and stays whole.
+  TERRAIN_SLICE_ROWS: 12,
   // Infinite Sands S1 — content-chunk streaming (ChunkManager). Content
   // (S1: marker posts; S2+: POIs, scatter) streams on a finer grid than the
   // terrain tiles: CHUNK_SIZE-meter chunks kept loaded within
@@ -332,8 +339,10 @@ export const Tuning = {
   CHUNK_LOAD_RADIUS: 3,
   CHUNK_ANCHOR_MARGIN_M: 8,
   // Generation budget: at most N chunk loads per frame (the anchor chunk
-  // always loads immediately, budget notwithstanding).
-  CHUNK_LOADS_PER_FRAME: 2,
+  // always loads immediately, budget notwithstanding). Measured (cycle 5):
+  // a single POI chunk load is ~20-50ms headless — 1/frame keeps the
+  // worst generation frame to ONE such load.
+  CHUNK_LOADS_PER_FRAME: 1,
   // Infinite Sands S2 — streamed POI wrecks. Per-chunk presence chance is
   // calibrated to the origin field's density (22 POIs over the 120-1100m
   // boot annulus ≈ 0.07 per 112m chunk). Chunks whose center lies within

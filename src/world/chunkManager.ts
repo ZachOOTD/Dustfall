@@ -141,6 +141,11 @@ interface LoadedChunk {
    *  player already looted them). */
   lizards: Lizard[];
   shrews: Shrew[];
+  /** S6 — heavy content pieces (landmark knot wrecks/ribcages) deferred
+   *  to ONE piece per frame so a landmark chunk can't blow a single
+   *  frame. Executed thunks push into bodies/salvage/etc as usual;
+   *  unload drops unexecuted thunks (their content never existed). */
+  deferred: Array<() => void>;
 }
 
 export interface ChunkManager {
@@ -167,7 +172,11 @@ export interface ChunkManager {
     shrewCount: number;
     /** S4 — streamed hero landmarks (root groups tagged streamLandmark). */
     landmarkCount: number;
+    /** S6 — per-load wall-clock maxima. */
+    perf: { loads: number; maxLoadMs: number; maxPoiLoadMs: number; maxLandmarkLoadMs: number };
   };
+  /** S6 — reset the load-perf maxima (probe baseline). */
+  resetPerf: () => void;
 }
 
 export function createChunkManager(
@@ -353,13 +362,18 @@ export function createChunkManager(
   // Shrews self-register into their module list via spawnShrew.
   let lizardList: Lizard[] | null = null;
 
+  // S6 — per-load wall-clock accounting (drives the chunk-perf gate).
+  const _perf = { loads: 0, maxLoadMs: 0, maxPoiLoadMs: 0, maxLandmarkLoadMs: 0 };
+
   const loadChunk = (cx: number, cz: number): void => {
+    const _t0 = performance.now();
     const group = new THREE.Group();
     group.name = `chunk-${cx}_${cz}`;
     const bodies: RAPIER.RigidBody[] = [];
     const salvage: Salvageable[] = [];
     const chunkLizards: Lizard[] = [];
     const chunkShrews: Shrew[] = [];
+    const deferred: Array<() => void> = [];
     const desc = describeChunk(cx, cz);
     // ── S2: streamed POI wreck — a pure render of the descriptor. The
     //    archetype is FORCED from the descriptor (the determinism gate
@@ -417,6 +431,7 @@ export function createChunkManager(
         });
       };
       if (lm.kind === 'colossal_ribcage') {
+        // A single cheap build — render inline.
         const scale = 5 + rand() * 3;   // a 20-40m titan skeleton
         const y = terrain.heightAt(lm.x, lm.z) - scale * (0.1 + rand() * 0.15);
         const rc = placeRibcage(scene, world, new THREE.Vector3(lm.x, y, lm.z), rand, group, scale);
@@ -425,7 +440,12 @@ export function createChunkManager(
         const body = rc.collider.parent();
         if (body) bodies.push(body);
       } else {
-        // wreck_knot — a tight salvage triangle + 2 carcasses.
+        // wreck_knot — 5 heavy pieces. S6: DEFERRED, one piece per frame
+        // (a single frame rendering 3 wreck assemblies + merges was the
+        // worst generation hitch). ALL rng draws happen NOW, in the same
+        // order as the old inline render, so the pieces are byte-identical
+        // regardless of when their thunks execute.
+        const chunkRef = (): LoadedChunk | undefined => chunks.get(key(cx, cz));
         for (let i = 0; i < 3; i++) {
           const ang = (i / 3) * Math.PI * 2 + rand() * 0.6;
           const dist = 18 + rand() * 14;
@@ -433,31 +453,43 @@ export function createChunkManager(
           const kz = lm.z + Math.sin(ang) * dist;
           const kBiome = biomes.biomeAt(kx, kz);
           const kArch = pickArchetype(rand, kBiome);
-          const before = salvageables.list.length;
-          const pg = placeProcgenPOI(
-            scene, world, terrain,
-            new THREE.Vector3(kx, terrain.heightAt(kx, kz), kz),
-            rand, salvageables,
-            { archetype: kArch, biome: kBiome, parent: group, buryY: 0.3 + rand() * 0.4 },
-          );
-          if (!pg.userData.poiArchetype) pg.userData.poiArchetype = kArch;
-          if (i === 0) pg.userData.streamLandmark = lm.kind;
-          const pb = pg.userData.poiBody as RAPIER.RigidBody | undefined;
-          if (pb) bodies.push(pb);
-          for (const rec of salvageables.list.slice(before)) {
-            rec.transient = true;
-            salvage.push(rec);
-          }
+          const buryY = 0.3 + rand() * 0.4;
+          const pieceSeed = Math.floor(rand() * 0x100000000) >>> 0;
+          const isFirst = i === 0;
+          deferred.push(() => {
+            const c = chunkRef();
+            if (!c) return;
+            const before = salvageables.list.length;
+            const pg = placeProcgenPOI(
+              scene, world, terrain,
+              new THREE.Vector3(kx, terrain.heightAt(kx, kz), kz),
+              makeRng(pieceSeed), salvageables,
+              { archetype: kArch, biome: kBiome, parent: c.group, buryY },
+            );
+            if (!pg.userData.poiArchetype) pg.userData.poiArchetype = kArch;
+            if (isFirst) pg.userData.streamLandmark = lm.kind;
+            const pb = pg.userData.poiBody as RAPIER.RigidBody | undefined;
+            if (pb) c.bodies.push(pb);
+            for (const rec of salvageables.list.slice(before)) {
+              rec.transient = true;
+              c.salvage.push(rec);
+            }
+          });
         }
         for (let i = 0; i < 2; i++) {
           const ang = rand() * Math.PI * 2;
           const dist = 8 + rand() * 20;
           const rx2 = lm.x + Math.cos(ang) * dist;
           const rz2 = lm.z + Math.sin(ang) * dist;
-          const rc = placeRibcage(scene, world, new THREE.Vector3(rx2, terrain.heightAt(rx2, rz2), rz2), rand, group, 1);
-          tagRibcage(rc.group);
-          const body = rc.collider.parent();
-          if (body) bodies.push(body);
+          const pieceSeed = Math.floor(rand() * 0x100000000) >>> 0;
+          deferred.push(() => {
+            const c = chunkRef();
+            if (!c) return;
+            const rc = placeRibcage(scene, world, new THREE.Vector3(rx2, terrain.heightAt(rx2, rz2), rz2), makeRng(pieceSeed), c.group, 1);
+            tagRibcage(rc.group);
+            const body = rc.collider.parent();
+            if (body) c.bodies.push(body);
+          });
         }
       }
     }
@@ -515,7 +547,12 @@ export function createChunkManager(
       }
     }
     scene.add(group);
-    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage, lizards: chunkLizards, shrews: chunkShrews });
+    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage, lizards: chunkLizards, shrews: chunkShrews, deferred });
+    const _ms = performance.now() - _t0;
+    _perf.loads++;
+    if (_ms > _perf.maxLoadMs) _perf.maxLoadMs = _ms;
+    if (desc.poi.present && _ms > _perf.maxPoiLoadMs) _perf.maxPoiLoadMs = _ms;
+    if (desc.landmark.present && _ms > _perf.maxLandmarkLoadMs) _perf.maxLandmarkLoadMs = _ms;
   };
 
   const unloadChunk = (k: string): void => {
@@ -609,6 +646,18 @@ export function createChunkManager(
         }
       }
     }
+    // S6 — drain ONE deferred heavy piece per frame (landmark knot wrecks/
+    // ribcages) so a landmark chunk never renders more than one assembly
+    // in a single frame.
+    for (const c of chunks.values()) {
+      if (c.deferred.length === 0) continue;
+      const thunk = c.deferred.shift()!;
+      const t0 = performance.now();
+      thunk();
+      const ms = performance.now() - t0;
+      if (ms > _perf.maxLandmarkLoadMs) _perf.maxLandmarkLoadMs = ms;
+      break;
+    }
   };
 
   const setMarkersEnabled = (on: boolean): void => {
@@ -625,6 +674,7 @@ export function createChunkManager(
     describeChunk,
     setMarkersEnabled,
     wireCreatures: (lizards) => { lizardList = lizards; },
+    resetPerf: () => { _perf.loads = 0; _perf.maxLoadMs = 0; _perf.maxPoiLoadMs = 0; _perf.maxLandmarkLoadMs = 0; },
     stats: () => {
       let markerMeshCount = 0;
       let bodyCount = 0;
@@ -658,6 +708,7 @@ export function createChunkManager(
         lizardCount,
         shrewCount,
         landmarkCount,
+        perf: { ..._perf },
       };
     },
   };

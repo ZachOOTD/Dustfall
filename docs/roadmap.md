@@ -152,9 +152,13 @@ and promotes the second.
 >   `wreck_knot` (3-wreck salvage triangle; Skyfall's future slot); regional wreck-yard anchors
 >   (0.08/region, ≥2200m from origin) feeding the SAME wreckYardAt → far graveyards get ground +
 >   biome + POI mix + 6× density for free. Origin world bakes byte-identically (placement gate green).
-> - **▶ S6 — perf: frame-budgeted generation + cross-chunk perf probe (NEXT)** — budget the
->   ~100-200ms terrain-tile bake across frames (the known D288 hitch); draw-call/body ceilings for
->   the active set; extend the perf probe to a cross-chunk walk asserting steady counts.
+> - **✅ S6 — perf: frame-budgeted generation** — SHIPPED cycle 5 (2026-07-11, D296). Terrain tiles
+>   build sliced (12-row stage-steps ≈ 8-10ms; atomic mesh+collider finalize; anchor tile stays
+>   synchronous for fall-through safety); chunk loads 1/frame; wreck_knot pieces deferred 1/frame;
+>   NEW permanent `chunk-perf` gate (3rd verify:chunks leg) with mechanism asserts + tripwires.
+> - **▶ ⏸ S5 — save: per-chunk diffs (NEXT = THE SANCTIONED PAUSE)** — the next cycle writes the
+>   SAVE_VERSION schema plan (per-chunk diffs over the deterministic base) and PAUSES for human
+>   review BEFORE building (D81). The ladder's final rung.
 > - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
 > - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
 > - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).

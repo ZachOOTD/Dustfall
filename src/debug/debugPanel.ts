@@ -407,6 +407,17 @@ interface DebugApi {
   /** Infinite Sands S1 — toggle the marker-post spike layer (regenerates
    *  active chunks). Probes + humans only; defaults off in normal play. */
   setChunkMarkers: (on: boolean) => void;
+  /** Infinite Sands S6 — generation-perf maxima (terrain slice steps +
+   *  chunk loads). Drives the chunk-perf gate. */
+  chunkPerf: () => {
+    terrain: {
+      syncBuilds: number; maxSyncMs: number;
+      sliceSteps: number; maxSliceMs: number;
+      maxStageMs: { fill: number; geometry: number; finalize: number };
+    };
+    chunks: { loads: number; maxLoadMs: number; maxPoiLoadMs: number; maxLandmarkLoadMs: number };
+  };
+  resetChunkPerf: () => void;
 }
 
 /** Hooks main.ts supplies for actions that need its boot-scope closures
@@ -892,6 +903,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       };
     },
     setChunkMarkers: (on) => ctx.chunks.setMarkersEnabled(on),
+    chunkPerf: () => ({ terrain: ctx.terrain.perfStats(), chunks: ctx.chunks.stats().perf }),
+    resetChunkPerf: () => { ctx.terrain.resetPerf(); ctx.chunks.resetPerf(); },
     castDown(x, z, fromY = 100) {
       const ray = new RAPIER.Ray({ x, y: fromY, z }, { x: 0, y: -1, z: 0 });
       const hit = ctx.physics.world.castRay(ray, 500, true);

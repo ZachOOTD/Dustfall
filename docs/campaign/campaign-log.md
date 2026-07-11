@@ -7,6 +7,20 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 
 ---
 
+## Cycle 5 — S6 hitch-free generation (2026-07-11) — SHIPPED
+
+- **Planned:** S6 — frame-budget the ~100-200ms terrain-tile bake (the D288 hitch); ceilings; a cross-chunk perf probe.
+- **Measured first:** synchronous bake 90-200ms; fill dominates (37k computeHeightAt); computeVertexNormals ~17ms; POI chunk load 20-57ms; a wreck_knot would be ~150ms in one frame.
+- **Shipped:**
+  - Sliced tile builds: staged `fillRows`(12 rows ≈ 8-10ms/frame) → geometry+normals (one ~17ms frame) → ATOMIC mesh+collider finalize; anchor tile + boot ring stay synchronous (safety + byte-identity). One shared code path; per-vertex output byte-identical.
+  - `CHUNK_LOADS_PER_FRAME` 2→1; wreck_knot pieces DEFERRED one per frame (load-time draws + per-piece seeds — deterministic regardless of execution frame; measured ~7-8ms/piece).
+  - NEW permanent `chunk-perf` gate (verify:chunks leg 3): mechanism asserts (slicing the norm ≥100 steps; sync anchor bakes ≤4 + ≤250ms) + tripwires (slice ≤60ms, loads/pieces ≤120ms) + draw/body ceilings + baseline return; routed through a REAL wreck_knot via a wide descriptor scan (the cycle-3 unexercised-path lesson).
+  - The gate CAUGHT a real edge in development: diagonal teleport legs outrun the sliced ring → the anchor-tile safety bake fires (correct fall-through protection at ~100× play speed) — assert recalibrated from ===0 to the rare-and-bounded allowance, logged in D296.
+- **Verify:** ALL GREEN — placement ×5, colliders 55, chunks (determinism digests UNCHANGED from cycle 4 — slicing alters nothing; streaming 332→332; perf leg first-pass), 5 smokes, 9 vista shots regenerated identically.
+- **D-entries:** D296. **Spend:** ~190K (campaign ~990K / 10M; cycle 5/50).
+- **Commit:** (SHA recorded on commit — next log edit.)
+- **Next:** cycle 6 = **⏸ S5 save schema plan — THE SANCTIONED PAUSE** (plans, sets awaiting_approval, STOPS; brief in `docs/next-session-prompt.md`). Morning review: walk-test + review the plan + `/campaign-approve`.
+
 ## Cycle 4 — S4 distributed landmarks + per-region biomes (2026-07-11) — SHIPPED (interrupted + resumed)
 
 - **Planned:** S4 — a rare per-region roll scattering hero destinations; re-anchor the distance-override biomes per-region; origin heroes stay authored.
@@ -18,7 +32,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 - **Verify:** ALL 10 GREEN first-pass — placement ×5 0-fails (the byte-identity tripwire for the biomes change), colliders 55, chunks (determinism ×2 + cross-seed; streaming 332→332 exact incl. the landmark leg), all 5 smokes.
 - **Visual:** the colossal ribcage is a genuine hero read (30m titan skeleton arcing a dune crest, player-eye).
 - **D-entries:** D295. **Spend:** ~200K (campaign ~800K / 10M; cycle 4/50).
-- **Commit:** (SHA recorded on commit — next log edit.)
+- **Commit:** `9b3ba92` (the SHA-recording docs edit rides in cycle 5's commit).
 - **Next:** cycle 5 = **S6 perf** (brief in `docs/next-session-prompt.md`) — then ⏸ S5 (the sanctioned save pause).
 
 ## Cycle 3 — S3 scatter + ambient life (2026-07-11) — SHIPPED

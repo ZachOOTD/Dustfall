@@ -132,6 +132,14 @@ export interface Terrain {
   recenter: (px: number, pz: number) => void;
   /** Loaded tile keys ("tx,tz") — for the streaming probe / debug. */
   tileKeys: () => string[];
+  /** S6 — generation-perf counters (max wall-clock per sync build / slice
+   *  step / stage). Drives the chunk-perf gate. */
+  perfStats: () => {
+    syncBuilds: number; maxSyncMs: number;
+    sliceSteps: number; maxSliceMs: number;
+    maxStageMs: { fill: number; geometry: number; finalize: number };
+  };
+  resetPerf: () => void;
   /** Legacy half-extent of the ORIGINAL fixed grid (kept for consumers
    *  that still reason about the authored origin region). */
   worldHalfSize: number;
@@ -210,40 +218,75 @@ export function createTerrain(
   const meshes: THREE.Mesh[] = [];
   const tileKey = (tx: number, tz: number): string => `${tx},${tz}`;
 
-  const buildTile = (tx: number, tz: number): void => {
-    const centerX = tx * SIZE;
-    const centerZ = tz * SIZE;
+  // ── Infinite Sands S6 — STAGED tile builds. ONE shared per-vertex fill
+  // (fillRows) serves both the SYNCHRONOUS path (the boot ring + the
+  // anchor tile — fall-through protection; byte-identical to the pre-S6
+  // build) and the SLICED background path (recenter advances a single
+  // in-flight build by TERRAIN_SLICE_ROWS rows per frame, then assembles
+  // geometry on one frame and finalizes mesh+collider ATOMICALLY on the
+  // next — rule 9: the collider and the visible mesh appear together;
+  // no partial tile is ever in the scene). The fill combines the old
+  // heights pass + colors pass into one row sweep — every per-vertex
+  // value is a pure function of world (x, z), so the output arrays are
+  // byte-identical to the two-pass original. ──
 
-    const heights = new Float32Array(stride * stride);
-    for (let i = 0; i <= CELLS; i++) {
-      for (let j = 0; j <= CELLS; j++) {
-        // World-space sampling — adjacent tiles' shared edge produces
-        // identical heights because both tiles pass the same world (x,z)
-        // through the SAME noise instance and biome sampler.
-        const localX = (i / CELLS - 0.5) * SIZE;
-        const localZ = (j / CELLS - 0.5) * SIZE;
-        heights[i * stride + j] = computeHeightAt(centerX + localX, centerZ + localZ);
-      }
-    }
+  interface TileBuild {
+    tx: number;
+    tz: number;
+    centerX: number;
+    centerZ: number;
+    heights: Float32Array;
+    positions: Float32Array;
+    colors: Float32Array;
+    biomeRaws: Float32Array;
+    /** Next i-row to fill; > CELLS = fill complete. */
+    row: number;
+    geo: THREE.BufferGeometry | null;
+  }
 
-    // --- Three.js mesh (vertex positions in mesh-local space) ---
+  // Permanent generation-perf accounting (drives the S6 chunk-perf gate +
+  // the F1 HUD if wired later). Wall-clock per recenter/build step.
+  const _perf = {
+    syncBuilds: 0,
+    maxSyncMs: 0,
+    sliceSteps: 0,
+    maxSliceMs: 0,
+    maxStageMs: { fill: 0, geometry: 0, finalize: 0 },
+  };
+
+  const newTileBuild = (tx: number, tz: number): TileBuild => {
     const vertCount = stride * stride;
-    const positions = new Float32Array(vertCount * 3);
-    const colors = new Float32Array(vertCount * 3);
-    // Per-vertex raw biome noise value — feeds the fragment shader's
-    // biome-detection (terrainMaterial). Independent of vertex color
-    // so the shader can detect biome correctly even where adjacent
-    // vertices have blended colors.
-    const biomeRaws = new Float32Array(vertCount);
-    for (let i = 0; i <= CELLS; i++) {
+    return {
+      tx, tz,
+      centerX: tx * SIZE,
+      centerZ: tz * SIZE,
+      heights: new Float32Array(vertCount),
+      positions: new Float32Array(vertCount * 3),
+      colors: new Float32Array(vertCount * 3),
+      biomeRaws: new Float32Array(vertCount),
+      row: 0,
+      geo: null,
+    };
+  };
+
+  /** Fill up to `rowBudget` i-rows (heights + positions + colors +
+   *  biomeRaws in one sweep). Returns true when the fill is complete.
+   *  World-space sampling — adjacent tiles' shared edge produces identical
+   *  heights because both tiles pass the same world (x,z) through the SAME
+   *  noise instance and biome sampler. */
+  const fillRows = (b: TileBuild, rowBudget: number): boolean => {
+    const end = Math.min(CELLS, b.row + rowBudget - 1);
+    for (let i = b.row; i <= end; i++) {
       for (let j = 0; j <= CELLS; j++) {
-        const idx = (i * stride + j) * 3;
         const localX = (i / CELLS - 0.5) * SIZE;
         const localZ = (j / CELLS - 0.5) * SIZE;
-        positions[idx] = localX;
-        positions[idx + 1] = heights[i * stride + j];
-        positions[idx + 2] = localZ;
-        const wx2 = centerX + localX, wz2 = centerZ + localZ;
+        const h = computeHeightAt(b.centerX + localX, b.centerZ + localZ);
+        b.heights[i * stride + j] = h;
+        const idx = (i * stride + j) * 3;
+        b.positions[idx] = localX;
+        b.positions[idx + 1] = h;
+        b.positions[idx + 2] = localZ;
+        const wx2 = b.centerX + localX, wz2 = b.centerZ + localZ;
         const n = biomes.rawAt(wx2, wz2);
         let c = blendedBiomeColor(n);
         const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
@@ -257,61 +300,82 @@ export function createTerrain(
           c = lerp3(c, stain, wyC);
         }
         // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
-        // funnel READS as a shadowed pit even under flat overhead light (the
-        // depression alone is too subtle). Darkens to a shadowed dune-brown.
+        // funnel READS as a shadowed pit even under flat overhead light.
         const pitC = biomes.sarlaccPitAt(wx2, wz2);
         if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
         // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
         const caveC = biomes.caveAt(wx2, wz2);
         if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
-        colors[idx]     = c[0];
-        colors[idx + 1] = c[1];
-        colors[idx + 2] = c[2];
-        biomeRaws[i * stride + j] = n;
+        b.colors[idx]     = c[0];
+        b.colors[idx + 1] = c[1];
+        b.colors[idx + 2] = c[2];
+        b.biomeRaws[i * stride + j] = n;
       }
     }
-    const indices: number[] = [];
-    for (let i = 0; i < CELLS; i++) {
-      for (let j = 0; j < CELLS; j++) {
-        const a = i * stride + j;
-        const b = a + 1;
-        const c = (i + 1) * stride + j;
-        const d = c + 1;
-        indices.push(a, b, c, b, d, c);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    // Custom per-vertex biome noise — read by terrainMaterial shader.
-    geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(biomeRaws, 1));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
+    b.row = end + 1;
+    return b.row > CELLS;
+  };
 
+  // Index buffer is identical for every tile — build once, share.
+  const _sharedIndices: number[] = [];
+  for (let i = 0; i < CELLS; i++) {
+    for (let j = 0; j < CELLS; j++) {
+      const a = i * stride + j;
+      const b2 = a + 1;
+      const c2 = (i + 1) * stride + j;
+      const d = c2 + 1;
+      _sharedIndices.push(a, b2, c2, b2, d, c2);
+    }
+  }
+
+  const assembleGeometry = (b: TileBuild): void => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(b.positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(b.colors, 3));
+    // Custom per-vertex biome noise — read by terrainMaterial shader.
+    geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(b.biomeRaws, 1));
+    geo.setIndex(_sharedIndices);
+    geo.computeVertexNormals();
+    b.geo = geo;
+  };
+
+  const finalizeTile = (b: TileBuild): void => {
     // Session MM-2 — procedural detail via onBeforeCompile shader patches
-    // (the shared `material` above). Vertex colors (biome blend) feed the
-    // base diffuse; the shader adds sand grain + ripples + slope darkening.
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.position.set(centerX, 0, centerZ);
+    // (the shared `material` above). Vertex colors feed the base diffuse.
+    const mesh = new THREE.Mesh(b.geo!, material);
+    mesh.position.set(b.centerX, 0, b.centerZ);
     // Terrain never casts (it IS the shadow catcher). noShadow marks it so
     // the boot shadow-flag traverse in main.ts doesn't flip castShadow on.
     mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.userData.noShadow = true;
     scene.add(mesh);
-
-    // --- Rapier heightfield collider, body translated to tile center ---
+    // Rapier heightfield collider, body translated to tile center — added
+    // in the SAME step as the mesh (atomic; rule 9).
     const colliderDesc = RAPIER.ColliderDesc.heightfield(
-      CELLS, CELLS, heights,
+      CELLS, CELLS, b.heights,
       { x: SIZE, y: 1, z: SIZE },
     );
     const body = world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(centerX, 0, centerZ),
+      RAPIER.RigidBodyDesc.fixed().setTranslation(b.centerX, 0, b.centerZ),
     );
     world.createCollider(colliderDesc, body);
-
-    tiles.set(tileKey(tx, tz), { centerX, centerZ, heights, mesh, body });
+    tiles.set(tileKey(b.tx, b.tz), { centerX: b.centerX, centerZ: b.centerZ, heights: b.heights, mesh, body });
     meshes.push(mesh);
+  };
+
+  /** SYNCHRONOUS build — the boot ring + the anchor tile (a save-load
+   *  teleport must never fall through unloaded ground). Same staged fns,
+   *  run to completion in one call; byte-identical output. */
+  const buildTile = (tx: number, tz: number): void => {
+    const t0 = performance.now();
+    const b = newTileBuild(tx, tz);
+    fillRows(b, stride);
+    assembleGeometry(b);
+    finalizeTile(b);
+    const ms = performance.now() - t0;
+    _perf.syncBuilds++;
+    if (ms > _perf.maxSyncMs) _perf.maxSyncMs = ms;
   };
 
   const disposeTile = (key: string): void => {
@@ -343,6 +407,8 @@ export function createTerrain(
   // (2*RADIUS+1)² set. Initial anchor = tile (0,0), matching the boot ring.
   let atx = 0;
   let atz = 0;
+  // S6 — the single in-flight SLICED build (non-anchor ring tiles only).
+  let pending: TileBuild | null = null;
 
   const recenter = (px: number, pz: number): void => {
     // Tiles are CENTER-aligned (span center ± SIZE/2).
@@ -355,27 +421,59 @@ export function createTerrain(
       atx = Math.round(px / SIZE);
       atz = Math.round(pz / SIZE);
     }
-    // Dispose beyond the ring (relative to the anchor).
+    // Dispose beyond the ring (relative to the anchor); discard an
+    // in-flight build whose tile left the ring.
     for (const key of [...tiles.keys()]) {
       const [tx, tz] = key.split(',').map(Number);
       if (Math.max(Math.abs(tx - atx), Math.abs(tz - atz)) > RADIUS) {
         disposeTile(key);
       }
     }
-    // Build missing tiles. The anchor tile (where the player stands,
-    // modulo the margin) builds immediately — never let the capsule fall
-    // through unloaded ground (e.g. a save-load teleport far from the
-    // current ring); the rest are budgeted one per call to spread the
-    // ~37k-vertex bake across frames.
-    if (!tiles.has(tileKey(atx, atz))) buildTile(atx, atz);
-    let budget = 1;
-    for (let d = 1; d <= RADIUS && budget > 0; d++) {
-      for (let tx = atx - d; tx <= atx + d && budget > 0; tx++) {
-        for (let tz = atz - d; tz <= atz + d && budget > 0; tz++) {
-          if (Math.max(Math.abs(tx - atx), Math.abs(tz - atz)) !== d) continue;
-          if (!tiles.has(tileKey(tx, tz))) {
-            buildTile(tx, tz);
-            budget--;
+    if (pending && Math.max(Math.abs(pending.tx - atx), Math.abs(pending.tz - atz)) > RADIUS) {
+      pending = null;
+    }
+    // The anchor tile (where the player stands, modulo the margin) builds
+    // SYNCHRONOUSLY — never let the capsule fall through unloaded ground
+    // (e.g. a save-load teleport far from the current ring).
+    if (!tiles.has(tileKey(atx, atz))) {
+      if (pending && pending.tx === atx && pending.tz === atz) pending = null;
+      buildTile(atx, atz);
+    }
+    // S6 — advance the sliced background build ONE stage-step per frame:
+    // fill (TERRAIN_SLICE_ROWS rows) → geometry+normals → finalize
+    // (mesh + collider, atomic). Bounded per-frame cost regardless of how
+    // many tiles the ring is missing.
+    const t0 = performance.now();
+    if (pending) {
+      if (pending.row <= CELLS) {
+        const done = fillRows(pending, Tuning.TERRAIN_SLICE_ROWS);
+        const ms = performance.now() - t0;
+        if (ms > _perf.maxStageMs.fill) _perf.maxStageMs.fill = ms;
+        void done;
+      } else if (!pending.geo) {
+        assembleGeometry(pending);
+        const ms = performance.now() - t0;
+        if (ms > _perf.maxStageMs.geometry) _perf.maxStageMs.geometry = ms;
+      } else {
+        finalizeTile(pending);
+        pending = null;
+        const ms = performance.now() - t0;
+        if (ms > _perf.maxStageMs.finalize) _perf.maxStageMs.finalize = ms;
+      }
+      const ms = performance.now() - t0;
+      _perf.sliceSteps++;
+      if (ms > _perf.maxSliceMs) _perf.maxSliceMs = ms;
+    } else {
+      // Start the next missing ring tile (nearest-first).
+      outer:
+      for (let d = 1; d <= RADIUS; d++) {
+        for (let tx = atx - d; tx <= atx + d; tx++) {
+          for (let tz = atz - d; tz <= atz + d; tz++) {
+            if (Math.max(Math.abs(tx - atx), Math.abs(tz - atz)) !== d) continue;
+            if (!tiles.has(tileKey(tx, tz))) {
+              pending = newTileBuild(tx, tz);
+              break outer;
+            }
           }
         }
       }
@@ -432,6 +530,12 @@ export function createTerrain(
     normalAt,
     recenter,
     tileKeys: () => [...tiles.keys()],
+    perfStats: () => ({ ..._perf, maxStageMs: { ..._perf.maxStageMs } }),
+    resetPerf: () => {
+      _perf.syncBuilds = 0; _perf.maxSyncMs = 0;
+      _perf.sliceSteps = 0; _perf.maxSliceMs = 0;
+      _perf.maxStageMs.fill = 0; _perf.maxStageMs.geometry = 0; _perf.maxStageMs.finalize = 0;
+    },
     worldHalfSize,
   };
 }

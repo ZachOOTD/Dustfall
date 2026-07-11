@@ -88,7 +88,19 @@ if (!sm) {
   rows.push(`streaming: bodies ${sm[2]}→${sm[3]}, chunks ${sm[4]}/${sm[5]} (home/far), farMarkers=${sm[6]}, farPois=${sm[7]}, farSalvage=${sm[8]}, farRocks=${sm[9]}, farFauna=${sm[10]}, tiles=${sm[11]}, ${sm[12]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
-console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak gate) ===');
+// ── 3. Generation perf (S6): sliced tile builds, bounded chunk loads,
+//      draw/body ceilings across a multi-km walk ──
+const pm = runParsed('chunk-perf', 1337, 5490, /CHUNK-PERF pass=(\d) slice=([\d.]+)ms\(fill=([\d.]+)\/geo=([\d.]+)\/fin=([\d.]+)\) steps=(\d+) load=([\d.]+)ms lm=([\d.]+)ms draw=(\d+)->(\d+) bodies=(\d+)->(\d+)->(\d+) fails=(\d+)/, 900000);
+if (!pm) {
+  allPass = false;
+  rows.push('perf: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
+} else {
+  const ok = pm[1] === '1';
+  if (!ok) allPass = false;
+  rows.push(`perf: slice ${pm[2]}ms (fill ${pm[3]} / geo ${pm[4]} / fin ${pm[5]}), ${pm[6]} steps, load ${pm[7]}ms, landmark-piece ${pm[8]}ms, draw ${pm[9]}→${pm[10]}, bodies ${pm[11]}→${pm[12]}→${pm[13]}, ${pm[14]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
+console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass
   ? '\nCHUNKS GATE: PASS — deterministic per-chunk content, clean streaming, no body leaks.'

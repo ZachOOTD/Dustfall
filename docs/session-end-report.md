@@ -1,7 +1,7 @@
 # Dustfall — Session-end report
 
 Cumulative state. Rewritten (and pruned) at each `/session-end`. Per-session detail lives in
-`docs/changelog.md` (append-only); per-cycle campaign detail in `docs/campaign/campaign-log.md`.
+`docs/changelog.md`; per-cycle campaign detail in `docs/campaign/campaign-log.md`.
 
 ## Current state (2026-07-11)
 
@@ -9,71 +9,61 @@ Cumulative state. Rewritten (and pruned) at each `/session-end`. Per-session det
 LIVE web build, Tauri desktop build).
 
 **⚙ ACTIVE CAMPAIGN — "Infinite Sands"** (branch `campaign/2026-07-10-procgen`).
-**S1-S4 shipped (cycles 1-4). Two rungs left: S6 perf (next) → ⏸ S5 save (the sanctioned pause,
-then the morning review).** Ladder detail: `docs/roadmap.md` "Up next".
+**S1-S4 + S6 shipped (cycles 1-5). ONE rung left: ⏸ S5 save schema — cycle 6 writes the plan and
+PAUSES for your review (D81).** Ladder detail: `docs/roadmap.md`.
 
-**Cycle 4 (this session) — S4 landmarks + per-region biomes (D295):** the far field has
-destinations. Region-grid (1792m) hero landmarks at 0.3/region — `colossal_ribcage` (a 5-8×
-titan skeleton; placeRibcage gained scale + returns handles, collider scaled with the mesh) and
-`wreck_knot` (a 3-wreck salvage triangle + carcasses; Skyfall's future slot) — rendered on the
-normal chunk lifecycle. Regional wreck-yard anchors (0.08/region, ≥2200m from origin — the boot
-ring's corner vertex is 1697m) feed the SAME `wreckYardAt` via one APPENDED biome-stream draw +
-a memoized region hash: far graveyards get the ashen mottled ground, terrain flatten, biome id,
-graveyard POI mix, and a 6× POI density with zero new consumer code. The released origin world
-bakes byte-identically (placement gate green ×5 seeds). Gates extended: landmark
-descriptor↔render equality, a landmark-site walk leg, a ±15km regional-yard biome scan, vista
-landmark/yard shots + a vertex-color yard diagnostic.
+**Cycle 5 (this session) — S6 hitch-free generation (D296):**
+- Terrain tiles build SLICED: staged fns (fill 12 rows/frame ≈ 8-10ms → geometry+normals one
+  ~17ms frame → ATOMIC mesh+collider finalize; no partial tile ever visible). The anchor tile +
+  boot ring stay synchronous (fall-through safety + boot byte-identity). Old cost: ~90-200ms ×3
+  tiles per 800m crossing, in single frames.
+- Chunk loads bounded to 1/frame; wreck_knot landmark pieces render DEFERRED one per frame
+  (load-time rng draws + per-piece seeds → deterministic regardless of execution frame).
+- NEW permanent `chunk-perf` gate (3rd `verify:chunks` leg): a multi-km walk routed through a
+  real wreck_knot asserting slicing-is-the-norm (≥100 steps), sync anchor-safety bakes rare
+  (≤4 at teleport pace) + bounded, loads/pieces under tripwires, draw+body ceilings, baseline
+  return. The gate caught a real edge during development (diagonal teleport legs outrun the
+  sliced ring → the anchor safety bake fires — correct behavior, assert recalibrated).
+- Permanent perf instrumentation: `__game.chunkPerf()` / `resetChunkPerf`.
 
-**Mid-cycle interruption (resolved):** the user's machine hit 100% CPU — root-caused to leaked
-headless browsers (`chrome-headless-shell`, whose dashed name every reap regex missed) + probe
-suites' inherent swiftshader load. Fixed FRAMEWORK-WIDE: `gamedev-framework/plugin/scripts/
-reap-orphans.mjs` (orphan-state reaping, safe with concurrent sessions) wired as global
-SessionStart/SessionEnd hooks; per-project regexes fixed (dustfall, project-mountain, skeleton);
-canon in `gamedev-framework/shared-memory/process-leak-hygiene.md`. Verified live: the
-SessionStart hook fired on restart, and the full cycle-4 gate suite returned the machine to an
-exact 4-node/0-headless baseline.
-
-**Verify baseline:** all 10 gates green first-pass this cycle (streaming: bodies 332→332,
-farPois/farRocks descriptor↔render exact, landmark leg green). Save schema v16 untouched.
+**Verify baseline:** all gates green — placement ×5, colliders 55, chunks (determinism ×2 +
+cross-seed + streaming + perf), 5 smokes, 9 vista shots regenerated identically. Save v16
+untouched. Machine clean after the suite (the reap-orphans fix holding).
 
 ## What works end-to-end
-The full survival loop plus an INFINITE world: walk any direction forever — deterministic terrain,
-wrecks with working salvage, rocks, wordless vignettes, prey clusters, rare hero landmarks
-(titan skeletons, salvage knots), and rare regional wreck-yard graveyard regions. All streamed
-content is save-transient (regenerates pristine — v1 semantics until S5) and leak-gated.
+The full survival loop + an INFINITE, HITCH-FREE world: deterministic terrain, wrecks with
+salvage, rocks, vignettes, prey, hero landmarks, regional graveyard biomes — walk forever in any
+direction with no generation hitch a player would feel. Missing only: far-field persistence
+(S5 — the pause).
 
 ## Known issues / partials
-- Terrain tile bake frame-blocks at ring crossings (~100-200ms ×3 tiles per 800m) — **S6, next**.
-- Streamed content regenerate-pristine on reload until S5 (D292, documented).
-- Regional yards lack a dense boot-style cluster read (backlog `[polish]`, knob: the ×6).
-- No far-field vultures (D294 defer); streamed-landmark horizon silhouettes skipped (S2/S4 note).
-- The §A owed human walk-tests pile (`docs/backlog.md`).
+- Streamed content regenerate-pristine until S5 (D292 — the point of the next cycle).
+- Regional-yard cluster read, far-field vultures, streamed-landmark silhouettes (backlog).
+- The §A owed human walk-tests pile.
+- If real-play profiling ever shows the one 17ms normals frame per tile: banded normals is the
+  known next step (D296).
 
 ## Constants / knobs (new this cycle)
-`CHUNK_REGION_CHUNKS` (16), `CHUNK_LANDMARK_CHANCE` (0.3), `WRECK_YARD_REGION_CHANCE` (0.08),
-`WRECK_YARD_REGION_MIN_DIST` (2200), the yard POI ×6 (chunkManager).
+`TERRAIN_SLICE_ROWS` (12), `CHUNK_LOADS_PER_FRAME` (2→1).
 
 ## Suggested next
-1. **Cycle 5 = S6 perf** (brief in `docs/next-session-prompt.md`): measure → slice the tile bake
-   across frames → ceilings + a NEW permanent cross-chunk perf probe.
-2. **Then ⏸ S5** — the save-schema plan pauses for human review BEFORE building (D81).
-3. Morning review: walk the infinite world (`npm run dev`) — landmarks, a regional yard, far
-   salvage; then `/campaign-approve` at the S5 pause; Skyfall resumes after the campaign.
+1. **Cycle 6 = ⏸ S5 schema plan** (brief in `docs/next-session-prompt.md`) — plans, pauses,
+   awaits `/campaign-approve`.
+2. **Your morning review**: walk the infinite world (`npm run dev`) — cross a tile boundary at
+   sprint (feel for hitches), visit a landmark + a regional yard, strip a far wreck; then review
+   `docs/feature-save-per-chunk-diffs.md` (cycle 6 will have written it) and `/campaign-approve`.
+3. After the campaign: the parked Skyfall plan-review.
 
 ## State at session end
-- **Git:** `campaign/2026-07-10-procgen`; cycles 1-4 committed (`e82d9a7`, `ad49dc0`, `deadc77`,
-  cycle 4's SHA in campaign-log). `master` untouched, nothing pushed.
-- **Save:** v16 untouched. **Machine:** 4 node / 0 headless after the full suite (the reap fix
-  holding); framework fix committed separately (`gamedev-framework@e78c1ca`).
+- **Git:** `campaign/2026-07-10-procgen`; cycles 1-5 committed (`e82d9a7`, `ad49dc0`, `deadc77`,
+  `9b3ba92`, cycle 5's SHA in campaign-log). `master` untouched, nothing pushed.
+- **Save:** v16 untouched.
 
 ## Time + token spend
-Cycle 4 ≈ 200K output tokens (build + the yard density iteration + the vista diagnostics), plus
-~120K on the mid-cycle machine-slowdown investigation + framework fix (outside the campaign's
-scope but charged to the session). Campaign ledger: ~800K / 10M, cycle 4/50.
+Cycle 5 ≈ 190K output tokens (measure → build → 4 probe calibration rounds — one of which was
+the gate catching the teleport-pace sync edge). Campaign ledger: ~990K / 10M, cycle 5/50.
 
 ## Iteration-discipline self-check (rule 8)
-PASS (systems bar + one hero moment). The colossal-ribcage landmark shot is a genuine hero read
-achieved through existing art at scale (screenshot-verified player-eye); the regional-yard look
-went through 3 diagnose rounds (shot → suspected missing bake → vertex-color diag proved the bake
-→ density identified as the real gap → ×6 + a logged cluster-read polish item). No visual element
-shipped blind.
+PASS (systems/perf bar). No new visual surface (slicing is invisible by design — proven by the
+9 vista shots regenerating identically + the atomic-finalize rule). The perf work followed
+measure→build→measure discipline with numbers logged at each step.

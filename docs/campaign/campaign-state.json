@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-10",
   "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 4,
-  "current_tier": "S6 - Perf: frame-budgeted generation + cross-chunk perf probe",
+  "cycles_completed": 5,
+  "current_tier": "S5 - Save: per-chunk diffs (SANCTIONED PAUSE before build)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -16,13 +16,13 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 800000 },
+  "spend": { "total": 990000 },
   "ladder": [
     { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
     { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "shipped", "cycle": 2 },
     { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "shipped", "cycle": 3 },
     { "id": "S4", "name": "Distributed rare landmarks + per-region biomes", "kind": "auto", "status": "shipped", "cycle": 4 },
-    { "id": "S6", "name": "Perf: frame-budgeted generation + cross-chunk perf probe", "kind": "auto", "status": "pending" },
+    { "id": "S6", "name": "Perf: frame-budgeted generation + cross-chunk perf probe", "kind": "auto", "status": "shipped", "cycle": 5 },
     { "id": "S5", "name": "Save: per-chunk diffs (SAVE_VERSION bump)", "kind": "save-critical", "status": "pending", "pause_before": "build" }
   ],
   "sanctioned_pauses": ["save-version-bump (S5, pause BEFORE building)"],
@@ -65,9 +65,19 @@
       "outcome": "shipped",
       "tier": "S4",
       "spend_this_cycle": 200000,
-      "commit": "PENDING-SET-ON-COMMIT",
+      "commit": "9b3ba92",
       "d_entries": ["D295"],
       "note": "interrupted mid-cycle by the machine-slowdown investigation (framework-wide reap-orphans fix, gamedev-framework@e78c1ca); resumed + closed after"
+    },
+    {
+      "n": 5,
+      "date": "2026-07-11",
+      "focus": "S6 hitch-free generation: sliced tile builds + deferred landmark pieces + the permanent chunk-perf gate",
+      "outcome": "shipped",
+      "tier": "S6",
+      "spend_this_cycle": 190000,
+      "commit": "PENDING-SET-ON-COMMIT",
+      "d_entries": ["D296"]
     }
   ]
 }

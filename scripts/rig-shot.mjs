@@ -1904,6 +1904,124 @@ const SCENARIOS = {
     if (!pass) throw new Error('chunk-streaming GATE FAILED');
   },
 
+  // Infinite Sands S6 (campaign 2026-07-10) — CHUNK-PERF GATE. Generation
+  // must be hitch-free: terrain tiles build SLICED (a bounded stage-step
+  // per frame, never a synchronous 37k-vertex bake mid-walk) and chunk
+  // loads stay bounded; draw calls + Rapier bodies hold ceilings across a
+  // multi-km walk. Thresholds are GROSS-REGRESSION tripwires (a synchronous
+  // bake is ~100-200ms; a sliced step ~2-10ms), generous enough to be
+  // machine-load flake-resistant (D291) — the sharp assert is
+  // syncBuilds === 0: a contiguous walk must never hit the synchronous
+  // (anchor-teleport) path.
+  'chunk-perf': async (page) => {
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const fails = [];
+      ctx.sandWorms.list.length = 0;
+      ctx.vultures.list.length = 0;
+      ctx.three.renderer.setSize(320, 240, false);
+      // Settle at home, then reset the perf maxima so the walk is the sample.
+      const tp = async (x, z, settle) => {
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+        await frames(settle);
+      };
+      await tp(56, 56, 60);
+      const baseBodies = ctx.physics.world.bodies.len();
+      const baseDraw = ctx.three.renderer.info.render.calls;
+      g.resetChunkPerf();
+      // Walk out through the landmark-bearing far field and back — every
+      // 140m hop queues tiles + chunks (a WORSE generation load than real
+      // walking speed).
+      let maxDraw = 0, maxBodies = 0;
+      const hop = async (x, z) => {
+        await tp(x, z, 12);
+        const d = ctx.three.renderer.info.render.calls;
+        const b = ctx.physics.world.bodies.len();
+        if (d > maxDraw) maxDraw = d;
+        if (b > maxBodies) maxBodies = b;
+      };
+      const cur = () => ctx.player.body.body.translation();
+      const walkTo = async (txp, tzp) => {
+        const c0 = cur();
+        const steps = Math.max(1, Math.ceil(Math.hypot(txp - c0.x, tzp - c0.z) / 140));
+        for (let i = 1; i <= steps; i++) {
+          await hop(c0.x + (txp - c0.x) * (i / steps), c0.z + (tzp - c0.z) * (i / steps));
+        }
+        await frames(30);
+      };
+      await walkTo(2500, 56);
+      // Route through the nearest region-rolled LANDMARK so its (deferred,
+      // one-piece-per-frame) render cost is in the sample.
+      {
+        // Prefer a wreck_knot — its DEFERRED per-frame piece renders are
+        // the path this gate exists to sample (an unexercised deferred
+        // path shipping is the cycle-3 fauna lesson); fall back to any
+        // landmark. Wide scan: knot kinds are a 50% sub-roll of a
+        // 0.3/region roll, so ~40 regions makes one near-certain.
+        let lm = null, knot = null;
+        for (let cx = 12; cx <= 110; cx++) {
+          for (let cz = -48; cz <= 48; cz++) {
+            const d = g.chunkDescribe(cx, cz);
+            if (!d.landmark.present) continue;
+            if (!lm) lm = d.landmark;
+            if (!knot && d.landmark.kind === 'wreck_knot') { knot = d.landmark; break; }
+          }
+          if (knot) break;
+        }
+        const target = knot || lm;
+        if (target) { await walkTo(target.x + 40, target.z + 40); await frames(90); }
+        fails.__route = target ? `${target.kind}@${target.x.toFixed(0)},${target.z.toFixed(0)}` : 'none';
+      }
+      await walkTo(2500, 2500);
+      await walkTo(56, 56);
+      await frames(90);
+      const perf = g.chunkPerf();
+      const endBodies = ctx.physics.world.bodies.len();
+      // ── Asserts ──
+      // Slicing must be the NORM: plenty of slice steps ran, and sync
+      // (anchor-safety) bakes stay RARE. The teleport-hop walk moves
+      // ~100× faster than real play, so the ring legitimately lags on
+      // diagonal legs and the anchor-tile safety bake may fire a few
+      // times — that's fall-through protection working, not a
+      // regression. A real regression (ring fills reverting to sync)
+      // does ~30+ sync bakes on this walk and near-zero slice steps.
+      if (perf.terrain.sliceSteps < 100) {
+        fails.push(`only ${perf.terrain.sliceSteps} slice steps — sliced builds are not running (reverted to sync?)`);
+      }
+      if (perf.terrain.syncBuilds > 4) {
+        fails.push(`${perf.terrain.syncBuilds} SYNCHRONOUS tile bakes (maxSyncMs=${perf.terrain.maxSyncMs.toFixed(1)}) — far above the teleport-pace safety allowance; slicing regressed`);
+      }
+      if (perf.terrain.maxSyncMs > 250) fails.push(`sync anchor bake ${perf.terrain.maxSyncMs.toFixed(1)}ms > 250ms tripwire`);
+      if (perf.terrain.maxSliceMs > 60) fails.push(`terrain slice step ${perf.terrain.maxSliceMs.toFixed(1)}ms > 60ms tripwire (stages: ${JSON.stringify(perf.terrain.maxStageMs)})`);
+      if (perf.chunks.maxLoadMs > 120) fails.push(`chunk load ${perf.chunks.maxLoadMs.toFixed(1)}ms > 120ms tripwire (poi=${perf.chunks.maxPoiLoadMs.toFixed(1)})`);
+      if (perf.chunks.maxLandmarkLoadMs > 120) fails.push(`landmark piece ${perf.chunks.maxLandmarkLoadMs.toFixed(1)}ms > 120ms tripwire (deferred staging regressed)`);
+      if (maxDraw > baseDraw + 500) fails.push(`draw calls unbounded: max ${maxDraw} vs base ${baseDraw}`);
+      if (maxBodies > baseBodies + 300) fails.push(`bodies unbounded: max ${maxBodies} vs base ${baseBodies}`);
+      if (Math.abs(endBodies - baseBodies) > 3) fails.push(`bodies did not return to baseline: ${baseBodies} → ${endBodies}`);
+      return {
+        fails,
+        route: fails.__route,
+        sliceSteps: perf.terrain.sliceSteps,
+        maxSliceMs: +perf.terrain.maxSliceMs.toFixed(1),
+        stages: {
+          fill: +perf.terrain.maxStageMs.fill.toFixed(1),
+          geometry: +perf.terrain.maxStageMs.geometry.toFixed(1),
+          finalize: +perf.terrain.maxStageMs.finalize.toFixed(1),
+        },
+        loads: perf.chunks.loads,
+        maxLoadMs: +perf.chunks.maxLoadMs.toFixed(1),
+        maxLandmarkLoadMs: +perf.chunks.maxLandmarkLoadMs.toFixed(1),
+        baseDraw, maxDraw, baseBodies, maxBodies, endBodies,
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`CHUNK-PERF pass=${pass ? 1 : 0} slice=${r.maxSliceMs}ms(fill=${r.stages.fill}/geo=${r.stages.geometry}/fin=${r.stages.finalize}) steps=${r.sliceSteps} load=${r.maxLoadMs}ms lm=${r.maxLandmarkLoadMs}ms draw=${r.baseDraw}->${r.maxDraw} bodies=${r.baseBodies}->${r.maxBodies}->${r.endBodies} fails=${r.fails.length}`);
+    console.log(`[chunk-perf] route=${r.route} ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('chunk-perf GATE FAILED');
+  },
+
   // Infinite Sands S1 — VISUAL sanity shots for the streamed world (the
   // appearance side of the S1 gate; systems work, placement-sanity bar).
   // Walks the player out past the old ±1200m world edge with markers on and
