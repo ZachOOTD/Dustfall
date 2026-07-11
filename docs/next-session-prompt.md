@@ -1,5 +1,7 @@
 # Next session — Infinite procedural generation (chunk-streamed open world)
 
+**⚙ A CAMPAIGN IS ACTIVE for this work** — "Infinite Sands", overnight, branch `campaign/2026-07-10-procgen`. Boot `/campaign-cycle` from `docs/campaign/campaign-state.json` + `campaign.md` (the design questions below are ANSWERED there). The paused Skyfall campaign is parked at `docs/campaign/*-2026-07-09-sharpen-deepen.*`.
+
 **Focus this session:** begin the infinite-procgen work. **Read `docs/feature-infinite-procgen.md` first** — it has the DoD, the current finite-vs-infinite architecture map (with file:line refs), the sub-task breakdown (S1 research/spike → S2 POI streaming → S3 scatter/creatures → S4 landmarks/biomes → S5 save → S6 perf), the open design questions, and the invariants to preserve.
 
 ## Start here

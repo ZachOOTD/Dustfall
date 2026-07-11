@@ -1,46 +1,45 @@
-# Campaign — Dustfall "Sharpen & Deepen"
+# Campaign — Dustfall "Infinite Sands" (infinite procedural generation)
 
-**Goal:** Deepen the EXISTING game so its content bites, breathes, and rewards exploration — no new content pillars, no tone change, no endgame. "Done enough" = the 7-milestone ladder below is built + green, ready for one end review.
-**Started:** 2026-07-09
-**Branch:** `campaign/2026-07-09` (every cycle commits here; never pushed; merged at end review)
-**Budget:** max-cycles **50** (hard stop) · soft ceiling ~10M output tokens (self-estimate; cycle count is the real bound)
-**Checkpoint policy:** `none` (unattended run-to-completion) — **with two sanctioned exceptions that DO pause** (below)
-**Self-author policy:** `propose` (if the ladder empties before max-cycles, propose more from the GDD and wait — do NOT auto-add)
-**Verify gate (per cycle):** `npm run verify:all` (tsc + placement + colliders) **plus** the intro/tutorial smoke suite (`smoke-intro` / `smoke-pod-tutorial`) — a cycle that breaks the released opening does NOT pass. Visual/feel cycles also run the adversarial appearance gate (`--visual-gate=auto`).
+**Goal:** Convert the finite origin-bound world into an **infinite, deterministic, chunk-streamed** open world per `docs/feature-infinite-procgen.md` (the authoritative feature slice — read it every cycle). "Done enough" = the S-ladder below built + green, ready for one morning review.
+**Started:** 2026-07-10 (overnight)
+**Branch:** `campaign/2026-07-10-procgen` (every cycle commits here; never pushed; merged after the human review)
+**Budget:** max-cycles **50** (hard stop) · soft ceiling ~10M output tokens
+**Checkpoint policy:** `none` — run to completion, **except the one sanctioned pause** (below)
+**Self-author policy:** `propose` (if the ladder empties, propose + wait — do NOT auto-add)
 **Status:** active
 
-## Locked design constraints (do NOT violate autonomously)
-- **No endgame / no Long-Storm finale** — forbidden by the 2026-06-18 user directive; the game stays open-ended "days survived." (The stale "endgame finale" candidate line is scrubbed from CLAUDE.md/roadmap/next-session-prompt in M1.)
-- **No tone change / no pruning** — the user confirmed the current spectacle, 6 flagship journals, and combat/weapon surface are INTENDED. Do not treat them as debt; do not quarantine the raider/combat surface. GDD stays as-is.
-- **Additive-save-only (D81)** — if a unit genuinely needs a `SAVE_VERSION` bump, **PAUSE and surface it** (sanctioned exception below); never cut around it, never ship an unreviewed migration.
-- **No new content pillars** — this campaign sharpens/deepens what exists (plus the ONE new hero wreck, M7). The Phase-A feel-pile (worm/vulture/speeder/atmosphere feel-tunes) is EXCLUDED — reserved for attended sessions.
+## Design decisions (ANSWERED by the user 2026-07-09 — do not re-litigate)
+1. **Chunk size / load radius:** ~112m chunks, load radius ≈ the fog cull horizon (~3 chunks). S1 may tune ±, log a D-entry if it does.
+2. **Deterministic world:** yes — `hash(worldSeed, cx, cz)` per chunk; same seed → same infinite world.
+3. **Landmarks:** DISTRIBUTED rares — a rare per-region roll scatters hero destinations across the infinite field (Skyfall plugs in here later).
+4. **The escape-pod intro stays the fixed start** — the origin region is authored; infinity extends beyond it.
+5. **Save v1 ambition:** FULL per-chunk diffs (modified chunks persist; pristine chunks regenerate). Requires a `SAVE_VERSION` bump → the sanctioned pause.
 
-## Sanctioned pauses (the only two things that stop the unattended run before max-cycles)
-1. **Skyfall pre-detail (M7 `[feel-critical]`)** — build the blockout (scale, shell, interior layout, colliders, enterability) autonomously, then **PAUSE** for the human to walk it (enter it; verify collision + intro-ship scale) before the hero-detail pass.
-2. **Any `SAVE_VERSION` bump** (D81) — surface for approval, do not proceed.
+## The S-ladder (authoritative queue — traverse in order; from feature-infinite-procgen.md)
+- **S1 — ChunkManager spike** `[auto]` — the chunk grid + per-chunk deterministic seed + load/unload with full disposal (meshes, Rapier bodies, registries). Prove it with trivial marker posts + author the NEW permanent gates: a per-chunk **determinism probe** (same (seed,cx,cz) → byte-identical twice) and a **streaming probe** (walk across boundaries → chunks load/unload, body count returns to baseline, no seam duplicates).
+- **S2 — POI streaming** `[auto]` — `placeProcgenPOIs`/`placeProcgenPOI` become per-chunk (biome weights, collider audit, static merge, salvage/journal registration all per chunk; full teardown on unload). Origin chunk keeps the spawn exclusion.
+- **S3 — Scatter + ambient life streaming** `[auto]` — rocks, wordless scenes per-chunk; creatures via an active-ring model around the player (VERIFY how spawn*Procgen works first — the brief's ❓).
+- **S4 — Landmarks + biomes for infinite** `[auto]` — distributed rare heroes (coarse landmark grid / Poisson-disk roll); re-anchor the distance-override biomes (wreck_yard etc.) per-region; origin heroes (Leviathan, mega-ship/wreck, opening scene) stay authored.
+- **S6 — Perf + hitch-free generation** `[auto]` — frame-budgeted chunk generation; draw-call/body ceilings for the active set; extend `perf-probe` to a cross-chunk walk asserting steady counts. (Ordered before S5 so the pause lands last.)
+- **S5 — Save: per-chunk diffs** `[⏸ SANCTIONED PAUSE — pause BEFORE building]` — write the schema plan (which diffs per chunk, migration story, the `SAVE_VERSION` bump), set `awaiting_approval` + `stop_reasons: ["save-version-bump"]`, STOP. The human reviews in the morning + `/campaign-approve` releases the build. **Never ship an unreviewed migration (D81).**
 
-Otherwise: no mid-checkpoints. Review async via `campaign-log.md`; redirect via `steering.md`.
+## Locked constraints (do NOT violate autonomously)
+- **Determinism law (D208/D226)** — per-chunk seeding; components stay `phash`-only; `verify:placement` (adapted as needed) + the new determinism probe stay green.
+- **Rule 9 / no leaks** — every Rapier body, registry entry, and mesh disposed on chunk unload; the streaming probe asserts body-count baseline.
+- **The released escape-pod intro + near-origin spawn are UNCHANGED** — `smoke-intro` / `smoke-pod-tutorial` must stay green every cycle.
+- **No save-schema changes before the S5 pause** (D81).
+- **Keep banked perf** — pickup instancing (D281), `mergeStaticByMaterial`; don't undo.
+- **Master stays untouched** — all work on this branch.
+- **The PARKED Skyfall campaign** (`campaign-*-2026-07-09-sharpen-deepen.*`) is read-only — resume later by restoring those files + `/campaign-approve`.
 
-## The milestone ladder (authoritative queue — traverse in order)
+## Verify gate (per cycle)
+`npm run verify:all` + `smoke-intro` + `smoke-pod-tutorial` + `pickup-take-sweep` + `survival-probe` + `diurnal-probe`, PLUS (once S1 authors them) the **chunk-determinism** + **streaming/leak** probes. A cycle that breaks the released opening does NOT pass. Visual gate: this is systems work — screenshots for placement sanity, no hero bar.
 
-- **M1 — Perf + housekeeping** `[auto]` — ✅ SHIPPED cycle 1 (2026-07-09, D281)
-  - `pickup-instancing` — `InstancedMesh` in `src/pickups/pickups.ts` + an `instanceId→pickupId` resolver in the interaction raycast (`src/player/interaction.ts`); precedent `src/world/footprints.ts`. Verify: perf-probe drawcalls before/after + an eval take-loop confirms every pickup still collects. (Scope-cut #1 if it regresses: revert to merged-mesh pooling.)
-  - `decisions-archival` — roll the oldest ~15 (D207→) into `docs/decisions-archive.md` verbatim, never renumber, update both headers; conserve the count (C43 precedent).
-  - `panel-deadcode-cleanup` — strip superseded panel/greeble builders + dead fields (ACAX list). tsc/build-verifiable.
-  - `survival-probe-crashheat-guard` — one-line determinism assert in the survival probe.
-  - `doc-scrub` — remove the stale "endgame/Long-Storm finale" candidate from CLAUDE.md + `docs/roadmap.md` + `docs/next-session-prompt.md`.
-- **M2 — Survival curve** `[auto + evidence]` — ✅ ALREADY SHIPPED pre-campaign (C38/D246; probe re-verified green cycle 1; the FEEL walk-test stays an end-review item; the "enable in new-game" premise was stale — survival IS live post-intro) — build a headless time-to-death sim harness (minutes-to-death under {open-midday / shade / sheltered / watered}); tune drain/damage/regen bands in `src/config/tuning.ts` to a defensible curve; **enable survival in the REAL new-game path** (currently suspended by the intro) **behind a `FEATURES` flag** so it's one-line reversible at end review. Verify: the evidence table + the flag path.
-- **M3 — Survival depth** `[auto]` — ✅ SHIPPED cycle 2 (2026-07-09, D282: occluders 3→51 via SUN_OCCLUDER_MIN_HEIGHT 2.5m + POI registration; THIRST_SHADE_RELIEF 0.8; heat-shade probe env; C38 bands byte-identical). Was RE-SCOPED cycle 1: sun-shade-exposure ALREADY SHIPPED (C31); remaining = (a) decouple the sun-occluder height threshold from the C28 silhouette threshold + register more occluders (procgen POIs / rocks — coverage is sparse), (b) water-scarcity/exposure (the deferred Arc C1 half). Verify via survival-probe + __game.sunInfo().
-- **M4 — Ambient life beds** `[auto]` — ✅ SHIPPED cycle 3 (2026-07-09, D283: procedural sources on the existing stems; ambient-beds gate) — procedural day + night ambient beds synthesized in `src/audio/soundscape.ts` (zero-asset per D3). **Wind STAYS muted** (user). Verify: audio-state gains > 0 across day/night/storm.
-- **M5 — Living world (diurnal-cycle)** `[auto]` — ✅ SHIPPED cycle 4 (2026-07-09, D284; diurnal-probe gate) — bind lizards/shrews/vultures/worms to day/night activity (iteration-plan M5b). Verify: assert creature activity by time-of-day.
-- **M6 — POI breadth** `[gate-verified]` — COMPLETE (cycles 5-7: `relay_mast` D285 / `buried_pipeline` D286 / `cargo_crawler` D287 — 3 distinct archetypes) — 2-3 new procgen wreck/POI archetypes via the `src/world/poiComponents.ts` socket grammar (+ `poiArchetypes.ts` biome weighting). Verify: `verify:placement` (0 occlusion/terrain fails ×5 seeds) + `verify:colliders`.
-- **M7 — Skyfall enterable hero wreck** `[feel-critical]` — a NEW enterable hero wreck at intro-ship scale (exterior) with an enterable interior of similar-or-larger scale. **Build ON the intro-ship interior tech** (`src/world/escapePodIntro/shipScene.ts`: D-section hull, room colliders, doorways, rule-9 collider discipline) — reuse guarantees the scale-match + de-risks collision. Research-first → blockout → **PAUSE for human walk-test** → hero-detail via the procedural-modeler loop + adversarial-visual gate.
+## Scope-cut order (if a wall hits 3× or budget trips)
+Wordless-scene streaming (keep them origin-only) → creature active-ring nuance (simple radius despawn) → S4 biome re-anchoring breadth (wreck_yard stays origin-anchored for v1) → S6 LOD depth. **Never cut:** determinism, unload disposal (leaks), the intro gates, or the S5 pause.
 
-## Scope-cut order (if verify fails 3× or budget pressure trips)
-Per GDD §12 + this ladder: `pickup-instancing` raycast (→ merged-mesh fallback) → optional M6 archetype count (3→2→1) → M3 water-scarcity breadth → M5 per-species diurnal nuance. **Never cut:** any save-touching change (pause instead, D81); the M2 curve *evidence* (surface it, don't guess); M7 collision correctness (revert to last-green, don't half-ship).
-
-## How to steer this campaign
-- **Watch progress:** read `campaign-log.md` or run `/campaign-status`.
-- **Redirect:** write a note in `steering.md` — picked up at the next cycle boundary.
-- **At a sanctioned pause:** review + (for M7) walk the build, then `/campaign-approve` to release the next unit.
-- **Stop:** `/campaign-status --stop`, or delete `.gamedev-framework/overnight.lock`, or write "pause" in `steering.md`.
+## How to steer
+- Watch: `campaign-log.md` (this file's sibling) or `/campaign-status`.
+- Redirect: write in `steering.md` (picked up at the next cycle boundary).
+- Stop: delete `.gamedev-framework/overnight.lock`, or write `pause` in `steering.md`.
+- Morning: review the log + walk the world (`npm run dev`), then `/campaign-approve` at the S5 pause.

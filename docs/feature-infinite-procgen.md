@@ -45,7 +45,14 @@ All world-build runs ONCE at boot in `src/main.ts`, placing a bounded set around
 - A **streaming probe** (new rig-shot scenario): teleport/walk the player across several chunk boundaries and assert chunks load + unload, Rapier body count returns to baseline (no leaks), and no duplicate POIs at seams.
 - The existing collider-audit + smoke-intro/pod gates must stay green (the origin/intro experience is unchanged).
 
-## Open design questions (decide at kickoff)
+## Open design questions — ANSWERED (user, 2026-07-09; baked into docs/campaign/campaign.md)
+1. Chunk size/load radius: ~112m, radius ≈ fog horizon (~3 chunks) — S1 may tune, log a D-entry.
+2. Deterministic-infinite: YES.
+3. Landmarks: DISTRIBUTED rares across the infinite field.
+4. Intro stays the fixed start: YES.
+5. Save v1: FULL per-chunk diffs (SAVE_VERSION bump — the S5 sanctioned pause).
+
+### (original questions, for context)
 1. **Chunk size + load radius** — tie to the fog cull distance. Proposal: ~112m chunks, load radius ~3 chunks.
 2. **Deterministic-infinite vs endless-random** — strongly recommend deterministic (a seed → the same infinite world). It matches the codebase's determinism law and is what makes save tractable.
 3. **Landmark distribution** — heroes near origin only, or rare heroes distributed across the infinite field (recommended: distributed, so travel has destinations)?
