@@ -26,20 +26,26 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DET_SEEDS = [1337, 7];
 
-function run(scenario, seed, port) {
+// Per-scenario child timeout. The streaming walk is LONG (a 4×1.5km
+// teleport walk with POI generation; ~3-4 min alone, plus a cold Vite boot
+// that can take 60-120s under machine load) — a too-tight spawnSync timeout
+// KILLS the child mid-probe, which both reads as the boot-failure signature
+// ("no probe line") AND leaks the child's dev server (rig-shot's taskkill
+// teardown never runs). 15 min is a give-up deadline, not a wait.
+function run(scenario, seed, port, timeout) {
   const r = spawnSync('node', ['scripts/rig-shot.mjs', `--scenario=${scenario}`, `--seed=${seed}`, `--port=${port}`], {
-    cwd: ROOT, encoding: 'utf8', shell: false, timeout: 420000,
+    cwd: ROOT, encoding: 'utf8', shell: false, timeout,
   });
   return `${r.stdout || ''}${r.stderr || ''}`;
 }
 
 /** Run + parse with one bounded retry on the no-line boot-race signature. */
-function runParsed(scenario, seed, port, regex) {
-  let out = run(scenario, seed, port);
+function runParsed(scenario, seed, port, regex, timeout = 420000) {
+  let out = run(scenario, seed, port, timeout);
   let m = out.match(regex);
   if (!m) {
     console.log(`  transient boot failure (${scenario} seed ${seed}) — retrying (1/1)…`);
-    out = run(scenario, seed, port + 37);
+    out = run(scenario, seed, port + 37, timeout);
     m = out.match(regex);
   }
   return m;
@@ -72,14 +78,14 @@ if (digests.length === 2 && digests[0] === digests[1]) {
 }
 
 // ── 2. Streaming / leak walk (one seed — the walk itself is the test) ──
-const sm = runParsed('chunk-streaming', 1337, 5480, /CHUNK-STREAM pass=(\d) bodies=(\d+)->(\d+) chunks=(\d+)\/(\d+) farMarkers=(\d+) tiles=(\d+) fails=(\d+)/);
+const sm = runParsed('chunk-streaming', 1337, 5480, /CHUNK-STREAM pass=(\d) bodies=(\d+)->(\d+) chunks=(\d+)\/(\d+) farMarkers=(\d+) farPois=(\d+) farSalvage=(\d+) tiles=(\d+) fails=(\d+)/, 900000);
 if (!sm) {
   allPass = false;
   rows.push('streaming: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
 } else {
   const ok = sm[1] === '1';
   if (!ok) allPass = false;
-  rows.push(`streaming: bodies ${sm[2]}→${sm[3]}, chunks ${sm[4]}/${sm[5]} (home/far), farMarkers=${sm[6]}, tiles=${sm[7]}, ${sm[8]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+  rows.push(`streaming: bodies ${sm[2]}→${sm[3]}, chunks ${sm[4]}/${sm[5]} (home/far), farMarkers=${sm[6]}, farPois=${sm[7]}, farSalvage=${sm[8]}, tiles=${sm[9]}, ${sm[10]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak gate) ===');

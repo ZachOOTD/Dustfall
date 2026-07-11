@@ -139,10 +139,12 @@ and promotes the second.
 >   Terrain streams (an anchor-margin 3×3×800m tile ring follows the player); NEW `src/world/chunkManager.ts`
 >   (112m content chunks, r3, full teardown); `heightAt` infinite; 2 NEW permanent gates in `verify:all`
 >   (`verify:chunks` = chunk-determinism + chunk-streaming/leak walk). Marker-post spike content, off by default.
-> - **▶ S2 — POI streaming (NEXT)** — `placeProcgenPOIs`/`placeProcgenPOI` become per-chunk via the descriptor
->   model (D290): biome weights, collider audit, static merge, salvage/journal registration per chunk; full
->   teardown on unload; the origin chunk keeps the spawn exclusion.
-> - S3 — scatter + wordless scenes per-chunk; creatures via an active ring (verify how spawn*Procgen works first).
+> - **✅ S2 — POI streaming** — SHIPPED cycle 2 (2026-07-11, D292–D293). Descriptor-rolled wrecks
+>   (0.07/chunk, biome-weighted archetypes, real `placeProcgenPOI` render, full teardown incl. salvage
+>   splice-out) beyond the 1250m origin exclusion; streamed wrecks are save-TRANSIENT (regenerate
+>   pristine — per-chunk diffs land at S5); the streaming gate now saves at +1500m and asserts the file.
+> - **▶ S3 — scatter + ambient life streaming (NEXT)** — rocks + wordless scenes per-chunk; creatures via
+>   an active ring around the player (VERIFY how spawn*Procgen works first — the slice's open ❓).
 > - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
 > - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
 > - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).

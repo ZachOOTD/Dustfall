@@ -10,7 +10,8 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
-### Infinite Sands residuals (campaign 2026-07-10, cycle 1)
+### Infinite Sands residuals (campaign 2026-07-10, cycles 1-2)
+- `[debt]` **Streamed wrecks have no scrap-debris ring + no horizon silhouette** (S2, deliberate — D292). Scrap pickups are save-id-coupled (S5 lifts this with per-chunk diffs); silhouettes are a module-global registry with no removal path (S4's landmark pass should add a removable variant). Also streamed salvage progress is regenerate-pristine until S5 — documented v1 semantics, not a bug.
 - `[polish]` **Worm-crossing humps read exposed on dead-flat salt** (spotted in the S1 chunk-vista pass). The dorsal-ridge spectacle (`wormHorizonCrossing.ts`) hides its hump bases below dune crests, but on a flat salt pan the base + under-gap show at close range. Rarely seen (ambient + far by design); consider a biome-aware extra bury or a salt-biome skip. Pre-existing — just newly observable now that the player can stand 1500m out.
 - `[debt]` **`verify:chunks` adds ~3-5 min to `verify:all`** (two determinism boots + one streaming walk). Fine as a campaign gate; if it grates later, the two determinism seeds can share one boot.
 

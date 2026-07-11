@@ -1632,14 +1632,17 @@ const SCENARIOS = {
       if (!base.markersEnabled || base.markerMeshCount === 0) {
         fails.push(`markers did not enable (meshes=${base.markerMeshCount})`);
       }
-      // Marker snapshot of chunks guaranteed-loaded around a position:
-      // world-space positions of every marker mesh in chunks within
-      // LOAD_RADIUS-1 of the player's chunk (immune to hysteresis-path
-      // differences at the ring edge).
+      // Content snapshot of chunks guaranteed-loaded around a position:
+      // WORLD-space positions of every mesh (markers + streamed-POI content)
+      // in chunks within LOAD_RADIUS-1 of the player's chunk (immune to
+      // hysteresis-path differences at the ring edge). World space matters:
+      // merged POI meshes sit at local origin — their placement lives in the
+      // group transform.
       const snapshot = (px, pz) => {
         const SIZE = 112, R = 2;
         const pcx = Math.floor(px / SIZE), pcz = Math.floor(pz / SIZE);
         const rows = [];
+        const wp = new window.__game.THREE.Vector3();
         for (const grp of ctx.three.scene.children) {
           if (!grp.name || !grp.name.startsWith('chunk-')) continue;
           const m = grp.name.match(/^chunk-(-?\d+)_(-?\d+)$/);
@@ -1647,10 +1650,35 @@ const SCENARIOS = {
           const cx = +m[1], cz = +m[2];
           if (Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz)) > R) continue;
           grp.traverse((o) => {
-            if (o.isMesh) rows.push(`${o.name}:${o.position.x.toFixed(3)},${o.position.y.toFixed(3)},${o.position.z.toFixed(3)}`);
+            if (!o.isMesh) return;
+            o.getWorldPosition(wp);
+            rows.push(`${grp.name}/${o.name}:${wp.x.toFixed(3)},${wp.y.toFixed(3)},${wp.z.toFixed(3)}`);
           });
         }
         return rows.sort().join('|');
+      };
+      // S2 — descriptor-vs-render check: within radius R of the player's
+      // chunk, every descriptor with poi.present must have a placed POI
+      // group (userData.poiArchetype) under its chunk group, and vice versa.
+      const poiRenderCheck = (px, pz, label) => {
+        const SIZE = 112, R = 2;
+        const pcx = Math.floor(px / SIZE), pcz = Math.floor(pz / SIZE);
+        let expected = 0;
+        for (let cx = pcx - R; cx <= pcx + R; cx++) {
+          for (let cz = pcz - R; cz <= pcz + R; cz++) {
+            if (g.chunkDescribe(cx, cz).poi.present) expected++;
+          }
+        }
+        let rendered = 0;
+        for (const grp of ctx.three.scene.children) {
+          if (!grp.name || !grp.name.startsWith('chunk-')) continue;
+          const m = grp.name.match(/^chunk-(-?\d+)_(-?\d+)$/);
+          if (!m) continue;
+          if (Math.max(Math.abs(+m[1] - pcx), Math.abs(+m[2] - pcz)) > R) continue;
+          grp.traverse((o) => { if (o.userData && o.userData.poiArchetype) rendered++; });
+        }
+        if (expected !== rendered) fails.push(`${label}: POI descriptor/render mismatch — ${expected} rolled, ${rendered} placed`);
+        return expected;
       };
       const dupCheck = (label) => {
         const seen = new Set();
@@ -1677,9 +1705,12 @@ const SCENARIOS = {
           let blocked = false;
           for (let dx = -1; dx <= 1 && !blocked; dx++) {
             for (let dz = -1; dz <= 1 && !blocked; dz++) {
-              for (const m of g.chunkDescribe(cx + dx, cz + dz).markers) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              for (const m of d.markers) {
                 if (Math.hypot(m.x - 1500, m.z - pz) < 2) { blocked = true; break; }
               }
+              // S2 — streamed wrecks are big; give them a wide berth.
+              if (d.poi.present && Math.hypot(d.poi.x - 1500, d.poi.z - pz) < 30) blocked = true;
             }
           }
           if (!blocked) return pz;
@@ -1701,7 +1732,29 @@ const SCENARIOS = {
       }
       if (far.markerMeshCount === 0) fails.push('no markers at +1500m (content did not stream)');
       dupCheck('far');
+      const farPois = poiRenderCheck(1500, 56, 'far');
       const farSnapA = snapshot(1500, 56);
+      // S2 — SAVE SAFETY with streamed wrecks live: the serialized save
+      // must contain ONLY boot-placed salvageables (transient excluded) —
+      // a leaked load-order-dependent id would silently patch the WRONG
+      // wreck after reload.
+      {
+        const sv = g.saveGame();
+        if (!sv.ok) fails.push('saveGame failed at far point: ' + (sv.error || '?'));
+        else {
+          const raw = JSON.parse(localStorage.getItem('dustfall.save.v1'));
+          const savedIds = new Set(raw.salvageables.map((s) => s.id));
+          const liveTransient = ctx.salvageables.list.filter((s) => s.transient);
+          if (liveTransient.length === 0) fails.push('no transient salvage live at the far save point (save-safety test vacuous — extend the walk)');
+          for (const s of liveTransient) {
+            if (savedIds.has(s.id)) fails.push(`transient salvage id ${s.id} leaked into the save`);
+          }
+          const bootCount = ctx.salvageables.list.filter((s) => !s.transient).length;
+          if (raw.salvageables.length !== bootCount) {
+            fails.push(`saved salvageable count ${raw.salvageables.length} != boot (non-transient) count ${bootCount}`);
+          }
+        }
+      }
       // ── Leg 2: return home (unloads the far field) ──
       for (let x = 1350; x >= 150; x -= 150) await tp(x, 56, 12);
       await tp(56, 56, 60);
@@ -1729,17 +1782,26 @@ const SCENARIOS = {
       if (end.markerMeshCount !== base.markerMeshCount) {
         fails.push(`marker mesh count at home drifted: ${base.markerMeshCount} → ${end.markerMeshCount}`);
       }
+      // S2 — streamed-wreck salvage entries must all splice back out: the
+      // global registry returns to its boot size (origin wrecks only).
+      if (end.registrySalvageCount !== base.registrySalvageCount) {
+        fails.push(`salvage registry LEAK: ${base.registrySalvageCount} → ${end.registrySalvageCount} (streamed entries not spliced on unload)`);
+      }
+      if (end.chunkSalvageCount !== 0 || end.chunkPoiCount !== 0) {
+        fails.push(`streamed POI content at HOME (inside the origin exclusion): pois=${end.chunkPoiCount} salvage=${end.chunkSalvageCount}`);
+      }
       dupCheck('home');
       g.setChunkMarkers(false);
       return {
         fails,
         baseBodies: base.worldBodies, endBodies: end.worldBodies,
         baseChunks: base.activeKeys.length, farChunks: far.activeKeys.length,
-        farMarkers: far.markerMeshCount, tiles: end.terrainTileKeys.length,
+        farMarkers: far.markerMeshCount, farPois,
+        farSalvage: far.chunkSalvageCount, tiles: end.terrainTileKeys.length,
       };
     });
     const pass = r.fails.length === 0;
-    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} tiles=${r.tiles} fails=${r.fails.length}`);
+    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} farPois=${r.farPois} farSalvage=${r.farSalvage} tiles=${r.tiles} fails=${r.fails.length}`);
     console.log(`[chunk-streaming] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
     if (!pass) throw new Error('chunk-streaming GATE FAILED');
   },
@@ -1874,6 +1936,48 @@ const SCENARIOS = {
       cam.lookAt(md.x, ctx.terrain.heightAt(md.x, md.z) + 1.2, md.z);
       cam.updateMatrixWorld(true);
     })()`);
+    // S2 — a STREAMED wreck, player-eye: find the nearest descriptor-rolled
+    // POI beyond the origin exclusion, walk there (streaming builds it),
+    // frame it from ~20m at eye height.
+    const poi = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      let target = null;
+      outer:
+      for (let cx = 12; cx <= 34; cx++) {
+        for (let cz = -8; cz <= 8; cz++) {
+          const d = g.chunkDescribe(cx, cz);
+          if (d.poi.present) { target = d.poi; break outer; }
+        }
+      }
+      if (!target) return null;
+      ctx.flags.paused = false;
+      // Step toward it so chunks stream in along the way.
+      const from = ctx.player.body.body.translation();
+      const steps = 10;
+      for (let i = 1; i <= steps; i++) {
+        const x = from.x + (target.x - from.x) * (i / steps);
+        const z = from.z + (target.z - from.z) * (i / steps);
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+        for (let f = 0; f < 12; f++) await raf();
+      }
+      for (let f = 0; f < 60; f++) await raf();
+      return { x: target.x, z: target.z, archetype: target.archetype };
+    });
+    if (poi) {
+      console.log(`[chunk-vista] streamed POI: ${poi.archetype} at ${poi.x.toFixed(0)},${poi.z.toFixed(0)}`);
+      await shot('streamed-poi', `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = ${poi.x}, pz = ${poi.z};
+        const cx2 = px - 20, cz2 = pz - 14;
+        cam.position.set(cx2, ctx.terrain.heightAt(cx2, cz2) + 1.7, cz2);
+        cam.lookAt(px, ctx.terrain.heightAt(px, pz) + 2.5, pz);
+        cam.updateMatrixWorld(true);
+      })()`);
+    } else {
+      console.log('[chunk-vista] no streamed POI rolled in the scan window (seed-dependent)');
+    }
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/

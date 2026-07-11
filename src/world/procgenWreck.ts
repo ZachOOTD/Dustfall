@@ -1971,7 +1971,9 @@ export function placeProcgenComposite(
   // it builds one collider per part mesh by geometry type; merging first would
   // collapse the wreck to a single giant AABB. The Rapier colliders are
   // independent of the meshes, so removing the visual meshes afterward is safe.
-  attachCompoundCollider(world, group);
+  // Infinite Sands S2 — stash the body (mirrors poiAssembler) so a RUNTIME
+  // caller (chunk streaming) can remove it on unload; boot callers ignore it.
+  group.userData.poiBody = attachCompoundCollider(world, group);
 
   // ACAP W4 — shed a crash-debris fan onto a random impact flank, added to the
   // group BEFORE the merge so it folds in (≈0 draw cost). Debris is cosmetic →

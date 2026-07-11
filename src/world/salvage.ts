@@ -51,6 +51,12 @@ export interface Salvageable {
   hovered: boolean;
   /** True once material desaturation has been applied on stripping. */
   stripped: boolean;
+  /** Infinite Sands S2 — TRUE for chunk-STREAMED wrecks: excluded from save
+   *  serialization (their ids are load-order-dependent, so persisting them
+   *  would mis-match on reload — the D290 descriptor model regenerates them
+   *  pristine instead; per-chunk diffs arrive at S5). Boot-placed wrecks
+   *  leave this unset and persist exactly as before (save schema untouched). */
+  transient?: boolean;
 }
 
 /** AAT — friendly adjective for the hover prompt. */

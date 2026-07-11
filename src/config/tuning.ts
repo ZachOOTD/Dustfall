@@ -334,6 +334,16 @@ export const Tuning = {
   // Generation budget: at most N chunk loads per frame (the anchor chunk
   // always loads immediately, budget notwithstanding).
   CHUNK_LOADS_PER_FRAME: 2,
+  // Infinite Sands S2 — streamed POI wrecks. Per-chunk presence chance is
+  // calibrated to the origin field's density (22 POIs over the 120-1100m
+  // boot annulus ≈ 0.07 per 112m chunk). Chunks whose center lies within
+  // the origin-exclusion radius roll EMPTY — the boot-placed field owns
+  // that ground (streamed POIs begin where S1 left bare dunes). The edge
+  // margin keeps a chunk's POI off its border so two neighbors can't
+  // place wrecks a few meters apart across a seam.
+  CHUNK_POI_CHANCE: 0.07,
+  CHUNK_POI_ORIGIN_EXCLUSION_M: 1250,
+  CHUNK_POI_EDGE_MARGIN_M: 25,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)

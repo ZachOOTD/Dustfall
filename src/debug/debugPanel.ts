@@ -391,6 +391,9 @@ interface DebugApi {
     markersEnabled: boolean;
     markerMeshCount: number;
     chunkBodyCount: number;
+    chunkPoiCount: number;
+    chunkSalvageCount: number;
+    registrySalvageCount: number;
     terrainTileKeys: string[];
     worldBodies: number;
     worldColliders: number;
@@ -868,6 +871,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         markersEnabled: s.markersEnabled,
         markerMeshCount: s.markerMeshCount,
         chunkBodyCount: s.bodyCount,
+        chunkPoiCount: s.poiCount,
+        chunkSalvageCount: s.salvageCount,
+        registrySalvageCount: ctx.salvageables.list.length,
         terrainTileKeys: ctx.terrain.tileKeys().sort(),
         worldBodies: ctx.physics.world.bodies.len(),
         worldColliders: ctx.physics.world.colliders.len(),

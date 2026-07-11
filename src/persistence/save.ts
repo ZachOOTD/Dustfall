@@ -550,7 +550,11 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
             : {}),
         };
       }),
-      salvageables: ctx.salvageables.list.map((s) => {
+      // Infinite Sands S2 — chunk-streamed wrecks (`transient`) are NOT
+      // serialized: their ids are load-order-dependent (a saved id could
+      // silently patch a DIFFERENT wreck after reload) and their v1 save
+      // semantics are regenerate-pristine (per-chunk diffs land at S5).
+      salvageables: ctx.salvageables.list.filter((s) => !s.transient).map((s) => {
         // ACAX — persist WHICH components are gone (extracted OR condition-surplus)
         // so a reload restores the exact visible set (WYSIWYG), not all of them.
         const comps = (s.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];

@@ -28,6 +28,10 @@ import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { makeRng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
+import type { BiomeSampler, BiomeId } from './biomes.ts';
+import type { SalvageableRegistry, Salvageable } from './salvage.ts';
+import { placeProcgenPOI } from './poiAssembler.ts';
+import { pickArchetype, type ArchetypeId } from './poiArchetypes.ts';
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -54,12 +58,28 @@ export interface ChunkMarkerDesc {
   tint: number;
 }
 
+/** Infinite Sands S2 — the streamed-POI roll for one chunk. Fixed shape:
+ *  every field is drawn/derived whether or not `present` (stable rand
+ *  budget → descriptor byte-identity is meaningful). `renderSeed` seeds
+ *  the FRESH rng `placeProcgenPOI` consumes at load time (yaw, bury,
+ *  panel count, salvage registration) so rendering is a pure function of
+ *  the descriptor (D290). */
+export interface ChunkPoiDesc {
+  present: boolean;
+  x: number;
+  z: number;
+  biome: BiomeId;
+  archetype: ArchetypeId;
+  renderSeed: number;
+}
+
 /** The full deterministic content descriptor for one chunk. */
 export interface ChunkDesc {
   cx: number;
   cz: number;
   seed: number;
   markers: ChunkMarkerDesc[];
+  poi: ChunkPoiDesc;
 }
 
 interface LoadedChunk {
@@ -67,6 +87,9 @@ interface LoadedChunk {
   cz: number;
   group: THREE.Group;
   bodies: RAPIER.RigidBody[];
+  /** S2 — this chunk's streamed-wreck salvage registry entries (spliced
+   *  back out on unload). */
+  salvage: Salvageable[];
 }
 
 export interface ChunkManager {
@@ -82,6 +105,8 @@ export interface ChunkManager {
     markersEnabled: boolean;
     markerMeshCount: number;
     bodyCount: number;
+    poiCount: number;
+    salvageCount: number;
   };
 }
 
@@ -89,6 +114,8 @@ export function createChunkManager(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
+  biomes: BiomeSampler,
+  salvageables: SalvageableRegistry,
   worldSeed: number,
 ): ChunkManager {
   const SIZE = Tuning.CHUNK_SIZE;
@@ -141,15 +168,65 @@ export function createChunkManager(
         });
       }
     }
-    return { cx, cz, seed, markers: markerList };
+    // ── S2: the streamed-POI roll (a DEDICATED rng stream so the S1
+    //    marker draws above stay byte-stable). Every draw happens
+    //    unconditionally — fixed budget. ──
+    const poiRand = makeRng((seed ^ 0x9e3779b9) >>> 0);
+    const roll = poiRand();
+    const px = (cx + 0.5) * SIZE + (poiRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const pz = (cz + 0.5) * SIZE + (poiRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const biome = biomes.biomeAt(px, pz);
+    const archetype = pickArchetype(poiRand, biome);
+    const renderSeed = Math.floor(poiRand() * 0x100000000) >>> 0;
+    // The boot-placed field owns the origin region — streamed POIs begin
+    // beyond the exclusion radius (measured at the chunk CENTER so the
+    // whole chunk rolls consistently).
+    const exclR = Tuning.CHUNK_POI_ORIGIN_EXCLUSION_M;
+    const outsideOrigin = centerX * centerX + centerZ * centerZ > exclR * exclR;
+    const present = outsideOrigin && roll < Tuning.CHUNK_POI_CHANCE;
+    return {
+      cx, cz, seed,
+      markers: markerList,
+      poi: { present, x: px, z: pz, biome, archetype, renderSeed },
+    };
   };
 
   const loadChunk = (cx: number, cz: number): void => {
     const group = new THREE.Group();
     group.name = `chunk-${cx}_${cz}`;
     const bodies: RAPIER.RigidBody[] = [];
+    const salvage: Salvageable[] = [];
+    const desc = describeChunk(cx, cz);
+    // ── S2: streamed POI wreck — a pure render of the descriptor. The
+    //    archetype is FORCED from the descriptor (the determinism gate
+    //    covers the pick); the fresh renderSeed rng drives yaw/bury/panels/
+    //    salvage registration. Deliberately SKIPPED vs the boot path:
+    //    addHorizonSilhouette (module-global, no removal — S4's landmark
+    //    concern) and the scrap-debris ring (pickup ids are save-coupled;
+    //    per-chunk loot diffs arrive at S5). ──
+    if (desc.poi.present) {
+      const p = desc.poi;
+      const rand = makeRng(p.renderSeed);
+      const before = salvageables.list.length;
+      const poiGroup = placeProcgenPOI(
+        scene, world, terrain,
+        new THREE.Vector3(p.x, terrain.heightAt(p.x, p.z), p.z),
+        rand, salvageables,
+        { archetype: p.archetype, biome: p.biome, parent: group, buryY: 0.3 + rand() * 0.4 },
+      );
+      // The 'ship' delegate (placeProcgenComposite) doesn't stamp the
+      // archetype itself — normalize so stats/probes count every streamed POI.
+      if (!poiGroup.userData.poiArchetype) poiGroup.userData.poiArchetype = p.archetype;
+      const poiBody = poiGroup.userData.poiBody as RAPIER.RigidBody | undefined;
+      if (poiBody) bodies.push(poiBody);
+      // Entries added by this POI (post-prune survivors) — marked transient
+      // so the save serializer skips them (regenerate-pristine v1, D290/S5).
+      for (const rec of salvageables.list.slice(before)) {
+        rec.transient = true;
+        salvage.push(rec);
+      }
+    }
     if (markers) {
-      const desc = describeChunk(cx, cz);
       for (let m = 0; m < desc.markers.length; m++) {
         const md = desc.markers[m];
         const y = terrain.heightAt(md.x, md.z);
@@ -183,7 +260,7 @@ export function createChunkManager(
       }
     }
     scene.add(group);
-    chunks.set(key(cx, cz), { cx, cz, group, bodies });
+    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage });
   };
 
   const unloadChunk = (k: string): void => {
@@ -194,13 +271,25 @@ export function createChunkManager(
     c.group.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
-      // Shared marker geometries survive; per-post materials don't.
-      if (mesh.geometry !== markerGeo && mesh.geometry !== crossGeo) {
-        mesh.geometry.dispose();
+      if (mesh.geometry === markerGeo || mesh.geometry === crossGeo) {
+        // Marker: shared geometry survives; the per-post material clone doesn't.
+        (mesh.material as THREE.Material).dispose();
+        return;
       }
-      const mat = mesh.material as THREE.Material;
-      mat.dispose();
+      // POI content: dispose ONLY merge-output geometry (unique per POI,
+      // tagged noCollider by mergeStaticByMaterial — the memory that
+      // matters). Panel/component meshes may share module-level geometry
+      // and ALL wreck materials are shared bucket singletons — never
+      // dispose those.
+      if (mesh.userData.noCollider) mesh.geometry.dispose();
     });
+    // Splice this chunk's streamed salvage entries back out of the live
+    // registry (interaction rebuilds its target list per frame, so
+    // removal is immediately effective).
+    for (const rec of c.salvage) {
+      const idx = salvageables.list.indexOf(rec);
+      if (idx >= 0) salvageables.list.splice(idx, 1);
+    }
     for (const body of c.bodies) world.removeRigidBody(body);
   };
 
@@ -264,17 +353,24 @@ export function createChunkManager(
     stats: () => {
       let markerMeshCount = 0;
       let bodyCount = 0;
+      let poiCount = 0;
+      let salvageCount = 0;
       for (const c of chunks.values()) {
         c.group.traverse((obj) => {
-          if ((obj as THREE.Mesh).isMesh) markerMeshCount++;
+          const mesh = obj as THREE.Mesh;
+          if (mesh.isMesh && (mesh.geometry === markerGeo || mesh.geometry === crossGeo)) markerMeshCount++;
+          if ((obj as THREE.Group).userData?.poiArchetype) poiCount++;
         });
         bodyCount += c.bodies.length;
+        salvageCount += c.salvage.length;
       }
       return {
         activeKeys: [...chunks.keys()].sort(),
         markersEnabled: markers,
         markerMeshCount,
         bodyCount,
+        poiCount,
+        salvageCount,
       };
     },
   };

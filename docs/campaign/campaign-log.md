@@ -7,6 +7,21 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 
 ---
 
+## Cycle 2 — S2 POI streaming (2026-07-11) — SHIPPED
+
+- **Planned:** S2 — `placeProcgenPOIs`/`placeProcgenPOI` per-chunk on the ChunkManager lifecycle: biome weights, static merge, salvage registration per chunk, full teardown, origin exclusion.
+- **Shipped:**
+  - `ChunkDesc.poi` — a fixed-shape descriptor roll from a dedicated per-chunk rng: presence 0.07/chunk (≈ origin density), 25m edge margin, biome-weighted archetype via the real `pickArchetype`, fresh `renderSeed`. Origin exclusion 1250m (boot placement untouched).
+  - `loadChunk` renders through the REAL `placeProcgenPOI` (forced archetype, `parent: group`): panels mount, salvage registers live, per-POI merge, declared colliders. `unloadChunk`: POI body removed, salvage spliced out, merge-output geometry disposed (shared panel geo + bucket materials never). `placeProcgenComposite` now stashes `userData.poiBody` (streamed 'ship' wrecks would have leaked their body).
+  - **Save safety (the cycle's danger zone):** streamed wrecks are `transient` — excluded from `save.salvageables` (visit-order ids would patch the WRONG wreck after reload); v1 = regenerate pristine (S5 lifts). The streaming gate now SAVES at +1500m with streamed salvage live + asserts only boot ids in the file. Schema v16 untouched. Skipped deliberately: scrap rings (S5), horizon silhouettes (S4) — backlog + D292.
+  - Gate hardening: verify-chunks streaming child 420s→900s (a spawnSync kill mid-probe = fake boot failure + a leaked dev server, D293); probe additions: descriptor↔render POI count, salvage-registry leak assert, world-space snapshots, POI-aware ground ray; `chunk-vista` streamed-POI shot.
+- **Verify:** ALL GREEN — tsc; placement 5-seed 0-fails; colliders 55; verify:chunks (determinism 8/8 ×2 seeds + cross-seed; streaming: bodies 332→330, chunks 49/49, farPois=1 descriptor↔render, farSalvage=2, registry baseline, save-safety); smoke-intro/pod-tutorial/pickup-sweep/survival/diurnal PASS. One wrapper-timeout false-fail root-caused (D293), re-run green.
+- **Visual iteration:** placement-sanity bar — a streamed `hollow_husk` at (1388,−736) shot player-eye: seated, sand line natural, archetype-faithful (renders through the SAME assemblers the origin field uses — no new-element polish owed).
+- **D-entries:** D292 (save-transient streamed wrecks), D293 (wrapper child timeouts / dev-server leak).
+- **Spend:** ~180K output tokens (campaign total ~430K / 10M; cycle 2/50).
+- **Commit:** (SHA recorded on commit — next log edit.)
+- **Next:** cycle 3 = **S3 scatter + ambient life** (brief in `docs/next-session-prompt.md`; step 1 is the spawn*Procgen research ❓ — creature save arrays are the same id-trap as D292).
+
 ## Cycle 1 — S1 ChunkManager spike (2026-07-11) — SHIPPED
 
 - **Planned:** S1 — the chunk grid + per-chunk deterministic seed + load/unload with full disposal, proven by marker posts + the two NEW permanent gates (determinism + streaming/leak).
@@ -20,7 +35,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 - **Design deltas mid-cycle (probe-driven):** the first trim design (settle-frame counter) was replaced by the ANCHOR-MARGIN model after the streaming probe caught corner micro-slide starvation (D288/D289 — the probe did its job before anything shipped).
 - **D-entries:** D288 (two-grid anchor-margin streaming architecture, friction 3), D289 (heightAt infinite fallback), D290 (descriptor-pure chunk content — the S2 contract), D291 (walk-probe discipline). decisions.md archived D236–D246 (45 active).
 - **Spend:** ~250K output tokens this cycle (campaign total ~250K / 10M; cycle 1/50).
-- **Commit:** (SHA recorded on commit — see below.)
+- **Commit:** `e82d9a7` (branch `campaign/2026-07-10-procgen`; the SHA-recording docs edit rides in the next cycle's commit).
 - **Next:** cycle 2 = **S2 POI streaming** (brief in `docs/next-session-prompt.md`; the descriptor-first contract is D290).
 - **Pending post-mortem drafts:** queued to `.post-mortem-pending/` (consolidate skipped — unattended campaign).
 

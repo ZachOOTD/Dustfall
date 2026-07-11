@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-10",
   "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 1,
-  "current_tier": "S2 - POI streaming (per-chunk placement + full teardown)",
+  "cycles_completed": 2,
+  "current_tier": "S3 - Scatter + creature active-ring streaming",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -16,10 +16,10 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 250000 },
+  "spend": { "total": 430000 },
   "ladder": [
     { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
-    { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "pending" },
+    { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "shipped", "cycle": 2 },
     { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "pending" },
     { "id": "S4", "name": "Distributed rare landmarks + per-region biomes", "kind": "auto", "status": "pending" },
     { "id": "S6", "name": "Perf: frame-budgeted generation + cross-chunk perf probe", "kind": "auto", "status": "pending" },
@@ -35,8 +35,18 @@
       "outcome": "shipped",
       "tier": "S1",
       "spend_this_cycle": 250000,
-      "commit": "PENDING-SET-ON-COMMIT",
+      "commit": "e82d9a7",
       "d_entries": ["D288", "D289", "D290", "D291"]
+    },
+    {
+      "n": 2,
+      "date": "2026-07-11",
+      "focus": "S2 POI streaming: descriptor-rolled wrecks beyond the origin exclusion, save-transient, full teardown",
+      "outcome": "shipped",
+      "tier": "S2",
+      "spend_this_cycle": 180000,
+      "commit": "PENDING-SET-ON-COMMIT",
+      "d_entries": ["D292", "D293"]
     }
   ]
 }

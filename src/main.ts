@@ -183,10 +183,6 @@ const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
 (window as unknown as { __bootT: typeof _bootT }).__bootT = _bootT;
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
 _mark('terrain');
-// Infinite Sands S1 — content-chunk streaming manager. Constructed inert
-// (S1 marker layer defaults off); updateChunks in the tick drives it +
-// the terrain tile ring once normal play starts.
-const chunkManager = createChunkManager(three.scene, physics.world, terrain, worldSeed);
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the
 // chunk-band edge (1200m, density 0.0018 ≈ 99% opaque) is the visible
@@ -194,6 +190,12 @@ const chunkManager = createChunkManager(three.scene, physics.world, terrain, wor
 // Session T — salvage registry. Built up-front so hero landmarks + POIs
 // can register their wrecks as they're placed.
 const salvageables = createSalvageableRegistry();
+// Infinite Sands S1/S2 — content-chunk streaming manager. Constructed
+// AFTER the salvage registry (streamed POIs register into it, marked
+// transient) but stays inert until updateChunks ticks in normal play; the
+// S1 marker layer defaults off. Boot placement below proceeds exactly as
+// before — streamed POIs only exist beyond CHUNK_POI_ORIGIN_EXCLUSION_M.
+const chunkManager = createChunkManager(three.scene, physics.world, terrain, biomes, salvageables, worldSeed);
 // ACAI f/u — bone carcasses (ribcages) are ecology anchors: vultures circle them,
 // lizards/shrews gather at them (a "something died here" cluster).
 const carcasses = placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageables);
