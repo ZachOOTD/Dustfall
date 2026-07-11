@@ -507,7 +507,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           return entry;
         }),
       cacti: ctx.cacti.list.map((c) => ({ id: c.id, harvested: c.harvested })),
-      lizards: ctx.lizards.map((l) => {
+      // Infinite Sands S3 — chunk-streamed creatures (`transient`) are NOT
+      // serialized (the D292 rule: visit-order ids would mis-match the boot
+      // population on reload; streamed fauna regenerates with its chunk).
+      lizards: ctx.lizards.filter((l) => !l.transient).map((l) => {
         const tr = l.body.translation();
         return {
           id: l.id,
@@ -518,7 +521,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
       }),
       // ACL — v14: persist desert shrews (id + world XZ + state). y is
       // re-derived from terrain on load.
-      shrews: ctx.shrews.list.map((s) => ({
+      shrews: ctx.shrews.list.filter((s) => !s.transient).map((s) => ({
         id: s.id,
         x: s.pos.x,
         z: s.pos.z,

@@ -33,6 +33,10 @@ export interface Lizard {
   looted: boolean;
   /** Distance accumulator (m) for footprint cadence — flee state only. */
   trackAccum: number;
+  /** Infinite Sands S3 — TRUE for chunk-STREAMED lizards: excluded from
+   *  save serialization (visit-order ids — the D292 rule) and despawned
+   *  with their chunk. Boot-spawned lizards leave this unset. */
+  transient?: boolean;
 }
 
 let _nextId = 1;
@@ -444,6 +448,23 @@ export function lootLizard(lizard: Lizard, ctx: GameContext): void {
 export function findLizardById(list: Lizard[], id: number | undefined): Lizard | undefined {
   if (id === undefined) return undefined;
   return list.find((l) => l.id === id);
+}
+
+/** Infinite Sands S3 — remove a lizard WITHOUT loot semantics (chunk
+ *  unload). Mirrors removeShrew: scene + handle-map + body + list splice.
+ *  Safe only for a lizard still in `list` (the caller checks — a looted
+ *  one already had its body removed). */
+export function despawnLizard(
+  lizard: Lizard,
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  list: Lizard[],
+): void {
+  scene.remove(lizard.mesh);
+  _colliderToLizard.delete(lizard.collider.handle);
+  world.removeRigidBody(lizard.body);
+  const idx = list.indexOf(lizard);
+  if (idx >= 0) list.splice(idx, 1);
 }
 
 const _toPlayer = new THREE.Vector3();

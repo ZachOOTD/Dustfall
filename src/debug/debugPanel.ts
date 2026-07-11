@@ -394,6 +394,11 @@ interface DebugApi {
     chunkPoiCount: number;
     chunkSalvageCount: number;
     registrySalvageCount: number;
+    chunkRockCount: number;
+    chunkLizardCount: number;
+    chunkShrewCount: number;
+    totalLizards: number;
+    totalShrews: number;
     terrainTileKeys: string[];
     worldBodies: number;
     worldColliders: number;
@@ -874,6 +879,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         chunkPoiCount: s.poiCount,
         chunkSalvageCount: s.salvageCount,
         registrySalvageCount: ctx.salvageables.list.length,
+        chunkRockCount: s.rockCount,
+        chunkLizardCount: s.lizardCount,
+        chunkShrewCount: s.shrewCount,
+        totalLizards: ctx.lizards.length,
+        totalShrews: ctx.shrews.list.length,
         terrainTileKeys: ctx.terrain.tileKeys().sort(),
         worldBodies: ctx.physics.world.bodies.len(),
         worldColliders: ctx.physics.world.colliders.len(),

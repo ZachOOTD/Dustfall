@@ -32,6 +32,10 @@ import type { BiomeSampler, BiomeId } from './biomes.ts';
 import type { SalvageableRegistry, Salvageable } from './salvage.ts';
 import { placeProcgenPOI } from './poiAssembler.ts';
 import { pickArchetype, type ArchetypeId } from './poiArchetypes.ts';
+import { makeScatterRock } from './rockScatter.ts';
+import { buildWordlessTableau } from './wordlessScenes.ts';
+import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
+import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -73,6 +77,31 @@ export interface ChunkPoiDesc {
   renderSeed: number;
 }
 
+/** Infinite Sands S3 — one streamed scatter rock (kept candidates only). */
+export interface ChunkRockDesc {
+  x: number;
+  z: number;
+  /** Seeds the rock's own 6-draw pose rng at render time. */
+  seed: number;
+}
+
+/** Infinite Sands S3 — the streamed wordless-scene roll (fixed shape). */
+export interface ChunkSceneDesc {
+  present: boolean;
+  x: number;
+  z: number;
+  /** Archetype cycle index + the tableau's render rng seed. */
+  index: number;
+  seed: number;
+}
+
+/** Infinite Sands S3 — the fauna cluster at this chunk's POI (empty when
+ *  no POI / salt biome). Offsets are ring positions around the wreck. */
+export interface ChunkFaunaDesc {
+  lizards: Array<{ x: number; z: number }>;
+  shrews: Array<{ x: number; z: number }>;
+}
+
 /** The full deterministic content descriptor for one chunk. */
 export interface ChunkDesc {
   cx: number;
@@ -80,6 +109,9 @@ export interface ChunkDesc {
   seed: number;
   markers: ChunkMarkerDesc[];
   poi: ChunkPoiDesc;
+  rocks: ChunkRockDesc[];
+  scene: ChunkSceneDesc;
+  fauna: ChunkFaunaDesc;
 }
 
 interface LoadedChunk {
@@ -90,6 +122,10 @@ interface LoadedChunk {
   /** S2 — this chunk's streamed-wreck salvage registry entries (spliced
    *  back out on unload). */
   salvage: Salvageable[];
+  /** S3 — this chunk's streamed fauna (despawned on unload unless the
+   *  player already looted them). */
+  lizards: Lizard[];
+  shrews: Shrew[];
 }
 
 export interface ChunkManager {
@@ -99,6 +135,9 @@ export interface ChunkManager {
   describeChunk: (cx: number, cz: number) => ChunkDesc;
   /** Toggle the S1 marker layer. Regenerates all active chunks. */
   setMarkersEnabled: (on: boolean) => void;
+  /** S3 — wire the live lizard array (created after the manager at boot;
+   *  streamed lizards push into it / splice out of it). */
+  wireCreatures: (lizards: Lizard[]) => void;
   /** Probe/debug snapshot. */
   stats: () => {
     activeKeys: string[];
@@ -107,6 +146,10 @@ export interface ChunkManager {
     bodyCount: number;
     poiCount: number;
     salvageCount: number;
+    /** S3 — streamed scatter meshes (rocks + tableau props). */
+    rockCount: number;
+    lizardCount: number;
+    shrewCount: number;
   };
 }
 
@@ -184,18 +227,88 @@ export function createChunkManager(
     const exclR = Tuning.CHUNK_POI_ORIGIN_EXCLUSION_M;
     const outsideOrigin = centerX * centerX + centerZ * centerZ > exclR * exclR;
     const present = outsideOrigin && roll < Tuning.CHUNK_POI_CHANCE;
+    const poi: ChunkPoiDesc = { present, x: px, z: pz, biome, archetype, renderSeed };
+    // ── S3: rocks — N candidates from a dedicated stream, kept only on
+    //    rocky biome (the boot sampler's rule), never inside the origin
+    //    field, and never on a wordless-scene stage (cleared below). ──
+    const rockRand = makeRng((seed ^ 0x726f636b) >>> 0);
+    const rocks: ChunkRockDesc[] = [];
+    for (let r = 0; r < Tuning.CHUNK_ROCK_CANDIDATES; r++) {
+      // Fixed budget: 3 draws per candidate, always.
+      const rx = cx * SIZE + rockRand() * SIZE;
+      const rz = cz * SIZE + rockRand() * SIZE;
+      const rSeed = Math.floor(rockRand() * 0x100000000) >>> 0;
+      if (!outsideOrigin) continue;
+      if (biomes.biomeAt(rx, rz) !== 'rocky') continue;
+      rocks.push({ x: rx, z: rz, seed: rSeed });
+    }
+    // ── S3: wordless scene — a rare roll (fixed 4-draw budget). ──
+    const sceneRand = makeRng((seed ^ 0x5ce7e5) >>> 0);
+    const sceneRoll = sceneRand();
+    const sx = (cx + 0.5) * SIZE + (sceneRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const sz = (cz + 0.5) * SIZE + (sceneRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const sceneSeed = Math.floor(sceneRand() * 0x100000000) >>> 0;
+    const scenePresent = outsideOrigin && sceneRoll < Tuning.CHUNK_WORDLESS_CHANCE;
+    const sceneDesc: ChunkSceneDesc = {
+      present: scenePresent,
+      x: sx,
+      z: sz,
+      index: Math.abs(cx * 31 + cz * 17),
+      seed: sceneSeed,
+    };
+    // A boulder in the middle of a death tableau reads as clutter — the
+    // boot ring clears rocks off stages; here it's a descriptor-level cull.
+    if (scenePresent) {
+      for (let r = rocks.length - 1; r >= 0; r--) {
+        const dx = rocks[r].x - sx, dz = rocks[r].z - sz;
+        if (dx * dx + dz * dz < Tuning.WORDLESS_SCENE_CLEAR_M * Tuning.WORDLESS_SCENE_CLEAR_M) {
+          rocks.splice(r, 1);
+        }
+      }
+    }
+    // ── S3: fauna cluster at the POI wreck (boot rule: none on salt).
+    //    Fixed budget: 2 count draws + 2×MAX offset pairs, always. ──
+    const faunaRand = makeRng((seed ^ 0xfa0a) >>> 0);
+    const lizCount = 1 + Math.floor(faunaRand() * Tuning.CHUNK_POI_LIZARDS_MAX);
+    const shrewCount = Math.floor(faunaRand() * (Tuning.CHUNK_POI_SHREWS_MAX + 1));
+    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [] };
+    const faunaOk = present && biome !== 'salt';
+    for (let i = 0; i < Tuning.CHUNK_POI_LIZARDS_MAX; i++) {
+      const ang = faunaRand() * Math.PI * 2;
+      const dist = 6 + faunaRand() * 8;
+      if (faunaOk && i < lizCount) {
+        fauna.lizards.push({ x: px + Math.cos(ang) * dist, z: pz + Math.sin(ang) * dist });
+      }
+    }
+    for (let i = 0; i < Tuning.CHUNK_POI_SHREWS_MAX; i++) {
+      const ang = faunaRand() * Math.PI * 2;
+      const dist = 6 + faunaRand() * 8;
+      if (faunaOk && i < shrewCount) {
+        fauna.shrews.push({ x: px + Math.cos(ang) * dist, z: pz + Math.sin(ang) * dist });
+      }
+    }
     return {
       cx, cz, seed,
       markers: markerList,
-      poi: { present, x: px, z: pz, biome, archetype, renderSeed },
+      poi,
+      rocks,
+      scene: sceneDesc,
+      fauna,
     };
   };
+
+  // S3 — the live lizard list (= ctx.lizards) is created AFTER the manager
+  // (boot creature spawn order is sacred); main.ts wires it before play.
+  // Shrews self-register into their module list via spawnShrew.
+  let lizardList: Lizard[] | null = null;
 
   const loadChunk = (cx: number, cz: number): void => {
     const group = new THREE.Group();
     group.name = `chunk-${cx}_${cz}`;
     const bodies: RAPIER.RigidBody[] = [];
     const salvage: Salvageable[] = [];
+    const chunkLizards: Lizard[] = [];
+    const chunkShrews: Shrew[] = [];
     const desc = describeChunk(cx, cz);
     // ── S2: streamed POI wreck — a pure render of the descriptor. The
     //    archetype is FORCED from the descriptor (the determinism gate
@@ -225,6 +338,40 @@ export function createChunkManager(
         rec.transient = true;
         salvage.push(rec);
       }
+      // ── S3: the wreck's fauna cluster (transient — the D292 rule). ──
+      if (lizardList) {
+        for (const f of desc.fauna.lizards) {
+          const l = spawnLizard(scene, world, terrain, f);
+          l.transient = true;
+          lizardList.push(l);
+          chunkLizards.push(l);
+        }
+      }
+      for (const f of desc.fauna.shrews) {
+        const s = spawnShrew(scene, world, terrain, f);   // self-registers into the module list
+        s.transient = true;
+        chunkShrews.push(s);
+      }
+    }
+    // ── S3: scatter rocks (no colliders — visual props, the boot rule).
+    //    Per-rock geometry is chunk-owned; materials are module singletons. ──
+    for (const r of desc.rocks) {
+      const rock = makeScatterRock(terrain, r.x, r.z, makeRng(r.seed));
+      rock.userData.chunkGeo = true;
+      rock.userData.streamRock = true;   // probe metric: rocks distinct from tableau props
+      group.add(rock);
+    }
+    // ── S3: a rare wordless tableau (decoration-only, no colliders). ──
+    if (desc.scene.present) {
+      const sceneRng = makeRng(desc.scene.seed);
+      const yaw = sceneRng() * Math.PI * 2;
+      const tableau = buildWordlessTableau(desc.scene.index, sceneRng);
+      tableau.position.set(desc.scene.x, terrain.heightAt(desc.scene.x, desc.scene.z), desc.scene.z);
+      tableau.rotation.y = yaw;
+      tableau.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) o.userData.chunkGeo = true;
+      });
+      group.add(tableau);
     }
     if (markers) {
       for (let m = 0; m < desc.markers.length; m++) {
@@ -260,7 +407,7 @@ export function createChunkManager(
       }
     }
     scene.add(group);
-    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage });
+    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage, lizards: chunkLizards, shrews: chunkShrews });
   };
 
   const unloadChunk = (k: string): void => {
@@ -276,6 +423,12 @@ export function createChunkManager(
         (mesh.material as THREE.Material).dispose();
         return;
       }
+      // S3 rocks/tableau props: per-mesh geometry is chunk-owned (dispose);
+      // their materials are module singletons (never disposed).
+      if (mesh.userData.chunkGeo) {
+        mesh.geometry.dispose();
+        return;
+      }
       // POI content: dispose ONLY merge-output geometry (unique per POI,
       // tagged noCollider by mergeStaticByMaterial — the memory that
       // matters). Panel/component meshes may share module-level geometry
@@ -283,6 +436,16 @@ export function createChunkManager(
       // dispose those.
       if (mesh.userData.noCollider) mesh.geometry.dispose();
     });
+    // S3 fauna: despawn survivors (looted ones already had mesh/body
+    // removed by their loot path — skip them).
+    if (lizardList) {
+      for (const l of c.lizards) {
+        if (!l.looted && lizardList.includes(l)) despawnLizard(l, scene, world, lizardList);
+      }
+    }
+    for (const s of c.shrews) {
+      if (!s.looted) removeShrew(s, scene, world);
+    }
     // Splice this chunk's streamed salvage entries back out of the live
     // registry (interaction rebuilds its target list per frame, so
     // removal is immediately effective).
@@ -350,19 +513,26 @@ export function createChunkManager(
     update,
     describeChunk,
     setMarkersEnabled,
+    wireCreatures: (lizards) => { lizardList = lizards; },
     stats: () => {
       let markerMeshCount = 0;
       let bodyCount = 0;
       let poiCount = 0;
       let salvageCount = 0;
+      let rockCount = 0;
+      let lizardCount = 0;
+      let shrewCount = 0;
       for (const c of chunks.values()) {
         c.group.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (mesh.isMesh && (mesh.geometry === markerGeo || mesh.geometry === crossGeo)) markerMeshCount++;
+          if (mesh.isMesh && mesh.userData.streamRock) rockCount++;
           if ((obj as THREE.Group).userData?.poiArchetype) poiCount++;
         });
         bodyCount += c.bodies.length;
         salvageCount += c.salvage.length;
+        lizardCount += c.lizards.length;
+        shrewCount += c.shrews.length;
       }
       return {
         activeKeys: [...chunks.keys()].sort(),
@@ -371,6 +541,9 @@ export function createChunkManager(
         bodyCount,
         poiCount,
         salvageCount,
+        rockCount,
+        lizardCount,
+        shrewCount,
       };
     },
   };

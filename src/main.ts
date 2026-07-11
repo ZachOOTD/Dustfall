@@ -305,6 +305,9 @@ const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.sarlaccPitAnchor
 // M8 ⑨ (C48) — the deep-cave enclosed interior at the carved funnel floor (biomes.caveAnchor).
 // A fixed feature (one per world); the funnel descent itself is carved in terrain.ts (C47).
 const deepCave = spawnDeepCave(three.scene, physics.world, terrain, biomes.caveAnchor);
+// Infinite Sands S3 — wire the live lizard array into the chunk streamer
+// AFTER the boot population spawns (boot spawn order = boot creature ids,
+// sacred). Streamed lizards push into / splice out of this same array.
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
@@ -324,6 +327,7 @@ const vultures = spawnVulturesProcgen(three.scene, physics.world, treePerches, s
 // here" signal) + hunt prey gathered there. Same module list as the perched ones.
 spawnCirclingVultures(three.scene, physics.world, carcasses, scatterRand);
 _mark('creatures+vultures');
+chunkManager.wireCreatures(lizards);   // S3 — streamed fauna joins/leaves this live array
 
 // AAP — sandworm home is now sampled per-seed from the dune biome via
 // sampleSandwormHome (mirrors wells-in-salt). Falls back to

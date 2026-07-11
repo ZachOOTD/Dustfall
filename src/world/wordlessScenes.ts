@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import type { Terrain } from './terrain.ts';
-import { makeRng } from '../core/rng.ts';
+import { makeRng, type Rng } from '../core/rng.ts';
 import { makeSkeleton } from './skeleton.ts';
 import { buildScrapMesh } from './scrapMesh.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -143,6 +143,16 @@ function sceneWatcher(rand: () => number): THREE.Group {
 // per user request. The single-figure vignettes below remain.)
 
 const ARCHETYPES = [sceneLastFire, sceneWatcher];
+
+/** Infinite Sands S3 — build ONE tableau (unpositioned) for the chunk
+ *  streamer. `index` cycles the archetype list; `rand` should be a
+ *  per-chunk stream (decoration-only, no colliders/registries — the same
+ *  contract as the boot ring). */
+export function buildWordlessTableau(index: number, rand: Rng): THREE.Group {
+  const tableau = ARCHETYPES[((index % ARCHETYPES.length) + ARCHETYPES.length) % ARCHETYPES.length](rand);
+  tableau.name = 'wordlessScene';
+  return tableau;
+}
 
 // ── Placement ───────────────────────────────────────────────────────────────
 

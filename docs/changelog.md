@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Infinite Sands" cycle 3 — 2026-07-11 — S3 scatter + ambient life: the far field is INHABITED ✓ all gates
+
+`verified` — `verify:all` PASS in ONE pass, zero flakes (tsc + placement 5-seed + colliders 55 + chunks: determinism ×2 seeds + cross-seed, streaming bodies 332→332 EXACT, farPois=2/farRocks=46 descriptor↔render equality, fauna leg exercised); all 5 smokes PASS; VISUAL routine bar (streamed watcher tableau + rock field + wreck, all player-eye, all seated). One cycle commit. D294.
+
+- **Streamed rock scatter** — `ChunkDesc.rocks`: 7 candidates/chunk from a dedicated stream, kept only on ROCKY biome (the boot sampler's rule ≈ the boot field's landed density), never inside the origin exclusion, culled off wordless-scene stages at the DESCRIPTOR level (cleaner than the boot ring's post-hoc rock removal). Rendered via NEW `makeScatterRock` (rockScatter.ts — the boot loop is untouched: its inline draws feed the shared boot stream every creature id depends on); per-rock geometry chunk-owned + disposed on unload, the 2 stone materials shared.
+- **Streamed wordless scenes** — `ChunkDesc.scene`: a rare roll (0.02/chunk — a distant vignette is a discovery, not set dressing) rendered via NEW `buildWordlessTableau` (archetype cycle by chunk hash, per-chunk rng); decoration-only, fully disposed.
+- **Streamed fauna (chunk-keyed, not a separate ring system)** — each streamed POI wreck rolls a prey cluster (1-2 lizards + 0-2 shrews, skipped on salt — boot rules) spawned via the REAL `spawnLizard`/`spawnShrew` on chunk load and despawned on unload (NEW `despawnLizard` export mirrors `removeShrew`; looted ones skip). `transient` on both species + save filters (the D292 rule) — only boot creatures serialize; the streaming gate saves mid-walk and asserts the counts. **Vultures deferred** (research verdict: perch/carcass-bound global placement + heaviest runtime state — fights the chunk model for the least value).
+- **Probe upgrades** — `contentRenderCheck` (descriptor↔render equality for POIs/rocks/fauna over the FULL active ring); a fauna-site leg (walks to the nearest descriptor-rolled fauna chunk so the spawn path can't ship unexercised — the straight walk landed on all-salt POIs); population-baseline asserts; ambient predators quieted at probe start (circling vultures HUNT lizards — 2 grabbed mid-walk false-failed the baseline as a "leak"); `chunk-vista` rock-field + scene shots.
+
 ## Campaign "Infinite Sands" cycle 2 — 2026-07-11 — S2 POI streaming: wrecks in the infinite field ✓ all gates
 
 `verified` — `verify:all` PASS (tsc + placement 5-seed 0-fails + colliders 55 + `verify:chunks` incl. the POI-extended streaming walk: farPois=1 descriptor↔render match, farSalvage=2, bodies 332→330, registry back to baseline); all 5 smoke gates PASS; VISUAL routine bar (a streamed `hollow_husk` at (1388,−736) shot player-eye — seated, sand line natural, archetype-faithful). One cycle commit. D292–D293.

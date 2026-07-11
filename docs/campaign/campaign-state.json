@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-10",
   "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 2,
-  "current_tier": "S3 - Scatter + creature active-ring streaming",
+  "cycles_completed": 3,
+  "current_tier": "S4 - Distributed rare landmarks + per-region biomes",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -16,11 +16,11 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 430000 },
+  "spend": { "total": 600000 },
   "ladder": [
     { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
     { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "shipped", "cycle": 2 },
-    { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "pending" },
+    { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "shipped", "cycle": 3 },
     { "id": "S4", "name": "Distributed rare landmarks + per-region biomes", "kind": "auto", "status": "pending" },
     { "id": "S6", "name": "Perf: frame-budgeted generation + cross-chunk perf probe", "kind": "auto", "status": "pending" },
     { "id": "S5", "name": "Save: per-chunk diffs (SAVE_VERSION bump)", "kind": "save-critical", "status": "pending", "pause_before": "build" }
@@ -45,8 +45,18 @@
       "outcome": "shipped",
       "tier": "S2",
       "spend_this_cycle": 180000,
-      "commit": "PENDING-SET-ON-COMMIT",
+      "commit": "ad49dc0",
       "d_entries": ["D292", "D293"]
+    },
+    {
+      "n": 3,
+      "date": "2026-07-11",
+      "focus": "S3 scatter + ambient life: rocks + wordless scenes + chunk-keyed prey clusters (vultures deferred)",
+      "outcome": "shipped",
+      "tier": "S3",
+      "spend_this_cycle": 170000,
+      "commit": "PENDING-SET-ON-COMMIT",
+      "d_entries": ["D294"]
     }
   ]
 }

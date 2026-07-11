@@ -1,85 +1,84 @@
-# Cycle 3 — Kickoff brief: S3 scatter + ambient life streaming (campaign "Infinite Sands")
+# Cycle 4 — Kickoff brief: S4 distributed rare landmarks + per-region biomes (campaign "Infinite Sands")
 
 **⚙ A CAMPAIGN IS ACTIVE** — "Infinite Sands", overnight, branch `campaign/2026-07-10-procgen`.
-Boot `/campaign-cycle` from `docs/campaign/campaign-state.json` + `campaign.md`. The paused
-Skyfall campaign stays parked read-only.
+Boot `/campaign-cycle` from `docs/campaign/campaign-state.json` + `campaign.md`.
 
 ## Read these now
-1. `CLAUDE.md` (auto-loaded) — "Last shipped" = cycles 1-2 (S1 streaming core, S2 POI wrecks).
-2. `docs/campaign/campaign.md` — charter + S-ladder + locked constraints + scope-cut order.
-3. `docs/feature-infinite-procgen.md` — S3 = its sub-task 3.
-4. `docs/decisions.md` D288–D293 — the streaming architecture + the save-transient model S3
-   must follow (D290 descriptor purity; D292 transient/save rules).
-5. `src/world/chunkManager.ts` — the lifecycle S3 hangs content on (see how S2's poi roll works).
-6. `src/world/rockScatter.ts` + `src/world/wordlessScenes.ts` + the creature spawners
-   (`src/enemies/lizard.ts` `spawnLizardsProcgen`, shrew.ts, vulture.ts).
+1. `CLAUDE.md` (auto-loaded) — "Last shipped" = cycles 1-3.
+2. `docs/campaign/campaign.md` — charter; design decision #3 (user): DISTRIBUTED rare landmarks.
+3. `docs/feature-infinite-procgen.md` — S4 = its sub-task 4.
+4. `docs/decisions.md` D288–D294 — descriptor purity (D290), transient/save rules (D292),
+   chunk-keyed content (D294).
+5. `src/world/biomes.ts` — the distance-override biomes (wreck_yard 620-1000m ring,
+   sarlaccPitAnchor, caveAnchor) that need per-region re-anchoring.
+6. `src/world/heroLandmarks.ts` + `src/world/leviathanLandmark.ts` — what a "hero destination"
+   is today (authored ring near origin).
 
-## What's already built (S1+S2)
-Terrain streams (anchor-margin tile ring, `heightAt` infinite); ChunkManager (112m chunks, pure
-descriptors, full teardown); streamed POI wrecks beyond 1250m (save-transient, salvage works);
-permanent `verify:chunks` gates (determinism + a streaming/leak walk that also saves at +1500m);
-`chunk-vista` visual scenario incl. a streamed-POI shot.
+## What's already built (S1-S3)
+Terrain + content stream on an anchor-margin chunk model with pure descriptors; POI wrecks,
+rocks, wordless scenes, and prey clusters populate the infinite field (all save-transient per
+D292); permanent `verify:chunks` gates assert determinism, teardown, save safety, and
+descriptor↔render equality over the active ring.
 
-## Cycle 3 focus — S3: scatter + ambient life
-The far field has wrecks but is otherwise dead ground: no rocks, no wordless scenes, no creatures.
-DoD: walking anywhere yields biome-appropriate rock/decoration scatter and living creatures at
-roughly origin-field density, loading/unloading cleanly (no leaks, no save corruption), with the
-origin field and all existing gates untouched.
+## Cycle 4 focus — S4: landmarks + biomes for infinite
+Two halves:
+**(a) Distributed rare hero landmarks** — the infinite field needs DESTINATIONS, not just
+scatter. A coarse landmark grid (e.g. 1792m regions = 16×16 chunks) rolls at most one hero
+landmark per region at low probability from `hash(worldSeed, region)`; the landmark's CHUNK
+renders it through the existing lifecycle. Origin heroes (Leviathan, mega-ship, opening scene)
+stay authored. This is where Skyfall plugs in later — build the SLOT (a landmark-class registry
+with one or two entries), not Skyfall itself.
+**(b) Per-region biome re-anchoring** — `wreckYardAt` etc. are origin-distance functions; the
+infinite field never gets a wreck-yard. Re-anchor: rare per-region biome-anchor rolls (a
+wreck-yard region every N regions) feeding the SAME `wreckYardAt`-style falloffs at region-rolled
+anchor points. CAUTION: terrain heights/colors sample these per-vertex — the origin ring must be
+byte-identical after the change (placement gate + the determinism digest will catch drift; run
+them EARLY after touching biomes.ts).
 
 ## Priority sub-tasks (in order)
-1. **RESEARCH FIRST (the slice's open ❓):** read how `spawnLizardsProcgen` / `spawnShrewsProcgen`
-   / `spawnVulturesProcgen` actually work — module-owned lists (`ctx.shrews.list` IS the module
-   array), Rapier bodies?, save schema v14 persists shrews/vultures (id + pos + state) — the SAME
-   save-id trap as D292. Decide per-species: active-ring streaming vs leave-origin-only, and write
-   the finding into the cycle log BEFORE building.
-2. **Rock scatter per-chunk** — `spawnRockScatter` is boot-scoped (radius ≤1100m) and NO colliders
-   (visual props). Descriptor: per-chunk rock roll (count/positions/kinds from the chunk stream,
-   biome-gated like the boot path); render on load into the chunk group (instanced pools? check
-   how boot rocks draw — if InstancedMesh pools exist, per-chunk instancing may need its own
-   small pools or plain meshes; measure before choosing); dispose on unload. No colliders → no
-   body-count risk; extend the streaming probe's snapshot/leak asserts to cover rock meshes.
-3. **Wordless scenes per-chunk (scope-cuttable #1)** — `placeWordlessScenes` uses a dedicated
-   seeded RNG + a ring around origin; decoration-only, no colliders. A rare per-chunk roll
-   (~0.01-0.02) via the descriptor. Per the charter's scope-cut order this is the FIRST thing to
-   cut if a wall hits — keep them origin-only in that case and log it.
-4. **Creatures — active ring (scope-cuttable #2 to "simple radius despawn")** — spawn within
-   ~150-250m of the player from per-region deterministic rolls, despawn beyond. DANGER ZONE
-   (from step 1's findings): creature save arrays are id-keyed like salvage — streamed creatures
-   must be save-transient (mirror D292: exclude from serialization, or scope-cut to
-   origin-creatures-only and log). Creatures have AI ticks — keep the ring small and the
-   per-frame cost flat (the diurnal-probe + survival-probe must stay green).
-5. **Gates** — extend `chunk-streaming`: rock/scene content in snapshots (world-space), creature
-   count returns to baseline after the round trip, save-safety assert extended to creature
-   arrays if streamed. `verify:all` + all 5 smokes + `verify:chunks` green, per cycle.
-6. **Visual pass (routine bar)** — `chunk-vista`: a far-field shot with rocks + a wreck together
-   (the field should read INHABITED, not prop-spammed); wordless scene shot if built.
+1. **Research first**: read `biomes.ts` end-to-end (how wreckYardAt/sarlaccPitAt/caveAt compose
+   into heightAt + terrain colors + ARCH_WEIGHTS biome picks) and `heroLandmarks.ts` (what
+   assets/colliders a hero landmark carries). Decide the landmark-grid size + probability and
+   log the numbers.
+2. **Landmark grid roll** (descriptor-level): `describeRegion(rx, rz)` — pure, seeded per region;
+   at most one landmark (kind + position). Wire into `describeChunk` (a chunk knows if it hosts
+   its region's landmark) so the existing gates cover it. Landmark kinds for v1: reuse EXISTING
+   hero builders (a ribcage carcass cluster + one big procgen wreck class at hero scale) — the
+   value is the DESTINATION SYSTEM, not new art (Skyfall brings the new art later).
+3. **Render + teardown** on the chunk lifecycle (bodies tracked, salvage transient, geometry
+   disposal rules per D292/S3). Landmarks are BIG — verify the collider audit approach applies
+   (declared colliders / compound) and extend the streaming probe: a landmark-site leg
+   (descriptor-scan → walk → descriptor↔render + teardown asserts).
+4. **Per-region wreck-yard anchors** (b): region-rolled anchor points feeding a
+   `wreckYardAt`-equivalent that the terrain bake + POI weights consume. ONLY if the origin ring
+   stays byte-identical (assert early); if the coupling is too hot, scope-cut per the charter
+   ("S4 biome re-anchoring breadth — wreck_yard stays origin-anchored for v1") and log the
+   D-entry.
+5. **Gates + visual**: all 10 green; vista landmark shot (player-eye approach read — a landmark
+   must read as a DESTINATION from ~400m: silhouette against the fog).
+6. **Stretch**: a removable horizon-silhouette variant for streamed landmarks (the S2 skip).
 
 ## Constraints (locked)
-Determinism law (descriptor-pure, dedicated streams); rule 9 (no leaks — probe-gated); the intro +
-near-origin spawn unchanged; NO save-schema changes (S5 pause; use the D292 transient pattern);
-keep banked perf (rock scatter must not undo pickup instancing wins — watch draw calls);
-master untouched.
+Determinism law; rule 9; the intro + origin field byte-identical (the placement gate is the
+tripwire for biome changes); NO save-schema changes (transient pattern); master untouched.
+Scope-cut order (charter): biome re-anchoring breadth first — never cut determinism/teardown.
 
-## Footguns (from cycles 1-2)
-- Save-id coupling: anything with an id-keyed save array (salvage, pickups, shrews, vultures,
-  worms) must NOT serialize streamed instances — D292's transient pattern is the template.
-- Probe discipline: 320×240 render target for walk probes; cell-CENTER comparisons; ground-truth
-  rays dodge player/markers/POIs (D291). Wrapper child timeouts ≥900s for walk legs (D293).
-- Vite boots take 60-120s under machine load — that's the flake signature, not a regression.
-- `__game.resetWormCrossing()` before vista shots (the ambient ridge photobombs).
-- The boot `scatterRand` stream is SACRED — never draw from it for streamed content (D208/D221);
-  chunk streams only.
+## Footguns
+- biomes.ts feeds the TERRAIN BAKE — any change that shifts a single origin-ring vertex breaks
+  placement/panel audits AND the byte-identity promise. Guard every biome change behind
+  "origin-region unchanged" (e.g. only apply region anchors beyond the origin exclusion).
+- Probe discipline: D291 (320×240, cell centers, ray clearance) + D293 (900s wrapper legs) +
+  D294 (quiet ambient predators; `resetWormCrossing` for vistas).
+- Landmark colliders: use declared colliders / `attachCompoundCollider` with the body stashed
+  for teardown (the S2 composite lesson).
 
 ## Stop conditions
-Per the charter: budget/cycle caps, 3-strike walls (→ scope-cut order above), `stuck`, steering
-`pause`. S3's pre-authorized cuts: wordless scenes stay origin-only; creature ring simplifies to
-radius-despawn-only (or origin-only if the save coupling is hairy — log a D-entry either way).
+Charter caps; 3-strike walls → the scope-cut order; `stuck`; steering `pause`.
 
 ## On stop
-`/session-end` (campaign auto-commit) + campaign bookkeeping (state.json, campaign-log.md, marker
-removal) + verdict (CONTINUE → ScheduleWakeup /loop /campaign-cycle; the ladder continues S4 → S6
-→ ⏸ S5).
+`/session-end` (campaign auto-commit) + campaign bookkeeping + verdict (CONTINUE → S6 next,
+then ⏸ S5).
 
 ## Begin
-Read the files above → write `.gamedev-framework/campaign-cycle.inprogress` → research step 1 →
-build → gates → visual pass → `/session-end` → log + verdict.
+Read the files above → write `.gamedev-framework/campaign-cycle.inprogress` → research →
+build (a) then (b) → gates → vista → `/session-end` → log + verdict.

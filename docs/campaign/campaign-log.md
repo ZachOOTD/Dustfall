@@ -7,6 +7,21 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 
 ---
 
+## Cycle 3 — S3 scatter + ambient life (2026-07-11) — SHIPPED
+
+- **Planned:** S3 — rocks + wordless scenes per-chunk; creatures streamed (research the spawn systems first — the slice's ❓).
+- **Research verdicts (step 1, drove the design):** rocks streamable (no colliders, shared materials; the ONLY care is the boot `scatterRand` stream — every boot creature id depends on its draw order → new exports, boot loops untouched); scenes trivially streamable (already on a dedicated rng); lizards/shrews streamable-with-care (id-keyed saves → D292 transient pattern); **vultures DEFER** (perch/carcass-bound global placement + dynamic death bodies + full-population prey scans fight the chunk model).
+- **Shipped:**
+  - `ChunkDesc` gains `rocks` (7 candidates/chunk, rocky-biome kept, descriptor-level scene-stage cull), `scene` (0.02/chunk rare tableau), `fauna` (1-2 lizards + 0-2 shrews at the chunk's wreck, salt-skipped). New exports: `makeScatterRock`, `buildWordlessTableau`, `despawnLizard`.
+  - **Chunk-keyed fauna (D294)** — spawned via the REAL `spawnLizard`/`spawnShrew` on load, despawned on unload (looted skip), `transient` + save filters (lizards + shrews). No separate ring system — the chunk IS the ring.
+  - Probe upgrades: full-ring descriptor↔render equality (POIs/rocks/fauna); a fauna-site walk leg (the straight +X walk landed on all-salt POIs — fauna would have shipped unexercised); population baselines with ambient predators QUIETED (circling vultures grabbed 2 boot lizards mid-walk → false "leak"); vista rock + scene shots.
+- **Verify:** ALL 10 GREEN IN ONE PASS, zero flakes — tsc; placement 5-seed 0-fails; colliders 55; chunks (determinism ×2 + cross-seed; streaming bodies 332→332 EXACT, farPois 2/2, farRocks 46/46, fauna leg live); all 5 smokes. The D291/D293 hardening held.
+- **Visual iteration:** placement-sanity bar — watcher tableau on a dune crest (reads as intended), rock field seated, wreck+fauna area; all player-eye.
+- **D-entries:** D294 (chunk-keyed fauna; vulture defer; sacred boot streams; quiet-ambient-predators probe rule).
+- **Spend:** ~170K (campaign total ~600K / 10M; cycle 3/50).
+- **Commit:** (SHA recorded on commit — next log edit.)
+- **Next:** cycle 4 = **S4 distributed rare landmarks + per-region biomes** (brief in `docs/next-session-prompt.md`; biomes.ts changes must keep the origin ring byte-identical — the placement gate is the tripwire).
+
 ## Cycle 2 — S2 POI streaming (2026-07-11) — SHIPPED
 
 - **Planned:** S2 — `placeProcgenPOIs`/`placeProcgenPOI` per-chunk on the ChunkManager lifecycle: biome weights, static merge, salvage registration per chunk, full teardown, origin exclusion.
@@ -19,7 +34,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 - **Visual iteration:** placement-sanity bar — a streamed `hollow_husk` at (1388,−736) shot player-eye: seated, sand line natural, archetype-faithful (renders through the SAME assemblers the origin field uses — no new-element polish owed).
 - **D-entries:** D292 (save-transient streamed wrecks), D293 (wrapper child timeouts / dev-server leak).
 - **Spend:** ~180K output tokens (campaign total ~430K / 10M; cycle 2/50).
-- **Commit:** (SHA recorded on commit — next log edit.)
+- **Commit:** `ad49dc0` (the SHA-recording docs edit rides in cycle 3's commit).
 - **Next:** cycle 3 = **S3 scatter + ambient life** (brief in `docs/next-session-prompt.md`; step 1 is the spawn*Procgen research ❓ — creature save arrays are the same id-trap as D292).
 
 ## Cycle 1 — S1 ChunkManager spike (2026-07-11) — SHIPPED

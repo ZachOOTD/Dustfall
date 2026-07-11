@@ -143,8 +143,13 @@ and promotes the second.
 >   (0.07/chunk, biome-weighted archetypes, real `placeProcgenPOI` render, full teardown incl. salvage
 >   splice-out) beyond the 1250m origin exclusion; streamed wrecks are save-TRANSIENT (regenerate
 >   pristine — per-chunk diffs land at S5); the streaming gate now saves at +1500m and asserts the file.
-> - **▶ S3 — scatter + ambient life streaming (NEXT)** — rocks + wordless scenes per-chunk; creatures via
->   an active ring around the player (VERIFY how spawn*Procgen works first — the slice's open ❓).
+> - **✅ S3 — scatter + ambient life streaming** — SHIPPED cycle 3 (2026-07-11, D294). Rocks (rocky-biome,
+>   7 candidates/chunk), rare wordless scenes (0.02/chunk, descriptor-level stage clearing), and prey
+>   clusters at streamed wrecks (chunk-keyed lizards+shrews via the real spawners, save-transient,
+>   despawned with their chunk). Vultures deferred (placement model fights chunking — D294).
+> - **▶ S4 — distributed rare landmarks + per-region biomes (NEXT)** — a rare per-region roll scatters
+>   hero destinations across the infinite field (Skyfall plugs in here later); re-anchor the
+>   distance-override biomes (wreck_yard 620-1000m ring) to a per-region scheme. Origin heroes stay authored.
 > - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
 > - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
 > - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).

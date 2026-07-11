@@ -1609,9 +1609,14 @@ const SCENARIOS = {
       const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
       const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
       const fails = [];
-      // Quiet the ambient systems that add/remove bodies mid-walk: worms
-      // breach (kinematic bodies) if the path crosses territory.
+      // Quiet the ambient systems that add/remove bodies or CREATURES
+      // mid-walk: worms breach (kinematic bodies) if the path crosses
+      // territory, and circling vultures HUNT lizards/shrews (a grabbed
+      // lizard leaves the list — it false-failed the population-baseline
+      // assert as a "leak"). Emptying the lists stops their updates; their
+      // frozen meshes/bodies stay put (the body baseline is taken after).
       ctx.sandWorms.list.length = 0;
+      ctx.vultures.list.length = 0;
       // Numeric probe — shrink the render target so swiftshader fill cost
       // doesn't dominate the walk (900×1100 made this probe take ~15 min).
       ctx.three.renderer.setSize(320, 240, false);
@@ -1632,6 +1637,10 @@ const SCENARIOS = {
       if (!base.markersEnabled || base.markerMeshCount === 0) {
         fails.push(`markers did not enable (meshes=${base.markerMeshCount})`);
       }
+      // S3 — creature population baselines (streamed fauna must all
+      // despawn on the way home; boot fauna must be untouched).
+      const baseLiz = base.totalLizards;
+      const baseShrews = base.totalShrews;
       // Content snapshot of chunks guaranteed-loaded around a position:
       // WORLD-space positions of every mesh (markers + streamed-POI content)
       // in chunks within LOAD_RADIUS-1 of the player's chunk (immune to
@@ -1657,28 +1666,25 @@ const SCENARIOS = {
         }
         return rows.sort().join('|');
       };
-      // S2 — descriptor-vs-render check: within radius R of the player's
-      // chunk, every descriptor with poi.present must have a placed POI
-      // group (userData.poiArchetype) under its chunk group, and vice versa.
-      const poiRenderCheck = (px, pz, label) => {
-        const SIZE = 112, R = 2;
-        const pcx = Math.floor(px / SIZE), pcz = Math.floor(pz / SIZE);
-        let expected = 0;
-        for (let cx = pcx - R; cx <= pcx + R; cx++) {
-          for (let cz = pcz - R; cz <= pcz + R; cz++) {
-            if (g.chunkDescribe(cx, cz).poi.present) expected++;
-          }
+      // S2/S3 — descriptor-vs-render check over the FULL ACTIVE SET: every
+      // descriptor-rolled POI / rock / fauna must be placed, and vice versa
+      // (the active set is exactly the anchor ring once settled).
+      const contentRenderCheck = (label) => {
+        const st = g.chunkStats();
+        let expPois = 0, expRocks = 0, expLiz = 0, expShrews = 0;
+        for (const k of st.activeKeys) {
+          const [cx, cz] = k.split(',').map(Number);
+          const d = g.chunkDescribe(cx, cz);
+          if (d.poi.present) expPois++;
+          expRocks += d.rocks.length;
+          expLiz += d.fauna.lizards.length;
+          expShrews += d.fauna.shrews.length;
         }
-        let rendered = 0;
-        for (const grp of ctx.three.scene.children) {
-          if (!grp.name || !grp.name.startsWith('chunk-')) continue;
-          const m = grp.name.match(/^chunk-(-?\d+)_(-?\d+)$/);
-          if (!m) continue;
-          if (Math.max(Math.abs(+m[1] - pcx), Math.abs(+m[2] - pcz)) > R) continue;
-          grp.traverse((o) => { if (o.userData && o.userData.poiArchetype) rendered++; });
-        }
-        if (expected !== rendered) fails.push(`${label}: POI descriptor/render mismatch — ${expected} rolled, ${rendered} placed`);
-        return expected;
+        if (expPois !== st.chunkPoiCount) fails.push(`${label}: POI descriptor/render mismatch — ${expPois} rolled, ${st.chunkPoiCount} placed`);
+        if (expRocks !== st.chunkRockCount) fails.push(`${label}: rock descriptor/render mismatch — ${expRocks} rolled, ${st.chunkRockCount} placed`);
+        if (expLiz !== st.chunkLizardCount) fails.push(`${label}: lizard descriptor/render mismatch — ${expLiz} rolled, ${st.chunkLizardCount} tracked`);
+        if (expShrews !== st.chunkShrewCount) fails.push(`${label}: shrew descriptor/render mismatch — ${expShrews} rolled, ${st.chunkShrewCount} tracked`);
+        return { expPois, expRocks, expLiz, expShrews };
       };
       const dupCheck = (label) => {
         const seen = new Set();
@@ -1732,7 +1738,7 @@ const SCENARIOS = {
       }
       if (far.markerMeshCount === 0) fails.push('no markers at +1500m (content did not stream)');
       dupCheck('far');
-      const farPois = poiRenderCheck(1500, 56, 'far');
+      const farContent = contentRenderCheck('far');
       const farSnapA = snapshot(1500, 56);
       // S2 — SAVE SAFETY with streamed wrecks live: the serialized save
       // must contain ONLY boot-placed salvageables (transient excluded) —
@@ -1753,24 +1759,67 @@ const SCENARIOS = {
           if (raw.salvageables.length !== bootCount) {
             fails.push(`saved salvageable count ${raw.salvageables.length} != boot (non-transient) count ${bootCount}`);
           }
+          // S3 — same rule for streamed fauna: only boot creatures serialize.
+          const bootLiz = ctx.lizards.filter((l) => !l.transient).length;
+          const bootShr = ctx.shrews.list.filter((s) => !s.transient).length;
+          if (raw.lizards.length !== bootLiz) fails.push(`saved lizard count ${raw.lizards.length} != boot count ${bootLiz}`);
+          if ((raw.shrews || []).length !== bootShr) fails.push(`saved shrew count ${(raw.shrews || []).length} != boot count ${bootShr}`);
+          if (ctx.lizards.filter((l) => l.transient).length === 0 && farContent.expLiz > 0) {
+            fails.push('descriptor rolled streamed lizards but none are live (spawn path broken)');
+          }
         }
       }
+      // ── Leg 1b: EXERCISE THE FAUNA PATH — walk to the nearest
+      //    descriptor-rolled fauna chunk (the straight +X walk can land on
+      //    all-salt POIs where fauna correctly skips, leaving the
+      //    spawn/despawn path untested). ──
+      const walkTo = async (txp, tzp) => {
+        const cur = ctx.player.body.body.translation();
+        const dist = Math.hypot(txp - cur.x, tzp - cur.z);
+        const steps = Math.max(1, Math.ceil(dist / 140));
+        for (let i = 1; i <= steps; i++) {
+          const x = cur.x + (txp - cur.x) * (i / steps);
+          const z = cur.z + (tzp - cur.z) * (i / steps);
+          await tp(x, z, 12);
+        }
+        await frames(60);
+      };
+      let faunaSite = null;
+      {
+        let best = null;
+        for (let cx = 12; cx <= 40; cx++) {
+          for (let cz = -14; cz <= 14; cz++) {
+            const d = g.chunkDescribe(cx, cz);
+            if (d.fauna.lizards.length === 0) continue;
+            const fx = d.poi.x, fz = d.poi.z;
+            const dd = (fx - 1500) * (fx - 1500) + (fz - 56) * (fz - 56);
+            if (!best || dd < best.dd) best = { x: fx, z: fz, dd };
+          }
+        }
+        faunaSite = best;
+      }
+      if (!faunaSite) {
+        fails.push('no fauna chunk in the scan window (seed-dependent — widen the scan)');
+      } else {
+        await walkTo(faunaSite.x + 20, faunaSite.z + 20);   // stand OFF the wreck (not inside its collider)
+        contentRenderCheck('fauna-site');
+        const liveTransientLiz = ctx.lizards.filter((l) => l.transient).length;
+        if (liveTransientLiz === 0) fails.push('at a descriptor-rolled fauna site but no streamed lizards live (spawn path broken)');
+      }
       // ── Leg 2: return home (unloads the far field) ──
-      for (let x = 1350; x >= 150; x -= 150) await tp(x, 56, 12);
-      await tp(56, 56, 60);
+      await walkTo(56, 56);
       const homeKeys = new Set(g.chunkStats().activeKeys);
       if (homeKeys.has('12,0') || homeKeys.has('13,0')) {
         fails.push('far chunks still loaded after returning home (unload broken)');
       }
       // ── Leg 3: out again — the reload must regenerate IDENTICAL content ──
-      for (let x = 150; x <= 1500; x += 150) await tp(x, 56, 12);
-      await frames(60);
+      await walkTo(1500, 56);
       const farSnapB = snapshot(1500, 56);
       if (farSnapA !== farSnapB) fails.push('reloaded chunk content differs from first visit (determinism broken across unload/reload)');
       if (farSnapA.length === 0) fails.push('empty marker snapshot at far point (nothing to compare)');
       // ── Leg 4: home again — leak check against the baseline ──
-      for (let x = 1350; x >= 150; x -= 150) await tp(x, 56, 12);
-      await tp(56, 56, 90);
+      await walkTo(56, 56);
+      await frames(90);
       const end = g.chunkStats();
       const sameKeys = JSON.stringify(end.activeKeys) === JSON.stringify(base.activeKeys);
       if (!sameKeys) fails.push(`active chunk set at home differs from baseline (${end.activeKeys.length} vs ${base.activeKeys.length})`);
@@ -1790,18 +1839,24 @@ const SCENARIOS = {
       if (end.chunkSalvageCount !== 0 || end.chunkPoiCount !== 0) {
         fails.push(`streamed POI content at HOME (inside the origin exclusion): pois=${end.chunkPoiCount} salvage=${end.chunkSalvageCount}`);
       }
+      // S3 — creature populations return to their boot baselines.
+      if (end.totalLizards !== baseLiz) fails.push(`lizard population LEAK: ${baseLiz} → ${end.totalLizards} (streamed fauna not despawned)`);
+      if (end.totalShrews !== baseShrews) fails.push(`shrew population LEAK: ${baseShrews} → ${end.totalShrews}`);
+      if (end.chunkRockCount !== 0) fails.push(`streamed rocks at HOME (inside the origin exclusion): ${end.chunkRockCount}`);
       dupCheck('home');
       g.setChunkMarkers(false);
       return {
         fails,
         baseBodies: base.worldBodies, endBodies: end.worldBodies,
         baseChunks: base.activeKeys.length, farChunks: far.activeKeys.length,
-        farMarkers: far.markerMeshCount, farPois,
-        farSalvage: far.chunkSalvageCount, tiles: end.terrainTileKeys.length,
+        farMarkers: far.markerMeshCount, farPois: farContent.expPois,
+        farSalvage: far.chunkSalvageCount, farRocks: farContent.expRocks,
+        farFauna: farContent.expLiz + farContent.expShrews,
+        tiles: end.terrainTileKeys.length,
       };
     });
     const pass = r.fails.length === 0;
-    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} farPois=${r.farPois} farSalvage=${r.farSalvage} tiles=${r.tiles} fails=${r.fails.length}`);
+    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} farPois=${r.farPois} farSalvage=${r.farSalvage} farRocks=${r.farRocks} farFauna=${r.farFauna} tiles=${r.tiles} fails=${r.fails.length}`);
     console.log(`[chunk-streaming] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
     if (!pass) throw new Error('chunk-streaming GATE FAILED');
   },
@@ -1978,6 +2033,47 @@ const SCENARIOS = {
     } else {
       console.log('[chunk-vista] no streamed POI rolled in the scan window (seed-dependent)');
     }
+    // S3 — a streamed ROCK FIELD (rocky biome) and a streamed WORDLESS
+    // SCENE, both player-eye. Deterministic descriptor scans.
+    const walkShoot = async (name, target, lookLift) => {
+      if (!target) { console.log(`[chunk-vista] no ${name} in the scan window (seed-dependent)`); return; }
+      await page.evaluate(async (t) => {
+        const ctx = window.__game.ctx;
+        ctx.flags.paused = false;
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        const from = ctx.player.body.body.translation();
+        for (let i = 1; i <= 10; i++) {
+          const x = from.x + (t.x - from.x) * (i / 10);
+          const z = from.z + (t.z - from.z) * (i / 10);
+          ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+          for (let f = 0; f < 12; f++) await raf();
+        }
+        for (let f = 0; f < 60; f++) await raf();
+      }, target);
+      await shot(name, `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = ${target.x}, pz = ${target.z};
+        const cx2 = px - 14, cz2 = pz - 10;
+        cam.position.set(cx2, ctx.terrain.heightAt(cx2, cz2) + 1.7, cz2);
+        cam.lookAt(px, ctx.terrain.heightAt(px, pz) + ${lookLift}, pz);
+        cam.updateMatrixWorld(true);
+      })()`);
+    };
+    const targets = await page.evaluate(() => {
+      const g = window.__game;
+      let rockT = null, sceneT = null;
+      for (let cx = 12; cx <= 40 && (!rockT || !sceneT); cx++) {
+        for (let cz = -12; cz <= 12 && (!rockT || !sceneT); cz++) {
+          const d = g.chunkDescribe(cx, cz);
+          if (!rockT && d.rocks.length >= 4) rockT = { x: d.rocks[0].x, z: d.rocks[0].z };
+          if (!sceneT && d.scene.present) sceneT = { x: d.scene.x, z: d.scene.z };
+        }
+      }
+      return { rockT, sceneT };
+    });
+    await walkShoot('streamed-rocks', targets.rockT, 0.6);
+    await walkShoot('streamed-scene', targets.sceneT, 0.8);
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/

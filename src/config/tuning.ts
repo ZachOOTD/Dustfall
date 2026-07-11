@@ -344,6 +344,19 @@ export const Tuning = {
   CHUNK_POI_CHANCE: 0.07,
   CHUNK_POI_ORIGIN_EXCLUSION_M: 1250,
   CHUNK_POI_EDGE_MARGIN_M: 25,
+  // Infinite Sands S3 — streamed scatter + ambient life (all beyond the
+  // same origin exclusion; the boot field is untouched).
+  // Rocks: N candidate positions per chunk, kept only where the biome is
+  // rocky (mirrors the boot rejection-sampler's landed density: 520 rocks
+  // over the boot disc ≈ 7 per rocky 112m chunk).
+  CHUNK_ROCK_CANDIDATES: 7,
+  // Wordless scenes: rarer than the boot ring's local density — a distant
+  // vignette should be a discovery, not set dressing (~1 per 50 chunks).
+  CHUNK_WORDLESS_CHANCE: 0.02,
+  // Fauna cluster at a streamed POI wreck (mirrors the boot per-POI
+  // clusters): 1..MAX lizards + 0..MAX shrews, skipped on salt (boot rule).
+  CHUNK_POI_LIZARDS_MAX: 2,
+  CHUNK_POI_SHREWS_MAX: 2,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)

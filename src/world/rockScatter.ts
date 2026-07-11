@@ -42,6 +42,29 @@ const MAX_PLACEMENT_TRIES = TARGET_COUNT * 25;
 const WORLD_RADIUS = 1100;         // matches DEAD_TREE_SCATTER_RADIUS_MAX
 const RADIUS_MIN = 30;             // skip the area right around spawn
 
+/** Infinite Sands S3 — build ONE scatter rock at (x, z), drawing its
+ *  tier/size/pose from the passed rng (6 draws, fixed budget). Used by the
+ *  chunk streamer with a per-chunk rng; NOT added to the scene (the caller
+ *  parents it into its chunk group). The boot loop below intentionally does
+ *  NOT route through this — its inline draws feed the shared boot stream
+ *  whose exact order every creature id depends on (D208/D294). */
+export function makeScatterRock(terrain: Terrain, x: number, z: number, rand: Rng): THREE.Mesh {
+  const isMedium = rand() < MEDIUM_FRACTION;
+  const baseR = isMedium
+    ? 0.5 + rand() * 0.7      // 0.5 - 1.2m
+    : 0.15 + rand() * 0.25;   // 0.15 - 0.4m
+  const rock = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(baseR, 0),
+    isMedium ? _rockMediumMat : _rockSmallMat,
+  );
+  rock.position.set(x, terrain.heightAt(x, z) + baseR * 0.15, z);
+  rock.rotation.set(rand() * 0.8, rand() * Math.PI * 2, rand() * 0.6);
+  rock.scale.set(1.0, 0.55 + rand() * 0.30, 1.0);
+  rock.castShadow = isMedium;
+  rock.receiveShadow = true;
+  return rock;
+}
+
 /** Spawn rocks across the rocky biome. Rejection-sample until either
  *  TARGET_COUNT rocks are placed or MAX_PLACEMENT_TRIES is hit. */
 export function spawnRockScatter(

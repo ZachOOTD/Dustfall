@@ -60,6 +60,10 @@ export interface Shrew {
    *  sand). Eases toward 1 while the player is near in 'burrow' state, back
    *  toward 0 when they leave. Transient (not persisted). */
   burrowT: number;
+  /** Infinite Sands S3 — TRUE for chunk-STREAMED shrews: excluded from
+   *  save serialization (visit-order ids — the D292 rule) and despawned
+   *  with their chunk. Boot-spawned shrews leave this unset. */
+  transient?: boolean;
   /** ACAI f/u — seconds the shrew stays burrowed after a vulture scare, even
    *  with no player nearby (a vulture-triggered dive-for-cover). */
   burrowHold: number;
