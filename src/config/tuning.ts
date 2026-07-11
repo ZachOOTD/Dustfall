@@ -310,6 +310,30 @@ export const Tuning = {
   TERRAIN_CHUNK_SIZE: 800,
   TERRAIN_CHUNK_GRID: 3,
   TERRAIN_CHUNK_CELLS: 192,
+  // Infinite Sands S1 — the terrain grid now FOLLOWS the player: a
+  // (2*RADIUS+1)² ring of TERRAIN_CHUNK_SIZE tiles stays loaded around an
+  // ANCHOR tile; tiles outside the ring are disposed (mesh geometry +
+  // Rapier heightfield body). RADIUS 1 = the same 3×3 / 2400m coverage the
+  // fixed grid had, re-centered as the player travels, so the ground
+  // extends infinitely in every direction. The anchor re-centers only when
+  // the player moves MARGIN meters past the anchor tile's edge — boundary
+  // straddling can never thrash a 37k-vertex tile rebuild.
+  TERRAIN_TILE_RADIUS: 1,
+  TERRAIN_ANCHOR_MARGIN_M: 24,
+  // Infinite Sands S1 — content-chunk streaming (ChunkManager). Content
+  // (S1: marker posts; S2+: POIs, scatter) streams on a finer grid than the
+  // terrain tiles: CHUNK_SIZE-meter chunks kept loaded within
+  // CHUNK_LOAD_RADIUS chunks (Chebyshev) of the anchor chunk (same
+  // anchor-margin anti-thrash as the terrain ring). 112m × radius 3 ≈ 392m
+  // guaranteed content ahead — FogExp2 (0.0018) has faded ground detail
+  // well into the haze by then. Per the campaign charter these are
+  // S1-tunable (log a D-entry).
+  CHUNK_SIZE: 112,
+  CHUNK_LOAD_RADIUS: 3,
+  CHUNK_ANCHOR_MARGIN_M: 8,
+  // Generation budget: at most N chunk loads per frame (the anchor chunk
+  // always loads immediately, budget notwithstanding).
+  CHUNK_LOADS_PER_FRAME: 2,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)

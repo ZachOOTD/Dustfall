@@ -43,6 +43,7 @@ import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
 import type { LightPool } from './core/lightPool.ts';
 import type { IntroState } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro)
+import type { ChunkManager } from './world/chunkManager.ts';   // Infinite Sands S1 — content-chunk streaming
 
 export interface GameContext {
   /** Session AAI — world seed. Drives all 3 RNG streams (terrain,
@@ -115,6 +116,10 @@ export interface GameContext {
   };
   physics: PhysicsBundle;
   terrain: Terrain;
+  /** Infinite Sands S1 — streams content chunks (and, via updateChunks,
+   *  the terrain tile ring) around the player. Deterministic per
+   *  (seed, cx, cz); see world/chunkManager.ts. */
+  chunks: ChunkManager;
   biomes: BiomeSampler;
   assets: AssetRegistry;
   shelter: ShelterRegistry;

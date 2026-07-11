@@ -16,7 +16,7 @@ import { diurnalActivity01 } from '../enemies/diurnal.ts';   // M5 — __game.di
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
 import { updateStats, die } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe; C38 — triggerDeath
-import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
+import { spawnWormCrossing, updateWormHorizonCrossing, resetWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
@@ -256,6 +256,9 @@ interface DebugApi {
    *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
   triggerWormCrossing: () => { cx: number; cz: number } | null;
   advanceWormCrossing: (seconds: number) => void;
+  /** S1 — deactivate + hide an in-flight dorsal-ridge crossing, re-arm its
+   *  timer. Probes/vista teleport across its line and get photobombed. */
+  resetWormCrossing: () => void;
   /** M12 ⓖ (C66) — DEV/rig-only: pose ctx.sandWorms.list[0] at the breach-and-dive lunge
    *  time `t` (0..1) using the REAL applyLungePose (no rig-vs-real drift). Returns the body
    *  center + head world Y + pitch so the no-airborne-hop claim is numerically checkable
@@ -378,6 +381,23 @@ interface DebugApi {
   /** AAP — per-track procedural music gains (day / storm / night).
    *  Null until first click unlocks audio. */
   musicState: () => MusicStateSnapshot | null;
+  /** Infinite Sands S1 — pure per-chunk content descriptor (any coords,
+   *  loaded or not). Drives the chunk-determinism probe. */
+  chunkDescribe: (cx: number, cz: number) => unknown;
+  /** Infinite Sands S1 — streaming snapshot: active chunk/tile keys +
+   *  GLOBAL Rapier body/collider counts. Drives the streaming/leak probe. */
+  chunkStats: () => {
+    activeKeys: string[];
+    markersEnabled: boolean;
+    markerMeshCount: number;
+    chunkBodyCount: number;
+    terrainTileKeys: string[];
+    worldBodies: number;
+    worldColliders: number;
+  };
+  /** Infinite Sands S1 — toggle the marker-post spike layer (regenerates
+   *  active chunks). Probes + humans only; defaults off in normal play. */
+  setChunkMarkers: (on: boolean) => void;
 }
 
 /** Hooks main.ts supplies for actions that need its boot-scope closures
@@ -650,6 +670,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     triggerWormCrossing: () => spawnWormCrossing(ctx),
     advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),
+    // S1 — kill an in-flight ambient dorsal-ridge crossing + re-arm its
+    // timer (the probes/vista teleport across its line and get photobombed).
+    resetWormCrossing: () => resetWormHorizonCrossing(),
     poseLunge: (t = 0.5) => {
       const worm = ctx.sandWorms?.list?.[0];
       if (!worm) return { found: false };
@@ -836,6 +859,21 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     }),
     ctx,
     RAPIER,
+    // Infinite Sands S1 — chunk-streaming probe hooks.
+    chunkDescribe: (cx, cz) => ctx.chunks.describeChunk(cx, cz),
+    chunkStats: () => {
+      const s = ctx.chunks.stats();
+      return {
+        activeKeys: s.activeKeys,
+        markersEnabled: s.markersEnabled,
+        markerMeshCount: s.markerMeshCount,
+        chunkBodyCount: s.bodyCount,
+        terrainTileKeys: ctx.terrain.tileKeys().sort(),
+        worldBodies: ctx.physics.world.bodies.len(),
+        worldColliders: ctx.physics.world.colliders.len(),
+      };
+    },
+    setChunkMarkers: (on) => ctx.chunks.setMarkersEnabled(on),
     castDown(x, z, fromY = 100) {
       const ray = new RAPIER.Ray({ x, y: fromY, z }, { x: 0, y: -1, z: 0 });
       const hit = ctx.physics.world.castRay(ray, 500, true);

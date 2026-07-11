@@ -3,77 +3,93 @@
 Cumulative state. Rewritten (and pruned) at each `/session-end`. Per-session detail lives in
 `docs/changelog.md` (append-only); per-cycle campaign detail in `docs/campaign/campaign-log.md`.
 
-## Current state (2026-07-08)
+## Current state (2026-07-11)
 
 **The game is a complete, playable, shippable browser + desktop survival game.** The escape-pod
-intro is the **released opening** (2026-07-05, LIVE at https://zachootd.github.io/Dustfall/).
+intro is the **released opening** (2026-07-05, LIVE at https://zachootd.github.io/Dustfall/), and a
+Tauri v2 desktop build exists (Dustfall.exe, unsigned v1).
 
-**This session (round ACN, attended) — cockpit-glass playtest fixes** (D279-D280; one commit `07a818d`,
-all in `src/world/escapePodIntro/shipScene.ts`). A rapid live-feedback round sealing + cleaning the
-intro cockpit dome glass:
-1. Removed a floating hazard placard on the port collar foot (out-of-place yellow rectangle).
-2. **Side-closure glass now connects to the hull** — its collar-side edge lands on the collar/shell
-   forward ring with a small overlap (`CLOSURE_OUT`/`CLOSURE_AFT`), and it's `DoubleSide` so it never
-   back-face-culls to a see-through hole from the back-of-cockpit vantage.
-3. **Crown ROOF CAP added** — the dome was open above the crown ring (looking up showed space); glass
-   panes now loft from the crown ring to the shell forward ring (sampled by x → meet the ceiling exactly,
-   no top-corner slivers), framed by new roof meridian ribs so every pane edge sits on a mullion.
-4. **All "wrap" glass (side closures + roof) → a flat unlit tint** (`_glassRoof`) so it reads uniform;
-   the sheen-tuned `_glass` is now front-window-only (fixes the view-dependent bright-triangle artifacts).
+**⚙ ACTIVE CAMPAIGN — "Infinite Sands"** (infinite procgen, overnight-autonomous, branch
+`campaign/2026-07-10-procgen`, max 50 cycles / ~10M-token soft ceiling, checkpoint policy `none`
+with ONE sanctioned pause at S5 save-schema). Charter: `docs/campaign/campaign.md`; feature slice:
+`docs/feature-infinite-procgen.md`; ladder status in `docs/roadmap.md` "Up next".
 
-tsc clean; every fix render-verified via `scripts/ship-shot.mjs` (seated / back-left / look-up, plus
-cranked-opacity coverage checks) — the preview MCP wedges on this scene, so ship-shot is the gate.
+**This session (campaign cycle 1 — S1 ChunkManager spike, D288–D291):** the world now STREAMS.
+- `terrain.ts`: fixed 3×3×800m boot grid → an unbounded ANCHOR-MARGIN tile ring following the
+  player (24m margin hysteresis — boundary straddling can't thrash a 37k-vert rebuild); tiles fully
+  disposed outside the ring (geometry + Rapier heightfield body); `heightAt` = collider-exact
+  bilinear inside loaded tiles + closed-form fallback ANYWHERE else; ONE shared terrain material
+  (per-tile materials leaked `_shaderRefs` entries). The initial ring is byte-identical to the old
+  grid — the released intro region is untouched (placement gate 0-fails ×5 seeds).
+- NEW `src/world/chunkManager.ts`: 112m content chunks, Chebyshev load radius 3, 8m anchor margin,
+  `chunkSeed(worldSeed,cx,cz)` avalanche + pure `describeChunk` descriptors (loading only renders
+  them — the determinism law extended to the infinite grid), full teardown on unload. S1 content =
+  seed-tinted marker posts with real colliders, OFF by default (`__game.setChunkMarkers`).
+- 2 NEW permanent gates wired into `verify:all` via `npm run verify:chunks`: **chunk-determinism**
+  (descriptor byte-identity ×2 derivations at 8 coord spreads, adjacent-chunk + cross-seed
+  distinctness) and **chunk-streaming** (a 4-leg walk to +1500m — past the old ±1200m edge — and
+  back: terrain follows, collider agrees with heightAt, bounded active set, no seam duplicates,
+  unload→reload regenerates byte-identical positions, global body count returns to baseline ±3).
+- Tooling: rig-shot `startDev` 30s→120s (loaded-machine boots flaked every probe); walk probes
+  shrink the renderer to 320×240 (18min → ~2-3min); NEW `chunk-vista` visual scenario (crest-framed
+  player-eye shots at +1500m + a fwd-ray identify diagnostic); `__game.chunkDescribe/chunkStats/
+  setChunkMarkers/resetWormCrossing`.
 
-**Prior 2026-07-08 features** (see changelog): crafting rework — pickup-gated card grid (D277,
-SAVE_VERSION **16**); Tauri v2 desktop packaging → Dustfall.exe (D278); display-mode settings.
-
-**Verify baseline:** `npm run verify` (tsc) — Dustfall opts out of the tier-ladder. `verify:all` adds
-placement + colliders for world work. Save schema at **v16** (untouched this session).
+**Verify baseline:** `verify:all` = tsc + placement (5 seeds) + colliders (55) + **chunks** (NEW),
+plus the 5 rig smoke gates (smoke-intro, smoke-pod-tutorial, pickup-take-sweep, survival-probe,
+diurnal-probe). All 10 green this cycle. Save schema **v16, untouched** (S5 is the sanctioned bump).
 
 ## What works end-to-end
-Single-player: New Game → the escape-pod intro (cockpit → eject → descent → crash → wake → step out →
-craft-a-machete tutorial) → the open desert loop — survive (thirst/heat/cold/hunger/stamina, the 7-day
-Long Storm), scavenge wrecks (tactile pry+extract salvage), craft via the new pickup-gated card grid,
-build camp (fire/tent/bedroll/lantern/locker/grill), hunt/cook creatures, tow a sled / ride the speeder,
-explore the wreck-yard biome + Sarlacc pit. Continue restores a real save (no intro replay). Runs
-identically in-browser and as the Tauri desktop app.
+Single-player: New Game → the escape-pod intro → the open desert loop — survive (5 stats, the 7-day
+Long Storm), scavenge wrecks (pry+extract salvage, 11 procgen archetypes), craft via the
+pickup-gated card grid, build camp, hunt/cook, tow a sled / ride the speeder, the wreck-yard biome +
+Sarlacc pit + deep cave. Continue restores a real save. Browser + desktop identical. **NEW: the
+player can walk arbitrarily far in any direction and the GROUND keeps generating deterministically**
+(content beyond the origin field arrives in S2-S4 — for now the far field is bare dunes; marker
+posts prove the machinery when enabled).
 
 ## Known issues / partials
-See `docs/backlog.md` (⚠ stale — verify candidates against code before acting). The large owed pile is
-the §A human walk-tests / in-motion feel-tunes (survival curve, diegetic HUD, salvage/sandworm/speeder/3P
-feel) — headless can't judge these. Verified-open buildable: pickup instancing (perf), ambient life beds
-(silent audio). Desktop follow-ups: code signing, file-based saves, CSP tighten, WebView2 re-profile.
+- **The far field is intentionally EMPTY** — POIs/scatter/creatures/landmarks are still origin-bound
+  boot placement; that's S2/S3/S4 of the ladder (not a bug).
+- **Terrain tile bake blocks its frame** (~100-200ms × 3 tiles per 800m ring crossing, budgeted
+  1/frame) — explicitly S6's rung (frame-budgeted generation); do not band-aid earlier (D288).
+- Worm-crossing humps read exposed on dead-flat salt at close range (pre-existing, newly observable;
+  backlog `[polish]`).
+- The §A owed human walk-tests / feel-tunes pile (see `docs/backlog.md`) is unchanged.
 
-## Constants / knobs worth tuning
-This session added no gameplay tuning constants. New cockpit-glass tunables live in `shipScene.ts`:
-`CLOSURE_OUT`/`CLOSURE_AFT` (side-glass-to-hull overlap) and the `_glassRoof` material (flat wrap-glass
-tint). Desktop window size in `src-tauri/tauri.conf.json` (1280×800).
+## Constants / knobs worth tuning (new this session)
+`tuning.ts`: `TERRAIN_TILE_RADIUS` (1), `TERRAIN_ANCHOR_MARGIN_M` (24), `CHUNK_SIZE` (112),
+`CHUNK_LOAD_RADIUS` (3), `CHUNK_ANCHOR_MARGIN_M` (8), `CHUNK_LOADS_PER_FRAME` (2). All charter-
+sanctioned S1 tunables (D288).
 
-## Suggested next (user picks — no mandated direction)
-1. A net-new arc the user chooses: endgame goal (Long-Storm finale + ledger), a new enterable hero wreck,
-   or the cave multi-chamber expansion.
-2. Pickup instancing (perf, human-attended) or ambient life beds (audio) — both verified-open + buildable.
-3. Desktop shipping polish (code signing → itch/Steam) if distribution is the goal.
-   (More cockpit/world playtest-fix rounds if the user keeps walk-testing — this session was one such round.)
+## Suggested next
+1. **Campaign cycle 2 = S2 POI streaming** (the loop's next rung — see `docs/next-session-prompt.md`).
+2. Then S3 (scatter/creatures) → S4 (distributed landmarks + biome re-anchor) → S6 (perf) → ⏸ S5
+   (save schema, the sanctioned pause + morning review).
+3. After the campaign: resume the parked Skyfall plan-review (`/campaign-approve` on the restored
+   Sharpen & Deepen state) — Skyfall becomes an S4 distributed landmark.
 
 ## State at session end
-- **Git:** clean — this session's fixes committed `07a818d` + pushed to `master` mid-session (user asked).
-  The session-end doc updates are the only uncommitted change (commit-handoff below).
-- **Save:** localStorage v16 (untouched this session).
-- **Dev server:** a Vite dev server was left running on **port 5180** (`preview_start` "dustfall") for the
-  user's live playtest; ship-shot harness servers self-reap.
-- **Docs:** `decisions.md` at 60 entries — archival due (>50-entry threshold, ~30K tokens, under the 40K
-  hard threshold); deferred again to a dedicated pass (backlog `[debt]`).
+- **Git:** on `campaign/2026-07-10-procgen`; this cycle auto-committed (campaign mode) — SHA in
+  `docs/campaign/campaign-log.md`. `master` untouched. Not pushed (charter: never push; merge after
+  the morning review).
+- **Save:** localStorage v16 (untouched).
+- **Docs:** `decisions.md` archived D236–D246 → 45 active entries + this cycle's D288–D291 = 49.
+- **Machine note:** another project (project-mountain) was running its own verify suite concurrently
+  — Vite boots were slow all session (hence the 120s startDev window).
 
 ## Time + token spend
-~One attended live-feedback session (a single file, `shipScene.ts`). Output-token cost was elevated for a
-"polish" session because it was render-heavy: ~30+ `ship-shot.mjs` captures across many diagnostic +
-verification rounds (each screenshot is read back into context). Roughly ~1× a normal feature session on
-output tokens despite touching one file — the cost was in the iterate→screenshot→critique loop, not code volume.
+Campaign cycle 1 (autonomous, overnight window). Heavy for a systems cycle: the build itself was
+lean, but the streaming probe needed 4 diagnose→fix rounds (settle-counter → anchor-margin redesign;
+castDown false-hits; corner ambiguity; swiftshader runtime) and the vista needed 3 photobomber
+identification rounds. Estimated **~250K output tokens** this cycle (recorded in the campaign
+ledger: 250K / 10M ceiling, cycle 1/50).
 
 ## Iteration-discipline self-check (rule 8)
-STRONG PASS. This was a pure visual/feel session and it was iterated far beyond the rule-8 bar — the
-build→screenshot→critique→iterate loop ran the full length of the session with the user in the loop:
-placard → side-gap → roof-open → top-slivers → sheen-artifacts, each DIAGNOSED first (cyan/magenta pane
-tagging, opacity-crank coverage checks, glass-hidden structure shots) before the fix, then re-verified
-from multiple vantages. Zero ship-after-one-edit; no shallow-ship flags.
+PASS (systems bar). This cycle shipped no player-facing visual element — the marker posts are
+probe/debug affordances (off by default) and the streamed terrain re-renders the SAME formula the
+shipped world used. The visual gate still ran as placement-sanity: 4 player-eye `chunk-vista` shots
+(crest fwd/back at +1500m, tile seam, marker ground-contact), 3 iterate rounds on framing +
+photobomber identification (dune face + the worm spectacle — both explained, neither a regression).
+No hero bar applied — correctly, per the charter ("systems work — screenshots for placement sanity,
+no hero bar").

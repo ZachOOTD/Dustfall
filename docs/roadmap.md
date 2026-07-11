@@ -132,15 +132,25 @@ and promotes the second.
 
 ## Up next
 
-> **NO ACTIVE CAMPAIGN (2026-07-08).** The `campaign/escape-pod-intro` campaign is COMPLETE — the intro
-> shipped + released (2026-07-05). Standalone sessions since (crafting rework, desktop packaging) are in
-> "Recently shipped" above. **There is no single mandated next thing** — the genuinely-open work is a
-> user-picked direction. See [next-session-prompt.md](next-session-prompt.md) for the curated set
-> (verified-open: pickup-instancing, ambient life beds; net-new: a new enterable hero
-> wreck, cave multi-chamber; desktop follow-ups: signing / file-saves / CSP — endgame/finale: not pursued
-> per the 2026-06-18 open-ended directive). ⚠ [backlog.md](backlog.md)
-> is stale — verify candidates against the code first (last session found several "pending" items already
-> shipped). The escape-pod campaign detail below + the M11→M13 tiers are SHIPPED history.
+> **⚙ ACTIVE CAMPAIGN — "Infinite Sands" (infinite procgen, started 2026-07-10, branch `campaign/2026-07-10-procgen`).**
+> Charter + answered design questions: [campaign/campaign.md](campaign/campaign.md); authoritative feature
+> slice: [feature-infinite-procgen.md](feature-infinite-procgen.md). The S-ladder (traverse in order):
+> - **✅ S1 — ChunkManager spike + determinism/streaming probes** — SHIPPED cycle 1 (2026-07-11, D288–D291).
+>   Terrain streams (an anchor-margin 3×3×800m tile ring follows the player); NEW `src/world/chunkManager.ts`
+>   (112m content chunks, r3, full teardown); `heightAt` infinite; 2 NEW permanent gates in `verify:all`
+>   (`verify:chunks` = chunk-determinism + chunk-streaming/leak walk). Marker-post spike content, off by default.
+> - **▶ S2 — POI streaming (NEXT)** — `placeProcgenPOIs`/`placeProcgenPOI` become per-chunk via the descriptor
+>   model (D290): biome weights, collider audit, static merge, salvage/journal registration per chunk; full
+>   teardown on unload; the origin chunk keeps the spawn exclusion.
+> - S3 — scatter + wordless scenes per-chunk; creatures via an active ring (verify how spawn*Procgen works first).
+> - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
+> - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
+> - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).
+>
+> The PAUSED Skyfall campaign stays parked read-only ([feature-skyfall.md](feature-skyfall.md) +
+> `campaign/*-2026-07-09-sharpen-deepen.*`) — resume after procgen; it becomes an S4 distributed landmark.
+> (History: the escape-pod campaign + M11→M13 tiers below are SHIPPED. ⚠ [backlog.md](backlog.md) is
+> partially stale — verify candidates against code.)
 
 ### ▶ ACTIVE — REBUILD v2: the real-world physical intro (R1→R5) · supersedes the v1 phased build below
 The user walk-tested the v1 build (overnight C19-C26) + directed a re-architecture — full plan + locked

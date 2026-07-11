@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-10",
   "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 0,
-  "current_tier": "S1 - ChunkManager spike (+ determinism & streaming probes)",
+  "cycles_completed": 1,
+  "current_tier": "S2 - POI streaming (per-chunk placement + full teardown)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -16,9 +16,9 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 0 },
+  "spend": { "total": 250000 },
   "ladder": [
-    { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "pending" },
+    { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
     { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "pending" },
     { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "pending" },
     { "id": "S4", "name": "Distributed rare landmarks + per-region biomes", "kind": "auto", "status": "pending" },
@@ -27,5 +27,16 @@
   ],
   "sanctioned_pauses": ["save-version-bump (S5, pause BEFORE building)"],
   "locked_constraints": ["determinism-law", "no-unload-leaks-rule9", "intro-unchanged", "no-save-change-before-S5-pause", "keep-banked-perf", "master-untouched", "skyfall-campaign-parked-readonly"],
-  "cycles": []
+  "cycles": [
+    {
+      "n": 1,
+      "date": "2026-07-11",
+      "focus": "S1 ChunkManager spike: streaming terrain tile ring + content ChunkManager + determinism/streaming gates",
+      "outcome": "shipped",
+      "tier": "S1",
+      "spend_this_cycle": 250000,
+      "commit": "PENDING-SET-ON-COMMIT",
+      "d_entries": ["D288", "D289", "D290", "D291"]
+    }
+  ]
 }

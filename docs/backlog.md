@@ -10,6 +10,10 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
+### Infinite Sands residuals (campaign 2026-07-10, cycle 1)
+- `[polish]` **Worm-crossing humps read exposed on dead-flat salt** (spotted in the S1 chunk-vista pass). The dorsal-ridge spectacle (`wormHorizonCrossing.ts`) hides its hump bases below dune crests, but on a flat salt pan the base + under-gap show at close range. Rarely seen (ambient + far by design); consider a biome-aware extra bury or a salt-biome skip. Pre-existing — just newly observable now that the player can stand 1500m out.
+- `[debt]` **`verify:chunks` adds ~3-5 min to `verify:all`** (two determinism boots + one streaming walk). Fine as a campaign gate; if it grates later, the two determinism seeds can share one boot.
+
 ### ABQ live-feedback residuals (2026-07-07)
 - `[bug]` **Airlock-corner z-fight — LIVE-MOTION confirm owed.** Fixed via polygonOffset on the collar side wall (D275, probe-confirmed pair vs the −X corridor wall), but the `--probe`/still-render can't verify a GPU depth bias — only motion shows the flicker. If it STILL flickers live, the fallback is a real geometry change (pull the collar wall back + close the corner differently). See [[ship-zfight-probe-first]] memory.
 - `[polish]` **Cockpit glass haze amount** — set slight (`opacity 0.09`, glaze `1.05`, shipScene `_glass`). User may want it stronger/weaker; it's a one-value tune.

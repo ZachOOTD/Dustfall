@@ -1547,6 +1547,335 @@ const SCENARIOS = {
     if (!ok) throw new Error(`diurnal-probe GATE FAILED: ${JSON.stringify(r)}`);
   },
 
+  // Infinite Sands S1 (campaign 2026-07-10) — CHUNK-DETERMINISM GATE.
+  // The determinism law extended to the infinite grid: a chunk's content
+  // descriptor must be a PURE function of (worldSeed, cx, cz). Samples a
+  // spread of chunk coords (origin, negative, far, VERY far) and asserts
+  // each descriptor is byte-identical across repeated derivations. Prints a
+  // digest line so the verify:chunks wrapper can additionally assert that
+  // DIFFERENT seeds produce DIFFERENT worlds (the seed actually feeds in).
+  'chunk-determinism': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game;
+      const coords = [
+        [0, 0], [1, 0], [0, -1], [3, -2], [-7, 5],
+        [123, -456], [-1000, 1000], [90071, -90071],
+      ];
+      const fails = [];
+      let concat = '';
+      for (const [cx, cz] of coords) {
+        const a = JSON.stringify(g.chunkDescribe(cx, cz));
+        const b = JSON.stringify(g.chunkDescribe(cx, cz));
+        if (a !== b) fails.push(`(${cx},${cz}) descriptor unstable across derivations`);
+        concat += a;
+      }
+      // Neighboring chunks must differ (the coord feeds the hash — a broken
+      // mix that collapses to the world seed would pass the identity check).
+      const d00 = JSON.stringify(g.chunkDescribe(0, 0));
+      const d10 = JSON.stringify(g.chunkDescribe(1, 0));
+      const d01 = JSON.stringify(g.chunkDescribe(0, 1));
+      const strip = (s) => s.replace(/"cx":-?\d+,"cz":-?\d+,/, '');
+      if (strip(d00) === strip(d10) || strip(d00) === strip(d01)) {
+        fails.push('adjacent chunks produced identical content (seed mix broken)');
+      }
+      // FNV-1a over the concatenated descriptors — the per-seed world digest.
+      let h = 0x811c9dc5;
+      for (let i = 0; i < concat.length; i++) {
+        h ^= concat.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      return { seed: g.ctx.seed, digest: h.toString(16), fails, total: coords.length };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`CHUNK-DET seed=${r.seed} digest=${r.digest} pass=${r.total - r.fails.length}/${r.total} fails=${r.fails.length}`);
+    console.log(`[chunk-determinism] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('chunk-determinism GATE FAILED');
+  },
+
+  // Infinite Sands S1 (campaign 2026-07-10) — CHUNK-STREAMING / LEAK GATE.
+  // Walks the player from the origin out to +1500m (past the OLD ±1200m
+  // world edge), back, out again, and home, asserting at each stage:
+  //   • the terrain tile ring FOLLOWS (ground + collider exist at 1500m,
+  //     collider height agrees with heightAt, tile count never grows);
+  //   • content chunks load within the ring and fully unload behind
+  //     (active-key window bounded, no duplicate chunk groups at seams);
+  //   • re-entering a chunk regenerates marker content IDENTICALLY
+  //     (load→unload→reload byte-identity, world-space positions);
+  //   • rule 9 / no leaks: global Rapier body count returns to baseline
+  //     after the round trip (±3 tolerance for ambient creature churn).
+  'chunk-streaming': async (page) => {
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const fails = [];
+      // Quiet the ambient systems that add/remove bodies mid-walk: worms
+      // breach (kinematic bodies) if the path crosses territory.
+      ctx.sandWorms.list.length = 0;
+      // Numeric probe — shrink the render target so swiftshader fill cost
+      // doesn't dominate the walk (900×1100 made this probe take ~15 min).
+      ctx.three.renderer.setSize(320, 240, false);
+      const tp = async (x, z, settle) => {
+        const y = ctx.terrain.heightAt(x, z) + 1.6;
+        ctx.player.body.body.setTranslation({ x, y, z }, true);
+        await frames(settle);
+      };
+      // HOME is (56, 56) — the CENTER of chunk (0,0), > the anchor margin
+      // from every boundary, so the anchor ring resolves identically no
+      // matter which direction the player arrived from. ((0,0) exactly is
+      // a 4-chunk corner: the anchor there is legitimately path-dependent
+      // by the margin hysteresis, which false-failed the set-equality
+      // assert.) The walk runs at z=56 for the same reason.
+      g.setChunkMarkers(true);
+      await tp(56, 56, 90);   // settle the origin ring with markers on
+      const base = g.chunkStats();
+      if (!base.markersEnabled || base.markerMeshCount === 0) {
+        fails.push(`markers did not enable (meshes=${base.markerMeshCount})`);
+      }
+      // Marker snapshot of chunks guaranteed-loaded around a position:
+      // world-space positions of every marker mesh in chunks within
+      // LOAD_RADIUS-1 of the player's chunk (immune to hysteresis-path
+      // differences at the ring edge).
+      const snapshot = (px, pz) => {
+        const SIZE = 112, R = 2;
+        const pcx = Math.floor(px / SIZE), pcz = Math.floor(pz / SIZE);
+        const rows = [];
+        for (const grp of ctx.three.scene.children) {
+          if (!grp.name || !grp.name.startsWith('chunk-')) continue;
+          const m = grp.name.match(/^chunk-(-?\d+)_(-?\d+)$/);
+          if (!m) continue;
+          const cx = +m[1], cz = +m[2];
+          if (Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz)) > R) continue;
+          grp.traverse((o) => {
+            if (o.isMesh) rows.push(`${o.name}:${o.position.x.toFixed(3)},${o.position.y.toFixed(3)},${o.position.z.toFixed(3)}`);
+          });
+        }
+        return rows.sort().join('|');
+      };
+      const dupCheck = (label) => {
+        const seen = new Set();
+        for (const grp of ctx.three.scene.children) {
+          if (!grp.name || !grp.name.startsWith('chunk-')) continue;
+          if (seen.has(grp.name)) fails.push(`${label}: duplicate ${grp.name} (seam double-load)`);
+          seen.add(grp.name);
+        }
+        return seen.size;
+      };
+      // ── Leg 1: origin → +1500m in 150m strides ──
+      for (let x = 150; x <= 1500; x += 150) await tp(x, 56, 12);
+      await frames(60);   // let the ring finish filling at the far point
+      const far = g.chunkStats();
+      // Ground-truth ray at a point deterministically CLEAR of marker
+      // posts AND of the player capsule standing at (1500, 0) — a ray on
+      // either asserts the obstacle's top, not the terrain (both
+      // false-failed earlier probe runs).
+      const clearPoint = () => {
+        const SIZE = 112;
+        for (let pz = 6; pz < 106; pz += 4) {
+          if (Math.abs(pz - 56) < 4) continue;   // the player stands at (1500, 56)
+          const cx = Math.floor(1500 / SIZE), cz = Math.floor(pz / SIZE);
+          let blocked = false;
+          for (let dx = -1; dx <= 1 && !blocked; dx++) {
+            for (let dz = -1; dz <= 1 && !blocked; dz++) {
+              for (const m of g.chunkDescribe(cx + dx, cz + dz).markers) {
+                if (Math.hypot(m.x - 1500, m.z - pz) < 2) { blocked = true; break; }
+              }
+            }
+          }
+          if (!blocked) return pz;
+        }
+        return 6;
+      };
+      const cpz = clearPoint();
+      const cd = g.castDown(1500, cpz);
+      const hExpect = ctx.terrain.heightAt(1500, cpz);
+      if (!cd) fails.push('no ground collider at +1500m (terrain did not follow)');
+      else if (Math.abs(cd.hitY - hExpect) > 0.5) fails.push(`collider/heightAt disagree at (1500,${cpz}): ${cd.hitY.toFixed(2)} vs ${hExpect.toFixed(2)}`);
+      if (far.terrainTileKeys.length !== base.terrainTileKeys.length) {
+        fails.push(`terrain tile count changed: ${base.terrainTileKeys.length} → ${far.terrainTileKeys.length}`);
+      }
+      const maxActive = (2 * 3 + 1) ** 2;        // full (2*LOAD_R+1)² ring
+      const minActive = maxActive - (2 * 3 + 1);  // minus one still-loading edge
+      if (far.activeKeys.length < minActive || far.activeKeys.length > maxActive) {
+        fails.push(`active chunk count out of window at far point: ${far.activeKeys.length} (want ${minActive}..${maxActive})`);
+      }
+      if (far.markerMeshCount === 0) fails.push('no markers at +1500m (content did not stream)');
+      dupCheck('far');
+      const farSnapA = snapshot(1500, 56);
+      // ── Leg 2: return home (unloads the far field) ──
+      for (let x = 1350; x >= 150; x -= 150) await tp(x, 56, 12);
+      await tp(56, 56, 60);
+      const homeKeys = new Set(g.chunkStats().activeKeys);
+      if (homeKeys.has('12,0') || homeKeys.has('13,0')) {
+        fails.push('far chunks still loaded after returning home (unload broken)');
+      }
+      // ── Leg 3: out again — the reload must regenerate IDENTICAL content ──
+      for (let x = 150; x <= 1500; x += 150) await tp(x, 56, 12);
+      await frames(60);
+      const farSnapB = snapshot(1500, 56);
+      if (farSnapA !== farSnapB) fails.push('reloaded chunk content differs from first visit (determinism broken across unload/reload)');
+      if (farSnapA.length === 0) fails.push('empty marker snapshot at far point (nothing to compare)');
+      // ── Leg 4: home again — leak check against the baseline ──
+      for (let x = 1350; x >= 150; x -= 150) await tp(x, 56, 12);
+      await tp(56, 56, 90);
+      const end = g.chunkStats();
+      const sameKeys = JSON.stringify(end.activeKeys) === JSON.stringify(base.activeKeys);
+      if (!sameKeys) fails.push(`active chunk set at home differs from baseline (${end.activeKeys.length} vs ${base.activeKeys.length})`);
+      if (JSON.stringify(end.terrainTileKeys) !== JSON.stringify(base.terrainTileKeys)) {
+        fails.push(`terrain tiles at home differ from baseline: ${end.terrainTileKeys.join(' ')} vs ${base.terrainTileKeys.join(' ')}`);
+      }
+      const bodyDrift = end.worldBodies - base.worldBodies;
+      if (Math.abs(bodyDrift) > 3) fails.push(`Rapier body LEAK: ${base.worldBodies} → ${end.worldBodies} (drift ${bodyDrift})`);
+      if (end.markerMeshCount !== base.markerMeshCount) {
+        fails.push(`marker mesh count at home drifted: ${base.markerMeshCount} → ${end.markerMeshCount}`);
+      }
+      dupCheck('home');
+      g.setChunkMarkers(false);
+      return {
+        fails,
+        baseBodies: base.worldBodies, endBodies: end.worldBodies,
+        baseChunks: base.activeKeys.length, farChunks: far.activeKeys.length,
+        farMarkers: far.markerMeshCount, tiles: end.terrainTileKeys.length,
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} tiles=${r.tiles} fails=${r.fails.length}`);
+    console.log(`[chunk-streaming] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('chunk-streaming GATE FAILED');
+  },
+
+  // Infinite Sands S1 — VISUAL sanity shots for the streamed world (the
+  // appearance side of the S1 gate; systems work, placement-sanity bar).
+  // Walks the player out past the old ±1200m world edge with markers on and
+  // captures the PLAYER'S REAL EYE VIEW (per the visual-gate canon):
+  //   fwd1500  — standing at +1500m looking INTO the unexplored field
+  //   back1500 — same spot looking back toward the origin
+  //   seam     — looking +X across the 800m terrain-tile boundary at x=1200
+  //   marker   — close-up of a marker post (ground contact, not floating)
+  'chunk-vista': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.sandWorms.list.length = 0;
+      g.setChunkMarkers(true);
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      // The camera is hand-placed at the player's position — hide the 3P
+      // rig + viewmodel so they don't photobomb the frame.
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      for (let x = 150; x <= 1500; x += 150) {
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, 56) + 1.6, z: 56 }, true);
+        await frames(12);
+      }
+      await frames(90);
+      // Kill any in-flight dorsal-ridge crossing (its ~480m humps re-show
+      // themselves every active frame — a scene-side hide can't stick, so
+      // use the module's own reset; it photobombed the first fwd shot).
+      g.resetWormCrossing();
+    });
+    const shot = async (name, evalFn) => {
+      await page.evaluate(evalFn);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-chunk-vista-${name}.png`), timeout: 60000 });
+      console.log(`[chunk-vista] saved scen-chunk-vista-${name}.png`);
+    };
+    const aim = (fx, fz, tx, tz, lift = 1.7, tiltDown = 0) => `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      cam.position.set(${fx}, ctx.terrain.heightAt(${fx}, ${fz}) + ${lift}, ${fz});
+      cam.lookAt(${tx}, ctx.terrain.heightAt(${tx}, ${tz}) - ${tiltDown}, ${tz});
+      cam.updateMatrixWorld(true);
+    })()`;
+    // Diagnostic: name every large mesh near the far viewpoint so an
+    // unexpected photobomber (ambient spectacle, stray landmark) is
+    // identifiable from the log instead of a mystery silhouette.
+    const near = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      // Raycast from the fwd-shot camera position straight at the mystery
+      // hump — identifies the actual on-screen occluder, merged meshes
+      // included (a world-position sweep misses origin-anchored merges).
+      const from = new THREE.Vector3(1500, ctx.terrain.heightAt(1500, 56) + 1.7, 56);
+      const rc = new THREE.Raycaster(from, new THREE.Vector3(1, 0.05, 0).normalize(), 0.5, 2000);
+      const meshes = [];
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.visible) meshes.push(o); });
+      const hits = [];
+      for (const m of meshes) {
+        try { rc.intersectObject(m, false, hits); } catch { /* skip broken raycast targets */ }
+      }
+      hits.sort((a, b) => a.distance - b.distance);
+      return hits.slice(0, 4).map((h) => {
+        const o = h.object;
+        const chain = [];
+        let p = o;
+        while (p) { chain.unshift(p.name || p.type); p = p.parent; }
+        const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+        return `${chain.join('>')} geo=${o.geometry ? o.geometry.type : '?'} d=${h.distance.toFixed(1)} col=${mat && mat.color ? mat.color.getHexString() : '?'}`;
+      });
+    });
+    console.log('[chunk-vista] fwd-ray hits: ' + JSON.stringify(near));
+    // Height profile along the fwd sightline — confirms whether a close
+    // occluder is a dune face (terrain) vs an actual object.
+    const prof = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const rows = [];
+      for (let x = 1500; x <= 1560; x += 10) rows.push(`${x}:${ctx.terrain.heightAt(x, 56).toFixed(1)}`);
+      return rows.join(' ');
+    });
+    console.log('[chunk-vista] height profile z=56: ' + prof);
+    // Fwd vista from the local CREST (scan ±40m for the high point) so the
+    // player-eye shot looks OUT over the field instead of into a dune face.
+    const crest = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let best = { x: 1500, z: 56, h: -1e9 };
+      for (let x = 1460; x <= 1540; x += 4) {
+        for (let z = 16; z <= 96; z += 4) {
+          const h = ctx.terrain.heightAt(x, z);
+          if (h > best.h) best = { x, z, h };
+        }
+      }
+      return best;
+    });
+    await shot('fwd1500', aim(crest.x, crest.z, crest.x + 200, crest.z));
+    await shot('back1500', aim(crest.x, crest.z, crest.x - 200, crest.z));
+    // Walk back near the tile seam (unpause so streaming rebuilds), then shoot.
+    await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      for (let x = 1350; x >= 1185; x -= 55) {
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, 56) + 1.6, z: 56 }, true);
+        for (let i = 0; i < 12; i++) await raf();
+      }
+      for (let i = 0; i < 60; i++) await raf();
+    });
+    await shot('seam', aim(1185, 56, 1300, 56, 3.5, 2));
+    // Marker close-up: the center post of the chunk at (1512.5, 56) area —
+    // use the player-chunk descriptor for an exact target.
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      for (let x = 1240; x <= 1460; x += 55) {
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, 56) + 1.6, z: 56 }, true);
+        for (let i = 0; i < 12; i++) await raf();
+      }
+      for (let i = 0; i < 60; i++) await raf();
+    });
+    await shot('marker', `(() => {
+      const g = window.__game; const ctx = g.ctx; const cam = ctx.three.camera;
+      const md = g.chunkDescribe(13, 0).markers[0];
+      ctx.flags.paused = true;
+      const gy = ctx.terrain.heightAt(md.x - 6, md.z - 6);
+      cam.position.set(md.x - 6, gy + 1.7, md.z - 6);
+      cam.lookAt(md.x, ctx.terrain.heightAt(md.x, md.z) + 1.2, md.z);
+      cam.updateMatrixWorld(true);
+    })()`);
+  },
+
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/
   // lantern) in a row so the procedural-material swaps are visible, frame them in good front
   // light, and report the shader-PROGRAM count (must stay at baseline — the audit reuses the
@@ -8868,7 +9197,9 @@ function startDev() {
     const start = Date.now();
     const tick = async () => {
       if (exited) return rej(new Error('dev server exited early'));
-      if (Date.now() - start > 30000) { proc.kill(); return rej(new Error('dev server not ready in 30s')); }
+      // 120s: a cold Vite boot takes >30s when the machine is loaded (e.g. a
+      // concurrent project's verify suite) — 30s made every probe flake then.
+      if (Date.now() - start > 120000) { proc.kill(); return rej(new Error('dev server not ready in 120s')); }
       try {
         const r = await fetch(`http://127.0.0.1:${PORT}/`);
         if (r.ok) return res(proc);

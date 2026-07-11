@@ -3,12 +3,22 @@
 // generated from identical samples so they overlay exactly.
 //
 // Session EE — world rework #1. Replaced the single 800m heightfield with a
-// GRID × GRID grid of CHUNK_SIZE-meter chunks (defaults: 3×3 × 800m =
-// 2400m world span). Each chunk reuses the previous 192-cell pattern so
-// per-chunk fidelity is unchanged. Seam invisibility: ALL chunks share one
+// grid of TERRAIN_CHUNK_SIZE-meter chunks (192 cells each so per-chunk
+// fidelity is unchanged). Seam invisibility: ALL chunks share one
 // `createNoise2D` instance AND sample world-space (x, z) — adjacent chunks
 // at their shared edge sample identical coords, producing bit-identical
 // heights and zero visible seams.
+//
+// Infinite Sands S1 (campaign 2026-07-10) — the grid now STREAMS: tiles are
+// keyed by integer tile coords (tx, tz) in an unbounded grid (center =
+// tx*SIZE, tz*SIZE) and a (2*TERRAIN_TILE_RADIUS+1)² ring follows the
+// player via recenter(). Tiles beyond RADIUS+1 are disposed (geometry +
+// Rapier body). The initial ring around (0,0) is byte-identical to the old
+// fixed 3×3 grid, so the released escape-pod intro region is unchanged.
+// Determinism: tile content is a pure function of world-space (x, z)
+// through the shared noise instance — a re-entered tile regenerates
+// identically. heightAt falls back to the closed-form sample outside
+// loaded tiles so procgen can query anywhere in the infinite field.
 
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
@@ -94,25 +104,36 @@ function blendedBiomeColor(noiseVal: number): [number, number, number] {
   return [...BIOME_COLOR_SALT];
 }
 
-interface Chunk {
-  /** World-space center of this chunk (Y = 0). */
+interface Tile {
+  /** World-space center of this tile (Y = 0). */
   centerX: number;
   centerZ: number;
   /** Heights at each vertex, indexed [i*(CELLS+1)+j]. */
   heights: Float32Array;
+  mesh: THREE.Mesh;
+  body: RAPIER.RigidBody;
 }
 
 export interface Terrain {
-  /** One mesh per chunk; consumers iterate (e.g. for shadow flags). */
+  /** Live array — one mesh per LOADED tile (mutates as tiles stream). */
   meshes: THREE.Mesh[];
-  /** Shared simplex-noise instance — exposed so the far-LOD ring + future
-   *  procgen can sample identical world heights without seams. */
+  /** Shared simplex-noise instance — exposed so procgen can sample
+   *  identical world heights without seams. */
   noise: (x: number, y: number) => number;
-  /** Bilinear sample of terrain height at world (x, z). 0 outside bounds. */
+  /** Terrain height at world (x, z). Bilinear over the baked heightfield
+   *  inside loaded tiles (exactly matches the collider); the closed-form
+   *  sample everywhere else — so it answers at ANY coordinate. */
   heightAt: (x: number, z: number) => number;
   /** Approximate normal at world (x, z) using neighboring samples. */
   normalAt: (x: number, z: number) => THREE.Vector3;
-  /** Half-extent of the playable square (world bounds = [-bound, +bound]). */
+  /** Infinite Sands S1 — keep the tile ring centered on (px, pz). Builds
+   *  missing tiles (the player's own tile immediately, the rest budgeted
+   *  one per call) and disposes tiles beyond RADIUS+1. Call per-frame. */
+  recenter: (px: number, pz: number) => void;
+  /** Loaded tile keys ("tx,tz") — for the streaming probe / debug. */
+  tileKeys: () => string[];
+  /** Legacy half-extent of the ORIGINAL fixed grid (kept for consumers
+   *  that still reason about the authored origin region). */
   worldHalfSize: number;
 }
 
@@ -126,185 +147,265 @@ export function createTerrain(
 
   const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
   const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
-  const GRID = Tuning.TERRAIN_CHUNK_GRID;
+  const RADIUS = Tuning.TERRAIN_TILE_RADIUS;
   const stride = CELLS + 1;
-  const worldHalfSize = (SIZE * GRID) * 0.5;
+  const worldHalfSize = (SIZE * (2 * RADIUS + 1)) * 0.5;
 
-  const chunks: Chunk[] = [];
+  // One shared material for every tile. Sharing matters for streaming:
+  // createTerrainMaterial registers its compiled shader in a module-level
+  // Set for per-frame uniform updates (terrainMaterial.ts _shaderRefs) and
+  // there is no unregister — a material per streamed tile would leak a
+  // shader ref on every tile ever built. One material = one ref, ever,
+  // and one shader compile instead of one per tile.
+  const material = createTerrainMaterial();
+
+  // Closed-form height at world (x, z): dune formula × biome flatness,
+  // minus the authored crater carves. This is the SINGLE height function —
+  // tile baking samples it per-vertex, and heightAt falls back to it
+  // outside loaded tiles, so baked and computed heights always agree.
+  const computeHeightAt = (x: number, z: number): number => {
+    let flatness = biomeHeightScale(biomes.rawAt(x, z));
+    const wyH = biomes.wreckYardAt(x, z);   // Cycle 8 — flatten the graveyard floor
+    if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
+    const pitH = biomes.sarlaccPitAt(x, z);  // ACAR — flatten a sand bowl around the maw
+    if (pitH > 0) flatness = flatness * (1 - pitH) + 0.05 * pitH;
+    let h = sampleHeight(noise, x, z) * flatness;
+    // ACAR2 — carve the Sarlacc into a RECESSED funnel crater (Great Pit of
+    // Carkoon), deepest at center, eased to 0 at the clearing rim. The depth
+    // profile is a radial smoothstep on distance to the anchor: a soft sand
+    // lip at the rim (no seam / normal flicker), a steep mid-wall, and a
+    // flattened bottom where the maw mesh sits. Carved into the shared heights
+    // array → the visual mesh, the Rapier heightfield collider, AND heightAt()
+    // all dip together, so the player physically walks down into the bowl.
+    {
+      const pdx = x - biomes.sarlaccPitAnchor.x;
+      const pdz = z - biomes.sarlaccPitAnchor.z;
+      const pr = Math.sqrt(pdx * pdx + pdz * pdz);
+      const R = Tuning.SARLACC_PIT_CLEARING;
+      if (pr < R) {
+        const t = 1 - pr / R;                 // 0 at rim → 1 at center
+        const profile = t * t * (3 - 2 * t);  // smoothstep: soft lip + flat-ish floor
+        h -= profile * Tuning.SARLACC_PIT_CRATER_DEPTH;
+      }
+    }
+    // M8 ⑨ (C47) — carve the DEEP CAVE descent funnel (same recessed-funnel
+    // technique: a soft lip at the rim, a steep mid-wall ~39° < the KCC climb
+    // limit, a flat floor). This is the cave MOUTH the player walks down into;
+    // the enclosed roofed interior is a separate module placed at the floor.
+    {
+      const cdx = x - biomes.caveAnchor.x;
+      const cdz = z - biomes.caveAnchor.z;
+      const cr = Math.sqrt(cdx * cdx + cdz * cdz);
+      const CR = Tuning.CAVE_PIT_CLEARING;
+      if (cr < CR) {
+        const t = 1 - cr / CR;
+        const profile = t * t * (3 - 2 * t);
+        h -= profile * Tuning.CAVE_PIT_CRATER_DEPTH;
+      }
+    }
+    return h;
+  };
+
+  const tiles = new Map<string, Tile>();
   const meshes: THREE.Mesh[] = [];
-  // Build one heightfield collider + one mesh per (gx, gz) chunk. Each
-  // chunk's body is translated to the chunk's world-space center; vertices
-  // in the mesh are mesh-local, also centered on (0, 0).
-  for (let gx = 0; gx < GRID; gx++) {
-    for (let gz = 0; gz < GRID; gz++) {
-      const centerX = (gx - (GRID - 1) * 0.5) * SIZE;
-      const centerZ = (gz - (GRID - 1) * 0.5) * SIZE;
+  const tileKey = (tx: number, tz: number): string => `${tx},${tz}`;
 
-      const heights = new Float32Array(stride * stride);
-      for (let i = 0; i <= CELLS; i++) {
-        for (let j = 0; j <= CELLS; j++) {
-          // World-space sampling — adjacent chunks' shared edge produces
-          // identical heights because both chunks pass the same world (x,z)
-          // through the SAME noise instance and biome sampler.
-          const localX = (i / CELLS - 0.5) * SIZE;
-          const localZ = (j / CELLS - 0.5) * SIZE;
-          const x = centerX + localX;
-          const z = centerZ + localZ;
-          let flatness = biomeHeightScale(biomes.rawAt(x, z));
-          const wyH = biomes.wreckYardAt(x, z);   // Cycle 8 — flatten the graveyard floor
-          if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
-          const pitH = biomes.sarlaccPitAt(x, z);  // ACAR — flatten a sand bowl around the maw
-          if (pitH > 0) flatness = flatness * (1 - pitH) + 0.05 * pitH;
-          let h = sampleHeight(noise, x, z) * flatness;
-          // ACAR2 — carve the Sarlacc into a RECESSED funnel crater (Great Pit of
-          // Carkoon), deepest at center, eased to 0 at the clearing rim. The depth
-          // profile is a radial smoothstep on distance to the anchor: a soft sand
-          // lip at the rim (no seam / normal flicker), a steep mid-wall, and a
-          // flattened bottom where the maw mesh sits. Carved into the shared heights
-          // array → the visual mesh, the Rapier heightfield collider, AND heightAt()
-          // all dip together, so the player physically walks down into the bowl.
-          {
-            const pdx = x - biomes.sarlaccPitAnchor.x;
-            const pdz = z - biomes.sarlaccPitAnchor.z;
-            const pr = Math.sqrt(pdx * pdx + pdz * pdz);
-            const R = Tuning.SARLACC_PIT_CLEARING;
-            if (pr < R) {
-              const t = 1 - pr / R;                 // 0 at rim → 1 at center
-              const profile = t * t * (3 - 2 * t);  // smoothstep: soft lip + flat-ish floor
-              h -= profile * Tuning.SARLACC_PIT_CRATER_DEPTH;
-            }
-          }
-          // M8 ⑨ (C47) — carve the DEEP CAVE descent funnel (same recessed-funnel
-          // technique: a soft lip at the rim, a steep mid-wall ~39° < the KCC climb
-          // limit, a flat floor). This is the cave MOUTH the player walks down into;
-          // the enclosed roofed interior is a separate module placed at the floor.
-          {
-            const cdx = x - biomes.caveAnchor.x;
-            const cdz = z - biomes.caveAnchor.z;
-            const cr = Math.sqrt(cdx * cdx + cdz * cdz);
-            const CR = Tuning.CAVE_PIT_CLEARING;
-            if (cr < CR) {
-              const t = 1 - cr / CR;
-              const profile = t * t * (3 - 2 * t);
-              h -= profile * Tuning.CAVE_PIT_CRATER_DEPTH;
-            }
-          }
-          heights[i * stride + j] = h;
-        }
+  const buildTile = (tx: number, tz: number): void => {
+    const centerX = tx * SIZE;
+    const centerZ = tz * SIZE;
+
+    const heights = new Float32Array(stride * stride);
+    for (let i = 0; i <= CELLS; i++) {
+      for (let j = 0; j <= CELLS; j++) {
+        // World-space sampling — adjacent tiles' shared edge produces
+        // identical heights because both tiles pass the same world (x,z)
+        // through the SAME noise instance and biome sampler.
+        const localX = (i / CELLS - 0.5) * SIZE;
+        const localZ = (j / CELLS - 0.5) * SIZE;
+        heights[i * stride + j] = computeHeightAt(centerX + localX, centerZ + localZ);
       }
+    }
 
-      // --- Three.js mesh (vertex positions in mesh-local space) ---
-      const vertCount = stride * stride;
-      const positions = new Float32Array(vertCount * 3);
-      const colors = new Float32Array(vertCount * 3);
-      // Per-vertex raw biome noise value — feeds the fragment shader's
-      // biome-detection (terrainMaterial). Independent of vertex color
-      // so the shader can detect biome correctly even where adjacent
-      // vertices have blended colors.
-      const biomeRaws = new Float32Array(vertCount);
-      for (let i = 0; i <= CELLS; i++) {
-        for (let j = 0; j <= CELLS; j++) {
-          const idx = (i * stride + j) * 3;
-          const localX = (i / CELLS - 0.5) * SIZE;
-          const localZ = (j / CELLS - 0.5) * SIZE;
-          positions[idx] = localX;
-          positions[idx + 1] = heights[i * stride + j];
-          positions[idx + 2] = localZ;
-          const wx2 = centerX + localX, wz2 = centerZ + localZ;
-          const n = biomes.rawAt(wx2, wz2);
-          let c = blendedBiomeColor(n);
-          const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
-          if (wyC > 0) {
-            // ACAS A3 — mottle the graveyard floor with oil pools + ash drifts
-            // (separate-phase noise) so it reads as a contaminated dead place.
-            const mot = noise(wx2 * 0.05 + 11.3, wz2 * 0.05 - 7.1);   // -1..1
-            const stain = mot < 0
-              ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
-              : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
-            c = lerp3(c, stain, wyC);
-          }
-          // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
-          // funnel READS as a shadowed pit even under flat overhead light (the
-          // depression alone is too subtle). Darkens to a shadowed dune-brown.
-          const pitC = biomes.sarlaccPitAt(wx2, wz2);
-          if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
-          // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
-          const caveC = biomes.caveAt(wx2, wz2);
-          if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
-          colors[idx]     = c[0];
-          colors[idx + 1] = c[1];
-          colors[idx + 2] = c[2];
-          biomeRaws[i * stride + j] = n;
+    // --- Three.js mesh (vertex positions in mesh-local space) ---
+    const vertCount = stride * stride;
+    const positions = new Float32Array(vertCount * 3);
+    const colors = new Float32Array(vertCount * 3);
+    // Per-vertex raw biome noise value — feeds the fragment shader's
+    // biome-detection (terrainMaterial). Independent of vertex color
+    // so the shader can detect biome correctly even where adjacent
+    // vertices have blended colors.
+    const biomeRaws = new Float32Array(vertCount);
+    for (let i = 0; i <= CELLS; i++) {
+      for (let j = 0; j <= CELLS; j++) {
+        const idx = (i * stride + j) * 3;
+        const localX = (i / CELLS - 0.5) * SIZE;
+        const localZ = (j / CELLS - 0.5) * SIZE;
+        positions[idx] = localX;
+        positions[idx + 1] = heights[i * stride + j];
+        positions[idx + 2] = localZ;
+        const wx2 = centerX + localX, wz2 = centerZ + localZ;
+        const n = biomes.rawAt(wx2, wz2);
+        let c = blendedBiomeColor(n);
+        const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
+        if (wyC > 0) {
+          // ACAS A3 — mottle the graveyard floor with oil pools + ash drifts
+          // (separate-phase noise) so it reads as a contaminated dead place.
+          const mot = noise(wx2 * 0.05 + 11.3, wz2 * 0.05 - 7.1);   // -1..1
+          const stain = mot < 0
+            ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
+            : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
+          c = lerp3(c, stain, wyC);
         }
+        // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
+        // funnel READS as a shadowed pit even under flat overhead light (the
+        // depression alone is too subtle). Darkens to a shadowed dune-brown.
+        const pitC = biomes.sarlaccPitAt(wx2, wz2);
+        if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
+        // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
+        const caveC = biomes.caveAt(wx2, wz2);
+        if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
+        colors[idx]     = c[0];
+        colors[idx + 1] = c[1];
+        colors[idx + 2] = c[2];
+        biomeRaws[i * stride + j] = n;
       }
-      const indices: number[] = [];
-      for (let i = 0; i < CELLS; i++) {
-        for (let j = 0; j < CELLS; j++) {
-          const a = i * stride + j;
-          const b = a + 1;
-          const c = (i + 1) * stride + j;
-          const d = c + 1;
-          indices.push(a, b, c, b, d, c);
-        }
+    }
+    const indices: number[] = [];
+    for (let i = 0; i < CELLS; i++) {
+      for (let j = 0; j < CELLS; j++) {
+        const a = i * stride + j;
+        const b = a + 1;
+        const c = (i + 1) * stride + j;
+        const d = c + 1;
+        indices.push(a, b, c, b, d, c);
       }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      // Custom per-vertex biome noise — read by terrainMaterial shader.
-      geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(biomeRaws, 1));
-      geo.setIndex(indices);
-      geo.computeVertexNormals();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // Custom per-vertex biome noise — read by terrainMaterial shader.
+    geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(biomeRaws, 1));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
 
-      // Session MM-2 — procedural detail layer via onBeforeCompile shader
-      // patches. Vertex colors (biome blend) feed the base diffuse, the
-      // shader adds sand grain + wind ripples + slope-based darkening on
-      // top. Zero bundle cost — no textures shipped.
-      const mat = createTerrainMaterial();
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(centerX, 0, centerZ);
-      scene.add(mesh);
+    // Session MM-2 — procedural detail via onBeforeCompile shader patches
+    // (the shared `material` above). Vertex colors (biome blend) feed the
+    // base diffuse; the shader adds sand grain + ripples + slope darkening.
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.position.set(centerX, 0, centerZ);
+    // Terrain never casts (it IS the shadow catcher). noShadow marks it so
+    // the boot shadow-flag traverse in main.ts doesn't flip castShadow on.
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.userData.noShadow = true;
+    scene.add(mesh);
 
-      // --- Rapier heightfield collider, body translated to chunk center ---
-      const colliderDesc = RAPIER.ColliderDesc.heightfield(
-        CELLS, CELLS, heights,
-        { x: SIZE, y: 1, z: SIZE },
-      );
-      const body = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(centerX, 0, centerZ),
-      );
-      world.createCollider(colliderDesc, body);
+    // --- Rapier heightfield collider, body translated to tile center ---
+    const colliderDesc = RAPIER.ColliderDesc.heightfield(
+      CELLS, CELLS, heights,
+      { x: SIZE, y: 1, z: SIZE },
+    );
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(centerX, 0, centerZ),
+    );
+    world.createCollider(colliderDesc, body);
 
-      chunks.push({ centerX, centerZ, heights });
-      meshes.push(mesh);
+    tiles.set(tileKey(tx, tz), { centerX, centerZ, heights, mesh, body });
+    meshes.push(mesh);
+  };
+
+  const disposeTile = (key: string): void => {
+    const tile = tiles.get(key);
+    if (!tile) return;
+    tiles.delete(key);
+    scene.remove(tile.mesh);
+    tile.mesh.geometry.dispose();   // material is shared — never disposed
+    const mi = meshes.indexOf(tile.mesh);
+    if (mi >= 0) meshes.splice(mi, 1);
+    // Removing the body drops its heightfield collider with it (rule 9 —
+    // no orphaned colliders under vanished ground).
+    world.removeRigidBody(tile.body);
+  };
+
+  // Initial ring around the origin — identical to the old fixed 3×3 grid
+  // (centers at -800/0/+800), so the authored intro region boots unchanged.
+  for (let tx = -RADIUS; tx <= RADIUS; tx++) {
+    for (let tz = -RADIUS; tz <= RADIUS; tz++) {
+      buildTile(tx, tz);
     }
   }
 
-  // --- Sampling helpers ---
-  // Index a chunk by world (x, z). Returns null if outside the playable area.
-  const chunkAt = (x: number, z: number): Chunk | null => {
-    const gx = Math.floor((x + worldHalfSize) / SIZE);
-    const gz = Math.floor((z + worldHalfSize) / SIZE);
-    if (gx < 0 || gx >= GRID || gz < 0 || gz >= GRID) return null;
-    return chunks[gx * GRID + gz];
+  // ANCHOR-MARGIN model (mirrors chunkManager): the tile ring centers on
+  // an ANCHOR tile that only moves when the player walks more than
+  // TERRAIN_ANCHOR_MARGIN_M past the anchor tile's edge. Straddling /
+  // micro-sliding on a tile boundary therefore never flips the ring — no
+  // 37k-vertex rebuild thrash — and a settled ring is always exactly the
+  // (2*RADIUS+1)² set. Initial anchor = tile (0,0), matching the boot ring.
+  let atx = 0;
+  let atz = 0;
+
+  const recenter = (px: number, pz: number): void => {
+    // Tiles are CENTER-aligned (span center ± SIZE/2).
+    const margin = Tuning.TERRAIN_ANCHOR_MARGIN_M;
+    const half = SIZE * 0.5;
+    if (
+      px < atx * SIZE - half - margin || px > atx * SIZE + half + margin ||
+      pz < atz * SIZE - half - margin || pz > atz * SIZE + half + margin
+    ) {
+      atx = Math.round(px / SIZE);
+      atz = Math.round(pz / SIZE);
+    }
+    // Dispose beyond the ring (relative to the anchor).
+    for (const key of [...tiles.keys()]) {
+      const [tx, tz] = key.split(',').map(Number);
+      if (Math.max(Math.abs(tx - atx), Math.abs(tz - atz)) > RADIUS) {
+        disposeTile(key);
+      }
+    }
+    // Build missing tiles. The anchor tile (where the player stands,
+    // modulo the margin) builds immediately — never let the capsule fall
+    // through unloaded ground (e.g. a save-load teleport far from the
+    // current ring); the rest are budgeted one per call to spread the
+    // ~37k-vertex bake across frames.
+    if (!tiles.has(tileKey(atx, atz))) buildTile(atx, atz);
+    let budget = 1;
+    for (let d = 1; d <= RADIUS && budget > 0; d++) {
+      for (let tx = atx - d; tx <= atx + d && budget > 0; tx++) {
+        for (let tz = atz - d; tz <= atz + d && budget > 0; tz++) {
+          if (Math.max(Math.abs(tx - atx), Math.abs(tz - atz)) !== d) continue;
+          if (!tiles.has(tileKey(tx, tz))) {
+            buildTile(tx, tz);
+            budget--;
+          }
+        }
+      }
+    }
   };
 
+  // --- Sampling helpers ---
+  // Tile lookup by world (x, z) — center-aligned, unbounded grid.
+  const tileAt = (x: number, z: number): Tile | undefined =>
+    tiles.get(tileKey(Math.round(x / SIZE), Math.round(z / SIZE)));
+
   const heightAt = (x: number, z: number): number => {
-    const chunk = chunkAt(x, z);
-    if (!chunk) return 0;
-    // Local coords within this chunk: [-SIZE/2, +SIZE/2] → [0, CELLS].
-    const fi = ((x - chunk.centerX) / SIZE + 0.5) * CELLS;
-    const fj = ((z - chunk.centerZ) / SIZE + 0.5) * CELLS;
+    const tile = tileAt(x, z);
+    // Outside the loaded ring: answer with the closed-form sample so
+    // procgen/creature queries work anywhere in the infinite field.
+    if (!tile) return computeHeightAt(x, z);
+    // Local coords within this tile: [-SIZE/2, +SIZE/2] → [0, CELLS].
+    const fi = ((x - tile.centerX) / SIZE + 0.5) * CELLS;
+    const fj = ((z - tile.centerZ) / SIZE + 0.5) * CELLS;
     // Clamp to a safe interpolation range. fi can land on CELLS exactly at
-    // the +X edge — that's the boundary shared with the next chunk; heights
-    // there are identical so either chunk's sample matches.
+    // the +X edge — that's the boundary shared with the next tile; heights
+    // there are identical so either tile's sample matches.
     const i = Math.min(CELLS - 1, Math.max(0, Math.floor(fi)));
     const j = Math.min(CELLS - 1, Math.max(0, Math.floor(fj)));
     const tx = Math.min(1, Math.max(0, fi - i));
     const tz = Math.min(1, Math.max(0, fj - j));
-    const h00 = chunk.heights[i * stride + j];
-    const h10 = chunk.heights[(i + 1) * stride + j];
-    const h01 = chunk.heights[i * stride + (j + 1)];
-    const h11 = chunk.heights[(i + 1) * stride + (j + 1)];
+    const h00 = tile.heights[i * stride + j];
+    const h10 = tile.heights[(i + 1) * stride + j];
+    const h01 = tile.heights[i * stride + (j + 1)];
+    const h11 = tile.heights[(i + 1) * stride + (j + 1)];
     return (
       h00 * (1 - tx) * (1 - tz) +
       h10 * tx * (1 - tz) +
@@ -324,7 +425,15 @@ export function createTerrain(
     return _n;
   };
 
-  return { meshes, noise, heightAt, normalAt, worldHalfSize };
+  return {
+    meshes,
+    noise,
+    heightAt,
+    normalAt,
+    recenter,
+    tileKeys: () => [...tiles.keys()],
+    worldHalfSize,
+  };
 }
 
 // Smooth wind-warped dunes. Long ridges run perpendicular to a prevailing
@@ -372,7 +481,7 @@ export function sampleHeight(
          base;
 }
 
-// Re-export so the far-LOD ring can use the same biome height scaling as
-// the chunks (without it the LOD's salt regions would tower above the
-// chunks' near-flat salt).
+// Re-export so procgen consumers can apply the same biome height scaling
+// as the tiles (without it, salt regions would tower above the tiles'
+// near-flat salt).
 export { biomeHeightScale };

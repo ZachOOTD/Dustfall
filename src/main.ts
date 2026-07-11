@@ -15,6 +15,7 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
+import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
@@ -182,6 +183,10 @@ const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
 (window as unknown as { __bootT: typeof _bootT }).__bootT = _bootT;
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
 _mark('terrain');
+// Infinite Sands S1 — content-chunk streaming manager. Constructed inert
+// (S1 marker layer defaults off); updateChunks in the tick drives it +
+// the terrain tile ring once normal play starts.
+const chunkManager = createChunkManager(three.scene, physics.world, terrain, worldSeed);
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the
 // chunk-band edge (1200m, density 0.0018 ≈ 99% opaque) is the visible
@@ -440,6 +445,7 @@ const ctx: GameContext = {
   ui: hud,
   physics,
   terrain,
+  chunks: chunkManager,   // Infinite Sands S1 — content-chunk streaming
   biomes,
   assets,
   shelter,
@@ -999,6 +1005,7 @@ startLoop(ctx, (c, dt) => {
   //   game's survival density DURING the fall (blendDescentFog), so the world is already at plain
   //   game fog at the crash/exit — nothing to ease. (updateIntroFogEase was removed with the pin.)
   updatePlayer(c, dt);           // movement + camera + advance dayTime
+  updateChunks(c);               // Infinite Sands S1 — terrain tile ring + content chunks follow the player (AFTER updatePlayer so this-frame's position is committed; no-op during the intro)
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateCameraShake(c, dt);      // ACBE (D1) — trauma shake (stacks on the anchored camera, like stamina wobble)
   updateScreenFlash(c, dt);      // ACBE (D1) — decay the impact flash overlay
