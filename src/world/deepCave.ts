@@ -32,6 +32,7 @@ import type { GameContext } from '../GameContext.ts';
 import type { ColliderSpec } from '../physics/bodies.ts';
 import { attachDeclaredColliders } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
+import { getPlayerPos } from '../util/playerPos.ts';
 
 // A dark, dead cave rock — flat-shaded, unlit-feeling (no emissive). Reads as shadowed
 // stone/scrap, not maintained structure (D252).
@@ -202,7 +203,10 @@ export function spawnDeepCave(
 // is untouched. Call AFTER updateLighting (which sets the surface values each frame) +
 // updatePlayer (current player pos). Pause-safe (the tick's pause-gate skips the whole chain).
 export function updateDeepCave(ctx: GameContext, cave: DeepCave): void {
-  const t = ctx.player.body.body.translation();
+  // D297 — speeder-aware: the raw capsule is parked at (0,-2000,0) while
+  // mounted, so riding into the cave mouth never darkened. getPlayerPos
+  // reads the bike during a ride (the ACBD accessor).
+  const t = getPlayerPos(ctx);
   const a = cave.basePos;
   const dx = t.x - a.x, dz = t.z - a.z;
   const horiz = Math.sqrt(dx * dx + dz * dz);

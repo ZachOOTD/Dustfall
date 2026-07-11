@@ -37,6 +37,7 @@ import { buildWordlessTableau } from './wordlessScenes.ts';
 import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { placeRibcage } from './heroLandmarks.ts';
+import { getPlayerPos } from '../util/playerPos.ts';
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -715,12 +716,21 @@ export function createChunkManager(
 }
 
 /** Per-frame tick — keeps the terrain tile ring AND the content-chunk
- *  ring centered on the player. No-ops during the escape-pod intro (the
- *  authored origin region is fully loaded at boot; streaming starts when
- *  normal play does, so the released intro path is untouched). */
+ *  ring centered on the player's EFFECTIVE position. No-ops during the
+ *  escape-pod intro (the authored origin region is fully loaded at boot;
+ *  streaming starts when normal play does).
+ *
+ *  Uses getPlayerPos, NOT the raw capsule (playtest bug, 2026-07-11 /
+ *  D297): while riding the speeder the capsule is PARKED at (0,-2000,0)
+ *  (speeder.ts mount — collision isolation), so capsule-centered
+ *  streaming re-anchored the world to the ORIGIN mid-ride — nothing
+ *  loaded until dismount. getPlayerPos is the codebase's canonical
+ *  speeder-aware accessor (the ACBD storm/dust fix was this same bug
+ *  class); it also keeps the anchor-tile synchronous-build safety under
+ *  the BIKE, so a fast ride can't outrun the ground it needs. */
 export function updateChunks(c: GameContext): void {
   if (c.intro?.active) return;
-  const p = c.player.body.body.translation();
+  const p = getPlayerPos(c);
   c.terrain.recenter(p.x, p.z);
   c.chunks.update(p.x, p.z);
 }

@@ -6,9 +6,14 @@
 //
 // Mounted-rider model:
 //   - ctx.speeder.mounted gates updatePlayer (player WASD ignored).
-//   - updateSpeeder teleports the player's kinematic capsule to the
-//     bike's rider seat each frame so the camera (sourced from the
-//     player body) ends up at the rider's eyes.
+//   - While MOUNTED the player's kinematic capsule is PARKED at
+//     (0,-2000,0) (see the mount handler — collision isolation from the
+//     bike collider) and teleported back beside the bike on dismount.
+//     The CAMERA is positioned directly from the bike each frame.
+//     ⚠ Any system that needs the player's WORLD POSITION during a ride
+//     must use util/playerPos.ts getPlayerPos (speeder-aware), NEVER the
+//     raw capsule — reading the capsule mid-ride evaluates 2km underground
+//     at the origin (the ACBD storm bug; the D297 chunk-streaming bug).
 //   - Mouse-look still works because PointerLockControls writes camera
 //     rotation directly, not via the player body.
 //

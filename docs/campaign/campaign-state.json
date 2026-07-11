@@ -86,7 +86,7 @@
       "outcome": "proposed",
       "tier": "S5",
       "spend_this_cycle": 40000,
-      "commit": "PENDING-SET-ON-COMMIT",
+      "commit": "fe56a99",
       "d_entries": []
     }
   ]

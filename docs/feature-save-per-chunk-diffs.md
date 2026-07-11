@@ -87,7 +87,15 @@ A diff entry whose contentId doesn't resolve after a future content update is DR
 4. **Persist looted fauna at all?** REC: yes (cheap, prevents "loot the same wreck-lizard every
    re-visit" farming); alternatively drop `fauna` from v1 for an even smaller diff.
 
+## Addendum (post-plan, D297 audit finding)
+`saveGameState` stores the RAW capsule position as `player.pos`; saving while MOUNTED on the
+speeder therefore records (0,-2000,0). Loading is likely rescued by the mounted+speeder-position
+restore, but it's fragile (a restore glitch = spawn 2km underground). The S5 build should include
+the one-line hardening: `player.pos` = `getPlayerPos(ctx)` (the speeder-aware accessor) — always
+a sane world position; the mounted restore re-parks the capsule anyway. Same D297 class as the
+chunk-streaming ride bug.
+
 ## Build estimate
-One cycle: save.ts (field + version bump + load wiring), chunkManager (capture/apply + content-id
-plumbing + the fauna-thunk skip), GameContext (`chunkDiffCache` slot), the probe persistence leg.
-No new art, no new systems.
+One cycle: save.ts (field + version bump + load wiring + the D297 mounted-save hardening above),
+chunkManager (capture/apply + content-id plumbing + the fauna-thunk skip), GameContext
+(`chunkDiffCache` slot), the probe persistence leg. No new art, no new systems.

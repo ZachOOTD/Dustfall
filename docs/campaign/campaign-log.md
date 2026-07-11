@@ -14,7 +14,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 - **Campaign state:** `paused`, `awaiting_approval`, `stop_reasons: ["save-version-bump"]`. The /loop is STOPPED.
 - **▶ YOUR MORNING REVIEW:** (1) walk the world — `npm run dev`: sprint across a tile boundary (feel for hitches — S6), visit a landmark + a regional wreck-yard, strip a far wreck; (2) read the S5 plan; (3) `/campaign-approve` to release the S5 build (the final rung), optionally with steering notes. The whole branch (`campaign/2026-07-10-procgen`, cycles 1-6) then merges after S5 ships + your final review.
 - **Spend:** ~40K (campaign ~1.03M / 10M; cycle 6/50).
-- **Commit:** (SHA recorded on commit.)
+- **Commit:** `fe56a99`
 
 ## Cycle 5 — S6 hitch-free generation (2026-07-11) — SHIPPED
 

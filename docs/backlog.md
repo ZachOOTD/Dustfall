@@ -10,7 +10,8 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
-### Infinite Sands residuals (campaign 2026-07-10, cycles 1-4)
+### Infinite Sands residuals (campaign 2026-07-10, cycles 1-6)
+- `[idea]` **Sarlacc pit ignores a mounted rider** (D297 audit). `sarlaccPit.ts` reads the raw capsule (parked at -2000 while riding) so the pit never gapes/pulls/bites at a speeder crossing it. Making it `getPlayerPos`-aware is one line for the GAPE (visual), but pull/bite would apply forces to the PARKED capsule — needs a mounted-behavior design call (bite the bike? dismount-fling? immune?). Decide at a walk-test.
 - `[polish]` **Regional wreck-yard CLUSTER read** (S4). Regional yards get the full biome treatment (ashen mottled ground, flatten, graveyard POI mix at 6× density) but not the origin yard's dense boot-style cluster (`wreckYard.ts` field of wrecks/ribcages/mounds around the anchor). If a walked regional yard reads sparse, render a knot-style cluster at the yard anchor's chunk (same pattern as the wreck_knot landmark, bigger). Knob: the ×6 in chunkManager's poiChance.
 - `[feat]` **Far-field VULTURES deferred** (S3/D294). Perch-pool + carcass-anchored placement + dynamic death bodies fight the chunk model; the infinite field has no aerial life. Revisit after the campaign with a placement-model rework (region-rolled perch trees?).
 - `[polish]` **Streamed-fauna density between wrecks** — prey only clusters AT streamed wrecks (D294); if the far field feels empty on the walk-test, add anchor-free per-chunk fauna rolls (descriptor extension, same transient rules). Rock density knob: `CHUNK_ROCK_CANDIDATES`.

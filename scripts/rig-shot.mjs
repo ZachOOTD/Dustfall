@@ -1887,6 +1887,41 @@ const SCENARIOS = {
       if (end.totalShrews !== baseShrews) fails.push(`shrew population LEAK: ${baseShrews} → ${end.totalShrews}`);
       if (end.chunkRockCount !== 0) fails.push(`streamed rocks at HOME (inside the origin exclusion): ${end.chunkRockCount}`);
       dupCheck('home');
+      // ── Leg 5 (D297): SPEEDER RIDE — streaming must follow the BIKE.
+      //    While mounted the real game PARKS the capsule at (0,-2000,0)
+      //    and drives the camera from the bike; capsule-centered
+      //    streaming re-anchored the world to the origin mid-ride (the
+      //    playtest bug). Mimic the real mount exactly, hop the BIKE
+      //    diagonally into fresh chunks, assert the rings follow. ──
+      if (ctx.speeder) {
+        const s = ctx.speeder;
+        s.mounted = true;
+        ctx.player.body.body.setTranslation({ x: 0, y: -2000, z: 0 }, true);
+        const b0 = s.body.translation();
+        for (let i = 1; i <= 8; i++) {
+          const bx = b0.x + i * 130, bz = b0.z - i * 130;
+          s.body.setTranslation({ x: bx, y: ctx.terrain.heightAt(bx, bz) + 1.4, z: bz }, true);
+          s.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          await frames(15);
+        }
+        await frames(60);
+        const bt = s.body.translation();
+        const st2 = g.chunkStats();
+        const bikeChunk = `${Math.floor(bt.x / 112)},${Math.floor(bt.z / 112)}`;
+        const bikeTile = `${Math.round(bt.x / 800)},${Math.round(bt.z / 800)}`;
+        if (!st2.activeKeys.includes(bikeChunk)) {
+          fails.push(`RIDE: chunk ring did not follow the bike (missing ${bikeChunk} — streaming from the parked capsule?)`);
+        }
+        if (!st2.terrainTileKeys.includes(bikeTile)) {
+          fails.push(`RIDE: terrain ring did not follow the bike (missing tile ${bikeTile})`);
+        }
+        // Dismount-mimic: capsule beside the bike (the real dismount path).
+        s.mounted = false;
+        ctx.player.body.body.setTranslation({ x: bt.x + 2, y: ctx.terrain.heightAt(bt.x + 2, bt.z) + 1.6, z: bt.z }, true);
+        await frames(30);
+      } else {
+        fails.push('no speeder on this world — the D297 ride leg is vacuous');
+      }
       g.setChunkMarkers(false);
       return {
         fails,
