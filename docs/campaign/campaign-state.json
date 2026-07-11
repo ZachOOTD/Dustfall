@@ -1,12 +1,12 @@
 {
   "campaign": "Infinite Sands (infinite procgen)",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-10",
   "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 5,
-  "current_tier": "S5 - Save: per-chunk diffs (SANCTIONED PAUSE before build)",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 6,
+  "current_tier": "S5 - Save: per-chunk diffs (schema plan written; build awaits approval)",
+  "awaiting_approval": true,
+  "stop_reasons": ["save-version-bump"],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 990000 },
+  "spend": { "total": 1030000 },
   "ladder": [
     { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
     { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "shipped", "cycle": 2 },
@@ -76,8 +76,18 @@
       "outcome": "shipped",
       "tier": "S6",
       "spend_this_cycle": 190000,
-      "commit": "PENDING-SET-ON-COMMIT",
+      "commit": "5f57a5d",
       "d_entries": ["D296"]
+    },
+    {
+      "n": 6,
+      "date": "2026-07-11",
+      "focus": "S5 save schema PLAN (per-chunk diffs, v16->17) — the sanctioned pause; NO build",
+      "outcome": "proposed",
+      "tier": "S5",
+      "spend_this_cycle": 40000,
+      "commit": "PENDING-SET-ON-COMMIT",
+      "d_entries": []
     }
   ]
 }

@@ -156,9 +156,10 @@ and promotes the second.
 >   build sliced (12-row stage-steps ≈ 8-10ms; atomic mesh+collider finalize; anchor tile stays
 >   synchronous for fall-through safety); chunk loads 1/frame; wreck_knot pieces deferred 1/frame;
 >   NEW permanent `chunk-perf` gate (3rd verify:chunks leg) with mechanism asserts + tripwires.
-> - **▶ ⏸ S5 — save: per-chunk diffs (NEXT = THE SANCTIONED PAUSE)** — the next cycle writes the
->   SAVE_VERSION schema plan (per-chunk diffs over the deterministic base) and PAUSES for human
->   review BEFORE building (D81). The ladder's final rung.
+> - **⏸ S5 — save: per-chunk diffs — PLAN WRITTEN, CAMPAIGN PAUSED (cycle 6, awaiting approval)** —
+>   [feature-save-per-chunk-diffs.md](feature-save-per-chunk-diffs.md): v16→17, descriptor-keyed
+>   chunk diffs (capture on unload/save, apply on load), zero-migration additive, scrap rings
+>   deferred to v2, a probe persistence leg. `/campaign-approve` releases the one-cycle build.
 > - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
 > - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
 > - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).

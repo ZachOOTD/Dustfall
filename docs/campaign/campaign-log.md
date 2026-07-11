@@ -7,6 +7,15 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 
 ---
 
+## Cycle 6 — ⏸ S5 save schema PLAN (2026-07-11) — PROPOSED → CAMPAIGN PAUSED (the sanctioned pause)
+
+- **Planned:** write the per-chunk-diff save schema plan and PAUSE for human review BEFORE building (D81 — the ladder's one sanctioned pause).
+- **Delivered:** `docs/feature-save-per-chunk-diffs.md` — SAVE_VERSION 16→17 (additive `chunkDiffs` map; old saves = empty map, zero migration); content addressed by descriptor-derived CONTENT IDS (never runtime registry ids — the D292 trap); capture on unload + at save, apply on load; scrap rings explicitly deferred to v2; a probe persistence leg (strip-far → round-trip → still-stripped + a real page-reload re-apply); 4 open questions each with a recommendation. Build estimate: one cycle. **No code changed.**
+- **Campaign state:** `paused`, `awaiting_approval`, `stop_reasons: ["save-version-bump"]`. The /loop is STOPPED.
+- **▶ YOUR MORNING REVIEW:** (1) walk the world — `npm run dev`: sprint across a tile boundary (feel for hitches — S6), visit a landmark + a regional wreck-yard, strip a far wreck; (2) read the S5 plan; (3) `/campaign-approve` to release the S5 build (the final rung), optionally with steering notes. The whole branch (`campaign/2026-07-10-procgen`, cycles 1-6) then merges after S5 ships + your final review.
+- **Spend:** ~40K (campaign ~1.03M / 10M; cycle 6/50).
+- **Commit:** (SHA recorded on commit.)
+
 ## Cycle 5 — S6 hitch-free generation (2026-07-11) — SHIPPED
 
 - **Planned:** S6 — frame-budget the ~100-200ms terrain-tile bake (the D288 hitch); ceilings; a cross-chunk perf probe.
@@ -18,7 +27,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
   - The gate CAUGHT a real edge in development: diagonal teleport legs outrun the sliced ring → the anchor-tile safety bake fires (correct fall-through protection at ~100× play speed) — assert recalibrated from ===0 to the rare-and-bounded allowance, logged in D296.
 - **Verify:** ALL GREEN — placement ×5, colliders 55, chunks (determinism digests UNCHANGED from cycle 4 — slicing alters nothing; streaming 332→332; perf leg first-pass), 5 smokes, 9 vista shots regenerated identically.
 - **D-entries:** D296. **Spend:** ~190K (campaign ~990K / 10M; cycle 5/50).
-- **Commit:** (SHA recorded on commit — next log edit.)
+- **Commit:** `5f57a5d` (the SHA-recording docs edit rides in cycle 6's commit).
 - **Next:** cycle 6 = **⏸ S5 save schema plan — THE SANCTIONED PAUSE** (plans, sets awaiting_approval, STOPS; brief in `docs/next-session-prompt.md`). Morning review: walk-test + review the plan + `/campaign-approve`.
 
 ## Cycle 4 — S4 distributed landmarks + per-region biomes (2026-07-11) — SHIPPED (interrupted + resumed)
