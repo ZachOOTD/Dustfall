@@ -1,23 +1,24 @@
-# Post-approval brief — M7 Skyfall S1 (research + exterior blockout)
+# Next session — Infinite procedural generation (chunk-streamed open world)
 
-**⏸ THE CAMPAIGN IS PAUSED at M7 plan-review.** This brief applies AFTER the human runs `/campaign-approve`. If you are booting a `/campaign-cycle` and `campaign-state.json` still shows `status: paused` / `awaiting_approval: true` with `stop_reasons: [plan-review]`, DO NOT build — restate that the plan awaits review and STOP.
+**Focus this session:** begin the infinite-procgen work. **Read `docs/feature-infinite-procgen.md` first** — it has the DoD, the current finite-vs-infinite architecture map (with file:line refs), the sub-task breakdown (S1 research/spike → S2 POI streaming → S3 scatter/creatures → S4 landmarks/biomes → S5 save → S6 perf), the open design questions, and the invariants to preserve.
 
-## Before starting S1
-1. Read `docs/feature-skyfall.md` (the approved plan) end-to-end.
-2. Check `docs/campaign/steering.md` — the human may have answered the 4 open questions (placement distance, interior scale, ship archetype, FEATURES flag). Honor their answers; else use the plan's defaults (mid-distance ~200-350m fixed landmark; larger single grand interior 2-3 compartments; broken heavy freighter; behind `FEATURES.skyfall`).
+## Start here
+1. Read `docs/feature-infinite-procgen.md`.
+2. Answer the 5 open design questions (chunk size + load radius, deterministic-vs-random, landmark distribution, keep-the-intro-as-start, save-scope-for-v1) — or confirm the recommended defaults.
+3. Do **S1** (research + architecture spike): design the ChunkManager + per-chunk deterministic seed `hash(worldSeed, cx, cz)`, and spike load/unload/determinism with a trivial per-chunk marker before wiring real content.
 
-## S1 — Research + exterior blockout (this is ONE cycle, to depth)
-1. **Research first** (backlog mandate): `/research-topic crashed sci-fi ship hull silhouettes` or reuse the `megawreck-research` workflow. Goal: a DISTINCT crashed-ship silhouette that is NOT the intro ship and NOT the husk/tank.
-2. **Author the exterior** (`src/world/skyfallLandmark.ts`, cloned from `leviathanLandmark.ts`): a new hull via `makeLoftedHull` + a bespoke station/profile generator (model on `shipScene.ts` `hullProfile(z)` 1037-1060; mega-wreck `megaWreck` is the hero-hull precedent). Intro-ship scale or larger (≥17m; the intro ship = cockpit 6×3×5m + a 12m corridor). Crashed pose: terrain height-sink + a crash-list/tilt.
-3. **Place it** as a fixed landmark: fixed `LANDMARK_X/Z` (per the human's placement answer), own seeded RNG, static exterior collider(s), `addHorizonSilhouette()`, wire into `main.ts` ~232. Behind `FEATURES.skyfall` if flagged. Interior stays a greybox void this cycle (S2 builds it).
-4. **Gate**: verify:all + the 6 rig gates + a NEW/adapted exterior framer rig-shot (multi-angle) + a LIGHT visual pass (does the silhouette read as a unique crashed ship at intro-ship scale?).
+## Key facts (from the codebase)
+- Terrain (`terrain.ts` heightAt) is already infinite (simplex noise); biomes are noise-based. The whole rest of the world is placed ONCE at boot around the origin in `src/main.ts` (POIs :246, hero landmarks :194, rocks :207, wordless scenes :210, Leviathan :232, creatures :301-315, opening scene :575) — that's what becomes chunk-streamed.
+- `FogExp2` (~1.8e-3) is the natural view horizon → set the chunk load radius to ~the fog cull distance.
+- Determinism law (D208/D226) — components are `phash`-only, dedicated RNG streams, `verify:placement` gates it. Per-chunk seeding is the natural extension; keep the gate green.
 
-## Constraints (unchanged)
-No endgame · no tone change · **additive-save-only — a bump is the OTHER sanctioned pause (D81)** · no new pillars beyond this sanctioned hero wreck · wind muted · rule-9 collision discipline (colliders match geometry; real-motion probe, not clearance numbers).
+## Two things saved for later (do NOT lose these)
+- **The campaign is PAUSED at M7 Skyfall plan-review.** The Skyfall plan is in `docs/feature-skyfall.md` (enterable hero wreck at intro-ship scale) and `docs/campaign/` (state = paused, awaiting `/campaign-approve`). Come back to it after procgen — it plugs into the per-region landmark system (S4). Leave the campaign state as-is.
+- The rest of the campaign work (M1-M6) is shipped + live on `master`.
 
-## The pauses ahead
-- After S2 (interior + colliders green): ⏸ **post-blockout walk-test** — STOP for the human to walk it before hero-detail.
-- Any genuine `SAVE_VERSION` need: ⏸ STOP + surface (not expected — confirmed additive).
+## Working state
+- Branch `master`, clean, live-deployed + desktop rebuilt at the start of this session's work. Consider branching for the procgen work (it's a large multi-cycle feature): `git checkout -b feature/infinite-procgen`.
+- Gates: `npm run verify:all` + `smoke-intro` / `smoke-pod-tutorial` + `pickup-take-sweep` + `survival-probe` + `diurnal-probe` (rig-shot). Add the new determinism + streaming probes as you build S1/S2.
 
-## On stop (each S-cycle)
-Session-end docs → cycle commit on `campaign/2026-07-09` → verdict → ScheduleWakeup if CONTINUE, or set the pause flags + STOP at a sanctioned pause.
+## Constraints
+Preserve: determinism law, rule-9 collision (dispose Rapier bodies on unload — no leaks), the released escape-pod intro + near-origin spawn, save compatibility (a SAVE_VERSION bump is a sanctioned pause — surface it, D81), and the banked perf wins (pickup instancing D281 + static merge).
