@@ -31,7 +31,11 @@ export function placeRibcage(
   // ACAS A1 — re-parent the ribcage group into this object instead of the scene
   // (default: scene), so a dense field can collect + static-merge it.
   parent?: THREE.Object3D,
-): void {
+  // Infinite Sands S4 — uniform scale (the colossal-ribcage landmark). The
+  // collider box scales WITH the mesh (rule 9). Default 1 = byte-identical
+  // to the pre-S4 behavior (no new rand draws; boot callers unchanged).
+  scale = 1,
+): { group: THREE.Group; collider: RAPIER.Collider } {
   const group = new THREE.Group();
   const boneColor = new THREE.Color().setHSL(0.10, 0.18, 0.55 + rand() * 0.12);
   const mat = new THREE.MeshLambertMaterial({ color: boneColor, flatShading: true });
@@ -68,21 +72,23 @@ export function placeRibcage(
   group.add(skull);
 
   group.position.copy(pos);
-  group.position.y -= 0.2;
+  group.position.y -= 0.2 * scale;
   group.rotation.y = rand() * Math.PI * 2;
   group.rotation.z = (rand() - 0.5) * 0.08;
+  group.scale.setScalar(scale);
   group.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
   (parent ?? scene).add(group);
 
-  makeStaticBox(
+  const collider = makeStaticBox(
     world,
-    { x: spineLen / 2 + 0.4, y: 0.4, z: 0.7 },
-    { x: group.position.x, y: group.position.y + 0.3, z: group.position.z },
+    { x: (spineLen / 2 + 0.4) * scale, y: 0.4 * scale, z: 0.7 * scale },
+    { x: group.position.x, y: group.position.y + 0.3 * scale, z: group.position.z },
     getQuat(group),
   );
+  return { group, collider };
 }
 
 // ────────────────────────────────────────────────────────────────

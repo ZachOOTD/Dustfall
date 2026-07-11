@@ -357,6 +357,17 @@ export const Tuning = {
   // clusters): 1..MAX lizards + 0..MAX shrews, skipped on salt (boot rule).
   CHUNK_POI_LIZARDS_MAX: 2,
   CHUNK_POI_SHREWS_MAX: 2,
+  // Infinite Sands S4 — the REGION grid (16 chunks = 1792m): rare hero
+  // landmarks + regional wreck-yard biome anchors both roll per-region.
+  // LANDMARK_CHANCE 0.3 → a destination within ~1.5-2km of anywhere.
+  CHUNK_REGION_CHUNKS: 16,
+  CHUNK_LANDMARK_CHANCE: 0.3,
+  // Regional wreck-yard anchors (the far-field destination biome): rolled
+  // per region at low probability; anchors keep MIN_DIST from the origin so
+  // the initial ±1200m terrain ring (corner |v|≈1697m) + all boot placement
+  // bakes byte-identically (the placement gate is the tripwire).
+  WRECK_YARD_REGION_CHANCE: 0.08,
+  WRECK_YARD_REGION_MIN_DIST: 2200,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)

@@ -147,9 +147,14 @@ and promotes the second.
 >   7 candidates/chunk), rare wordless scenes (0.02/chunk, descriptor-level stage clearing), and prey
 >   clusters at streamed wrecks (chunk-keyed lizards+shrews via the real spawners, save-transient,
 >   despawned with their chunk). Vultures deferred (placement model fights chunking — D294).
-> - **▶ S4 — distributed rare landmarks + per-region biomes (NEXT)** — a rare per-region roll scatters
->   hero destinations across the infinite field (Skyfall plugs in here later); re-anchor the
->   distance-override biomes (wreck_yard 620-1000m ring) to a per-region scheme. Origin heroes stay authored.
+> - **✅ S4 — distributed rare landmarks + per-region biomes** — SHIPPED cycle 4 (2026-07-11, D295).
+>   Region-grid (1792m) hero landmarks at 0.3/region — `colossal_ribcage` (5-8× titan skeleton) +
+>   `wreck_knot` (3-wreck salvage triangle; Skyfall's future slot); regional wreck-yard anchors
+>   (0.08/region, ≥2200m from origin) feeding the SAME wreckYardAt → far graveyards get ground +
+>   biome + POI mix + 6× density for free. Origin world bakes byte-identically (placement gate green).
+> - **▶ S6 — perf: frame-budgeted generation + cross-chunk perf probe (NEXT)** — budget the
+>   ~100-200ms terrain-tile bake across frames (the known D288 hitch); draw-call/body ceilings for
+>   the active set; extend the perf probe to a cross-chunk walk asserting steady counts.
 > - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
 > - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
 > - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).

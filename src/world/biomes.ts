@@ -123,15 +123,87 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return t * t * (3 - 2 * t);
   };
 
+  // ── Infinite Sands S4 — REGIONAL wreck-yard anchors. The infinite field
+  // rolls a rare wreck-yard per REGION (a pure hash of a per-world seed +
+  // region coords — no rng draws per query), feeding the SAME falloff the
+  // origin yard uses, so far graveyards get the ground tint/flatten, the
+  // 'wreck_yard' biome id (→ POI archetype weights), and the dead-place
+  // read for free. The extra rand() draw below is APPENDED after all
+  // existing anchor draws — every prior anchor stays byte-identical (the
+  // deterministic-append precedent from the cave anchor). Anchors keep
+  // WRECK_YARD_REGION_MIN_DIST from the origin so the initial ±1200m
+  // terrain ring (corner radius ≈1697m) + all boot placement never sample
+  // a regional yard — the origin world bakes byte-identically. ──
+  const regionSeed = Math.floor(rand() * 0x100000000) >>> 0;
+  const REGION_M = Tuning.CHUNK_REGION_CHUNKS * Tuning.CHUNK_SIZE;
+  const regionMix = (rx: number, rz: number): number => {
+    let h = regionSeed >>> 0;
+    h = Math.imul(h ^ (rx | 0), 0x85ebca6b) >>> 0;
+    h = ((h << 13) | (h >>> 19)) >>> 0;
+    h = Math.imul(h ^ (rz | 0), 0xc2b2ae35) >>> 0;
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x45d9f3b) >>> 0;
+    h ^= h >>> 15;
+    return h >>> 0;
+  };
+  const _regionYards = new Map<string, { x: number; z: number } | null>();
+  const regionalYardAnchor = (rx: number, rz: number): { x: number; z: number } | null => {
+    const k = `${rx},${rz}`;
+    const memo = _regionYards.get(k);
+    if (memo !== undefined) return memo;
+    const h = regionMix(rx, rz);
+    // Two derived 0..1 values from one hash (hi/lo halves) + a presence roll.
+    const roll = (h & 0xffff) / 0x10000;
+    let out: { x: number; z: number } | null = null;
+    if (roll < Tuning.WRECK_YARD_REGION_CHANCE) {
+      const u = ((h >>> 16) & 0xff) / 256;
+      const v = ((h >>> 24) & 0xff) / 256;
+      // Keep the anchor a full radius inside its region so the falloff
+      // stays local-ish; neighbors are still scanned 3×3.
+      const margin = wreckYardRadius;
+      const ax = rx * REGION_M + margin + u * (REGION_M - 2 * margin);
+      const az = rz * REGION_M + margin + v * (REGION_M - 2 * margin);
+      if (ax * ax + az * az >= Tuning.WRECK_YARD_REGION_MIN_DIST * Tuning.WRECK_YARD_REGION_MIN_DIST) {
+        out = { x: ax, z: az };
+      }
+    }
+    _regionYards.set(k, out);
+    return out;
+  };
+  const yardFalloff = (d: number): number => {
+    if (d >= wreckYardRadius) return 0;
+    if (d <= wreckYardRadius * 0.6) return 1;
+    const t = (wreckYardRadius - d) / (wreckYardRadius * 0.4);
+    return t * t * (3 - 2 * t);
+  };
+  // The public wreckYardAt: max of the origin anchor + any regional anchor
+  // in the 3×3 region neighborhood of the query point.
+  const wreckYardAtFull = (x: number, z: number): number => {
+    let best = wreckYardAt(x, z);
+    if (best >= 1) return 1;
+    const rx0 = Math.floor(x / REGION_M);
+    const rz0 = Math.floor(z / REGION_M);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) {
+      for (let rz = rz0 - 1; rz <= rz0 + 1; rz++) {
+        const a = regionalYardAnchor(rx, rz);
+        if (!a) continue;
+        const dx = x - a.x, dz = z - a.z;
+        const f = yardFalloff(Math.sqrt(dx * dx + dz * dz));
+        if (f > best) { best = f; if (best >= 1) return 1; }
+      }
+    }
+    return best;
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
-    if (wreckYardAt(x, z) > 0.5) return 'wreck_yard';
+    if (wreckYardAtFull(x, z) > 0.5) return 'wreck_yard';
     const n = rawAt(x, z);
     if (n < Tuning.BIOME_THRESHOLD_ROCKY) return 'rocky';
     if (n > Tuning.BIOME_THRESHOLD_SALT) return 'salt';
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
+  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

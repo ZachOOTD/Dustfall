@@ -397,6 +397,7 @@ interface DebugApi {
     chunkRockCount: number;
     chunkLizardCount: number;
     chunkShrewCount: number;
+    chunkLandmarkCount: number;
     totalLizards: number;
     totalShrews: number;
     terrainTileKeys: string[];
@@ -882,6 +883,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         chunkRockCount: s.rockCount,
         chunkLizardCount: s.lizardCount,
         chunkShrewCount: s.shrewCount,
+        chunkLandmarkCount: s.landmarkCount,
         totalLizards: ctx.lizards.length,
         totalShrews: ctx.shrews.list.length,
         terrainTileKeys: ctx.terrain.tileKeys().sort(),

@@ -1,84 +1,86 @@
-# Cycle 4 — Kickoff brief: S4 distributed rare landmarks + per-region biomes (campaign "Infinite Sands")
+# Cycle 5 — Kickoff brief: S6 perf — frame-budgeted generation (campaign "Infinite Sands")
 
-**⚙ A CAMPAIGN IS ACTIVE** — "Infinite Sands", overnight, branch `campaign/2026-07-10-procgen`.
+**⚙ A CAMPAIGN IS ACTIVE** — "Infinite Sands", branch `campaign/2026-07-10-procgen`.
 Boot `/campaign-cycle` from `docs/campaign/campaign-state.json` + `campaign.md`.
+After S6 ships, the ONLY remaining rung is ⏸ S5 (save schema — the sanctioned pause).
 
 ## Read these now
-1. `CLAUDE.md` (auto-loaded) — "Last shipped" = cycles 1-3.
-2. `docs/campaign/campaign.md` — charter; design decision #3 (user): DISTRIBUTED rare landmarks.
-3. `docs/feature-infinite-procgen.md` — S4 = its sub-task 4.
-4. `docs/decisions.md` D288–D294 — descriptor purity (D290), transient/save rules (D292),
-   chunk-keyed content (D294).
-5. `src/world/biomes.ts` — the distance-override biomes (wreck_yard 620-1000m ring,
-   sarlaccPitAnchor, caveAnchor) that need per-region re-anchoring.
-6. `src/world/heroLandmarks.ts` + `src/world/leviathanLandmark.ts` — what a "hero destination"
-   is today (authored ring near origin).
+1. `CLAUDE.md` (auto-loaded) — "Last shipped" = cycles 1-4.
+2. `docs/campaign/campaign.md` — charter; scope-cut order ("S6 LOD depth" is cuttable; hitch-free
+   generation is NOT).
+3. `docs/decisions.md` D288 (the tile-bake hitch is explicitly S6's rung), D290/D292/D294/D295.
+4. `src/world/terrain.ts` — `buildTile` (the ~100-200ms bake: 37k heights + colors + normals +
+   Rapier heightfield) + `recenter`'s 1-per-call budget.
+5. `src/world/chunkManager.ts` — `loadChunk` (POI assembly ~5-15ms, landmark chunks heavier) +
+   `CHUNK_LOADS_PER_FRAME`.
+6. `scripts/rig-shot.mjs` — the existing `perf`-related scenarios (grep 'perf') + chunk-streaming.
 
-## What's already built (S1-S3)
-Terrain + content stream on an anchor-margin chunk model with pure descriptors; POI wrecks,
-rocks, wordless scenes, and prey clusters populate the infinite field (all save-transient per
-D292); permanent `verify:chunks` gates assert determinism, teardown, save safety, and
-descriptor↔render equality over the active ring.
+## What's already built (S1-S4)
+The infinite world is functionally COMPLETE pending perf + save: streamed terrain, wrecks (with
+salvage), rocks, scenes, prey, hero landmarks, regional wreck-yard biomes — all descriptor-pure,
+leak-gated, save-transient (D292), origin byte-identical.
 
-## Cycle 4 focus — S4: landmarks + biomes for infinite
-Two halves:
-**(a) Distributed rare hero landmarks** — the infinite field needs DESTINATIONS, not just
-scatter. A coarse landmark grid (e.g. 1792m regions = 16×16 chunks) rolls at most one hero
-landmark per region at low probability from `hash(worldSeed, region)`; the landmark's CHUNK
-renders it through the existing lifecycle. Origin heroes (Leviathan, mega-ship, opening scene)
-stay authored. This is where Skyfall plugs in later — build the SLOT (a landmark-class registry
-with one or two entries), not Skyfall itself.
-**(b) Per-region biome re-anchoring** — `wreckYardAt` etc. are origin-distance functions; the
-infinite field never gets a wreck-yard. Re-anchor: rare per-region biome-anchor rolls (a
-wreck-yard region every N regions) feeding the SAME `wreckYardAt`-style falloffs at region-rolled
-anchor points. CAUTION: terrain heights/colors sample these per-vertex — the origin ring must be
-byte-identical after the change (placement gate + the determinism digest will catch drift; run
-them EARLY after touching biomes.ts).
+## Cycle 5 focus — S6: hitch-free generation + perf ceilings
+DoD: walking across tile/chunk boundaries produces NO frame hitch a player would feel (target:
+no tick > ~25ms attributable to generation at 60fps-equivalent pacing), and the active set's
+draw calls + Rapier bodies hold steady ceilings during an arbitrary-length walk — asserted by a
+NEW permanent cross-chunk perf probe.
 
 ## Priority sub-tasks (in order)
-1. **Research first**: read `biomes.ts` end-to-end (how wreckYardAt/sarlaccPitAt/caveAt compose
-   into heightAt + terrain colors + ARCH_WEIGHTS biome picks) and `heroLandmarks.ts` (what
-   assets/colliders a hero landmark carries). Decide the landmark-grid size + probability and
-   log the numbers.
-2. **Landmark grid roll** (descriptor-level): `describeRegion(rx, rz)` — pure, seeded per region;
-   at most one landmark (kind + position). Wire into `describeChunk` (a chunk knows if it hosts
-   its region's landmark) so the existing gates cover it. Landmark kinds for v1: reuse EXISTING
-   hero builders (a ribcage carcass cluster + one big procgen wreck class at hero scale) — the
-   value is the DESTINATION SYSTEM, not new art (Skyfall brings the new art later).
-3. **Render + teardown** on the chunk lifecycle (bodies tracked, salvage transient, geometry
-   disposal rules per D292/S3). Landmarks are BIG — verify the collider audit approach applies
-   (declared colliders / compound) and extend the streaming probe: a landmark-site leg
-   (descriptor-scan → walk → descriptor↔render + teardown asserts).
-4. **Per-region wreck-yard anchors** (b): region-rolled anchor points feeding a
-   `wreckYardAt`-equivalent that the terrain bake + POI weights consume. ONLY if the origin ring
-   stays byte-identical (assert early); if the coupling is too hot, scope-cut per the charter
-   ("S4 biome re-anchoring breadth — wreck_yard stays origin-anchored for v1") and log the
-   D-entry.
-5. **Gates + visual**: all 10 green; vista landmark shot (player-eye approach read — a landmark
-   must read as a DESTINATION from ~400m: silhouette against the fog).
-6. **Stretch**: a removable horizon-silhouette variant for streamed landmarks (the S2 skip).
+1. **Measure first.** Instrument (temporarily or via the perf HUD path) the actual per-frame cost
+   of: a terrain tile bake, a POI chunk load, a landmark chunk load, on THIS machine headless +
+   estimate real-play (headless swiftshader ≠ GPU play — measure the CPU-side generation only;
+   it's the hitch source). Log numbers in the cycle log BEFORE optimizing.
+2. **Slice the terrain-tile bake across frames.** The bake is ~37k `computeHeightAt` samples +
+   a color pass + `computeVertexNormals` + a Rapier heightfield. Options (pick by measurement):
+   (a) row-banded incremental fill — build the heights/colors arrays over N frames (e.g. 24-32
+   rows/frame), then geometry+collider on the final frame; (b) a Web Worker for the height/color
+   arrays (postMessage the Float32Arrays back, transferable) with main-thread geometry+collider;
+   (c) precompute-ahead: start baking the NEXT ring tile as soon as the anchor is 1 margin-width
+   from a boundary (hides latency without slicing). (a) is simplest and deterministic; (b) is the
+   real fix if (a)'s final-frame geometry step still hitches; (c) composes with either.
+   CONSTRAINT: the player-tile-immediate rule (D288) stays — a save-load teleport must never
+   fall through; slicing applies only to NON-anchor tiles.
+3. **Budget the POI/landmark loads.** `CHUNK_LOADS_PER_FRAME` already bounds count; if a single
+   landmark/knot load blows the frame, split its render across 2-3 frames (descriptor → stage
+   list) or lower the per-frame budget when a heavy chunk is queued.
+4. **Ceilings + the NEW permanent perf probe.** Extend the chunk-streaming walk (or a sibling
+   `chunk-perf` scenario): during a multi-km walk sample per-frame generation time (expose a
+   `__game.chunkPerf()` accumulator), renderer.info draw calls, and world.bodies.len(); assert
+   (i) no generation frame > threshold, (ii) draw calls + bodies bounded (max-over-walk within a
+   ceiling), (iii) counts return to baseline at home. Wire into `verify:chunks` (or a
+   `verify:perf` sibling — keep wrapper timeouts per D293: 900s+).
+5. **Visual sanity** — a vista shot mid-crossing proving no half-built tile is ever visible
+   (slicing must not show a partial mesh: build off-scene, add atomically).
+6. **Stretch (scope-cuttable per charter: "S6 LOD depth")** — a cheap far-tile LOD ring or
+   horizon skirt. Do NOT reach for this before 1-4 are green.
 
 ## Constraints (locked)
-Determinism law; rule 9; the intro + origin field byte-identical (the placement gate is the
-tripwire for biome changes); NO save-schema changes (transient pattern); master untouched.
-Scope-cut order (charter): biome re-anchoring breadth first — never cut determinism/teardown.
+Determinism law (sliced/worker bakes must produce byte-identical heights — same computeHeightAt,
+same order-independence; the determinism + placement gates are the tripwire); rule 9 (atomic
+collider+mesh add — never a collider before its mesh or vice versa); intro + origin byte-identical;
+NO save changes (S5 next); keep banked perf; master untouched.
 
 ## Footguns
-- biomes.ts feeds the TERRAIN BAKE — any change that shifts a single origin-ring vertex breaks
-  placement/panel audits AND the byte-identity promise. Guard every biome change behind
-  "origin-region unchanged" (e.g. only apply region anchors beyond the origin exclusion).
-- Probe discipline: D291 (320×240, cell centers, ray clearance) + D293 (900s wrapper legs) +
-  D294 (quiet ambient predators; `resetWormCrossing` for vistas).
-- Landmark colliders: use declared colliders / `attachCompoundCollider` with the body stashed
-  for teardown (the S2 composite lesson).
+- `computeVertexNormals` on 37k verts is itself ~10-20ms — slicing heights but not normals still
+  hitches; measure per-stage.
+- A Rapier heightfield create is main-thread-only (WASM) — if it's the dominant cost, (b) worker
+  won't help it; consider building the collider one frame after the mesh (ground exists visually
+  first; the player is ≥400m away from a non-anchor tile by construction).
+- Probe discipline: D291 (320×240, cell centers, clear rays), D293 (wrapper timeouts), D294
+  (quiet ambient predators before count baselines; `resetWormCrossing` before vistas).
+- The process-leak reaper (SessionStart/End hooks) is now global — leaked probe processes are
+  swept automatically; `npm run reap` for immediate manual relief.
 
 ## Stop conditions
-Charter caps; 3-strike walls → the scope-cut order; `stuck`; steering `pause`.
+Charter caps; 3-strike walls → scope-cut order (LOD depth first — NEVER hitch-free generation);
+`stuck`; steering `pause`.
 
 ## On stop
-`/session-end` (campaign auto-commit) + campaign bookkeeping + verdict (CONTINUE → S6 next,
-then ⏸ S5).
+`/session-end` (campaign auto-commit) + campaign bookkeeping + verdict. If S6 ships, the verdict
+still CONTINUEs — the next cycle opens **⏸ S5** which pauses BEFORE building (write the save
+schema plan, set awaiting_approval, stop for the human review — D81).
 
 ## Begin
-Read the files above → write `.gamedev-framework/campaign-cycle.inprogress` → research →
-build (a) then (b) → gates → vista → `/session-end` → log + verdict.
+Read the files above → write `.gamedev-framework/campaign-cycle.inprogress` → measure → build →
+gates (incl. the new perf probe) → vista → `/session-end` → log + verdict.

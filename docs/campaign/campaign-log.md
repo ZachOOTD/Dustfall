@@ -7,6 +7,20 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 
 ---
 
+## Cycle 4 — S4 distributed landmarks + per-region biomes (2026-07-11) — SHIPPED (interrupted + resumed)
+
+- **Planned:** S4 — a rare per-region roll scattering hero destinations; re-anchor the distance-override biomes per-region; origin heroes stay authored.
+- **Shipped:**
+  - **Landmarks:** region grid (16 chunks = 1792m), 0.3/region, pure per-region hash → the hosting chunk renders on the normal lifecycle. Kinds reuse existing art (the SLOT is the deliverable — Skyfall plugs in later): `colossal_ribcage` (placeRibcage × 5-8, collider scaled with the mesh, returns {group, collider}; boot callers byte-identical) + `wreck_knot` (3 × placeProcgenPOI triangle + 2 carcasses; salvage transient per D292).
+  - **Regional wreck-yards:** ONE appended draw in createBiomeSampler (prior anchors byte-stable) seeds a memoized region hash; `wreckYardAt` = max(origin, 3×3 regional anchors ≥2200m from origin) → far graveyards inherit ground tint/mottle, flatten, biome id, graveyard POI weights + a 6× POI density, all through existing consumers. Origin bakes byte-identically (placement gate green ×5).
+  - Gates: landmark descriptor↔render equality + a landmark-site walk leg + a ±15km regional-yard scan; vista landmark/yard shots + a vertex-color yard diag (proved the bake when the shot read ambiguous — the real gap was density, fixed ×6, cluster-read polish backlogged).
+- **Mid-cycle interruption:** the user's machine hit 100% CPU → root-caused (leaked `chrome-headless-shell` processes every reap regex missed + swiftshader probe load) → FRAMEWORK-WIDE fix: `reap-orphans.mjs` (orphan-state reaping) as global SessionStart/SessionEnd hooks + per-project regex fixes + canon (`process-leak-hygiene.md`), committed `gamedev-framework@e78c1ca`. Verified live on resume: the hook fired at session start; after this cycle's full suite the machine sat at exactly 4 node / 0 headless.
+- **Verify:** ALL 10 GREEN first-pass — placement ×5 0-fails (the byte-identity tripwire for the biomes change), colliders 55, chunks (determinism ×2 + cross-seed; streaming 332→332 exact incl. the landmark leg), all 5 smokes.
+- **Visual:** the colossal ribcage is a genuine hero read (30m titan skeleton arcing a dune crest, player-eye).
+- **D-entries:** D295. **Spend:** ~200K (campaign ~800K / 10M; cycle 4/50).
+- **Commit:** (SHA recorded on commit — next log edit.)
+- **Next:** cycle 5 = **S6 perf** (brief in `docs/next-session-prompt.md`) — then ⏸ S5 (the sanctioned save pause).
+
 ## Cycle 3 — S3 scatter + ambient life (2026-07-11) — SHIPPED
 
 - **Planned:** S3 — rocks + wordless scenes per-chunk; creatures streamed (research the spawn systems first — the slice's ❓).
@@ -19,7 +33,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 - **Visual iteration:** placement-sanity bar — watcher tableau on a dune crest (reads as intended), rock field seated, wreck+fauna area; all player-eye.
 - **D-entries:** D294 (chunk-keyed fauna; vulture defer; sacred boot streams; quiet-ambient-predators probe rule).
 - **Spend:** ~170K (campaign total ~600K / 10M; cycle 3/50).
-- **Commit:** (SHA recorded on commit — next log edit.)
+- **Commit:** `deadc77` (the SHA-recording docs edit rides in cycle 4's commit).
 - **Next:** cycle 4 = **S4 distributed rare landmarks + per-region biomes** (brief in `docs/next-session-prompt.md`; biomes.ts changes must keep the origin ring byte-identical — the placement gate is the tripwire).
 
 ## Cycle 2 — S2 POI streaming (2026-07-11) — SHIPPED

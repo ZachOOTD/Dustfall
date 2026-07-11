@@ -36,6 +36,7 @@ import { makeScatterRock } from './rockScatter.ts';
 import { buildWordlessTableau } from './wordlessScenes.ts';
 import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
+import { placeRibcage } from './heroLandmarks.ts';
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -102,6 +103,19 @@ export interface ChunkFaunaDesc {
   shrews: Array<{ x: number; z: number }>;
 }
 
+/** Infinite Sands S4 — the rare per-REGION hero landmark (fixed shape).
+ *  `present` is true only on the ONE chunk that hosts the region's
+ *  landmark position. Kinds: 'colossal_ribcage' (a titan skeleton
+ *  breaching the dunes — a silhouette destination) | 'wreck_knot' (a
+ *  tight 3-wreck salvage knot + 2 carcasses — a reward destination). */
+export interface ChunkLandmarkDesc {
+  present: boolean;
+  kind: 'colossal_ribcage' | 'wreck_knot';
+  x: number;
+  z: number;
+  seed: number;
+}
+
 /** The full deterministic content descriptor for one chunk. */
 export interface ChunkDesc {
   cx: number;
@@ -112,6 +126,7 @@ export interface ChunkDesc {
   rocks: ChunkRockDesc[];
   scene: ChunkSceneDesc;
   fauna: ChunkFaunaDesc;
+  landmark: ChunkLandmarkDesc;
 }
 
 interface LoadedChunk {
@@ -150,6 +165,8 @@ export interface ChunkManager {
     rockCount: number;
     lizardCount: number;
     shrewCount: number;
+    /** S4 — streamed hero landmarks (root groups tagged streamLandmark). */
+    landmarkCount: number;
   };
 }
 
@@ -226,7 +243,14 @@ export function createChunkManager(
     // whole chunk rolls consistently).
     const exclR = Tuning.CHUNK_POI_ORIGIN_EXCLUSION_M;
     const outsideOrigin = centerX * centerX + centerZ * centerZ > exclR * exclR;
-    const present = outsideOrigin && roll < Tuning.CHUNK_POI_CHANCE;
+    // S4 — regional wreck-yards are DENSE: a graveyard biome chunk rolls
+    // wrecks at 4× the field rate so far yards read as destinations (the
+    // origin yard's density comes from a boot cluster; regional yards get
+    // theirs from the roll). Same archetype weights (the graveyard mix).
+    const poiChance = biome === 'wreck_yard'
+      ? Tuning.CHUNK_POI_CHANCE * 6
+      : Tuning.CHUNK_POI_CHANCE;
+    const present = outsideOrigin && roll < poiChance;
     const poi: ChunkPoiDesc = { present, x: px, z: pz, biome, archetype, renderSeed };
     // ── S3: rocks — N candidates from a dedicated stream, kept only on
     //    rocky biome (the boot sampler's rule), never inside the origin
@@ -287,6 +311,32 @@ export function createChunkManager(
         fauna.shrews.push({ x: px + Math.cos(ang) * dist, z: pz + Math.sin(ang) * dist });
       }
     }
+    // ── S4: the region's rare hero landmark — hosted by exactly ONE chunk
+    //    (the one containing the region-rolled position). Pure per-region
+    //    derivation; fixed shape either way. ──
+    const REGION = Tuning.CHUNK_REGION_CHUNKS;
+    const rx = Math.floor(cx / REGION);
+    const rz = Math.floor(cz / REGION);
+    const regionRand = makeRng(chunkSeed((worldSeed ^ 0x1a4d) >>> 0, rx, rz));
+    const regionRoll = regionRand();
+    const regionKind: ChunkLandmarkDesc['kind'] = regionRand() < 0.5 ? 'colossal_ribcage' : 'wreck_knot';
+    const REGION_M = REGION * SIZE;
+    const lmMargin = 150;
+    const lx = rx * REGION_M + lmMargin + regionRand() * (REGION_M - 2 * lmMargin);
+    const lz = rz * REGION_M + lmMargin + regionRand() * (REGION_M - 2 * lmMargin);
+    const lmSeed = Math.floor(regionRand() * 0x100000000) >>> 0;
+    const lmOutside = lx * lx + lz * lz > exclR * exclR;
+    const landmark: ChunkLandmarkDesc = {
+      present:
+        lmOutside &&
+        regionRoll < Tuning.CHUNK_LANDMARK_CHANCE &&
+        Math.floor(lx / SIZE) === cx &&
+        Math.floor(lz / SIZE) === cz,
+      kind: regionKind,
+      x: lx,
+      z: lz,
+      seed: lmSeed,
+    };
     return {
       cx, cz, seed,
       markers: markerList,
@@ -294,6 +344,7 @@ export function createChunkManager(
       rocks,
       scene: sceneDesc,
       fauna,
+      landmark,
     };
   };
 
@@ -351,6 +402,63 @@ export function createChunkManager(
         const s = spawnShrew(scene, world, terrain, f);   // self-registers into the module list
         s.transient = true;
         chunkShrews.push(s);
+      }
+    }
+    // ── S4: the region's hero landmark (this chunk hosts it). Rendered
+    //    from lm.seed alone; bodies tracked; salvage transient (D292);
+    //    ribcage geometry AND material are per-call → chunk-owned. ──
+    if (desc.landmark.present) {
+      const lm = desc.landmark;
+      const rand = makeRng(lm.seed);
+      const tagRibcage = (grp: THREE.Group): void => {
+        grp.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) { m.userData.chunkGeo = true; m.userData.chunkMat = true; }
+        });
+      };
+      if (lm.kind === 'colossal_ribcage') {
+        const scale = 5 + rand() * 3;   // a 20-40m titan skeleton
+        const y = terrain.heightAt(lm.x, lm.z) - scale * (0.1 + rand() * 0.15);
+        const rc = placeRibcage(scene, world, new THREE.Vector3(lm.x, y, lm.z), rand, group, scale);
+        rc.group.userData.streamLandmark = lm.kind;
+        tagRibcage(rc.group);
+        const body = rc.collider.parent();
+        if (body) bodies.push(body);
+      } else {
+        // wreck_knot — a tight salvage triangle + 2 carcasses.
+        for (let i = 0; i < 3; i++) {
+          const ang = (i / 3) * Math.PI * 2 + rand() * 0.6;
+          const dist = 18 + rand() * 14;
+          const kx = lm.x + Math.cos(ang) * dist;
+          const kz = lm.z + Math.sin(ang) * dist;
+          const kBiome = biomes.biomeAt(kx, kz);
+          const kArch = pickArchetype(rand, kBiome);
+          const before = salvageables.list.length;
+          const pg = placeProcgenPOI(
+            scene, world, terrain,
+            new THREE.Vector3(kx, terrain.heightAt(kx, kz), kz),
+            rand, salvageables,
+            { archetype: kArch, biome: kBiome, parent: group, buryY: 0.3 + rand() * 0.4 },
+          );
+          if (!pg.userData.poiArchetype) pg.userData.poiArchetype = kArch;
+          if (i === 0) pg.userData.streamLandmark = lm.kind;
+          const pb = pg.userData.poiBody as RAPIER.RigidBody | undefined;
+          if (pb) bodies.push(pb);
+          for (const rec of salvageables.list.slice(before)) {
+            rec.transient = true;
+            salvage.push(rec);
+          }
+        }
+        for (let i = 0; i < 2; i++) {
+          const ang = rand() * Math.PI * 2;
+          const dist = 8 + rand() * 20;
+          const rx2 = lm.x + Math.cos(ang) * dist;
+          const rz2 = lm.z + Math.sin(ang) * dist;
+          const rc = placeRibcage(scene, world, new THREE.Vector3(rx2, terrain.heightAt(rx2, rz2), rz2), rand, group, 1);
+          tagRibcage(rc.group);
+          const body = rc.collider.parent();
+          if (body) bodies.push(body);
+        }
       }
     }
     // ── S3: scatter rocks (no colliders — visual props, the boot rule).
@@ -423,10 +531,13 @@ export function createChunkManager(
         (mesh.material as THREE.Material).dispose();
         return;
       }
-      // S3 rocks/tableau props: per-mesh geometry is chunk-owned (dispose);
-      // their materials are module singletons (never disposed).
+      // S3 rocks/tableau props + S4 ribcages: per-mesh geometry is
+      // chunk-owned (dispose); materials are module singletons EXCEPT the
+      // ribcage's per-call material (chunkMat — dispose is idempotent
+      // across the ribcage's shared-material meshes).
       if (mesh.userData.chunkGeo) {
         mesh.geometry.dispose();
+        if (mesh.userData.chunkMat) (mesh.material as THREE.Material).dispose();
         return;
       }
       // POI content: dispose ONLY merge-output geometry (unique per POI,
@@ -522,12 +633,14 @@ export function createChunkManager(
       let rockCount = 0;
       let lizardCount = 0;
       let shrewCount = 0;
+      let landmarkCount = 0;
       for (const c of chunks.values()) {
         c.group.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (mesh.isMesh && (mesh.geometry === markerGeo || mesh.geometry === crossGeo)) markerMeshCount++;
           if (mesh.isMesh && mesh.userData.streamRock) rockCount++;
           if ((obj as THREE.Group).userData?.poiArchetype) poiCount++;
+          if ((obj as THREE.Group).userData?.streamLandmark) landmarkCount++;
         });
         bodyCount += c.bodies.length;
         salvageCount += c.salvage.length;
@@ -544,6 +657,7 @@ export function createChunkManager(
         rockCount,
         lizardCount,
         shrewCount,
+        landmarkCount,
       };
     },
   };

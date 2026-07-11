@@ -1671,7 +1671,7 @@ const SCENARIOS = {
       // (the active set is exactly the anchor ring once settled).
       const contentRenderCheck = (label) => {
         const st = g.chunkStats();
-        let expPois = 0, expRocks = 0, expLiz = 0, expShrews = 0;
+        let expPois = 0, expRocks = 0, expLiz = 0, expShrews = 0, expLandmarks = 0;
         for (const k of st.activeKeys) {
           const [cx, cz] = k.split(',').map(Number);
           const d = g.chunkDescribe(cx, cz);
@@ -1679,12 +1679,17 @@ const SCENARIOS = {
           expRocks += d.rocks.length;
           expLiz += d.fauna.lizards.length;
           expShrews += d.fauna.shrews.length;
+          if (d.landmark.present) {
+            expLandmarks++;
+            if (d.landmark.kind === 'wreck_knot') expPois += 3;   // knot wrecks stamp poiArchetype too
+          }
         }
         if (expPois !== st.chunkPoiCount) fails.push(`${label}: POI descriptor/render mismatch — ${expPois} rolled, ${st.chunkPoiCount} placed`);
         if (expRocks !== st.chunkRockCount) fails.push(`${label}: rock descriptor/render mismatch — ${expRocks} rolled, ${st.chunkRockCount} placed`);
         if (expLiz !== st.chunkLizardCount) fails.push(`${label}: lizard descriptor/render mismatch — ${expLiz} rolled, ${st.chunkLizardCount} tracked`);
         if (expShrews !== st.chunkShrewCount) fails.push(`${label}: shrew descriptor/render mismatch — ${expShrews} rolled, ${st.chunkShrewCount} tracked`);
-        return { expPois, expRocks, expLiz, expShrews };
+        if (expLandmarks !== st.chunkLandmarkCount) fails.push(`${label}: landmark descriptor/render mismatch — ${expLandmarks} rolled, ${st.chunkLandmarkCount} placed`);
+        return { expPois, expRocks, expLiz, expShrews, expLandmarks };
       };
       const dupCheck = (label) => {
         const seen = new Set();
@@ -1805,6 +1810,44 @@ const SCENARIOS = {
         contentRenderCheck('fauna-site');
         const liveTransientLiz = ctx.lizards.filter((l) => l.transient).length;
         if (liveTransientLiz === 0) fails.push('at a descriptor-rolled fauna site but no streamed lizards live (spawn path broken)');
+      }
+      // ── Leg 1c (S4): LANDMARK site — walk to the nearest region-rolled
+      //    hero landmark and assert descriptor↔render there too. ──
+      let lmSite = null;
+      {
+        let best = null;
+        for (let cx = 12; cx <= 60; cx++) {
+          for (let cz = -20; cz <= 20; cz++) {
+            const d = g.chunkDescribe(cx, cz);
+            if (!d.landmark.present) continue;
+            const cur = ctx.player.body.body.translation();
+            const dd = (d.landmark.x - cur.x) ** 2 + (d.landmark.z - cur.z) ** 2;
+            if (!best || dd < best.dd) best = { x: d.landmark.x, z: d.landmark.z, kind: d.landmark.kind, dd };
+          }
+        }
+        lmSite = best;
+      }
+      if (!lmSite) {
+        fails.push('no landmark in the scan window (seed-dependent — widen the scan or raise CHUNK_LANDMARK_CHANCE)');
+      } else {
+        await walkTo(lmSite.x + 30, lmSite.z + 30);   // stand off the landmark
+        contentRenderCheck('landmark-site');
+      }
+      // ── S4: regional wreck-yard existence — scan the pure biome field
+      //    directly over ±15km (≈280 regions at p=0.08 → a yard is
+      //    statistically certain; rendering flows through already-gated
+      //    paths, so existence is the load-bearing assert). Also assert the
+      //    ORIGIN ring is untouched: no regional yard reads inside ±1200m
+      //    beyond what the origin anchor itself produces. ──
+      {
+        let found = false;
+        for (let x = -15000; x <= 15000 && !found; x += 400) {
+          for (let z = -15000; z <= 15000 && !found; z += 400) {
+            if (x * x + z * z < 2200 * 2200) continue;   // skip the origin field
+            if (ctx.biomes.wreckYardAt(x, z) > 0.5) found = true;
+          }
+        }
+        if (!found) fails.push('no regional wreck-yard in a ±15km biome scan (regional anchors broken)');
       }
       // ── Leg 2: return home (unloads the far field) ──
       await walkTo(56, 56);
@@ -2074,6 +2117,54 @@ const SCENARIOS = {
     });
     await walkShoot('streamed-rocks', targets.rockT, 0.6);
     await walkShoot('streamed-scene', targets.sceneT, 0.8);
+    // S4 — the nearest hero landmark + the nearest regional wreck-yard.
+    const s4targets = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      let lmT = null;
+      for (let cx = 12; cx <= 60 && !lmT; cx++) {
+        for (let cz = -20; cz <= 20 && !lmT; cz++) {
+          const d = g.chunkDescribe(cx, cz);
+          if (d.landmark.present) lmT = { x: d.landmark.x, z: d.landmark.z, kind: d.landmark.kind };
+        }
+      }
+      let yardT = null, bestD = Infinity;
+      for (let x = -15000; x <= 15000; x += 400) {
+        for (let z = -15000; z <= 15000; z += 400) {
+          if (x * x + z * z < 2200 * 2200) continue;
+          if (ctx.biomes.wreckYardAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; yardT = { x, z }; }
+          }
+        }
+      }
+      return { lmT, yardT };
+    });
+    if (s4targets.lmT) console.log(`[chunk-vista] landmark: ${s4targets.lmT.kind} at ${s4targets.lmT.x.toFixed(0)},${s4targets.lmT.z.toFixed(0)}`);
+    await walkShoot('streamed-landmark', s4targets.lmT, 4.0);
+    if (s4targets.yardT) console.log(`[chunk-vista] regional wreck-yard at ${s4targets.yardT.x.toFixed(0)},${s4targets.yardT.z.toFixed(0)}`);
+    await walkShoot('regional-wreck-yard', s4targets.yardT, 1.2);
+    if (s4targets.yardT) {
+      // Diag: is the regional yard actually BAKED into the tile? Read the
+      // nearest terrain vertex color + the live sampler value at the spot.
+      const diag = await page.evaluate((t) => {
+        const ctx = window.__game.ctx;
+        const wy = ctx.biomes.wreckYardAt(t.x, t.z);
+        const biome = ctx.biomes.biomeAt(t.x, t.z);
+        let best = null;
+        for (const m of ctx.terrain.meshes) {
+          const posA = m.geometry.getAttribute('position');
+          const colA = m.geometry.getAttribute('color');
+          for (let i = 0; i < posA.count; i += 37) {
+            const wx = posA.getX(i) + m.position.x;
+            const wz = posA.getZ(i) + m.position.z;
+            const dd = (wx - t.x) ** 2 + (wz - t.z) ** 2;
+            if (!best || dd < best.dd) best = { dd, r: colA.getX(i), g: colA.getY(i), b: colA.getZ(i) };
+          }
+        }
+        return { wy: +wy.toFixed(3), biome, vtx: best ? [best.r.toFixed(2), best.g.toFixed(2), best.b.toFixed(2), Math.sqrt(best.dd).toFixed(0) + 'm'] : null };
+      }, s4targets.yardT);
+      console.log('[chunk-vista] yard diag: ' + JSON.stringify(diag));
+    }
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/

@@ -24,8 +24,16 @@ foreach ($p in $procs) {
 Write-Host "reaped $killed dev-server node processes"
 
 # Headless browsers spawned by the rig (puppeteer/playwright chromium).
-$browsers = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match 'headless_shell|chrome_headless' }
+# NOTE (2026-07-11): playwright's bundled browser runs as `chrome-headless-shell`
+# on Windows — DASHES, which the old 'headless_shell|chrome_headless' regex
+# silently missed, so leaked probe browsers survived every reap. Match any
+# process name containing 'headless' (never the user's real chrome.exe), PLUS
+# chrome.exe instances launched from the ms-playwright cache in headless mode.
+$browsers = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match 'headless' }
 $bk = 0; foreach ($b in $browsers) { try { Stop-Process -Id $b.Id -Force -ErrorAction Stop; $bk++ } catch {} }
+$pwChrome = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
+  Where-Object { $_.CommandLine -match 'ms-playwright' -and $_.CommandLine -match '--headless' }
+foreach ($b in $pwChrome) { try { Stop-Process -Id $b.ProcessId -Force -ErrorAction Stop; $bk++ } catch {} }
 if ($bk -gt 0) { Write-Host "reaped $bk headless browser processes" }
 
 $remain = @(Get-Process node -ErrorAction SilentlyContinue).Count
