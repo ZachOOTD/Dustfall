@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Infinite Sands" cycles 6-7 — 2026-07-11 — ⏸ S5 plan → APPROVED → S5 SHIPPED: the far field PERSISTS. **LADDER COMPLETE** ✓ all gates
+
+`verified` — full suite green incl. the NEW persistence legs (`persisted=1` in the permanent streaming gate): extraction at a far streamed wreck → unload capture → revisit re-apply → SPARSE save file (exactly 1 chunkDiff) → a REAL page reload + CONTINUE → the diff re-applies. Origin-world round-trip byte-exact (placement ×5, all smokes). D297 (the mid-review speeder hotfix) + D298. **The Infinite Sands ladder (S1-S6+S5) is COMPLETE — campaign `completed`, branch ready for merge review.**
+
+- **SAVE_VERSION 16 → 17 (`chunkDiffs`)** — a sparse map `"cx,cz"` → deviations from descriptor-pristine: salvage `{remaining, stripped, extracted[]}` keyed by descriptor-derived CONTENT IDS (`poi/N`, `lm/K/N` — registration order, deterministic per D296; NEVER runtime registry ids, the D292 trap) + looted fauna (`l0`/`s0`, with the incoming looted set UNIONED at recapture so skipped spawns can't resurrect). Captured on chunk unload + live-snapshot at save (`chunks.serializeDiffs`); applied on chunk load (incl. deferred knot pieces) mirroring the v16 visuals (remaining cap, stripped desaturation, extracted components re-hidden); handed to the streamer at load-game (`chunks.loadDiffs`). Pre-v17 saves load with an empty map — zero migration (D81 additive). Pristine chunks never enter the map.
+- **D297 hardening** — `player.pos` saves via the speeder-aware `getPlayerPos` (saving while mounted used to record the capsule parked at (0,-2000,0)).
+- **Per the approved plan**: scrap rings stay deferred (v2 — pickup ids are the global survivor model); no diff-map cap in v1 (player-bounded); looted-fauna persistence in (anti-farming).
+- **Cycle 6 (the sanctioned pause)** wrote `docs/feature-save-per-chunk-diffs.md` + paused per D81; the user approved in-session with the plan's recommendations standing; cycle 7 built it.
+
 ## Campaign "Infinite Sands" cycle 5 — 2026-07-11 — S6 perf: generation is HITCH-FREE ✓ all gates + a NEW permanent perf gate
 
 `verified` — `verify:all` PASS (placement/colliders/chunks incl. the NEW perf leg); all 5 smokes; all 9 vista shots regenerated identically (slicing changes nothing visible — tiles add atomically). One cycle commit. D296.

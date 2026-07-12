@@ -1,69 +1,48 @@
 # Dustfall — Session-end report
 
-Cumulative state. Rewritten (and pruned) at each `/session-end`. Per-session detail lives in
-`docs/changelog.md`; per-cycle campaign detail in `docs/campaign/campaign-log.md`.
+Cumulative state. Rewritten at each `/session-end`. Per-session detail: `docs/changelog.md`;
+campaign detail: `docs/campaign/campaign-log.md`.
 
 ## Current state (2026-07-11)
 
-**The game is a complete, playable, shippable browser + desktop survival game** (released intro,
-LIVE web build, Tauri desktop build).
+**🏁 Campaign "Infinite Sands" is COMPLETE** (7 cycles, ~1.3M/10M tokens, D288–D298). The world
+is INFINITE: deterministically streamed (S1), populated with salvageable wrecks (S2), rocks/
+vignettes/prey (S3), rare hero landmarks + regional graveyard biomes (S4), hitch-free (S6), and
+PERSISTENT — far-field changes survive save/reload via SAVE_VERSION 17's descriptor-keyed
+`chunkDiffs` (S5). The released origin world + intro are byte-identical throughout. Plus the
+D297 playtest hotfix (streaming/save read `getPlayerPos`, never the speeder-parked capsule) and,
+earlier this session, the framework-wide `reap-orphans` process-leak fix
+(`gamedev-framework@e78c1ca`).
 
-**⚙ ACTIVE CAMPAIGN — "Infinite Sands"** (branch `campaign/2026-07-10-procgen`).
-**S1-S4 + S6 shipped (cycles 1-5). ONE rung left: ⏸ S5 save schema — cycle 6 writes the plan and
-PAUSES for your review (D81).** Ladder detail: `docs/roadmap.md`.
+**Verify:** the permanent suite is now placement ×5 + colliders + `verify:chunks` (determinism ×2
++ cross-seed, streaming with ride + persistence legs, generation-perf) + 5 smoke gates — ALL
+GREEN on the final state. The streaming gate's persistence legs prove the full S5 lifecycle
+including a REAL page-reload + CONTINUE.
 
-**Cycle 5 (this session) — S6 hitch-free generation (D296):**
-- Terrain tiles build SLICED: staged fns (fill 12 rows/frame ≈ 8-10ms → geometry+normals one
-  ~17ms frame → ATOMIC mesh+collider finalize; no partial tile ever visible). The anchor tile +
-  boot ring stay synchronous (fall-through safety + boot byte-identity). Old cost: ~90-200ms ×3
-  tiles per 800m crossing, in single frames.
-- Chunk loads bounded to 1/frame; wreck_knot landmark pieces render DEFERRED one per frame
-  (load-time rng draws + per-piece seeds → deterministic regardless of execution frame).
-- NEW permanent `chunk-perf` gate (3rd `verify:chunks` leg): a multi-km walk routed through a
-  real wreck_knot asserting slicing-is-the-norm (≥100 steps), sync anchor-safety bakes rare
-  (≤4 at teleport pace) + bounded, loads/pieces under tripwires, draw+body ceilings, baseline
-  return. The gate caught a real edge during development (diagonal teleport legs outrun the
-  sliced ring → the anchor safety bake fires — correct behavior, assert recalibrated).
-- Permanent perf instrumentation: `__game.chunkPerf()` / `resetChunkPerf`.
-
-**Verify baseline:** all gates green — placement ×5, colliders 55, chunks (determinism ×2 +
-cross-seed + streaming + perf), 5 smokes, 9 vista shots regenerated identically. Save v16
-untouched. Machine clean after the suite (the reap-orphans fix holding).
+**Branch:** `campaign/2026-07-10-procgen`, 8 commits (`e82d9a7`→`5f57a5d`, `fe56a99`, `47769c8`,
++ the S5 commit). `master` untouched; nothing pushed. **Next human action: the merge review**
+(checklist in `docs/next-session-prompt.md`).
 
 ## What works end-to-end
-The full survival loop + an INFINITE, HITCH-FREE world: deterministic terrain, wrecks with
-salvage, rocks, vignettes, prey, hero landmarks, regional graveyard biomes — walk forever in any
-direction with no generation hitch a player would feel. Missing only: far-field persistence
-(S5 — the pause).
+The complete released survival game + walk (or RIDE) forever in any direction: terrain, wrecks
+with working salvage, ambient life, titan-skeleton landmarks, graveyard regions — hitch-free —
+and your changes out there now persist across save/reload. Old saves (≤v16) load unchanged.
 
-## Known issues / partials
-- Streamed content regenerate-pristine until S5 (D292 — the point of the next cycle).
-- Regional-yard cluster read, far-field vultures, streamed-landmark silhouettes (backlog).
-- The §A owed human walk-tests pile.
-- If real-play profiling ever shows the one 17ms normals frame per tile: banded normals is the
-  known next step (D296).
-
-## Constants / knobs (new this cycle)
-`TERRAIN_SLICE_ROWS` (12), `CHUNK_LOADS_PER_FRAME` (2→1).
+## Known gaps (all logged)
+Regenerate-only: scrap rings at streamed wrecks (S5 v2), far-field vultures (D294), regional-yard
+dense cluster read, the Sarlacc-vs-rider design call (D297), streamed-landmark horizon
+silhouettes; the §A owed feel walk-tests; content-id registration-order coupling noted in D298.
 
 ## Suggested next
-1. **Cycle 6 = ⏸ S5 schema plan** (brief in `docs/next-session-prompt.md`) — plans, pauses,
-   awaits `/campaign-approve`.
-2. **Your morning review**: walk the infinite world (`npm run dev`) — cross a tile boundary at
-   sprint (feel for hitches), visit a landmark + a regional yard, strip a far wreck; then review
-   `docs/feature-save-per-chunk-diffs.md` (cycle 6 will have written it) and `/campaign-approve`.
-3. After the campaign: the parked Skyfall plan-review.
+1. **The merge review** → merge to master → redeploy web/desktop.
+2. Resume the parked **Skyfall** campaign (plugs into the S4 landmark slot).
+3. Or the §A walk-test pile / backlog polish.
 
-## State at session end
-- **Git:** `campaign/2026-07-10-procgen`; cycles 1-5 committed (`e82d9a7`, `ad49dc0`, `deadc77`,
-  `9b3ba92`, cycle 5's SHA in campaign-log). `master` untouched, nothing pushed.
-- **Save:** v16 untouched.
-
-## Time + token spend
-Cycle 5 ≈ 190K output tokens (measure → build → 4 probe calibration rounds — one of which was
-the gate catching the teleport-pace sync edge). Campaign ledger: ~990K / 10M, cycle 5/50.
+## Token spend (session, approx)
+Cycles 5-7 + the D297 hotfix + the process-leak investigation ≈ 700K output tokens this session;
+campaign total ~1.3M/10M across 7 cycles — well under the ceiling, with the ladder finished.
 
 ## Iteration-discipline self-check (rule 8)
-PASS (systems/perf bar). No new visual surface (slicing is invisible by design — proven by the
-9 vista shots regenerating identically + the atomic-finalize rule). The perf work followed
-measure→build→measure discipline with numbers logged at each step.
+PASS. S5 is systems work verified by behavior-level gates (a real extraction, a real reload);
+no new visual surface. The one visual/feel item this session (the speeder streaming bug) came
+from the USER's walk-test and was fixed + A/B gate-proven same session.

@@ -156,10 +156,13 @@ and promotes the second.
 >   build sliced (12-row stage-steps ≈ 8-10ms; atomic mesh+collider finalize; anchor tile stays
 >   synchronous for fall-through safety); chunk loads 1/frame; wreck_knot pieces deferred 1/frame;
 >   NEW permanent `chunk-perf` gate (3rd verify:chunks leg) with mechanism asserts + tripwires.
-> - **⏸ S5 — save: per-chunk diffs — PLAN WRITTEN, CAMPAIGN PAUSED (cycle 6, awaiting approval)** —
->   [feature-save-per-chunk-diffs.md](feature-save-per-chunk-diffs.md): v16→17, descriptor-keyed
->   chunk diffs (capture on unload/save, apply on load), zero-migration additive, scrap rings
->   deferred to v2, a probe persistence leg. `/campaign-approve` releases the one-cycle build.
+> - **✅ S5 — save: per-chunk diffs — SHIPPED cycle 7 (2026-07-11, D298)** — SAVE_VERSION 17
+>   `chunkDiffs` (descriptor-keyed, sparse, zero-migration); far-field salvage + looted fauna
+>   persist across save/reload (REAL reload+CONTINUE gate-proven); D297 mounted-save hardening.
+>
+> **🏁 THE LADDER IS COMPLETE — campaign `completed` (7 cycles, ~1.3M/10M tokens).** The branch
+> `campaign/2026-07-10-procgen` (8 commits) awaits the human MERGE REVIEW → master. After the
+> merge: resume the parked Skyfall campaign (it plugs into the S4 landmark slot).
 > - S4 — distributed rare landmarks (Skyfall plugs in here) + per-region biome re-anchoring.
 > - S6 — perf: frame-budgeted generation (the known S1 tile-bake hitch, D288) + a cross-chunk perf probe.
 > - S5 — ⏸ SANCTIONED PAUSE before building: per-chunk save diffs (SAVE_VERSION bump, D81).

@@ -78,14 +78,14 @@ if (digests.length === 2 && digests[0] === digests[1]) {
 }
 
 // ── 2. Streaming / leak walk (one seed — the walk itself is the test) ──
-const sm = runParsed('chunk-streaming', 1337, 5480, /CHUNK-STREAM pass=(\d) bodies=(\d+)->(\d+) chunks=(\d+)\/(\d+) farMarkers=(\d+) farPois=(\d+) farSalvage=(\d+) farRocks=(\d+) farFauna=(\d+) tiles=(\d+) fails=(\d+)/, 900000);
+const sm = runParsed('chunk-streaming', 1337, 5480, /CHUNK-STREAM pass=(\d) bodies=(\d+)->(\d+) chunks=(\d+)\/(\d+) farMarkers=(\d+) farPois=(\d+) farSalvage=(\d+) farRocks=(\d+) farFauna=(\d+) tiles=(\d+) persisted=(\d) fails=(\d+)/, 900000);
 if (!sm) {
   allPass = false;
   rows.push('streaming: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
 } else {
   const ok = sm[1] === '1';
   if (!ok) allPass = false;
-  rows.push(`streaming: bodies ${sm[2]}→${sm[3]}, chunks ${sm[4]}/${sm[5]} (home/far), farMarkers=${sm[6]}, farPois=${sm[7]}, farSalvage=${sm[8]}, farRocks=${sm[9]}, farFauna=${sm[10]}, tiles=${sm[11]}, ${sm[12]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+  rows.push(`streaming: bodies ${sm[2]}→${sm[3]}, chunks ${sm[4]}/${sm[5]} (home/far), farMarkers=${sm[6]}, farPois=${sm[7]}, farSalvage=${sm[8]}, farRocks=${sm[9]}, farFauna=${sm[10]}, tiles=${sm[11]}, persisted=${sm[12]}, ${sm[13]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
 // ── 3. Generation perf (S6): sliced tile builds, bounded chunk loads,

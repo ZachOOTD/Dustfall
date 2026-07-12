@@ -19,6 +19,7 @@ import type { LootEntry } from '../world/lootContainers.ts';
 import { despawnPickup, spawnDroppedPickup } from '../pickups/pickups.ts';
 import { harvestCactus } from '../world/cactus.ts';
 import { markSalvageStripped } from '../world/salvage.ts';
+import { getPlayerPos } from '../util/playerPos.ts';   // D297 — speeder-aware save position
 import { serializeCrashes, setPendingCrashRestore, type SavedCrash } from '../world/meteorCrash.ts';   // ACBE (D1) — crash-site persistence
 import { serializeEnterablePod, setPendingPodCrashRestore, type SavedPodCrash } from '../world/escapePodIntro/podScene.ts';   // escape-pod intro — the ONE walk-in pod is built only by the intro (not at boot), so Continue must re-build it from the save
 import {
@@ -107,12 +108,20 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // Additive/optional per D81. Pre-v16 saves arrive without it; the loader seeds
 // it from the ingredient types of their already-discovered recipes so no
 // known recipe re-locks and the card-grid tease/unlock baseline is sane.
-export const SAVE_VERSION = 16;
+// Infinite Sands S5 (2026-07-11) — v17 adds `chunkDiffs` (sparse per-chunk
+// deviations of STREAMED far-field content from its descriptor-pristine
+// state; keyed by descriptor-derived content ids, never runtime registry
+// ids — D292/D297). Additive per D81: pre-v17 saves arrive without it and
+// load with an empty map (far content regenerates pristine, the pre-S5
+// behavior). Also v17: `player.pos` is captured via the speeder-aware
+// getPlayerPos (saving while MOUNTED used to record the parked capsule at
+// (0,-2000,0) — D297).
+export const SAVE_VERSION = 17;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -217,6 +226,9 @@ export interface SaveV1 {
    *  (the wreck + colliders + salvage + black box reappear, aged). Pre-v15 saves omit it → no
    *  crashes (D81 additive — no migration). */
   crashes?: SavedCrash[];
+  /** S5 (v17) — sparse per-chunk diffs of streamed far-field content
+   *  ("cx,cz" → deviations). Absent in pre-v17 saves → empty map. */
+  chunkDiffs?: Record<string, import('../world/chunkManager.ts').ChunkDiff>;
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
   /** Session QQ — placed sleds with their cargo + tether state. Optional
    *  so pre-v5 saves still load (sleds field is just absent).
@@ -431,7 +443,11 @@ function cloneSlot(s: Slot): Slot {
 // ────────────────────────────────────────────────────────────────
 export function saveGameState(ctx: GameContext): { ok: boolean; error?: string } {
   try {
-    const playerTr = ctx.player.body.body.translation();
+    // D297 — speeder-aware: saving while MOUNTED must record the BIKE's
+    // position, not the capsule parked at (0,-2000,0). On load the
+    // mounted restore re-parks the capsule anyway; this guarantees
+    // player.pos is always a sane world position.
+    const playerTr = getPlayerPos(ctx);
     const cq = ctx.three.camera.quaternion;
 
     const save: SaveV1 = {
@@ -553,10 +569,14 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
             : {}),
         };
       }),
+      // Infinite Sands S5 — sparse per-chunk diffs for the streamed far
+      // field (captures live chunks first). Boot content keeps the v16
+      // id-keyed model below; streamed content persists ONLY here.
+      chunkDiffs: ctx.chunks.serializeDiffs(),
       // Infinite Sands S2 — chunk-streamed wrecks (`transient`) are NOT
-      // serialized: their ids are load-order-dependent (a saved id could
-      // silently patch a DIFFERENT wreck after reload) and their v1 save
-      // semantics are regenerate-pristine (per-chunk diffs land at S5).
+      // serialized in the id-keyed array: their ids are load-order-
+      // dependent (a saved id could silently patch a DIFFERENT wreck
+      // after reload). They persist via chunkDiffs above (S5).
       salvageables: ctx.salvageables.list.filter((s) => !s.transient).map((s) => {
         // ACAX — persist WHICH components are gone (extracted OR condition-surplus)
         // so a reload restores the exact visible set (WYSIWYG), not all of them.
@@ -1009,6 +1029,11 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     );
     if (saved.state === 'dead') applyRaiderDeadPose(raider, ctx);
   }
+
+  // ── S5 (v17): hand the streamed far field its per-chunk diffs. Chunks
+  //    stream in AFTER this restore (ticks resume post-handoff) and apply
+  //    their diff on load. Pre-v17 saves: absent → empty map. ──
+  ctx.chunks.loadDiffs(save.chunkDiffs);
 
   // ── Salvageables: patch remaining + apply dim if stripped. ──
   for (const saved of save.salvageables) {

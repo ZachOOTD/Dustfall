@@ -37,6 +37,9 @@ export interface Lizard {
    *  save serialization (visit-order ids — the D292 rule) and despawned
    *  with their chunk. Boot-spawned lizards leave this unset. */
   transient?: boolean;
+  /** S5 — descriptor-derived within-chunk id ("l0") keying this creature
+   *  in the chunk's save diff (looted persistence). Runtime-only. */
+  chunkContentId?: string;
 }
 
 let _nextId = 1;

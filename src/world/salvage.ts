@@ -54,9 +54,17 @@ export interface Salvageable {
   /** Infinite Sands S2 — TRUE for chunk-STREAMED wrecks: excluded from save
    *  serialization (their ids are load-order-dependent, so persisting them
    *  would mis-match on reload — the D290 descriptor model regenerates them
-   *  pristine instead; per-chunk diffs arrive at S5). Boot-placed wrecks
-   *  leave this unset and persist exactly as before (save schema untouched). */
+   *  pristine instead). Boot-placed wrecks leave this unset and persist
+   *  exactly as before. S5: streamed wrecks persist via per-chunk diffs
+   *  keyed by chunkContentId — never by this runtime id. */
   transient?: boolean;
+  /** S5 — the descriptor-derived within-chunk content id ("poi/0",
+   *  "lm/1/0") that keys this record in the chunk's save diff. Set by the
+   *  chunk streamer at registration; runtime-only. */
+  chunkContentId?: string;
+  /** S5 — salvageRemaining at registration (the pristine baseline the
+   *  diff-capture compares against; extraction only ever decrements). */
+  chunkInitialRemaining?: number;
 }
 
 /** AAT — friendly adjective for the hover prompt. */

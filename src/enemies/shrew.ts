@@ -64,6 +64,9 @@ export interface Shrew {
    *  save serialization (visit-order ids — the D292 rule) and despawned
    *  with their chunk. Boot-spawned shrews leave this unset. */
   transient?: boolean;
+  /** S5 — descriptor-derived within-chunk id ("s0") keying this creature
+   *  in the chunk's save diff (looted persistence). Runtime-only. */
+  chunkContentId?: string;
   /** ACAI f/u — seconds the shrew stays burrowed after a vulture scare, even
    *  with no player nearby (a vulture-triggered dive-for-cover). */
   burrowHold: number;

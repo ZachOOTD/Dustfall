@@ -1,12 +1,12 @@
 {
   "campaign": "Infinite Sands (infinite procgen)",
-  "status": "paused",
+  "status": "completed",
   "started": "2026-07-10",
   "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 6,
-  "current_tier": "S5 - Save: per-chunk diffs (schema plan written; build awaits approval)",
-  "awaiting_approval": true,
-  "stop_reasons": ["save-version-bump"],
+  "cycles_completed": 7,
+  "current_tier": "LADDER COMPLETE (S1-S6+S5 shipped) — awaiting human merge review",
+  "awaiting_approval": false,
+  "stop_reasons": ["until-met"],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
@@ -16,14 +16,14 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1030000 },
+  "spend": { "total": 1300000 },
   "ladder": [
     { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
     { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "shipped", "cycle": 2 },
     { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "shipped", "cycle": 3 },
     { "id": "S4", "name": "Distributed rare landmarks + per-region biomes", "kind": "auto", "status": "shipped", "cycle": 4 },
     { "id": "S6", "name": "Perf: frame-budgeted generation + cross-chunk perf probe", "kind": "auto", "status": "shipped", "cycle": 5 },
-    { "id": "S5", "name": "Save: per-chunk diffs (SAVE_VERSION bump)", "kind": "save-critical", "status": "pending", "pause_before": "build" }
+    { "id": "S5", "name": "Save: per-chunk diffs (SAVE_VERSION bump)", "kind": "save-critical", "status": "shipped", "cycle": 7, "pause_before": "build", "approved": "2026-07-11 in-session (recommendations accepted)" }
   ],
   "sanctioned_pauses": ["save-version-bump (S5, pause BEFORE building)"],
   "locked_constraints": ["determinism-law", "no-unload-leaks-rule9", "intro-unchanged", "no-save-change-before-S5-pause", "keep-banked-perf", "master-untouched", "skyfall-campaign-parked-readonly"],
@@ -88,6 +88,16 @@
       "spend_this_cycle": 40000,
       "commit": "fe56a99",
       "d_entries": []
+    },
+    {
+      "n": 7,
+      "date": "2026-07-11",
+      "focus": "S5 build (approved): chunkDiffs v17 — far-field persistence; + the D297 speeder hotfix earlier in-session",
+      "outcome": "shipped",
+      "tier": "S5",
+      "spend_this_cycle": 270000,
+      "commit": "PENDING-SET-ON-COMMIT",
+      "d_entries": ["D297", "D298"]
     }
   ]
 }

@@ -7,6 +7,17 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 
 ---
 
+## Cycle 7 — S5 BUILD (2026-07-11) — SHIPPED → 🏁 CAMPAIGN COMPLETE (ladder S1-S6+S5 all shipped)
+
+- **Approval:** the user approved in-session ("finish it off with the S5 plan") — the plan's recommendations stood (v17 bump, no scrap rings, no cap, looted-fauna persistence in) + the D297 mounted-save hardening.
+- **Shipped (per the plan verbatim):** SAVE_VERSION 17 `chunkDiffs` — sparse per-chunk deviations keyed by descriptor-derived content ids (`poi/N`, `lm/K/N`, `l0`/`s0`); capture on unload + live snapshot at save (`serializeDiffs`); apply on load incl. the deferred knot pieces, mirroring the v16 visuals; `loadDiffs` at load-game; pre-v17 saves = empty map (zero migration). One implementation catch beyond the plan: the incoming looted-fauna set is UNIONED at recapture (skipped spawns would otherwise resurrect — D298). Plus `player.pos` now saves via `getPlayerPos` (D297).
+- **Earlier in-session (D297 hotfix, commit `47769c8`):** the playtest speeder bug — streaming re-anchored to the origin mid-ride because the mount PARKS the capsule at (0,-2000,0); fixed via the canonical `getPlayerPos`; deep-cave dark-nav fixed for riders; a permanent A/B-proven RIDE leg added to the streaming gate; the Sarlacc's rider-blindness backlogged as a design question.
+- **Verify:** ALL GREEN — placement ×5, colliders 55, chunks (determinism ×2 + cross-seed; streaming with `persisted=1`: extraction → unload capture → revisit re-apply → sparse save file → REAL reload+CONTINUE re-apply; perf leg), all 5 smokes. Origin-world round trip byte-exact.
+- **D-entries:** D297, D298. **Spend:** ~270K (campaign TOTAL ~1.3M / 10M; 7 cycles / 50).
+- **Verdict: TERMINAL — `until: ladder-complete` met. Campaign `completed`.**
+- **▶ THE HUMAN'S MERGE REVIEW:** walk the final build (stream on foot AND on the bike, strip a far wreck → save → reload → still stripped), then merge `campaign/2026-07-10-procgen` → `master` and redeploy (web + desktop) when satisfied. Then: resume the parked Skyfall campaign.
+- **Commit:** (SHA recorded on commit.)
+
 ## Cycle 6 — ⏸ S5 save schema PLAN (2026-07-11) — PROPOSED → CAMPAIGN PAUSED (the sanctioned pause)
 
 - **Planned:** write the per-chunk-diff save schema plan and PAUSE for human review BEFORE building (D81 — the ladder's one sanctioned pause).

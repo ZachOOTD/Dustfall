@@ -1745,6 +1745,25 @@ const SCENARIOS = {
       dupCheck('far');
       const farContent = contentRenderCheck('far');
       const farSnapA = snapshot(1500, 56);
+      // ── S5 — PERSISTENCE: extract from a streamed wreck (the mutation a
+      //    real player makes), then prove it survives unload→reload,
+      //    reaches the save file sparsely, and (node-side, after this
+      //    evaluate) survives a REAL page reload + CONTINUE. ──
+      let persist = null;
+      {
+        const t = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId);
+        if (!t) fails.push('S5: no transient salvageable at the far point (persistence leg vacuous)');
+        else {
+          const comps = (t.panel.userData.panelComponents || []);
+          const vis = comps.findIndex((cm) => cm.visible);
+          if (vis < 0) fails.push('S5: far panel has no visible components to extract');
+          else {
+            comps[vis].visible = false;          // what extraction does (WYSIWYG)
+            t.salvageRemaining -= 1;
+            persist = { contentId: t.chunkContentId, expectedRemaining: t.salvageRemaining, hiddenIdx: vis };
+          }
+        }
+      }
       // S2 — SAVE SAFETY with streamed wrecks live: the serialized save
       // must contain ONLY boot-placed salvageables (transient excluded) —
       // a leaked load-order-dependent id would silently patch the WRONG
@@ -1771,6 +1790,20 @@ const SCENARIOS = {
           if ((raw.shrews || []).length !== bootShr) fails.push(`saved shrew count ${(raw.shrews || []).length} != boot count ${bootShr}`);
           if (ctx.lizards.filter((l) => l.transient).length === 0 && farContent.expLiz > 0) {
             fails.push('descriptor rolled streamed lizards but none are live (spawn path broken)');
+          }
+          // S5 — the save must carry the (live-captured) chunk diff, and
+          // ONLY that one chunk (sparsity).
+          const diffKeys = Object.keys(raw.chunkDiffs || {});
+          if (persist && diffKeys.length !== 1) {
+            fails.push(`S5: expected exactly 1 chunkDiff in the save, got ${diffKeys.length} [${diffKeys.join(' ')}]`);
+          }
+          if (persist && diffKeys.length === 1) {
+            const d = raw.chunkDiffs[diffKeys[0]];
+            const entry = d.salvage && d.salvage[persist.contentId];
+            if (!entry || entry.remaining !== persist.expectedRemaining) {
+              fails.push(`S5: saved diff entry wrong for ${persist.contentId}: ${JSON.stringify(entry)}`);
+            }
+            persist.chunkKey = diffKeys[0];
           }
         }
       }
@@ -1860,6 +1893,21 @@ const SCENARIOS = {
       const farSnapB = snapshot(1500, 56);
       if (farSnapA !== farSnapB) fails.push('reloaded chunk content differs from first visit (determinism broken across unload/reload)');
       if (farSnapA.length === 0) fails.push('empty marker snapshot at far point (nothing to compare)');
+      // S5 — the extraction must have SURVIVED the unload→reload cycle:
+      // the re-registered record carries the diff-applied state.
+      if (persist) {
+        const t2 = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId === persist.contentId);
+        if (!t2) fails.push(`S5: re-registered record ${persist.contentId} not found on revisit`);
+        else {
+          if (t2.salvageRemaining !== persist.expectedRemaining) {
+            fails.push(`S5: revisit remaining ${t2.salvageRemaining} != expected ${persist.expectedRemaining} (diff not applied)`);
+          }
+          const comps2 = (t2.panel.userData.panelComponents || []);
+          if (comps2[persist.hiddenIdx] && comps2[persist.hiddenIdx].visible) {
+            fails.push('S5: extracted component visible again on revisit (diff not applied)');
+          }
+        }
+      }
       // ── Leg 4: home again — leak check against the baseline ──
       await walkTo(56, 56);
       await frames(90);
@@ -1925,6 +1973,7 @@ const SCENARIOS = {
       g.setChunkMarkers(false);
       return {
         fails,
+        persist,
         baseBodies: base.worldBodies, endBodies: end.worldBodies,
         baseChunks: base.activeKeys.length, farChunks: far.activeKeys.length,
         farMarkers: far.markerMeshCount, farPois: farContent.expPois,
@@ -1933,8 +1982,47 @@ const SCENARIOS = {
         tiles: end.terrainTileKeys.length,
       };
     });
+    // ── S5 node-side leg: a REAL page reload + CONTINUE must re-apply the
+    //    chunk diff (proves the save→loadDiffs→apply wiring end-to-end,
+    //    not just the in-memory map). Player restores at the far save
+    //    point; the modified chunk streams back in with its diff. ──
+    if (r.persist) {
+      await page.reload();
+      await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 60000 });
+      const clicked = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const cont = btns.find((b) => (b.textContent || '').trim().toUpperCase() === 'CONTINUE');
+        if (!cont) return false;
+        cont.click();
+        return true;
+      });
+      if (!clicked) {
+        r.fails.push('S5-reload: no CONTINUE button after a real page reload');
+      } else {
+        const rr = await page.evaluate(async (persist) => {
+          const ctx = window.__game.ctx;
+          const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+          ctx.input.controls.isLocked = true; ctx.flags.paused = false;
+          for (let i = 0; i < 200; i++) await raf();   // stream the ring at the restored far position
+          const fails = [];
+          const t = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId === persist.contentId);
+          if (!t) fails.push(`S5-reload: ${persist.contentId} not re-registered after reload+CONTINUE`);
+          else {
+            if (t.salvageRemaining !== persist.expectedRemaining) {
+              fails.push(`S5-reload: remaining ${t.salvageRemaining} != expected ${persist.expectedRemaining} (loadDiffs->apply broken)`);
+            }
+            const comps = (t.panel.userData.panelComponents || []);
+            if (comps[persist.hiddenIdx] && comps[persist.hiddenIdx].visible) {
+              fails.push('S5-reload: extracted component visible again after a real reload');
+            }
+          }
+          return fails;
+        }, r.persist);
+        r.fails.push(...rr);
+      }
+    }
     const pass = r.fails.length === 0;
-    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} farPois=${r.farPois} farSalvage=${r.farSalvage} farRocks=${r.farRocks} farFauna=${r.farFauna} tiles=${r.tiles} fails=${r.fails.length}`);
+    console.log(`CHUNK-STREAM pass=${pass ? 1 : 0} bodies=${r.baseBodies}->${r.endBodies} chunks=${r.baseChunks}/${r.farChunks} farMarkers=${r.farMarkers} farPois=${r.farPois} farSalvage=${r.farSalvage} farRocks=${r.farRocks} farFauna=${r.farFauna} tiles=${r.tiles} persisted=${r.persist ? 1 : 0} fails=${r.fails.length}`);
     console.log(`[chunk-streaming] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
     if (!pass) throw new Error('chunk-streaming GATE FAILED');
   },

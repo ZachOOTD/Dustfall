@@ -29,7 +29,7 @@ import { Tuning } from '../config/tuning.ts';
 import { makeRng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { BiomeSampler, BiomeId } from './biomes.ts';
-import type { SalvageableRegistry, Salvageable } from './salvage.ts';
+import { markSalvageStripped, type SalvageableRegistry, type Salvageable } from './salvage.ts';
 import { placeProcgenPOI } from './poiAssembler.ts';
 import { pickArchetype, type ArchetypeId } from './poiArchetypes.ts';
 import { makeScatterRock } from './rockScatter.ts';
@@ -147,11 +147,28 @@ interface LoadedChunk {
    *  frame. Executed thunks push into bodies/salvage/etc as usual;
    *  unload drops unexecuted thunks (their content never existed). */
   deferred: Array<() => void>;
+  /** S5 — the looted-fauna ids this chunk was LOADED with (skipped at
+   *  spawn; unioned back in at capture so they never resurrect). */
+  priorLooted: string[];
+}
+
+/** S5 — one chunk's deviations from its descriptor-pristine state
+ *  (SAVE_VERSION 17 `chunkDiffs` values). Sparse: pristine chunks have no
+ *  entry. Keys are descriptor-derived content ids (D290/D297 — NEVER the
+ *  runtime registry ids, the D292 trap). */
+export interface ChunkDiff {
+  salvage?: Record<string, { remaining: number; stripped: boolean; extracted: number[] }>;
+  fauna?: { looted: string[] };
 }
 
 export interface ChunkManager {
   /** Stream the ring toward (px, pz). Call once per frame. */
   update: (px: number, pz: number) => void;
+  /** S5 — snapshot live chunks into the diff map and return the full map
+   *  (plain object) for the save file. */
+  serializeDiffs: () => Record<string, ChunkDiff>;
+  /** S5 — replace the diff map from a loaded save (loadGameState). */
+  loadDiffs: (data: Record<string, ChunkDiff> | undefined) => void;
   /** Pure: descriptor for ANY chunk, loaded or not. */
   describeChunk: (cx: number, cz: number) => ChunkDesc;
   /** Toggle the S1 marker layer. Regenerates all active chunks. */
@@ -366,6 +383,69 @@ export function createChunkManager(
   // S6 — per-load wall-clock accounting (drives the chunk-perf gate).
   const _perf = { loads: 0, maxLoadMs: 0, maxPoiLoadMs: 0, maxLandmarkLoadMs: 0 };
 
+  // ── S5 — the per-chunk save-diff layer. `diffs` holds every known
+  // modified chunk ("cx,cz" → ChunkDiff); populated from the save at
+  // load-game, updated on chunk unload (capture) + at save time (live
+  // snapshot), consumed on chunk load (apply). Sparse by construction:
+  // an untouched chunk never gets an entry. ──
+  let diffs = new Map<string, ChunkDiff>();
+
+  /** Mark + baseline a piece's freshly-registered salvage records so the
+   *  capture/apply sides share ids ("<prefix>/<index in registration order>"). */
+  const tagSalvage = (recs: Salvageable[], prefix: string): void => {
+    recs.forEach((rec, j) => {
+      rec.chunkContentId = `${prefix}/${j}`;
+      rec.chunkInitialRemaining = rec.salvageRemaining;
+    });
+  };
+
+  /** Apply a chunk diff's salvage entries to freshly-registered records
+   *  (mirrors the v16 loader: remaining + stripped visuals + re-hidden
+   *  extracted components). */
+  const applySalvageDiff = (chunkKey: string, recs: Salvageable[]): void => {
+    const diff = diffs.get(chunkKey);
+    if (!diff?.salvage) return;
+    for (const rec of recs) {
+      const d = diff.salvage[rec.chunkContentId ?? ''];
+      if (!d) continue;
+      rec.salvageRemaining = d.remaining;
+      if (d.stripped) markSalvageStripped(rec);
+      const comps = (rec.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+      for (const i of d.extracted) { if (comps[i]) comps[i].visible = false; }
+    }
+  };
+
+  /** Capture a loaded chunk's deviations into the diff map (called on
+   *  unload + at save time). Pristine chunks are REMOVED from the map —
+   *  the descriptor regenerates them for free. */
+  const captureChunkDiff = (c: LoadedChunk): void => {
+    const k = key(c.cx, c.cz);
+    const diff: ChunkDiff = {};
+    for (const rec of c.salvage) {
+      const touched = rec.stripped ||
+        rec.salvageRemaining < (rec.chunkInitialRemaining ?? rec.salvageRemaining);
+      if (!touched) continue;
+      const comps = (rec.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+      const extracted = comps.flatMap((cm, i) => (cm.visible ? [] : [i]));
+      (diff.salvage ??= {})[rec.chunkContentId ?? ''] = {
+        remaining: rec.salvageRemaining,
+        stripped: rec.stripped,
+        extracted,
+      };
+    }
+    // Union the incoming looted set (creatures skipped at spawn never
+    // appear in c.lizards/shrews — without the union they'd resurrect on
+    // the visit after next).
+    const looted = [
+      ...c.priorLooted,
+      ...c.lizards.filter((l) => l.looted).map((l) => l.chunkContentId ?? ''),
+      ...c.shrews.filter((s) => s.looted).map((s) => s.chunkContentId ?? ''),
+    ].filter(Boolean);
+    if (looted.length) diff.fauna = { looted: [...new Set(looted)] };
+    if (diff.salvage || diff.fauna) diffs.set(k, diff);
+    else diffs.delete(k);
+  };
+
   const loadChunk = (cx: number, cz: number): void => {
     const _t0 = performance.now();
     const group = new THREE.Group();
@@ -375,6 +455,7 @@ export function createChunkManager(
     const chunkLizards: Lizard[] = [];
     const chunkShrews: Shrew[] = [];
     const deferred: Array<() => void> = [];
+    const priorLooted: string[] = [];
     const desc = describeChunk(cx, cz);
     // ── S2: streamed POI wreck — a pure render of the descriptor. The
     //    archetype is FORCED from the descriptor (the determinism gate
@@ -399,25 +480,37 @@ export function createChunkManager(
       const poiBody = poiGroup.userData.poiBody as RAPIER.RigidBody | undefined;
       if (poiBody) bodies.push(poiBody);
       // Entries added by this POI (post-prune survivors) — marked transient
-      // so the save serializer skips them (regenerate-pristine v1, D290/S5).
-      for (const rec of salvageables.list.slice(before)) {
+      // (excluded from the global id-keyed save arrays, D292) and tagged
+      // with descriptor-derived content ids for the S5 chunk diff, which
+      // is then applied (a revisit restores stripped/extracted state).
+      const poiRecs = salvageables.list.slice(before);
+      for (const rec of poiRecs) {
         rec.transient = true;
         salvage.push(rec);
       }
-      // ── S3: the wreck's fauna cluster (transient — the D292 rule). ──
+      tagSalvage(poiRecs, 'poi');
+      applySalvageDiff(key(cx, cz), poiRecs);
+      // ── S3: the wreck's fauna cluster (transient — the D292 rule).
+      //    S5: looted ones (per the chunk diff) never respawn. ──
+      const lootedSet = new Set(diffs.get(key(cx, cz))?.fauna?.looted ?? []);
+      priorLooted.push(...lootedSet);
       if (lizardList) {
-        for (const f of desc.fauna.lizards) {
+        desc.fauna.lizards.forEach((f, i) => {
+          if (lootedSet.has(`l${i}`)) return;
           const l = spawnLizard(scene, world, terrain, f);
           l.transient = true;
-          lizardList.push(l);
+          l.chunkContentId = `l${i}`;
+          lizardList!.push(l);
           chunkLizards.push(l);
-        }
+        });
       }
-      for (const f of desc.fauna.shrews) {
+      desc.fauna.shrews.forEach((f, i) => {
+        if (lootedSet.has(`s${i}`)) return;
         const s = spawnShrew(scene, world, terrain, f);   // self-registers into the module list
         s.transient = true;
+        s.chunkContentId = `s${i}`;
         chunkShrews.push(s);
-      }
+      });
     }
     // ── S4: the region's hero landmark (this chunk hosts it). Rendered
     //    from lm.seed alone; bodies tracked; salvage transient (D292);
@@ -471,10 +564,14 @@ export function createChunkManager(
             if (isFirst) pg.userData.streamLandmark = lm.kind;
             const pb = pg.userData.poiBody as RAPIER.RigidBody | undefined;
             if (pb) c.bodies.push(pb);
-            for (const rec of salvageables.list.slice(before)) {
+            const knotRecs = salvageables.list.slice(before);
+            for (const rec of knotRecs) {
               rec.transient = true;
               c.salvage.push(rec);
             }
+            // S5 — knot piece i's panels persist under "lm/<i>/<j>".
+            tagSalvage(knotRecs, `lm/${i}`);
+            applySalvageDiff(key(cx, cz), knotRecs);
           });
         }
         for (let i = 0; i < 2; i++) {
@@ -548,7 +645,7 @@ export function createChunkManager(
       }
     }
     scene.add(group);
-    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage, lizards: chunkLizards, shrews: chunkShrews, deferred });
+    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage, lizards: chunkLizards, shrews: chunkShrews, deferred, priorLooted });
     const _ms = performance.now() - _t0;
     _perf.loads++;
     if (_ms > _perf.maxLoadMs) _perf.maxLoadMs = _ms;
@@ -559,6 +656,9 @@ export function createChunkManager(
   const unloadChunk = (k: string): void => {
     const c = chunks.get(k);
     if (!c) return;
+    // S5 — capture the chunk's deviations BEFORE teardown (the diff map
+    // is what makes a revisit + the save file remember them).
+    captureChunkDiff(c);
     chunks.delete(k);
     scene.remove(c.group);
     c.group.traverse((obj) => {
@@ -675,6 +775,11 @@ export function createChunkManager(
     describeChunk,
     setMarkersEnabled,
     wireCreatures: (lizards) => { lizardList = lizards; },
+    serializeDiffs: () => {
+      for (const c of chunks.values()) captureChunkDiff(c);   // live chunks too
+      return Object.fromEntries(diffs);
+    },
+    loadDiffs: (data) => { diffs = new Map(Object.entries(data ?? {})); },
     resetPerf: () => { _perf.loads = 0; _perf.maxLoadMs = 0; _perf.maxPoiLoadMs = 0; _perf.maxLandmarkLoadMs = 0; },
     stats: () => {
       let markerMeshCount = 0;
