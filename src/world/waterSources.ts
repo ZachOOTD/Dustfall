@@ -152,6 +152,39 @@ function makeWell(rand: Rng): THREE.Group {
   return g;
 }
 
+/** Infinite Sands parity (D299) — build ONE well at (x, z) for the chunk
+ *  streamer. The caller pushes the returned record into ctx.waterSources
+ *  .list and removes it (splice + scene teardown) on chunk unload. Wells
+ *  are stateless (infinite refill, never saved) — no save coupling. The
+ *  boot loop below does NOT route through this (sacred boot streams). */
+export function spawnWellAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  x: number,
+  z: number,
+  rand: Rng,
+  parent?: THREE.Object3D,
+): WaterSource {
+  const groundY = terrain.heightAt(x, z);
+  const mesh = makeWell(rand);
+  mesh.position.set(x, groundY - 0.05, z);
+  mesh.rotation.y = rand() * Math.PI * 2;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+  });
+  const id = _nextId++;
+  tag(mesh, id);
+  (parent ?? scene).add(mesh);
+  return {
+    id,
+    kind: 'well',
+    mesh,
+    pos: new THREE.Vector3(x, groundY, z),
+    hovered: false,
+  };
+}
+
 export function spawnWaterSources(
   scene: THREE.Scene,
   terrain: Terrain,

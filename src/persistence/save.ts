@@ -488,7 +488,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         daysSurvived: ctx.time.daysSurvived,
         elapsed: ctx.time.elapsed,
       },
-      pickupSurvivors: ctx.pickups.list.map((p) => p.id),
+      // D299 — chunk-streamed pickups (`transient`) are excluded: their
+      // visit-order ids can't survive a reload (D292); taken-state
+      // persists via chunkDiffs instead.
+      pickupSurvivors: ctx.pickups.list.filter((p) => !p.transient).map((p) => p.id),
       // ABM (B7) — serialize only physics-bodied (= dropped) pickups.
       // Seed-spawned ones (no body) restore from world build naturally.
       droppedPickups: ctx.pickups.list
@@ -522,7 +525,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           }
           return entry;
         }),
-      cacti: ctx.cacti.list.map((c) => ({ id: c.id, harvested: c.harvested })),
+      cacti: ctx.cacti.list.filter((c) => !c.transient).map((c) => ({ id: c.id, harvested: c.harvested })),   // D299 — streamed cacti excluded (regrow-by-design; D292 ids)
       // Infinite Sands S3 — chunk-streamed creatures (`transient`) are NOT
       // serialized (the D292 rule: visit-order ids would mis-match the boot
       // population on reload; streamed fauna regenerates with its chunk).

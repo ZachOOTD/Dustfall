@@ -22,6 +22,9 @@ export interface Cactus {
   pos: THREE.Vector3;
   harvested: boolean;
   hovered: boolean;
+  /** D299 — TRUE for chunk-STREAMED cacti: excluded from the id-keyed
+   *  save array (D292); despawned with their chunk. */
+  transient?: boolean;
   /** Fruit + stem meshes — hidden when harvested, re-shown when fruit
    *  regrows (one full day cycle later, CC-4). */
   _fruitMeshes: THREE.Object3D[];
@@ -138,6 +141,49 @@ function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.2): n
     Math.abs(e - c), Math.abs(w - c),
     Math.abs(n - c), Math.abs(s - c),
   );
+}
+
+/** Infinite Sands parity (D299) — build ONE cactus at (x, z) for the
+ *  chunk streamer. Returns the record + its Rapier body (teardown). The
+ *  streamer marks it `transient` (excluded from the id-keyed save array —
+ *  D292; harvest state deliberately regenerates on revisit: cacti regrow
+ *  daily by design, so a fresh far cactus is economy-consistent). The
+ *  boot loop below does NOT route through this (sacred boot streams). */
+export function spawnCactusAt(
+  scene: THREE.Scene,
+  physicsWorld: RAPIER.World,
+  terrain: Terrain,
+  x: number,
+  z: number,
+  rand: Rng,
+  parent?: THREE.Object3D,
+): { cactus: Cactus; body: RAPIER.RigidBody } {
+  const y = terrain.heightAt(x, z);
+  const built = makeAlienCactus(rand);
+  const mesh = built.group;
+  mesh.position.set(x, y - 0.25, z);
+  mesh.rotation.y = rand() * Math.PI * 2;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+  });
+  const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 1, z);
+  const body = physicsWorld.createRigidBody(bodyDesc);
+  physicsWorld.createCollider(RAPIER.ColliderDesc.cylinder(1, 0.20), body);
+  const id = _nextId++;
+  tag(mesh, id);
+  (parent ?? scene).add(mesh);
+  const cactus: Cactus = {
+    id,
+    kind: 'alien',
+    mesh,
+    pos: new THREE.Vector3(x, y, z),
+    harvested: false,
+    hovered: false,
+    _fruitMeshes: built.fruitMeshes,
+    _harvestedAt: 0,
+  };
+  return { cactus, body };
 }
 
 export function spawnCacti(

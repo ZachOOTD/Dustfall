@@ -96,7 +96,7 @@
       "outcome": "shipped",
       "tier": "S5",
       "spend_this_cycle": 270000,
-      "commit": "PENDING-SET-ON-COMMIT",
+      "commit": "a77048a",
       "d_entries": ["D297", "D298"]
     }
   ]

@@ -16,7 +16,7 @@ restoring those files + `/campaign-approve`; the Skyfall plan itself is
 - **D-entries:** D297, D298. **Spend:** ~270K (campaign TOTAL ~1.3M / 10M; 7 cycles / 50).
 - **Verdict: TERMINAL — `until: ladder-complete` met. Campaign `completed`.**
 - **▶ THE HUMAN'S MERGE REVIEW:** walk the final build (stream on foot AND on the bike, strip a far wreck → save → reload → still stripped), then merge `campaign/2026-07-10-procgen` → `master` and redeploy (web + desktop) when satisfied. Then: resume the parked Skyfall campaign.
-- **Commit:** (SHA recorded on commit.)
+- **Commit:** `a77048a` (+ the D297 hotfix `47769c8`).
 
 ## Cycle 6 — ⏸ S5 save schema PLAN (2026-07-11) — PROPOSED → CAMPAIGN PAUSED (the sanctioned pause)
 

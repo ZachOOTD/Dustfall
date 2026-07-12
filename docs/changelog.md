@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Post-campaign D299 — 2026-07-12 — ORIGIN PARITY: streamed chunks spawn the full boot content set — the far field no longer feels empty ✓ all gates
+
+`verified` — verify:chunks green (determinism ×2 seeds + cross-seed, streaming incl. the NEW dressing legs, perf tripwires), full suite + smokes green, vista shots show the inhabited far field. Playtest driver: Zach reported generated terrain "pretty much empty" vs the starting area.
+
+- **Streamed chunks now carry EVERYTHING the boot world spawns**: 0-2 dead trees (flatness-gated via a new purity-safe `terrain.pureHeightAt`, with harvestable branch pickups), 3% wells, 4% cactus patches (3-4, drinkable/harvestable), 15%/15% roaming lizards/shrews (independent of wreck fauna), and 2-4 scrap pickups ringing every streamed wreck (the D298 "known v2", shipped). New rng streams (`dressing`/`roam`/`scrap` salts) keep descriptor purity + fixed draw budgets.
+- **All of it save-transient** (D292): pickups/cacti gain `transient` flags + serializer filters; full pool-aware teardown on unload. **Taken pickups persist** via a `pickups.taken` chunkDiffs branch (optional field, no version bump) with the D298 prior-set UNION; spawn-then-despawn keeps rand draw order for culled ones.
+- **Gate growth**: exact tree/well/cactus descriptor↔render checks, pickup/well/cactus registry-leak baselines, save-transient asserts, and a taken-scrap persistence branch through unload→revisit AND the real reload+CONTINUE. (Probe lesson: content ids repeat per chunk — persistence finds are chunk-scoped by position.)
+- Loot containers stay out (dormant at boot too); cactus water regenerates on revisit by design. D299.
+
 ## Campaign "Infinite Sands" cycles 6-7 — 2026-07-11 — ⏸ S5 plan → APPROVED → S5 SHIPPED: the far field PERSISTS. **LADDER COMPLETE** ✓ all gates
 
 `verified` — full suite green incl. the NEW persistence legs (`persisted=1` in the permanent streaming gate): extraction at a far streamed wreck → unload capture → revisit re-apply → SPARSE save file (exactly 1 chunkDiff) → a REAL page reload + CONTINUE → the diff re-applies. Origin-world round-trip byte-exact (placement ×5, all smokes). D297 (the mid-review speeder hotfix) + D298. **The Infinite Sands ladder (S1-S6+S5) is COMPLETE — campaign `completed`, branch ready for merge review.**

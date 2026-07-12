@@ -181,6 +181,13 @@ const _worldScrapAccentMat = createMetalMaterial(0x52260f, { wornScale: 52.0, sc
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take
+  /** D299 — TRUE for chunk-STREAMED pickups (far branches / scrap rings):
+   *  excluded from the pickupSurvivors save set (visit-order ids — the
+   *  D292 trap); taken-state persists via the chunk diff instead. */
+  transient?: boolean;
+  /** D299 — descriptor-derived within-chunk id keying this pickup in the
+   *  chunk's save diff ("t0/b1" tree branches, "poi/scrap0"). Runtime-only. */
+  chunkContentId?: string;
   itemId: ItemId;
   /** Optional meta attached on world-spawn (e.g. canteen fillLevel). Passes
    *  through to addItem on take. */

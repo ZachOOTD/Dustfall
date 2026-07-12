@@ -152,7 +152,7 @@ function makeDeadTree(rand: Rng): THREE.Group {
 }
 
 /** Max |dY| across a 4-sample cross at radius `r`. Higher = steeper. */
-function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.5): number {
+export function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.5): number {
   const c = terrain.heightAt(cx, cz);
   return Math.max(
     Math.abs(terrain.heightAt(cx + r, cz) - c),
@@ -165,6 +165,61 @@ function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.5): n
 /** ACAI — a world-space branch perch (point on a sturdy limb + that limb's
  *  direction) for seating a vulture cleanly on a real branch. */
 export interface TreePerch { pos: THREE.Vector3; dir: THREE.Vector3; }
+
+/** Infinite Sands parity (D299) — build ONE dead tree at (x, z) for the
+ *  chunk streamer: mesh (+ optional parent), trunk collider, world-space
+ *  perches, and its base branch-pickup ring appended to `branchList` (the
+ *  slice of branchList added here is also RETURNED so the streamer can
+ *  track/despawn them per-chunk). No biome/flatness gating — the chunk
+ *  DESCRIPTOR decides placement (D290). The boot loop below deliberately
+ *  does NOT route through this (its inline draws feed the shared boot
+ *  stream — sacred, D294). */
+export function spawnDeadTreeAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  world: RAPIER.World,
+  x: number,
+  z: number,
+  rand: Rng,
+  branchList: Pickup[],
+  parent?: THREE.Object3D,
+): { group: THREE.Group; collider: RAPIER.Collider; perches: TreePerch[]; branches: Pickup[] } {
+  const groundY = terrain.heightAt(x, z);
+  const tree = makeDeadTree(rand);
+  tree.name = 'deadTree';
+  tree.position.set(x, groundY - 0.05, z);
+  tree.rotation.y = rand() * Math.PI * 2;
+  tree.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+  });
+  (parent ?? scene).add(tree);
+  const trunkR = (tree.userData.trunkRadius ?? 0.13) as number;
+  const trunkH = (tree.userData.trunkColliderH ?? 1.4) as number;
+  const collider = makeStaticCylinder(world, trunkH / 2, trunkR, {
+    x, y: groundY - 0.05 + trunkH / 2, z,
+  });
+  const perches: TreePerch[] = [];
+  const yaw = tree.rotation.y;
+  const localPerches = (tree.userData.branchPerches ?? []) as Array<{ pos: THREE.Vector3; dir: THREE.Vector3 }>;
+  for (const lp of localPerches) {
+    const wp = lp.pos.clone().applyAxisAngle(_UP, yaw);
+    wp.set(wp.x + x, wp.y + (groundY - 0.05), wp.z + z);
+    perches.push({ pos: wp, dir: lp.dir.clone().applyAxisAngle(_UP, yaw) });
+  }
+  const minN = Tuning.DEAD_TREE_BRANCH_COUNT_MIN;
+  const maxN = Tuning.DEAD_TREE_BRANCH_COUNT_MAX;
+  const branchN = minN + Math.floor(rand() * (maxN - minN + 1));
+  const ringMin = Tuning.DEAD_TREE_BRANCH_RING_RADIUS_MIN;
+  const ringSpan = Tuning.DEAD_TREE_BRANCH_RING_RADIUS_MAX - ringMin;
+  const before = branchList.length;
+  for (let b = 0; b < branchN; b++) {
+    const a = rand() * Math.PI * 2;
+    const r = ringMin + rand() * ringSpan;
+    spawnBranchAt(scene, terrain, x + Math.cos(a) * r, z + Math.sin(a) * r, rand, branchList);
+  }
+  return { group: tree, collider, perches, branches: branchList.slice(before) };
+}
 
 /** Spawn dead trees scattered across the SALT-FLATS biome only, on
  *  roughly-flat ground. Each tree drops 2-4 branch pickups within a

@@ -124,6 +124,10 @@ export interface Terrain {
    *  inside loaded tiles (exactly matches the collider); the closed-form
    *  sample everywhere else — so it answers at ANY coordinate. */
   heightAt: (x: number, z: number) => number;
+  /** D299 — the CLOSED-FORM height only, independent of tile-load state.
+   *  Chunk DESCRIPTORS must gate on this (bilinear-vs-formula differences
+   *  would make a descriptor depend on what happens to be loaded). */
+  pureHeightAt: (x: number, z: number) => number;
   /** Approximate normal at world (x, z) using neighboring samples. */
   normalAt: (x: number, z: number) => THREE.Vector3;
   /** Infinite Sands S1 — keep the tile ring centered on (px, pz). Builds
@@ -527,6 +531,7 @@ export function createTerrain(
     meshes,
     noise,
     heightAt,
+    pureHeightAt: computeHeightAt,
     normalAt,
     recenter,
     tileKeys: () => [...tiles.keys()],

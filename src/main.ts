@@ -327,7 +327,8 @@ const vultures = spawnVulturesProcgen(three.scene, physics.world, treePerches, s
 // here" signal) + hunt prey gathered there. Same module list as the perched ones.
 spawnCirclingVultures(three.scene, physics.world, carcasses, scatterRand);
 _mark('creatures+vultures');
-chunkManager.wireCreatures(lizards);   // S3 — streamed fauna joins/leaves this live array
+// S3/D299 — wireCtx happens after ctx creation below (the streamer needs
+// the live pickup/cactus/well/lizard lists + despawnPickup's ctx).
 
 // AAP — sandworm home is now sampled per-seed from the dune biome via
 // sampleSandwormHome (mirrors wells-in-salt). Falls back to
@@ -613,6 +614,10 @@ createGhostPreview(ctx); // AAA — kit-placement preview ring + marker
 createFootprintPuffs(three.scene); // AAG — upward dust burst on each footstep
 // Tutorial panel must exist before wireOverlays so the lock handler can call
 // noteIntroSeen() — and before installDebugPanel so __game.showControls works.
+// S3/D299 — hand the chunk streamer the live GameContext (its streamed
+// content pushes into / splices out of ctx's live lists). Boot placement
+// above is complete, so the sacred boot streams are untouched.
+chunkManager.wireCtx(ctx);
 createTutorial(ctx);
 wireOverlays(ctx);
 installDebugPanel(ctx, {

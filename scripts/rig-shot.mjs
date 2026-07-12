@@ -1641,6 +1641,11 @@ const SCENARIOS = {
       // despawn on the way home; boot fauna must be untouched).
       const baseLiz = base.totalLizards;
       const baseShrews = base.totalShrews;
+      // D299 — dressing registry baselines (pickups/wells/cacti must
+      // return to boot counts after the round trip).
+      const basePk = base.totalPickups;
+      const baseWells = base.totalWells;
+      const baseCacti = base.totalCacti;
       // Content snapshot of chunks guaranteed-loaded around a position:
       // WORLD-space positions of every mesh (markers + streamed-POI content)
       // in chunks within LOAD_RADIUS-1 of the player's chunk (immune to
@@ -1672,24 +1677,38 @@ const SCENARIOS = {
       const contentRenderCheck = (label) => {
         const st = g.chunkStats();
         let expPois = 0, expRocks = 0, expLiz = 0, expShrews = 0, expLandmarks = 0;
+        let expTrees = 0, expWells = 0, expCacti = 0, minPk = 0, maxPk = 0;
         for (const k of st.activeKeys) {
           const [cx, cz] = k.split(',').map(Number);
           const d = g.chunkDescribe(cx, cz);
-          if (d.poi.present) expPois++;
+          if (d.poi.present) { expPois++; minPk += 2; maxPk += 4; }   // scrap ring 2-4
           expRocks += d.rocks.length;
-          expLiz += d.fauna.lizards.length;
-          expShrews += d.fauna.shrews.length;
+          expLiz += d.fauna.lizards.length + d.fauna.roamLizards.length;
+          expShrews += d.fauna.shrews.length + d.fauna.roamShrews.length;
           if (d.landmark.present) {
             expLandmarks++;
             if (d.landmark.kind === 'wreck_knot') expPois += 3;   // knot wrecks stamp poiArchetype too
           }
+          expTrees += d.dressing.trees.length;
+          minPk += d.dressing.trees.length * 2;   // 2-4 branches per tree
+          maxPk += d.dressing.trees.length * 4;
+          if (d.dressing.well.present) expWells++;
+          expCacti += d.dressing.cacti.length;
         }
         if (expPois !== st.chunkPoiCount) fails.push(`${label}: POI descriptor/render mismatch — ${expPois} rolled, ${st.chunkPoiCount} placed`);
         if (expRocks !== st.chunkRockCount) fails.push(`${label}: rock descriptor/render mismatch — ${expRocks} rolled, ${st.chunkRockCount} placed`);
         if (expLiz !== st.chunkLizardCount) fails.push(`${label}: lizard descriptor/render mismatch — ${expLiz} rolled, ${st.chunkLizardCount} tracked`);
         if (expShrews !== st.chunkShrewCount) fails.push(`${label}: shrew descriptor/render mismatch — ${expShrews} rolled, ${st.chunkShrewCount} tracked`);
         if (expLandmarks !== st.chunkLandmarkCount) fails.push(`${label}: landmark descriptor/render mismatch — ${expLandmarks} rolled, ${st.chunkLandmarkCount} placed`);
-        return { expPois, expRocks, expLiz, expShrews, expLandmarks };
+        // D299 dressing (trees/wells/cacti exact; pickups band — branch
+        // counts are render-rng, bounded 2-4 per tree/wreck).
+        if (expTrees !== st.chunkTreeCount) fails.push(`${label}: tree descriptor/render mismatch — ${expTrees} rolled, ${st.chunkTreeCount} placed`);
+        if (expWells !== st.chunkWellCount) fails.push(`${label}: well descriptor/render mismatch — ${expWells} rolled, ${st.chunkWellCount} placed`);
+        if (expCacti !== st.chunkCactusCount) fails.push(`${label}: cactus descriptor/render mismatch — ${expCacti} rolled, ${st.chunkCactusCount} placed`);
+        if (st.chunkPickupCount < minPk || st.chunkPickupCount > maxPk) {
+          fails.push(`${label}: streamed pickups ${st.chunkPickupCount} outside band [${minPk},${maxPk}]`);
+        }
+        return { expPois, expRocks, expLiz, expShrews, expLandmarks, expTrees, expWells, expCacti };
       };
       const dupCheck = (label) => {
         const seen = new Set();
@@ -1751,7 +1770,10 @@ const SCENARIOS = {
       //    evaluate) survives a REAL page reload + CONTINUE. ──
       let persist = null;
       {
-        const t = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId);
+        // Restrict to a chunk-own POI wreck ('poi/...' ids) so the salvage
+        // mutation AND the taken scrap below land in the SAME chunk — the
+        // save-file sparsity assert expects exactly one modified chunk.
+        const t = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId && s.chunkContentId.startsWith('poi/'));
         if (!t) fails.push('S5: no transient salvageable at the far point (persistence leg vacuous)');
         else {
           const comps = (t.panel.userData.panelComponents || []);
@@ -1762,6 +1784,25 @@ const SCENARIOS = {
             t.salvageRemaining -= 1;
             persist = { contentId: t.chunkContentId, expectedRemaining: t.salvageRemaining, hiddenIdx: vis };
           }
+        }
+        // D299 — also TAKE a streamed pickup the way a real take does;
+        // its absence must persist like the salvage. Same chunk as the
+        // mutated wreck (its own scrap ring — 'poi/sc*' ids share the
+        // wreck's chunk via the POI edge margin).
+        const tChunk = persist && (() => {
+          const tt = ctx.salvageables.list.find((s) => s.chunkContentId === persist.contentId && s.transient);
+          return tt ? `${Math.floor(tt.pos.x / 112)},${Math.floor(tt.pos.z / 112)}` : null;
+        })();
+        const bp = ctx.pickups.list.find((pp) =>
+          pp.transient && pp.chunkContentId && pp.chunkContentId.startsWith('poi/sc') &&
+          `${Math.floor(pp.pos.x / 112)},${Math.floor(pp.pos.z / 112)}` === tChunk);
+        if (bp) {
+          const pkId = bp.chunkContentId;
+          g.despawnPickupById(bp.id);
+          if (persist) persist.takenPickup = pkId;
+          else fails.push('D299: pickup taken but no salvage persist record (assert wiring)');
+        } else if (persist) {
+          fails.push('D299: no streamed pickup at the far point (scrap ring / branches missing?)');
         }
       }
       // S2 — SAVE SAFETY with streamed wrecks live: the serialized save
@@ -1788,6 +1829,11 @@ const SCENARIOS = {
           const bootShr = ctx.shrews.list.filter((s) => !s.transient).length;
           if (raw.lizards.length !== bootLiz) fails.push(`saved lizard count ${raw.lizards.length} != boot count ${bootLiz}`);
           if ((raw.shrews || []).length !== bootShr) fails.push(`saved shrew count ${(raw.shrews || []).length} != boot count ${bootShr}`);
+          // D299 — only boot pickups/cacti serialize (streamed are transient).
+          const bootPk = ctx.pickups.list.filter((pp) => !pp.transient).length;
+          if ((raw.pickupSurvivors || []).length !== bootPk) fails.push(`saved pickupSurvivors ${(raw.pickupSurvivors || []).length} != boot pickup count ${bootPk}`);
+          const bootCact = ctx.cacti.list.filter((cc) => !cc.transient).length;
+          if ((raw.cacti || []).length !== bootCact) fails.push(`saved cacti ${(raw.cacti || []).length} != boot cactus count ${bootCact}`);
           if (ctx.lizards.filter((l) => l.transient).length === 0 && farContent.expLiz > 0) {
             fails.push('descriptor rolled streamed lizards but none are live (spawn path broken)');
           }
@@ -1896,7 +1942,10 @@ const SCENARIOS = {
       // S5 — the extraction must have SURVIVED the unload→reload cycle:
       // the re-registered record carries the diff-applied state.
       if (persist) {
-        const t2 = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId === persist.contentId);
+        // Content ids ('poi/0', 'poi/sc0') repeat across chunks — scope every
+        // find to the mutated chunk (persist.chunkKey, from the save's diff).
+        const inChunk = (pos) => `${Math.floor(pos.x / 112)},${Math.floor(pos.z / 112)}` === persist.chunkKey;
+        const t2 = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId === persist.contentId && inChunk(s.pos));
         if (!t2) fails.push(`S5: re-registered record ${persist.contentId} not found on revisit`);
         else {
           if (t2.salvageRemaining !== persist.expectedRemaining) {
@@ -1906,6 +1955,11 @@ const SCENARIOS = {
           if (comps2[persist.hiddenIdx] && comps2[persist.hiddenIdx].visible) {
             fails.push('S5: extracted component visible again on revisit (diff not applied)');
           }
+        }
+        // D299 — the taken pickup must NOT respawn on revisit.
+        if (persist.takenPickup) {
+          const back = ctx.pickups.list.find((pp) => pp.transient && pp.chunkContentId === persist.takenPickup && inChunk(pp.pos));
+          if (back) fails.push(`D299: taken pickup ${persist.takenPickup} respawned on revisit (pickups diff not applied)`);
         }
       }
       // ── Leg 4: home again — leak check against the baseline ──
@@ -1934,6 +1988,10 @@ const SCENARIOS = {
       if (end.totalLizards !== baseLiz) fails.push(`lizard population LEAK: ${baseLiz} → ${end.totalLizards} (streamed fauna not despawned)`);
       if (end.totalShrews !== baseShrews) fails.push(`shrew population LEAK: ${baseShrews} → ${end.totalShrews}`);
       if (end.chunkRockCount !== 0) fails.push(`streamed rocks at HOME (inside the origin exclusion): ${end.chunkRockCount}`);
+      // D299 — dressing registries return to boot baselines.
+      if (end.totalPickups !== basePk) fails.push(`pickup registry LEAK: ${basePk} → ${end.totalPickups} (streamed branches/scrap not despawned)`);
+      if (end.totalWells !== baseWells) fails.push(`well registry LEAK: ${baseWells} → ${end.totalWells}`);
+      if (end.totalCacti !== baseCacti) fails.push(`cactus registry LEAK: ${baseCacti} → ${end.totalCacti}`);
       dupCheck('home');
       // ── Leg 5 (D297): SPEEDER RIDE — streaming must follow the BIKE.
       //    While mounted the real game PARKS the capsule at (0,-2000,0)
@@ -2005,7 +2063,9 @@ const SCENARIOS = {
           ctx.input.controls.isLocked = true; ctx.flags.paused = false;
           for (let i = 0; i < 200; i++) await raf();   // stream the ring at the restored far position
           const fails = [];
-          const t = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId === persist.contentId);
+          // Content ids repeat across chunks — scope finds to the mutated chunk.
+          const inChunk = (pos) => `${Math.floor(pos.x / 112)},${Math.floor(pos.z / 112)}` === persist.chunkKey;
+          const t = ctx.salvageables.list.find((s) => s.transient && s.chunkContentId === persist.contentId && inChunk(s.pos));
           if (!t) fails.push(`S5-reload: ${persist.contentId} not re-registered after reload+CONTINUE`);
           else {
             if (t.salvageRemaining !== persist.expectedRemaining) {
@@ -2015,6 +2075,10 @@ const SCENARIOS = {
             if (comps[persist.hiddenIdx] && comps[persist.hiddenIdx].visible) {
               fails.push('S5-reload: extracted component visible again after a real reload');
             }
+          }
+          if (persist.takenPickup) {
+            const back = ctx.pickups.list.find((pp) => pp.transient && pp.chunkContentId === persist.takenPickup && inChunk(pp.pos));
+            if (back) fails.push(`S5-reload: taken pickup ${persist.takenPickup} respawned after a real reload`);
           }
           return fails;
         }, r.persist);
@@ -2358,6 +2422,24 @@ const SCENARIOS = {
     });
     await walkShoot('streamed-rocks', targets.rockT, 0.6);
     await walkShoot('streamed-scene', targets.sceneT, 0.8);
+    // D299 — the far-field DRESSING reads inhabited: the nearest streamed
+    // dead tree and the nearest streamed well, player-eye.
+    const dressT = await page.evaluate(() => {
+      const g = window.__game;
+      let treeT = null, wellT = null;
+      for (let cx = 12; cx <= 60 && (!treeT || !wellT); cx++) {
+        for (let cz = -20; cz <= 20 && (!treeT || !wellT); cz++) {
+          const d = g.chunkDescribe(cx, cz);
+          if (!treeT && d.dressing.trees.length > 0) treeT = { x: d.dressing.trees[0].x, z: d.dressing.trees[0].z };
+          if (!wellT && d.dressing.well.present) wellT = { x: d.dressing.well.x, z: d.dressing.well.z };
+        }
+      }
+      return { treeT, wellT };
+    });
+    if (dressT.treeT) console.log(`[chunk-vista] streamed tree at ${dressT.treeT.x.toFixed(0)},${dressT.treeT.z.toFixed(0)}`);
+    await walkShoot('streamed-tree', dressT.treeT, 2.2);
+    if (dressT.wellT) console.log(`[chunk-vista] streamed well at ${dressT.wellT.x.toFixed(0)},${dressT.wellT.z.toFixed(0)}`);
+    await walkShoot('streamed-well', dressT.wellT, 0.8);
     // S4 — the nearest hero landmark + the nearest regional wreck-yard.
     const s4targets = await page.evaluate(() => {
       const g = window.__game; const ctx = g.ctx;

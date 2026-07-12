@@ -43,7 +43,7 @@ import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.t
 import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
-import { spawnDroppedPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook
+import { spawnDroppedPickup, despawnPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook; D299 — despawnPickupById probe hook
 import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 
@@ -398,8 +398,15 @@ interface DebugApi {
     chunkLizardCount: number;
     chunkShrewCount: number;
     chunkLandmarkCount: number;
+    chunkTreeCount: number;
+    chunkWellCount: number;
+    chunkCactusCount: number;
+    chunkPickupCount: number;
     totalLizards: number;
     totalShrews: number;
+    totalPickups: number;
+    totalWells: number;
+    totalCacti: number;
     terrainTileKeys: string[];
     worldBodies: number;
     worldColliders: number;
@@ -409,6 +416,9 @@ interface DebugApi {
   setChunkMarkers: (on: boolean) => void;
   /** Infinite Sands S6 — generation-perf maxima (terrain slice steps +
    *  chunk loads). Drives the chunk-perf gate. */
+  /** D299 — probe hook: despawn a pickup by id exactly the way a take
+   *  does (pool-aware). Returns whether it existed. */
+  despawnPickupById: (id: number) => boolean;
   chunkPerf: () => {
     terrain: {
       syncBuilds: number; maxSyncMs: number;
@@ -895,14 +905,27 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         chunkLizardCount: s.lizardCount,
         chunkShrewCount: s.shrewCount,
         chunkLandmarkCount: s.landmarkCount,
+        chunkTreeCount: s.treeCount,
+        chunkWellCount: s.wellCount,
+        chunkCactusCount: s.cactusCount,
+        chunkPickupCount: s.pickupCount,
         totalLizards: ctx.lizards.length,
         totalShrews: ctx.shrews.list.length,
+        totalPickups: ctx.pickups.list.length,
+        totalWells: ctx.waterSources.list.length,
+        totalCacti: ctx.cacti.list.length,
         terrainTileKeys: ctx.terrain.tileKeys().sort(),
         worldBodies: ctx.physics.world.bodies.len(),
         worldColliders: ctx.physics.world.colliders.len(),
       };
     },
     setChunkMarkers: (on) => ctx.chunks.setMarkersEnabled(on),
+    despawnPickupById: (id) => {
+      const p = ctx.pickups.list.find((x) => x.id === id);
+      if (!p) return false;
+      despawnPickup(ctx, p);
+      return true;
+    },
     chunkPerf: () => ({ terrain: ctx.terrain.perfStats(), chunks: ctx.chunks.stats().perf }),
     resetChunkPerf: () => { ctx.terrain.resetPerf(); ctx.chunks.resetPerf(); },
     castDown(x, z, fromY = 100) {

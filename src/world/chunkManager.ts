@@ -38,6 +38,10 @@ import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { placeRibcage } from './heroLandmarks.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
+import { spawnDeadTreeAt } from './deadTree.ts';
+import { spawnWellAt, type WaterSource } from './waterSources.ts';
+import { spawnCactusAt, type Cactus } from './cactus.ts';
+import { spawnScrapAt, despawnPickup, type Pickup } from '../pickups/pickups.ts';
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -98,10 +102,21 @@ export interface ChunkSceneDesc {
 }
 
 /** Infinite Sands S3 — the fauna cluster at this chunk's POI (empty when
- *  no POI / salt biome). Offsets are ring positions around the wreck. */
+ *  no POI / salt biome), plus D299 free-ROAMING prey independent of any
+ *  wreck (the origin's global sparse fill, chunk-rolled). */
 export interface ChunkFaunaDesc {
   lizards: Array<{ x: number; z: number }>;
   shrews: Array<{ x: number; z: number }>;
+  roamLizards: Array<{ x: number; z: number }>;
+  roamShrews: Array<{ x: number; z: number }>;
+}
+
+/** D299 — origin-parity dressing: dead trees (salt, flat), a rare well
+ *  (salt), a rare cactus patch (salt, flat). All fixed-shape rolls. */
+export interface ChunkDressingDesc {
+  trees: Array<{ x: number; z: number; seed: number }>;
+  well: { present: boolean; x: number; z: number; seed: number };
+  cacti: Array<{ x: number; z: number; seed: number }>;
 }
 
 /** Infinite Sands S4 — the rare per-REGION hero landmark (fixed shape).
@@ -128,6 +143,7 @@ export interface ChunkDesc {
   scene: ChunkSceneDesc;
   fauna: ChunkFaunaDesc;
   landmark: ChunkLandmarkDesc;
+  dressing: ChunkDressingDesc;
 }
 
 interface LoadedChunk {
@@ -150,6 +166,12 @@ interface LoadedChunk {
   /** S5 — the looted-fauna ids this chunk was LOADED with (skipped at
    *  spawn; unioned back in at capture so they never resurrect). */
   priorLooted: string[];
+  /** D299 — streamed pickups (tree branches, wreck scrap), wells, cacti
+   *  this chunk owns, + the taken-pickup ids it was loaded with. */
+  pickups: Pickup[];
+  wells: WaterSource[];
+  cactiRecs: Cactus[];
+  priorTaken: string[];
 }
 
 /** S5 — one chunk's deviations from its descriptor-pristine state
@@ -159,6 +181,8 @@ interface LoadedChunk {
 export interface ChunkDiff {
   salvage?: Record<string, { remaining: number; stripped: boolean; extracted: number[] }>;
   fauna?: { looted: string[] };
+  /** D299 — taken streamed pickups (tree branches, wreck scrap rings). */
+  pickups?: { taken: string[] };
 }
 
 export interface ChunkManager {
@@ -173,9 +197,9 @@ export interface ChunkManager {
   describeChunk: (cx: number, cz: number) => ChunkDesc;
   /** Toggle the S1 marker layer. Regenerates all active chunks. */
   setMarkersEnabled: (on: boolean) => void;
-  /** S3 — wire the live lizard array (created after the manager at boot;
-   *  streamed lizards push into it / splice out of it). */
-  wireCreatures: (lizards: Lizard[]) => void;
+  /** S3/D299 — wire the live GameContext after boot placement (streamed
+   *  content pushes into / splices out of its live lists). */
+  wireCtx: (ctx: GameContext) => void;
   /** Probe/debug snapshot. */
   stats: () => {
     activeKeys: string[];
@@ -190,6 +214,11 @@ export interface ChunkManager {
     shrewCount: number;
     /** S4 — streamed hero landmarks (root groups tagged streamLandmark). */
     landmarkCount: number;
+    /** D299 — origin-parity dressing counts (tracked per chunk). */
+    treeCount: number;
+    wellCount: number;
+    cactusCount: number;
+    pickupCount: number;
     /** S6 — per-load wall-clock maxima. */
     perf: { loads: number; maxLoadMs: number; maxPoiLoadMs: number; maxLandmarkLoadMs: number };
   };
@@ -322,7 +351,7 @@ export function createChunkManager(
     const faunaRand = makeRng((seed ^ 0xfa0a) >>> 0);
     const lizCount = 1 + Math.floor(faunaRand() * Tuning.CHUNK_POI_LIZARDS_MAX);
     const shrewCount = Math.floor(faunaRand() * (Tuning.CHUNK_POI_SHREWS_MAX + 1));
-    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [] };
+    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [], roamLizards: [], roamShrews: [] };
     const faunaOk = present && biome !== 'salt';
     for (let i = 0; i < Tuning.CHUNK_POI_LIZARDS_MAX; i++) {
       const ang = faunaRand() * Math.PI * 2;
@@ -364,6 +393,69 @@ export function createChunkManager(
       z: lz,
       seed: lmSeed,
     };
+    // ── D299: origin-parity dressing (trees, well, cactus patch) +
+    //    free-roaming prey. Dedicated streams; every draw unconditional
+    //    (fixed budget). Flatness gates use the PURE closed-form height —
+    //    bilinear-vs-formula differences must never flip a descriptor. ──
+    const pureFlat = (fx: number, fz: number, r = 1.5): number => {
+      const c = terrain.pureHeightAt(fx, fz);
+      return Math.max(
+        Math.abs(terrain.pureHeightAt(fx + r, fz) - c),
+        Math.abs(terrain.pureHeightAt(fx - r, fz) - c),
+        Math.abs(terrain.pureHeightAt(fx, fz + r) - c),
+        Math.abs(terrain.pureHeightAt(fx, fz - r) - c),
+      );
+    };
+    const dressRand = makeRng((seed ^ 0xd4e551) >>> 0);
+    const trees: ChunkDressingDesc['trees'] = [];
+    for (let t = 0; t < Tuning.CHUNK_TREE_CANDIDATES; t++) {
+      const tx2 = cx * SIZE + dressRand() * SIZE;
+      const tz2 = cz * SIZE + dressRand() * SIZE;
+      const tSeed = Math.floor(dressRand() * 0x100000000) >>> 0;
+      if (!outsideOrigin) continue;
+      if (biomes.biomeAt(tx2, tz2) !== 'salt') continue;
+      if (pureFlat(tx2, tz2) > Tuning.DEAD_TREE_FLATNESS_THRESHOLD) continue;
+      trees.push({ x: tx2, z: tz2, seed: tSeed });
+    }
+    const wellRoll = dressRand();
+    const wlx = (cx + 0.5) * SIZE + (dressRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const wlz = (cz + 0.5) * SIZE + (dressRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const wSeed = Math.floor(dressRand() * 0x100000000) >>> 0;
+    const wellPresent = outsideOrigin && wellRoll < Tuning.CHUNK_WELL_CHANCE
+      && biomes.biomeAt(wlx, wlz) === 'salt';
+    const cactusRoll = dressRand();
+    const ccx = (cx + 0.5) * SIZE + (dressRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const ccz = (cz + 0.5) * SIZE + (dressRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const cactusCount = Tuning.CHUNK_CACTUS_PATCH_MIN
+      + Math.floor(dressRand() * (Tuning.CHUNK_CACTUS_PATCH_MAX - Tuning.CHUNK_CACTUS_PATCH_MIN + 1));
+    const patchOk = outsideOrigin && cactusRoll < Tuning.CHUNK_CACTUS_PATCH_CHANCE
+      && biomes.biomeAt(ccx, ccz) === 'salt';
+    const cacti: ChunkDressingDesc['cacti'] = [];
+    for (let i = 0; i < Tuning.CHUNK_CACTUS_PATCH_MAX; i++) {
+      const ang = dressRand() * Math.PI * 2;
+      const dist = Math.sqrt(dressRand()) * 12;   // boot cluster radius
+      const cSeed = Math.floor(dressRand() * 0x100000000) >>> 0;
+      const px2 = ccx + Math.cos(ang) * dist;
+      const pz2 = ccz + Math.sin(ang) * dist;
+      if (!patchOk || i >= cactusCount) continue;
+      if (biomes.biomeAt(px2, pz2) !== 'salt') continue;
+      if (pureFlat(px2, pz2) > 0.6) continue;   // the boot loop's local threshold
+      cacti.push({ x: px2, z: pz2, seed: cSeed });
+    }
+    // Free-roaming prey (non-salt — the boot rule).
+    const roamRand = makeRng((seed ^ 0x40a4) >>> 0);
+    const rlRoll = roamRand();
+    const rlx = cx * SIZE + roamRand() * SIZE;
+    const rlz = cz * SIZE + roamRand() * SIZE;
+    if (outsideOrigin && rlRoll < Tuning.CHUNK_ROAM_LIZARD_CHANCE && biomes.biomeAt(rlx, rlz) !== 'salt') {
+      fauna.roamLizards = [{ x: rlx, z: rlz }];
+    } else fauna.roamLizards = [];
+    const rsRoll = roamRand();
+    const rsx = cx * SIZE + roamRand() * SIZE;
+    const rsz = cz * SIZE + roamRand() * SIZE;
+    if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt') {
+      fauna.roamShrews = [{ x: rsx, z: rsz }];
+    } else fauna.roamShrews = [];
     return {
       cx, cz, seed,
       markers: markerList,
@@ -372,12 +464,14 @@ export function createChunkManager(
       scene: sceneDesc,
       fauna,
       landmark,
+      dressing: { trees, well: { present: wellPresent, x: wlx, z: wlz, seed: wSeed }, cacti },
     };
   };
 
-  // S3 — the live lizard list (= ctx.lizards) is created AFTER the manager
-  // (boot creature spawn order is sacred); main.ts wires it before play.
-  // Shrews self-register into their module list via spawnShrew.
+  // S3/D299 — the live GameContext is wired AFTER boot placement finishes
+  // (boot spawn order is sacred); streamed content needs its live lists
+  // (pickups, cacti, waterSources, lizards) + despawnPickup's ctx.
+  let gameCtx: GameContext | null = null;
   let lizardList: Lizard[] | null = null;
 
   // S6 — per-load wall-clock accounting (drives the chunk-perf gate).
@@ -442,7 +536,15 @@ export function createChunkManager(
       ...c.shrews.filter((s) => s.looted).map((s) => s.chunkContentId ?? ''),
     ].filter(Boolean);
     if (looted.length) diff.fauna = { looted: [...new Set(looted)] };
-    if (diff.salvage || diff.fauna) diffs.set(k, diff);
+    // D299 — taken streamed pickups: a tracked pickup no longer in the
+    // live list was taken by the player. Union the incoming taken set
+    // (taken ones were culled at spawn — same resurrect trap as fauna).
+    const takenNow = gameCtx
+      ? c.pickups.filter((p) => !gameCtx!.pickups.list.includes(p)).map((p) => p.chunkContentId ?? '')
+      : [];
+    const taken = [...c.priorTaken, ...takenNow].filter(Boolean);
+    if (taken.length) diff.pickups = { taken: [...new Set(taken)] };
+    if (diff.salvage || diff.fauna || diff.pickups) diffs.set(k, diff);
     else diffs.delete(k);
   };
 
@@ -456,7 +558,26 @@ export function createChunkManager(
     const chunkShrews: Shrew[] = [];
     const deferred: Array<() => void> = [];
     const priorLooted: string[] = [];
+    const chunkPickups: Pickup[] = [];
+    const chunkWells: WaterSource[] = [];
+    const chunkCacti: Cactus[] = [];
+    const priorTaken: string[] = [];
     const desc = describeChunk(cx, cz);
+    // S5/D299 — this chunk's diff state, consulted by every content class.
+    const chunkDiff = diffs.get(key(cx, cz));
+    const lootedSet = new Set(chunkDiff?.fauna?.looted ?? []);
+    priorLooted.push(...lootedSet);
+    const takenSet = new Set(chunkDiff?.pickups?.taken ?? []);
+    priorTaken.push(...takenSet);
+    // Track-or-cull a freshly spawned streamed pickup: taken ones (per the
+    // diff) despawn immediately — spawning-then-despawning keeps the rand
+    // draw order identical to a fresh chunk (determinism).
+    const trackPickup = (p: Pickup, contentId: string): void => {
+      p.transient = true;
+      p.chunkContentId = contentId;
+      if (takenSet.has(contentId) && gameCtx) despawnPickup(gameCtx, p);
+      else chunkPickups.push(p);
+    };
     // ── S2: streamed POI wreck — a pure render of the descriptor. The
     //    archetype is FORCED from the descriptor (the determinism gate
     //    covers the pick); the fresh renderSeed rng drives yaw/bury/panels/
@@ -490,10 +611,22 @@ export function createChunkManager(
       }
       tagSalvage(poiRecs, 'poi');
       applySalvageDiff(key(cx, cz), poiRecs);
+      // ── D299: the scrap-debris ring around the streamed wreck (the boot
+      //    parity item S2 deferred until transient pickups existed).
+      //    Deterministic from a renderSeed-derived stream. ──
+      if (gameCtx) {
+        const sRand = makeRng((p.renderSeed ^ 0x5c4a9) >>> 0);
+        const n = Tuning.SCRAP_PER_WRECK_MIN
+          + Math.floor(sRand() * (Tuning.SCRAP_PER_WRECK_MAX - Tuning.SCRAP_PER_WRECK_MIN + 1));
+        for (let j = 0; j < n; j++) {
+          const ang = sRand() * Math.PI * 2;
+          const rr = Tuning.SCRAP_RING_RADIUS_MIN + sRand() * (Tuning.SCRAP_RING_RADIUS_MAX - Tuning.SCRAP_RING_RADIUS_MIN);
+          const sp = spawnScrapAt(scene, terrain, p.x + Math.cos(ang) * rr, p.z + Math.sin(ang) * rr, sRand, gameCtx.pickups.list);
+          trackPickup(sp, `poi/sc${j}`);
+        }
+      }
       // ── S3: the wreck's fauna cluster (transient — the D292 rule).
       //    S5: looted ones (per the chunk diff) never respawn. ──
-      const lootedSet = new Set(diffs.get(key(cx, cz))?.fauna?.looted ?? []);
-      priorLooted.push(...lootedSet);
       if (lizardList) {
         desc.fauna.lizards.forEach((f, i) => {
           if (lootedSet.has(`l${i}`)) return;
@@ -591,6 +724,62 @@ export function createChunkManager(
         }
       }
     }
+    // ── D299: origin-parity dressing — dead trees (+ branch pickups),
+    //    a rare well, a rare cactus patch, free-roaming prey. All render
+    //    from descriptor-derived seeds through the REAL single-unit
+    //    spawners; all state channels (transient flags, chunk diffs)
+    //    mirror the S2/S3/S5 patterns. Needs the wired ctx (live lists). ──
+    if (gameCtx) {
+      desc.dressing.trees.forEach((t, ti) => {
+        const tRand = makeRng(t.seed);
+        const res = spawnDeadTreeAt(scene, terrain, world, t.x, t.z, tRand, gameCtx!.pickups.list, group);
+        res.group.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) m.userData.chunkGeo = true;   // merged tree geo is per-tree; _treeMat shared
+        });
+        const tBody = res.collider.parent();
+        if (tBody) bodies.push(tBody);
+        res.branches.forEach((b, j) => trackPickup(b, `t${ti}/b${j}`));
+      });
+      if (desc.dressing.well.present) {
+        const w = spawnWellAt(scene, terrain, desc.dressing.well.x, desc.dressing.well.z, makeRng(desc.dressing.well.seed), group);
+        w.mesh.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) m.userData.chunkGeo = true;   // per-well geos; stone/wood mats shared
+        });
+        gameCtx.waterSources.list.push(w);
+        chunkWells.push(w);
+      }
+      for (const c2 of desc.dressing.cacti) {
+        const { cactus, body: cBody } = spawnCactusAt(scene, world, terrain, c2.x, c2.z, makeRng(c2.seed), group);
+        cactus.transient = true;
+        cactus.mesh.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) { m.userData.chunkGeo = true; m.userData.chunkMat = true; }   // per-cactus materials
+        });
+        gameCtx.cacti.list.push(cactus);
+        chunkCacti.push(cactus);
+        bodies.push(cBody);
+      }
+      // Free-roaming prey (independent of any wreck).
+      if (lizardList) {
+        desc.fauna.roamLizards.forEach((f, i) => {
+          if (lootedSet.has(`rl${i}`)) return;
+          const l = spawnLizard(scene, world, terrain, f);
+          l.transient = true;
+          l.chunkContentId = `rl${i}`;
+          lizardList!.push(l);
+          chunkLizards.push(l);
+        });
+      }
+      desc.fauna.roamShrews.forEach((f, i) => {
+        if (lootedSet.has(`rs${i}`)) return;
+        const s = spawnShrew(scene, world, terrain, f);
+        s.transient = true;
+        s.chunkContentId = `rs${i}`;
+        chunkShrews.push(s);
+      });
+    }
     // ── S3: scatter rocks (no colliders — visual props, the boot rule).
     //    Per-rock geometry is chunk-owned; materials are module singletons. ──
     for (const r of desc.rocks) {
@@ -645,7 +834,12 @@ export function createChunkManager(
       }
     }
     scene.add(group);
-    chunks.set(key(cx, cz), { cx, cz, group, bodies, salvage, lizards: chunkLizards, shrews: chunkShrews, deferred, priorLooted });
+    chunks.set(key(cx, cz), {
+      cx, cz, group, bodies, salvage,
+      lizards: chunkLizards, shrews: chunkShrews,
+      deferred, priorLooted,
+      pickups: chunkPickups, wells: chunkWells, cactiRecs: chunkCacti, priorTaken,
+    });
     const _ms = performance.now() - _t0;
     _perf.loads++;
     if (_ms > _perf.maxLoadMs) _perf.maxLoadMs = _ms;
@@ -694,6 +888,23 @@ export function createChunkManager(
     }
     for (const s of c.shrews) {
       if (!s.looted) removeShrew(s, scene, world);
+    }
+    // D299 dressing teardown: pickups despawn pool-aware (taken ones are
+    // already gone from the live list — skip); wells/cacti splice out of
+    // their ctx lists (their meshes go with the group; cactus bodies are
+    // in c.bodies).
+    if (gameCtx) {
+      for (const p of c.pickups) {
+        if (gameCtx.pickups.list.includes(p)) despawnPickup(gameCtx, p);
+      }
+      for (const w of c.wells) {
+        const wi = gameCtx.waterSources.list.indexOf(w);
+        if (wi >= 0) gameCtx.waterSources.list.splice(wi, 1);
+      }
+      for (const cc of c.cactiRecs) {
+        const ci = gameCtx.cacti.list.indexOf(cc);
+        if (ci >= 0) gameCtx.cacti.list.splice(ci, 1);
+      }
     }
     // Splice this chunk's streamed salvage entries back out of the live
     // registry (interaction rebuilds its target list per frame, so
@@ -774,7 +985,7 @@ export function createChunkManager(
     update,
     describeChunk,
     setMarkersEnabled,
-    wireCreatures: (lizards) => { lizardList = lizards; },
+    wireCtx: (c) => { gameCtx = c; lizardList = c.lizards; },
     serializeDiffs: () => {
       for (const c of chunks.values()) captureChunkDiff(c);   // live chunks too
       return Object.fromEntries(diffs);
@@ -790,6 +1001,10 @@ export function createChunkManager(
       let lizardCount = 0;
       let shrewCount = 0;
       let landmarkCount = 0;
+      let treeCount = 0;
+      let wellCount = 0;
+      let cactusCount = 0;
+      let pickupCount = 0;
       for (const c of chunks.values()) {
         c.group.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
@@ -797,11 +1012,15 @@ export function createChunkManager(
           if (mesh.isMesh && mesh.userData.streamRock) rockCount++;
           if ((obj as THREE.Group).userData?.poiArchetype) poiCount++;
           if ((obj as THREE.Group).userData?.streamLandmark) landmarkCount++;
+          if ((obj as THREE.Group).name === 'deadTree') treeCount++;
         });
         bodyCount += c.bodies.length;
         salvageCount += c.salvage.length;
         lizardCount += c.lizards.length;
         shrewCount += c.shrews.length;
+        wellCount += c.wells.length;
+        cactusCount += c.cactiRecs.length;
+        pickupCount += c.pickups.length;
       }
       return {
         activeKeys: [...chunks.keys()].sort(),
@@ -814,6 +1033,10 @@ export function createChunkManager(
         lizardCount,
         shrewCount,
         landmarkCount,
+        treeCount,
+        wellCount,
+        cactusCount,
+        pickupCount,
         perf: { ..._perf },
       };
     },

@@ -377,6 +377,21 @@ export const Tuning = {
   // bakes byte-identically (the placement gate is the tripwire).
   WRECK_YARD_REGION_CHANCE: 0.08,
   WRECK_YARD_REGION_MIN_DIST: 2200,
+  // Infinite Sands parity (D299) — the far field carries EVERYTHING the
+  // origin has. Densities calibrated to the boot spawners' landed counts
+  // over the boot area (then nudged up where the origin's read comes from
+  // origin-concentrated spawns that don't generalize):
+  // trees: 45 over the boot disc, salt-only ≈ 0.4/salt-chunk → 2 salt+flat-
+  // gated candidates/chunk; wells: ~2/region-area, salt-gated; cactus
+  // PATCHES (3-4 plants) matching the boot's 4 patches; free-roaming prey
+  // at a readable ~1-per-6-chunks (the boot's global fill is origin-tight).
+  CHUNK_TREE_CANDIDATES: 2,
+  CHUNK_WELL_CHANCE: 0.03,
+  CHUNK_CACTUS_PATCH_CHANCE: 0.04,
+  CHUNK_CACTUS_PATCH_MIN: 3,
+  CHUNK_CACTUS_PATCH_MAX: 4,
+  CHUNK_ROAM_LIZARD_CHANCE: 0.15,
+  CHUNK_ROAM_SHREW_CHANCE: 0.15,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)
