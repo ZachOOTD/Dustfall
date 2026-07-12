@@ -1,112 +1,103 @@
-# Campaign log — Dustfall "Infinite Sands" (started 2026-07-10, overnight)
+# Campaign log — Dustfall "Sharpen & Deepen" (started 2026-07-09)
 
-Newest cycle at top. Prior campaigns archived in this directory:
-`*-2026-07-09-sharpen-deepen.*` (PAUSED at M7 Skyfall plan-review — resume later by
-restoring those files + `/campaign-approve`; the Skyfall plan itself is
-`docs/feature-skyfall.md`) and `*-2026-06-18.*` (complete).
+Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
+`campaign-log-2026-06-18-cont.md` + `campaign-log-2026-06-18-m1-m13.md`.
 
 ---
 
-## Cycle 7 — S5 BUILD (2026-07-11) — SHIPPED → 🏁 CAMPAIGN COMPLETE (ladder S1-S6+S5 all shipped)
+## Cycle 8 — M7 Skyfall feature-slice (2026-07-09) — PAUSED (plan-review)
 
-- **Approval:** the user approved in-session ("finish it off with the S5 plan") — the plan's recommendations stood (v17 bump, no scrap rings, no cap, looted-fauna persistence in) + the D297 mounted-save hardening.
-- **Shipped (per the plan verbatim):** SAVE_VERSION 17 `chunkDiffs` — sparse per-chunk deviations keyed by descriptor-derived content ids (`poi/N`, `lm/K/N`, `l0`/`s0`); capture on unload + live snapshot at save (`serializeDiffs`); apply on load incl. the deferred knot pieces, mirroring the v16 visuals; `loadDiffs` at load-game; pre-v17 saves = empty map (zero migration). One implementation catch beyond the plan: the incoming looted-fauna set is UNIONED at recapture (skipped spawns would otherwise resurrect — D298). Plus `player.pos` now saves via `getPlayerPos` (D297).
-- **Earlier in-session (D297 hotfix, commit `47769c8`):** the playtest speeder bug — streaming re-anchored to the origin mid-ride because the mount PARKS the capsule at (0,-2000,0); fixed via the canonical `getPlayerPos`; deep-cave dark-nav fixed for riders; a permanent A/B-proven RIDE leg added to the streaming gate; the Sarlacc's rider-blindness backlogged as a design question.
-- **Verify:** ALL GREEN — placement ×5, colliders 55, chunks (determinism ×2 + cross-seed; streaming with `persisted=1`: extraction → unload capture → revisit re-apply → sparse save file → REAL reload+CONTINUE re-apply; perf leg), all 5 smokes. Origin-world round trip byte-exact.
-- **D-entries:** D297, D298. **Spend:** ~270K (campaign TOTAL ~1.3M / 10M; 7 cycles / 50).
-- **Verdict: TERMINAL — `until: ladder-complete` met. Campaign `completed`.**
-- **▶ THE HUMAN'S MERGE REVIEW:** walk the final build (stream on foot AND on the bike, strip a far wreck → save → reload → still stripped), then merge `campaign/2026-07-10-procgen` → `master` and redeploy (web + desktop) when satisfied. Then: resume the parked Skyfall campaign.
-- **Commit:** `a77048a` (+ the D297 hotfix `47769c8`).
+- **Planned:** M7 Skyfall is `[feel-critical]` -> feature-slice + PAUSE for human plan-review (no autonomous build on a hero asset).
+- **Did:** 2 read-only code-map agents (intro-ship interior tech + hero-landmark/enterable/save). Wrote `docs/feature-skyfall.md`: DoD, 6 sub-tasks, reuse map, the post-blockout walk-test pause, scope-cut order, 4 open questions.
+- **Key finding:** NO SAVE_VERSION bump needed (additive; fixed landmark rebuilds from seed, salvageables/journals auto-persist on v16). Save-bump pause NOT triggered.
+- **Verify:** n/a (plan-only; no code changed).
+- **Spend:** ~150K est. (campaign total ~3.2M / 10M; cycle 8/50).
+- **STATUS: PAUSED — awaiting_approval, stop_reasons [plan-review].** Human action: review `docs/feature-skyfall.md`, optionally answer the 4 open questions in `steering.md`, then `/campaign-approve` to release S1 (research + exterior blockout). The loop is STOPPED (no wakeup scheduled).
+- **Next (after approval):** S1 exterior blockout -> S2 interior+colliders -> walk-test pause -> hero-detail.
 
-## Cycle 6 — ⏸ S5 save schema PLAN (2026-07-11) — PROPOSED → CAMPAIGN PAUSED (the sanctioned pause)
+## Cycle 7 — M6 POI breadth A3: cargo_crawler (2026-07-09) — SHIPPED (M6 COMPLETE, 3/3)
 
-- **Planned:** write the per-chunk-diff save schema plan and PAUSE for human review BEFORE building (D81 — the ladder's one sanctioned pause).
-- **Delivered:** `docs/feature-save-per-chunk-diffs.md` — SAVE_VERSION 16→17 (additive `chunkDiffs` map; old saves = empty map, zero migration); content addressed by descriptor-derived CONTENT IDS (never runtime registry ids — the D292 trap); capture on unload + at save, apply on load; scrap rings explicitly deferred to v2; a probe persistence leg (strip-far → round-trip → still-stripped + a real page-reload re-apply); 4 open questions each with a recommendation. Build estimate: one cycle. **No code changed.**
-- **Campaign state:** `paused`, `awaiting_approval`, `stop_reasons: ["save-version-bump"]`. The /loop is STOPPED.
-- **▶ YOUR MORNING REVIEW:** (1) walk the world — `npm run dev`: sprint across a tile boundary (feel for hitches — S6), visit a landmark + a regional wreck-yard, strip a far wreck; (2) read the S5 plan; (3) `/campaign-approve` to release the S5 build (the final rung), optionally with steering notes. The whole branch (`campaign/2026-07-10-procgen`, cycles 1-6) then merges after S5 ships + your final review.
-- **Spend:** ~40K (campaign ~1.03M / 10M; cycle 6/50).
-- **Commit:** `fe56a99`
+- **Planned:** M6 A3 cargo_crawler (optional stretch; DoD already met at 2) — the tracked-vehicle silhouette.
+- **Shipped (D287, A3):** `crawlerBody` component (cab + exhaust stack + open cargo bed + two track bogies with wheels/drums/lugs); `assembleCargoCrawler` adds 1-2 spilled containers (reused debrisPiece). Cab/bed/2-bogie box colliders. Registry (`warm` bucket) + `ARCH_WEIGHTS` all biomes. Added to verify:colliders default list (50->55 audits).
+- **Visual gate rework:** round 1 (seatSink 0.45) buried the tracks -> box pile; round 2 (seatSink 0.16) made the tread/wheels/drums read as a tracked hauler. The defining feature must stay visible.
+- **Verify:** verify:all PASS (tsc + placement 5-seed 0-fails + colliders 55 audits, cargo_crawler 5-6/5-6 x4 seeds) - all 6 rig gates PASS.
+- **Visual iteration:** rendered via the procgen framer (3q natural + pinyaw broadside + zoom); routine bar (no sev>=2); 1 rework round. Clean tracked-hauler read.
+- **Spend:** ~600K est. (campaign total ~3.05M / 10M; cycle 7/50).
+- **M6 CLOSED:** 3 distinct archetypes (vertical mast / horizontal pipeline / ground vehicle).
+- **Next:** cycle 8 -> M7 Skyfall [feel-critical] — feature-slice it, then PAUSE (plan-review) for the human to approve the plan before building.
 
-## Cycle 5 — S6 hitch-free generation (2026-07-11) — SHIPPED
+## Cycle 6 — M6 POI breadth A2: buried_pipeline (2026-07-09) — SHIPPED (M6 DoD met, 2/2-3)
 
-- **Planned:** S6 — frame-budget the ~100-200ms terrain-tile bake (the D288 hitch); ceilings; a cross-chunk perf probe.
-- **Measured first:** synchronous bake 90-200ms; fill dominates (37k computeHeightAt); computeVertexNormals ~17ms; POI chunk load 20-57ms; a wreck_knot would be ~150ms in one frame.
+- **Planned:** M6 A2 buried_pipeline — a surfacing/diving pipe run (the low-horizontal silhouette).
+- **Shipped (D286, A2):** `pipeSegment` + `pipeJunction` components; `assembleBuriedPipeline` — 4-5 bedded pipe cylinders (lower third in sand, one surfacing hump, a diving far end, a ruptured joint) tied into a manifold hub (drum + valve handwheel + flange stubs + proud access housing/panel). Registry (`dark` bucket) + `ARCH_WEIGHTS` all biomes (derelict shaved to keep sums ~1.0). Added to verify:colliders default list (45->50 audits).
+- **Design rework (visual gate):** the first sine-undulation pass floated crests ~1.5m proud — a rigid POI group has NO terrain access, so it can't weave under the real heightfield. Reworked to a fixed shallow-bedding run (robust at any anchor). This is the value of rendering before declaring done.
+- **Verify:** verify:all PASS (tsc + placement 5-seed 0-fails + colliders 50 audits, buried_pipeline 7-8/7-8 x4 seeds) - all 6 rig gates PASS.
+- **Visual iteration:** rendered via the procgen framer (3q + zoom, 2 seeds); routine bar (no sev>=2); 1 rework round (float -> bedded). Seed 1337 broadside confirms a clean half-buried pipeline + manifold read.
+- **Spend:** ~550K est. (campaign total ~2.45M / 10M; cycle 6/50).
+- **Next:** cycle 7 -> M6 A3 cargo_crawler (optional stretch; DoD already met) — the last autonomous content before M7 Skyfall pauses for human plan-review.
+
+## Cycle 5 — M6 POI breadth A1: relay_mast (2026-07-09) — SHIPPED (partial 1/2-3)
+
+- **Planned:** M6 = 2-3 new procgen archetypes. DECOMPOSED (multi-part feature, anti-punt) into `docs/feature-poi-archetypes.md` — one archetype per cycle to depth.
+- **Shipped (D285, A1):** `relay_mast` — a fallen guyed lattice comms tower (the missing TALL+THIN silhouette). NEW `latticeMast` component (truss + housing + crossarm/dish/whip antennae/beacon + guy wires); `assembleRelayMast`; registry (`cool` bucket, list 0.42); `ARCH_WEIGHTS` all biomes (derelict shaved to keep sums ~1.0). Envelope-cylinder + base-box collision. Added to the verify:colliders default list (40->45 audits).
+- **Verify:** verify:all PASS (tsc + placement 5-seed 0-fails + colliders 45 audits 0-fails, relay_mast 5/5 x4 seeds) - all 6 rig gates PASS.
+- **Visual iteration:** rendered via the procgen framer at real placement (3q + tight zoom, 2 seeds); routine bar (no sev>=2); 1 polish round (weathered splayed whip antennae). Reads as a distinct, tone-appropriate leaning comms tower.
+- **Spend:** ~500K est. (campaign total ~1.9M / 10M; cycle 5/50).
+- **Next:** cycle 6 -> M6 A2 buried_pipeline (a surfacing/sinking pipe run — the low horizontal silhouette).
+
+## Cycle 4 — M5 diurnal-cycle (2026-07-09) — SHIPPED
+
+- **Planned:** bind lizards/shrews/vultures/worms to time-of-day (feature-audit first).
+- **Audit:** worms ALREADY fully twilight-bound (ACC twilightActivityMultiplier + ambient breach, D121) → verify-only. Lizard/shrew/vulture had zero time hooks → built.
+- **Shipped (D284):** NEW `enemies/diurnal.ts` — one pure `diurnalActivity01(ctx, profile)`. Lizards diurnal (spot radius + flee speed scaled, night bob suppressed); shrews crepuscular (idle time ÷ activity bell, wander pace eased); vultures day-fliers (no perch launch + no hunt dives below the roost line). Scalars on existing FSMs — no new states, no save fields. `__game.diurnalInfo()` + NEW permanent `diurnal-probe` gate (dawn found by sunHeight sweep; curve + perched-launch behavior asserted).
+- **Verify:** all 7 gates PASS (verify:all · smoke-intro · smoke-pod-tutorial · pickup-take-sweep · survival-probe · ambient-beds · diurnal-probe — noon 1/.25/1, midnight .15/.25/0, dawn shrew .998, vulture stayed-then-launched).
+- **Visual iteration:** N/A — behavior scalars; the night-read (sleeping lizards/roosting vultures) is an end-review walk item.
+- **Spend:** ~250K est. (campaign total ~1.4M / 10M; cycle 4/50).
+- **Next:** cycle 5 → M6 POI breadth (2-3 new socket-grammar archetypes; verify:placement + verify:colliders gates).
+
+## Cycle 3 — M4 ambient life beds (2026-07-09) — SHIPPED
+
+- **Planned:** M4 — procedural day/night ambient beds (wind stays muted).
+- **Shipped (D283):** `makeNightBedBuffer` (sparse cricket chirp-trains, ~22s loop) + `makeDayBedBuffer` (breathing heat-shimmer + 1-2 distant falling cries, ~26s) attached as SAMPLE-FALLBACK sources on the existing silent `ambient.day/night` stems (`attachProceduralBed`) — full mixer reuse (crossfade/storm-mask/masters/suppression); real samples auto-win if they land. Sparseness baked into the buffers. Snapshot gains `bedSrc` + `bedTargets`; NEW permanent `ambient-beds` gate (attach + crossfade + REAL-storm duck via triggerStorm + wind-still-muted).
+- **Verify:** verify:all PASS · smoke-intro {ok,beats:12} · smoke-pod-tutorial ok · pickup-take-sweep PASS · survival-probe PASS · ambient-beds PASS (noon day 0.35/night 0; midnight flipped; storm 0/0; pwind 0).
+- **Visual iteration:** N/A (audio) — tone FEEL (lonely vs annoying) is an end-review item; density conservative by construction.
+- **Spend:** ~250K est. (campaign total ~1.15M / 10M; cycle 3/50).
+- **Next:** cycle 4 → M5 living world (diurnal creature activity).
+
+## Cycle 2 — M3 survival depth (2026-07-09) — SHIPPED
+
+- **Planned:** M3 as re-scoped in cycle 1 — (a) C31 sun-occluder decouple + coverage, (b) water-scarcity/exposure.
+- **Shipped (D282):** `SUN_OCCLUDER_MIN_HEIGHT` (2.5m) decoupled from the 8m silhouette constant; procgen POIs (both branches) + wreck-yard hulks register post-placement bboxes as occluders → **3→51** in the probe seed (static boot sites only — meteor/debug spawns excluded to avoid stale-occluder leaks). `THIRST_SHADE_RELIEF` (0.8): open-air daytime shade slows water loss, gated (!inShelter + daytime) so all four C38 bands stay byte-identical BY CONSTRUCTION (design chosen over sun-drives-thirst precisely to avoid autonomous drift of the human-ratified curve). NEW `heat-shade` probe env (tops thirst/hunger to isolate temperature) + gate assertions: shade SURVIVES midday (minHealth ≥0.95) and occluder coverage ≥20; the gate now throws on failure.
+- **Verify:** verify:all PASS · smoke-intro {ok,beats:12} · smoke-pod-tutorial ok · pickup-take-sweep PASS · survival-probe PASS (7.54/8.67/10/15 unchanged; shade=true; occluders=51).
+- **Visual iteration:** N/A — pure systems/tuning cycle.
+- **Spend:** ~300K est. (campaign total ~900K / 10M; cycle 2/50).
+- **Commit:** (this cycle's commit — SHA in git log)
+- **Next:** cycle 3 → M4 ambient life beds (procedural day/night synthesis in soundscape.ts; wind STAYS muted).
+
+## Cycle 1 — M1 perf + housekeeping (2026-07-09) — SHIPPED
+
+- **Planned:** M1 (pickup-instancing, decisions-archival, panel-deadcode, crash-heat guard, doc-scrub).
 - **Shipped:**
-  - Sliced tile builds: staged `fillRows`(12 rows ≈ 8-10ms/frame) → geometry+normals (one ~17ms frame) → ATOMIC mesh+collider finalize; anchor tile + boot ring stay synchronous (safety + byte-identity). One shared code path; per-vertex output byte-identical.
-  - `CHUNK_LOADS_PER_FRAME` 2→1; wreck_knot pieces DEFERRED one per frame (load-time draws + per-piece seeds — deterministic regardless of execution frame; measured ~7-8ms/piece).
-  - NEW permanent `chunk-perf` gate (verify:chunks leg 3): mechanism asserts (slicing the norm ≥100 steps; sync anchor bakes ≤4 + ≤250ms) + tripwires (slice ≤60ms, loads/pieces ≤120ms) + draw/body ceilings + baseline return; routed through a REAL wreck_knot via a wide descriptor scan (the cycle-3 unexercised-path lesson).
-  - The gate CAUGHT a real edge in development: diagonal teleport legs outrun the sliced ring → the anchor-tile safety bake fires (correct fall-through protection at ~100× play speed) — assert recalibrated from ===0 to the rare-and-bounded allowance, logged in D296.
-- **Verify:** ALL GREEN — placement ×5, colliders 55, chunks (determinism digests UNCHANGED from cycle 4 — slicing alters nothing; streaming 332→332; perf leg first-pass), 5 smokes, 9 vista shots regenerated identically.
-- **D-entries:** D296. **Spend:** ~190K (campaign ~990K / 10M; cycle 5/50).
-- **Commit:** `5f57a5d` (the SHA-recording docs edit rides in cycle 6's commit).
-- **Next:** cycle 6 = **⏸ S5 save schema plan — THE SANCTIONED PAUSE** (plans, sets awaiting_approval, STOPS; brief in `docs/next-session-prompt.md`). Morning review: walk-test + review the plan + `/campaign-approve`.
+  - Pickup instancing (D281): branch/scrap → shared InstancedMesh pools; `instanceId→pickupId` raycast resolver; swap-with-last slot frees + index fixup; overflow fallback; seeded rand order preserved. drawCalls 852→817 at the probe cam (worst-case dense-view flattened; +70K always-drawn tris accepted). NEW permanent gate `pickup-take-sweep` (6 real E-takes end-to-end incl. the swap-fixup case + id↔slot bijection invariant).
+  - decisions.md archival D221–D235 (280=280 conserved) · panel dead-code sweep (backlog stale — mostly pre-shipped; deleted `clearPanelDebris`) · `survivalProbe` crash-heat guard · endgame-finale candidates scrubbed from CLAUDE.md/roadmap/next-session-prompt.
+- **Discovery (feature-audit):** M2 "survival curve" was ALREADY BUILT + probe-pinned (C38/D246: heat 7.54 / cold 8.67 / thirst 10 / hunger 15 min; prepared heals; death UI) — the planning input was stale. M2 → verify-only, re-run green this cycle. M3's sun-shade half also pre-shipped (C31) → M3 re-scoped to the occluder-threshold decouple + water-scarcity.
+- **Verify:** `verify:all` PASS (tsc + placement + colliders 40-audits) · `smoke-intro` {ok,beats:12} · `smoke-pod-tutorial` ok · `pickup-take-sweep` PASS · `survival-probe` PASS (guard active).
+- **Visual iteration:** N/A — pure perf/debt cycle (appearance unchanged by construction; instance positions proven by the take-sweep gate).
+- **Spend:** ~600K est. (campaign total ~600K / 10M; cycle 1/50). The take-sweep harness burned ~5 diagnostic rounds (stale-body, 3P boot, settle-drift) — lessons embedded in the gate + D281.
+- **Commit:** (this cycle's commit — SHA in git log)
+- **Next:** cycle 2 → M3 survival depth: (a) C31 sun-occluder decouple + occluder coverage, (b) water-scarcity/exposure.
 
-## Cycle 4 — S4 distributed landmarks + per-region biomes (2026-07-11) — SHIPPED (interrupted + resumed)
+## Cycle 0 — campaign started (2026-07-09)
 
-- **Planned:** S4 — a rare per-region roll scattering hero destinations; re-anchor the distance-override biomes per-region; origin heroes stay authored.
-- **Shipped:**
-  - **Landmarks:** region grid (16 chunks = 1792m), 0.3/region, pure per-region hash → the hosting chunk renders on the normal lifecycle. Kinds reuse existing art (the SLOT is the deliverable — Skyfall plugs in later): `colossal_ribcage` (placeRibcage × 5-8, collider scaled with the mesh, returns {group, collider}; boot callers byte-identical) + `wreck_knot` (3 × placeProcgenPOI triangle + 2 carcasses; salvage transient per D292).
-  - **Regional wreck-yards:** ONE appended draw in createBiomeSampler (prior anchors byte-stable) seeds a memoized region hash; `wreckYardAt` = max(origin, 3×3 regional anchors ≥2200m from origin) → far graveyards inherit ground tint/mottle, flatten, biome id, graveyard POI weights + a 6× POI density, all through existing consumers. Origin bakes byte-identically (placement gate green ×5).
-  - Gates: landmark descriptor↔render equality + a landmark-site walk leg + a ±15km regional-yard scan; vista landmark/yard shots + a vertex-color yard diag (proved the bake when the shot read ambiguous — the real gap was density, fixed ×6, cluster-read polish backlogged).
-- **Mid-cycle interruption:** the user's machine hit 100% CPU → root-caused (leaked `chrome-headless-shell` processes every reap regex missed + swiftshader probe load) → FRAMEWORK-WIDE fix: `reap-orphans.mjs` (orphan-state reaping) as global SessionStart/SessionEnd hooks + per-project regex fixes + canon (`process-leak-hygiene.md`), committed `gamedev-framework@e78c1ca`. Verified live on resume: the hook fired at session start; after this cycle's full suite the machine sat at exactly 4 node / 0 headless.
-- **Verify:** ALL 10 GREEN first-pass — placement ×5 0-fails (the byte-identity tripwire for the biomes change), colliders 55, chunks (determinism ×2 + cross-seed; streaming 332→332 exact incl. the landmark leg), all 5 smokes.
-- **Visual:** the colossal ribcage is a genuine hero read (30m titan skeleton arcing a dune crest, player-eye).
-- **D-entries:** D295. **Spend:** ~200K (campaign ~800K / 10M; cycle 4/50).
-- **Commit:** `9b3ba92` (the SHA-recording docs edit rides in cycle 5's commit).
-- **Next:** cycle 5 = **S6 perf** (brief in `docs/next-session-prompt.md`) — then ⏸ S5 (the sanctioned save pause).
+- **Goal:** sharpen/deepen the existing game — no new pillars, no tone change, no endgame.
+- **Budget:** max-cycles 50 (hard stop) · ~10M output-token soft ceiling.
+- **Checkpoint:** `none`, with two sanctioned pauses (Skyfall pre-detail `[feel-critical]`; any SAVE_VERSION bump).
+- **Verify gate:** `npm run verify:all` + `smoke-intro`/`smoke-pod-tutorial` + adversarial visual gate on visual cycles.
+- **Ladder:** M1 perf/housekeeping → M2 survival-curve (flagged) → M3 survival-depth → M4 ambient beds → M5 diurnal-cycle → M6 POI archetypes → M7 Skyfall `[feel-critical]`.
+- **Excluded:** the Phase-A feel-pile (attended sessions).
+- **Setup done:** session-end docs committed to `master` (`873d310`, tagged `session-ACN`); guard hook installed + behaviorally confirmed (blocks `rm -rf`/`reset --hard`/force-push under `overnight.lock`); `campaign/2026-07-09` branch created; old 2026-06-18 campaign state archived; `.gamedev-framework/overnight.lock` set.
+- **Next:** cycle 1 builds M1.
 
-## Cycle 3 — S3 scatter + ambient life (2026-07-11) — SHIPPED
+## Approval — 2026-07-12 — M7 Skyfall plan APPROVED with changes (gate cleared)
 
-- **Planned:** S3 — rocks + wordless scenes per-chunk; creatures streamed (research the spawn systems first — the slice's ❓).
-- **Research verdicts (step 1, drove the design):** rocks streamable (no colliders, shared materials; the ONLY care is the boot `scatterRand` stream — every boot creature id depends on its draw order → new exports, boot loops untouched); scenes trivially streamable (already on a dedicated rng); lizards/shrews streamable-with-care (id-keyed saves → D292 transient pattern); **vultures DEFER** (perch/carcass-bound global placement + dynamic death bodies + full-population prey scans fight the chunk model).
-- **Shipped:**
-  - `ChunkDesc` gains `rocks` (7 candidates/chunk, rocky-biome kept, descriptor-level scene-stage cull), `scene` (0.02/chunk rare tableau), `fauna` (1-2 lizards + 0-2 shrews at the chunk's wreck, salt-skipped). New exports: `makeScatterRock`, `buildWordlessTableau`, `despawnLizard`.
-  - **Chunk-keyed fauna (D294)** — spawned via the REAL `spawnLizard`/`spawnShrew` on load, despawned on unload (looted skip), `transient` + save filters (lizards + shrews). No separate ring system — the chunk IS the ring.
-  - Probe upgrades: full-ring descriptor↔render equality (POIs/rocks/fauna); a fauna-site walk leg (the straight +X walk landed on all-salt POIs — fauna would have shipped unexercised); population baselines with ambient predators QUIETED (circling vultures grabbed 2 boot lizards mid-walk → false "leak"); vista rock + scene shots.
-- **Verify:** ALL 10 GREEN IN ONE PASS, zero flakes — tsc; placement 5-seed 0-fails; colliders 55; chunks (determinism ×2 + cross-seed; streaming bodies 332→332 EXACT, farPois 2/2, farRocks 46/46, fauna leg live); all 5 smokes. The D291/D293 hardening held.
-- **Visual iteration:** placement-sanity bar — watcher tableau on a dune crest (reads as intended), rock field seated, wreck+fauna area; all player-eye.
-- **D-entries:** D294 (chunk-keyed fauna; vulture defer; sacred boot streams; quiet-ambient-predators probe rule).
-- **Spend:** ~170K (campaign total ~600K / 10M; cycle 3/50).
-- **Commit:** `deadc77` (the SHA-recording docs edit rides in cycle 4's commit).
-- **Next:** cycle 4 = **S4 distributed rare landmarks + per-region biomes** (brief in `docs/next-session-prompt.md`; biomes.ts changes must keep the origin ring byte-identical — the placement gate is the tripwire).
-
-## Cycle 2 — S2 POI streaming (2026-07-11) — SHIPPED
-
-- **Planned:** S2 — `placeProcgenPOIs`/`placeProcgenPOI` per-chunk on the ChunkManager lifecycle: biome weights, static merge, salvage registration per chunk, full teardown, origin exclusion.
-- **Shipped:**
-  - `ChunkDesc.poi` — a fixed-shape descriptor roll from a dedicated per-chunk rng: presence 0.07/chunk (≈ origin density), 25m edge margin, biome-weighted archetype via the real `pickArchetype`, fresh `renderSeed`. Origin exclusion 1250m (boot placement untouched).
-  - `loadChunk` renders through the REAL `placeProcgenPOI` (forced archetype, `parent: group`): panels mount, salvage registers live, per-POI merge, declared colliders. `unloadChunk`: POI body removed, salvage spliced out, merge-output geometry disposed (shared panel geo + bucket materials never). `placeProcgenComposite` now stashes `userData.poiBody` (streamed 'ship' wrecks would have leaked their body).
-  - **Save safety (the cycle's danger zone):** streamed wrecks are `transient` — excluded from `save.salvageables` (visit-order ids would patch the WRONG wreck after reload); v1 = regenerate pristine (S5 lifts). The streaming gate now SAVES at +1500m with streamed salvage live + asserts only boot ids in the file. Schema v16 untouched. Skipped deliberately: scrap rings (S5), horizon silhouettes (S4) — backlog + D292.
-  - Gate hardening: verify-chunks streaming child 420s→900s (a spawnSync kill mid-probe = fake boot failure + a leaked dev server, D293); probe additions: descriptor↔render POI count, salvage-registry leak assert, world-space snapshots, POI-aware ground ray; `chunk-vista` streamed-POI shot.
-- **Verify:** ALL GREEN — tsc; placement 5-seed 0-fails; colliders 55; verify:chunks (determinism 8/8 ×2 seeds + cross-seed; streaming: bodies 332→330, chunks 49/49, farPois=1 descriptor↔render, farSalvage=2, registry baseline, save-safety); smoke-intro/pod-tutorial/pickup-sweep/survival/diurnal PASS. One wrapper-timeout false-fail root-caused (D293), re-run green.
-- **Visual iteration:** placement-sanity bar — a streamed `hollow_husk` at (1388,−736) shot player-eye: seated, sand line natural, archetype-faithful (renders through the SAME assemblers the origin field uses — no new-element polish owed).
-- **D-entries:** D292 (save-transient streamed wrecks), D293 (wrapper child timeouts / dev-server leak).
-- **Spend:** ~180K output tokens (campaign total ~430K / 10M; cycle 2/50).
-- **Commit:** `ad49dc0` (the SHA-recording docs edit rides in cycle 3's commit).
-- **Next:** cycle 3 = **S3 scatter + ambient life** (brief in `docs/next-session-prompt.md`; step 1 is the spawn*Procgen research ❓ — creature save arrays are the same id-trap as D292).
-
-## Cycle 1 — S1 ChunkManager spike (2026-07-11) — SHIPPED
-
-- **Planned:** S1 — the chunk grid + per-chunk deterministic seed + load/unload with full disposal, proven by marker posts + the two NEW permanent gates (determinism + streaming/leak).
-- **Shipped:**
-  - Terrain STREAMS: `terrain.ts` fixed 3×3 grid → an anchor-margin tile ring (24m margin) following the player; full tile disposal; `heightAt` infinite (closed-form fallback); one shared terrain material (fixed a `_shaderRefs` leak-under-streaming). Boot ring byte-identical to the old grid — the intro region untouched (placement 0-fails ×5 seeds).
-  - NEW `src/world/chunkManager.ts`: 112m content chunks, r3, 8m anchor margin, `chunkSeed` avalanche + PURE `describeChunk` descriptors (D290), full Rapier/mesh teardown, marker spike content (off by default; `__game.setChunkMarkers`).
-  - NEW permanent gates in `verify:all` (`npm run verify:chunks`): `chunk-determinism` (2 seeds + cross-seed digest distinctness) + `chunk-streaming` (4-leg walk to +1500m: terrain follows, collider≡heightAt, bounded set, no seam dupes, byte-identical reload, body-count baseline ±3).
-  - Tooling: rig-shot `startDev` 30s→120s; walk probes at 320×240; `chunk-vista` scenario; `__game.chunkDescribe/chunkStats/resetWormCrossing`.
-- **Verify:** ALL GREEN — tsc, placement (5 seeds, 0 fails), colliders (55), chunk-determinism (8/8 ×2 seeds, digests differ), chunk-streaming (bodies 332→330, chunks 49/49, tiles 9), smoke-intro `{ok,beats:12}`, smoke-pod-tutorial ok, pickup-take-sweep 0 fails, survival-probe PASS, diurnal-probe PASS. (Several boot-window flakes under concurrent machine load — root-caused to Vite cold boots >30s, fixed by the 120s window; each gate re-run green.)
-- **Visual iteration:** placement-sanity bar (systems cycle, per charter) — 4 player-eye `chunk-vista` shots at/past +1500m, 3 identify/reframe rounds (the two "photobombers" were a dune slip face + the ambient worm-crossing ridge — explained, not regressions). No hero bar owed.
-- **Design deltas mid-cycle (probe-driven):** the first trim design (settle-frame counter) was replaced by the ANCHOR-MARGIN model after the streaming probe caught corner micro-slide starvation (D288/D289 — the probe did its job before anything shipped).
-- **D-entries:** D288 (two-grid anchor-margin streaming architecture, friction 3), D289 (heightAt infinite fallback), D290 (descriptor-pure chunk content — the S2 contract), D291 (walk-probe discipline). decisions.md archived D236–D246 (45 active).
-- **Spend:** ~250K output tokens this cycle (campaign total ~250K / 10M; cycle 1/50).
-- **Commit:** `e82d9a7` (branch `campaign/2026-07-10-procgen`; the SHA-recording docs edit rides in the next cycle's commit).
-- **Next:** cycle 2 = **S2 POI streaming** (brief in `docs/next-session-prompt.md`; the descriptor-first contract is D290).
-- **Pending post-mortem drafts:** queued to `.post-mortem-pending/` (consolidate skipped — unattended campaign).
-
-## Cycle 0 — campaign started (2026-07-10)
-
-- **Goal:** infinite deterministic chunk-streamed world per `docs/feature-infinite-procgen.md`.
-- **Design decisions (user, 2026-07-09):** ~112m chunks / fog-radius loading; deterministic (seed → same world); DISTRIBUTED rare landmarks; the escape-pod intro stays the fixed start; save v1 = FULL per-chunk diffs (bump pauses at S5).
-- **Ladder:** S1 spike+probes → S2 POI streaming → S3 scatter/creatures → S4 landmarks/biomes → S6 perf → ⏸ S5 save (the one sanctioned pause, BEFORE building).
-- **Budget:** 50 cycles / ~10M soft. Branch `campaign/2026-07-10-procgen` off master @ 10a27f2 (post-playtest-fixes + the kickoff brief).
-- **Guard:** `.gamedev-framework/overnight.lock` present; the destructive-action hook confirmed in `.claude/settings.local.json`.
-- **Next:** cycle 1 = S1.
+Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement = the S4 far-field landmark slot** (region-rolled hero landmark kind in the infinite world — the slot Infinite Sands reserved), interior = **larger** (~25m, 2-3 compartments), archetype = **heavy freighter**, **FEATURES.skyfall flag = yes**. The feature doc gained a binding "Infinite Sands reconciliation" section (descriptor purity D290, streamed teardown D292/rule 9, deferred-piece hitch discipline D296, chunkDiffs persistence D298 — the no-save-bump DoD holds). Between the pause and this approval, the WORLD SHIPPED INFINITE (campaign "Infinite Sands" S1-S6+S5, merged to master + deployed 2026-07-12) — M7 resumes on fresh branch `campaign/2026-07-12-skyfall` off post-merge master. Flag: the human may switch Fable 5 → Opus 4.8 mid-campaign (steering note added). Next: S1 research + exterior blockout.

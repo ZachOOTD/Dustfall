@@ -42,3 +42,24 @@ Every cycle: `verify:all` + the 6 rig gates (smoke-intro/pod, pickup-take-sweep,
 2. **Interior scale**: "similar" (~17m, one deck) or "larger" (~25m, a taller multi-deck hall)? Default: larger single grand interior with 2-3 compartments.
 3. **Ship archetype/silhouette**: freighter / liner / military / science? (Drives the dressing role.) Default: a broken heavy freighter (fits the salvage/survival tone).
 4. **FEATURES flag**: gate Skyfall behind `FEATURES.skyfall` for reversibility, or always-on? Default: flag it (one-line kill-switch at review).
+
+---
+
+## PLAN-REVIEW OUTCOME (2026-07-12) — APPROVED with changes
+
+Human answers to the open questions:
+1. **Placement: the S4 far-field landmark slot** (NOT the fixed origin-field default). Skyfall ships as a region-rolled hero landmark KIND in the infinite world's landmark system (`chunkManager.ts` S4 grid — joins `colossal_ribcage` / `wreck_knot`, the slot reserved for it during Infinite Sands). Rare-roll it so an encounter stays special.
+2. **Interior: larger** — ~25m hull, tall grand interior, 2-3 compartments.
+3. **Archetype: heavy freighter** (cargo bays, crane spine, container spill).
+4. **`FEATURES.skyfall` flag: yes** (defaults ON, one-line kill-switch).
+
+### Infinite Sands reconciliation (the world changed under this plan — binding)
+- **Determinism law applies** (D290): Skyfall generation must be descriptor-pure — seeded from the landmark's region roll, fixed rand-draw budgets, no state-dependent reads (`terrain.pureHeightAt` for any descriptor-side gates).
+- **Streamed lifecycle** (D292 + rule 9): full teardown on chunk unload — every collider, body, horizon silhouette, and occluder registration must splice back out; the streaming gate's body-leak baseline will catch misses. Use a REMOVABLE horizon-silhouette variant (the module-global registry has no removal path — backlogged; either add removal or skip silhouettes for streamed instances).
+- **Hitch discipline** (D296): a hero-scale build cannot land in one frame — construct via the deferred landmark-piece thunk queue (1 piece/frame) like the wreck knot; the permanent `chunk-perf` gate tripwires it.
+- **Persistence** (S5/D298): interior salvage + the journal persist via `chunkDiffs` content ids (`lm/K/N` registration-order) — NOT the v16 id-keyed arrays (streamed content is save-transient). The plan's "no SAVE_VERSION bump" DoD HOLDS — chunkDiffs already ships in v17 and new content-id branches are additive.
+- **Gate list update**: every cycle runs `verify:all` (now includes `verify:chunks`: determinism ×2 seeds + streaming/leak + perf) + the 5 smokes. S2's new `skyfall-walk` probe teleports to the nearest region-rolled Skyfall instance via a descriptor scan (the chunk-vista pattern), then does the real-motion interior walk there — walking IN a streamed chunk also proves load/unload around an enterable landmark.
+- **The ⏸ post-blockout walk-test pause** (charter pause #1) stands: after S1+S2, the human walks the greybox interior in-app. Surface the nearest rolled instance's coordinates (+ a `__game` teleport helper) so the walk-test doesn't require a 20-minute ride.
+
+### Session flag (2026-07-12)
+The human is low on Fable 5 usage and may switch to Opus 4.8 mid-campaign. Campaign state is file-based, so a mid-loop model switch is safe; each cycle re-boots from docs/campaign/. Keep cycle-log entries extra explicit about in-flight state at cycle end (nothing implicit carried in-context).
