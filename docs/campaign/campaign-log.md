@@ -101,3 +101,13 @@ Newest cycle at top. Prior campaign (2026-06-18, M1–M13, COMPLETE) archived at
 ## Approval — 2026-07-12 — M7 Skyfall plan APPROVED with changes (gate cleared)
 
 Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement = the S4 far-field landmark slot** (region-rolled hero landmark kind in the infinite world — the slot Infinite Sands reserved), interior = **larger** (~25m, 2-3 compartments), archetype = **heavy freighter**, **FEATURES.skyfall flag = yes**. The feature doc gained a binding "Infinite Sands reconciliation" section (descriptor purity D290, streamed teardown D292/rule 9, deferred-piece hitch discipline D296, chunkDiffs persistence D298 — the no-save-bump DoD holds). Between the pause and this approval, the WORLD SHIPPED INFINITE (campaign "Infinite Sands" S1-S6+S5, merged to master + deployed 2026-07-12) — M7 resumes on fresh branch `campaign/2026-07-12-skyfall` off post-merge master. Flag: the human may switch Fable 5 → Opus 4.8 mid-campaign (steering note added). Next: S1 research + exterior blockout.
+
+## Cycle 9 — M7 Skyfall S1: exterior blockout (2026-07-12) — SHIPPED
+- Planned: research + exterior blockout of the hero freighter as an S4 far-field landmark kind.
+- Shipped: `skyfall_freighter` live in the region-kind roll (34%, FEATURES.skyfall kill-switch restores the pre-M7 50/50 exactly); NEW src/world/skyfallWreck.ts (~46m crashed heavy freighter: container spine + crane rail, fore-starboard bridge tower, engine block + triple nozzles, snapped stern w/ dark torn mouths, deep keel bury, NO mounds); research digest docs/research/crashed-freighter-silhouettes.md; NEW fast `skyfall-shot` rig scenario. D300.
+- Steering (mid-cycle, applied): sand mounds removed + retired for Skyfall; S2+ interior bar = intro-ship detail in the wrecked style (bound in feature doc); stale headless shells reaped. Lesson logged: never reap while a probe is live.
+- Verify: verify:all PASS · 5 smokes PASS · chunks gate re-run green after the mound removal.
+- Visual iteration: 4 rounds real-streamed-view (procedural-modeler) + a 2nd-seed generality check + my own read of the final shots; residual S3 nits logged in the agent report + feature doc.
+- Spend: ~350K (campaign total ~3.55M / 10M; cycle 9/50)
+- Commit: (this cycle's commit — see git log on campaign/2026-07-12-skyfall)
+- Next: cycle 10 = S2 enterable interior + colliders + the skyfall-walk probe → then the ⏸ post-blockout walk-test pause.

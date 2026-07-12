@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 9 — 2026-07-12 — M7 Skyfall S1: the freighter EXISTS in the far field (exterior blockout) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + all 5 smokes green; 4-round real-view silhouette iteration + a second-seed generality check; visual proof scen-skyfall-{long,approach,broadside,close,snap}.png. Campaign resumed post-merge on branch `campaign/2026-07-12-skyfall` (plan approved with changes: S4 far-field slot / ~30m+ heavy freighter / FEATURES.skyfall).
+
+- **`skyfall_freighter` is a live S4 landmark kind** — 34% of landmark regions (flag-gated single-draw roll; `VITE_SKYFALL=0` restores the pre-M7 50/50 exactly); one deferred-thunk build (~20ms), full teardown, no body leaks (D300).
+- **NEW `src/world/skyfallWreck.ts`** — ~46m crashed heavy freighter blockout: long boxy loft (L:H≈5:1), spaced dorsal container row + crane gantry, fore-starboard bridge tower + mast, engine block + triple nozzles, snapped stern with dark-baffled torn mouths + exposed formers, spilled containers, deep keel bury. Research-grounded (`docs/research/crashed-freighter-silhouettes.md`).
+- **Steering fold-ins (mid-cycle)**: sand mounds REMOVED + retired for Skyfall (read as geometric piles; bury carries the no-float read); S2+ interior bar = INTRO-SHIP detail in the wrecked art style; stale headless shells reaped (+ lesson: never `npm run reap` while a probe is live — it killed a re-shoot's browser and left stale PNGs).
+- NEW fast `skyfall-shot` rig scenario (5 player-eye angles, ~1min) — reusable for S2-S5. Next: S2 enterable interior + the real-motion walk probe, then the ⏸ human walk-test pause.
+
 ## Post-campaign D299 — 2026-07-12 — ORIGIN PARITY: streamed chunks spawn the full boot content set — the far field no longer feels empty ✓ all gates
 
 `verified` — verify:chunks green (determinism ×2 seeds + cross-seed, streaming incl. the NEW dressing legs, perf tripwires), full suite + smokes green, vista shots show the inhabited far field. Playtest driver: Zach reported generated terrain "pretty much empty" vs the starting area.

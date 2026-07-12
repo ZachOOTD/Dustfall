@@ -221,3 +221,11 @@ PARACHUTE round 2 (Z8): (a) the shroud lines don't connect cleanly to the canopy
 PROCESS: plan + document first; execute overnight; extreme verification (multi-angle, machine checks where possible); morning summary.
 
 ## 2026-07-06 — round 3 additions (verbal): (Z9) the FAR-SPACE PLANET APPROACH moves WAY TOO FAST/unrealistic — slower; possibly split: a slow majestic drift from far away, then a bit faster near the planet; (Z10) the BLACKOUTS between phases are a bit TOO LONG — slightly shorter across the board to keep attention.
+
+## Archived at cycle 9 boot (2026-07-12)
+- 2026-07-12 (at M7 plan approval): the human is LOW ON FABLE 5 USAGE and may switch to Opus 4.8 mid-campaign. State is file-based so the switch is safe — but end every cycle with fully explicit log/state (assume the next cycle boots cold on a different model). If a cycle notices it is running on a weaker model mid-hero-detail, prefer more adversarial-visual rounds over fewer.
+(Standing guidance — also recorded in docs/feature-skyfall.md 'Session flag' + campaign-log; cycles read it there.)
+
+## Archived mid-cycle-9 (2026-07-12)
+don't like the sand mounds around the wreck, lets remove those and not do sand mounds anymore. also this wreck will need detailed interiors at the same detail level of the ship you start on in the intro. but needs to match the wrecked art style of the wreck. also make sure to end any stale headless shells so we don't slow things down
+(Applied: mounds removed from skyfallWreck.ts + retired for Skyfall; interior bar folded into docs/feature-skyfall.md; stale shells reaped via npm run reap.)

@@ -37,6 +37,8 @@ import { buildWordlessTableau } from './wordlessScenes.ts';
 import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { placeRibcage } from './heroLandmarks.ts';
+import { placeSkyfallWreck } from './skyfallWreck.ts';
+import { FEATURES } from '../config/features.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import { spawnDeadTreeAt } from './deadTree.ts';
 import { spawnWellAt, type WaterSource } from './waterSources.ts';
@@ -123,10 +125,12 @@ export interface ChunkDressingDesc {
  *  `present` is true only on the ONE chunk that hosts the region's
  *  landmark position. Kinds: 'colossal_ribcage' (a titan skeleton
  *  breaching the dunes — a silhouette destination) | 'wreck_knot' (a
- *  tight 3-wreck salvage knot + 2 carcasses — a reward destination). */
+ *  tight 3-wreck salvage knot + 2 carcasses — a reward destination) |
+ *  'skyfall_freighter' (M7 — the enterable hero freighter wreck;
+ *  FEATURES.skyfall-gated at the descriptor, purity holds per-build). */
 export interface ChunkLandmarkDesc {
   present: boolean;
-  kind: 'colossal_ribcage' | 'wreck_knot';
+  kind: 'colossal_ribcage' | 'wreck_knot' | 'skyfall_freighter';
   x: number;
   z: number;
   seed: number;
@@ -375,7 +379,14 @@ export function createChunkManager(
     const rz = Math.floor(cz / REGION);
     const regionRand = makeRng(chunkSeed((worldSeed ^ 0x1a4d) >>> 0, rx, rz));
     const regionRoll = regionRand();
-    const regionKind: ChunkLandmarkDesc['kind'] = regionRand() < 0.5 ? 'colossal_ribcage' : 'wreck_knot';
+    // M7 — one kind draw either way (fixed budget). Flag ON: skyfall takes
+    // SKYFALL_KIND_SHARE, the remainder splits ribcage/knot evenly. Flag
+    // OFF: the exact pre-M7 50/50 (the kill-switch restores old worlds).
+    const kindRoll = regionRand();
+    const skyShare = FEATURES.skyfall ? Tuning.SKYFALL_KIND_SHARE : 0;
+    const regionKind: ChunkLandmarkDesc['kind'] =
+      kindRoll < skyShare ? 'skyfall_freighter'
+      : kindRoll < skyShare + (1 - skyShare) / 2 ? 'colossal_ribcage' : 'wreck_knot';
     const REGION_M = REGION * SIZE;
     const lmMargin = 150;
     const lx = rx * REGION_M + lmMargin + regionRand() * (REGION_M - 2 * lmMargin);
@@ -666,6 +677,24 @@ export function createChunkManager(
         tagRibcage(rc.group);
         const body = rc.collider.parent();
         if (body) bodies.push(body);
+      } else if (lm.kind === 'skyfall_freighter') {
+        // M7 — the enterable hero freighter. One heavy assembly (a loft +
+        // box masses, far cheaper than a knot's 3 POI assemblies) → one
+        // deferred thunk (S6 hitch rule). Seed drawn NOW (fixed budget).
+        const pieceSeed = Math.floor(rand() * 0x100000000) >>> 0;
+        const chunkRef = (): LoadedChunk | undefined => chunks.get(key(cx, cz));
+        deferred.push(() => {
+          const c = chunkRef();
+          if (!c) return;
+          const sw = placeSkyfallWreck(scene, world, terrain, lm.x, lm.z, makeRng(pieceSeed), c.group);
+          sw.group.userData.streamLandmark = lm.kind;
+          // Shared module materials — tag geometry only (the _treeMat rule).
+          sw.group.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.isMesh) m.userData.chunkGeo = true;
+          });
+          c.bodies.push(...sw.bodies);
+        });
       } else {
         // wreck_knot — 5 heavy pieces. S6: DEFERRED, one piece per frame
         // (a single frame rendering 3 wreck assemblies + merges was the

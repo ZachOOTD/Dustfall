@@ -75,6 +75,14 @@ export const FEATURES = {
   // (an emergency rollback without reverting the merge). Dev mode + Continue still skip the
   // intro via their own gates in main.ts; legacy saves never replay it (introComplete=true).
   escapePodIntro: import.meta.env?.VITE_ESCAPE_POD_INTRO !== '0',
+
+  /** M7 Skyfall (Sharpen & Deepen, 2026-07-12 plan-approved) — the enterable hero
+   *  freighter wreck, shipped as a rare S4 far-field landmark KIND (region-rolled,
+   *  joins colossal_ribcage / wreck_knot). ON by default; build with VITE_SKYFALL=0
+   *  to kill-switch (skyfall regions then roll the pre-M7 ribcage/knot split —
+   *  descriptor purity holds per-build; far-field chunkDiffs for a skyfall region
+   *  drop silently per D298's content-id rule). Feature slice: docs/feature-skyfall.md. */
+  skyfall: import.meta.env?.VITE_SKYFALL !== '0',
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

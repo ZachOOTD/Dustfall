@@ -371,6 +371,10 @@ export const Tuning = {
   // LANDMARK_CHANCE 0.3 → a destination within ~1.5-2km of anywhere.
   CHUNK_REGION_CHUNKS: 16,
   CHUNK_LANDMARK_CHANCE: 0.3,
+  // M7 Skyfall — the enterable hero freighter's share of landmark-region
+  // kind rolls (FEATURES.skyfall on): ~1/3 of landmark regions → one
+  // Skyfall every ~5-6 regions (~a 4-6km ride between encounters).
+  SKYFALL_KIND_SHARE: 0.34,
   // Regional wreck-yard anchors (the far-field destination biome): rolled
   // per region at low probability; anchors keep MIN_DIST from the origin so
   // the initial ±1200m terrain ring (corner |v|≈1697m) + all boot placement

@@ -63,3 +63,7 @@ Human answers to the open questions:
 
 ### Session flag (2026-07-12)
 The human is low on Fable 5 usage and may switch to Opus 4.8 mid-campaign. Campaign state is file-based, so a mid-loop model switch is safe; each cycle re-boots from docs/campaign/. Keep cycle-log entries extra explicit about in-flight state at cycle end (nothing implicit carried in-context).
+
+### Steering fold-in (2026-07-12, mid-cycle-9 — user directives, binding)
+1. **NO SAND MOUNDS.** The drift banks/mounds around the wreck read as geometric orange piles — removed from the S1 blockout; `makeSandMound` is retired for ALL Skyfall work going forward. The no-float read is carried by the deep keel bury alone (~half the hull below the pan). If a future pose reads floaty, deepen the bury or reshape terrain interaction some other way — never mounds.
+2. **Interior detail bar = the INTRO SHIP.** S2's enterable interior must ultimately reach the same detail level as the escape-pod intro ship (`shipScene.ts` — consoles, cabling, panel detail, lighting), but in the WRECKED art style of this hull (torn, sand-drifted, dead systems, scavenger-stripped). S2 ships the walkable greybox + collision (the walk-test pause gates it); S3-S5 hero passes carry the interior to that bar — treat interior detail as HERO work (adversarial gate, positive quality target), not set dressing.

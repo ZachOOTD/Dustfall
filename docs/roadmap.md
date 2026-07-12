@@ -132,7 +132,26 @@ and promotes the second.
 
 ## Up next
 
-> **⚙ ACTIVE CAMPAIGN — "Infinite Sands" (infinite procgen, started 2026-07-10, branch `campaign/2026-07-10-procgen`).**
+> **⚙ ACTIVE CAMPAIGN — "Sharpen & Deepen" RESUMED at M7 Skyfall (2026-07-12, branch `campaign/2026-07-12-skyfall`).**
+> Plan (approved with changes — S4 far-field slot / larger ~30m+ freighter / FEATURES.skyfall):
+> [feature-skyfall.md](feature-skyfall.md). Steering fold-ins: NO sand mounds (retired for Skyfall);
+> interior bar = intro-ship detail in the wrecked art style. The M7 sub-ladder:
+> - **✅ S1 — research + exterior blockout** — SHIPPED cycle 9 (2026-07-12, D300). `skyfall_freighter`
+>   is a live S4 landmark kind (34% of landmark regions, flag-gated, kill-switch restores the old 50/50);
+>   NEW `src/world/skyfallWreck.ts` (~46m crashed heavy freighter: container spine + crane rail, fore-
+>   starboard bridge tower, engine block + triple nozzles, snapped stern, dark-baffled torn mouths, deep
+>   keel bury, NO mounds) iterated 4 rounds against the real streamed view (`skyfall-shot` scenario);
+>   research digest `docs/research/crashed-freighter-silhouettes.md`. All gates green.
+> - **S2 — enterable interior + colliders** (NEXT, cycle 10): walkable compartments in the hull frame,
+>   floor/wall/ceiling box colliders + threshold sills + jamb sealing, a real breach entry; NEW
+>   `skyfall-walk` real-motion probe (spawn inside, push every wall, exit+re-enter). Then the
+>   **⏸ post-blockout WALK-TEST pause** (charter pause #1) before any hero detail.
+> - S3-S5 — hero-detail passes (adversarial gate, HERO bar; interior to INTRO-SHIP detail in the
+>   wrecked style per steering) + the Skyfall landing-fire fix fold-in.
+> - S6 — integration + loot (salvage panels + journal inside via chunkDiffs content ids, occluder
+>   registration sweep, full gate pass).
+
+> **✔ MERGED — "Infinite Sands" (infinite procgen, 2026-07-10→12, merged to master + deployed 2026-07-12).**
 > Charter + answered design questions: [campaign/campaign.md](campaign/campaign.md); authoritative feature
 > slice: [feature-infinite-procgen.md](feature-infinite-procgen.md). The S-ladder (traverse in order):
 > - **✅ S1 — ChunkManager spike + determinism/streaming probes** — SHIPPED cycle 1 (2026-07-11, D288–D291).

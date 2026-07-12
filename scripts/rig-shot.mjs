@@ -2464,6 +2464,37 @@ const SCENARIOS = {
     });
     if (s4targets.lmT) console.log(`[chunk-vista] landmark: ${s4targets.lmT.kind} at ${s4targets.lmT.x.toFixed(0)},${s4targets.lmT.z.toFixed(0)}`);
     await walkShoot('streamed-landmark', s4targets.lmT, 4.0);
+    // M7 — the nearest SKYFALL freighter, player-eye at two reads: an
+    // approach framing (~45m) and a close hull read (~15m).
+    const skyT = await page.evaluate(() => {
+      const g = window.__game;
+      for (let r = 1; r <= 8; r++) {                       // spiral out by chunk rings
+        for (let cx = -r * 16; cx <= r * 16; cx += 4) {
+          for (let cz = -r * 16; cz <= r * 16; cz += 4) {
+            for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              if (d.landmark.present && d.landmark.kind === 'skyfall_freighter') {
+                return { x: d.landmark.x, z: d.landmark.z };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    if (skyT) console.log(`[chunk-vista] SKYFALL freighter at ${skyT.x.toFixed(0)},${skyT.z.toFixed(0)}`);
+    await walkShoot('skyfall-approach', skyT, 3.0);
+    if (skyT) {
+      await shot('skyfall-close', `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = ${skyT.x}, pz = ${skyT.z};
+        const cx2 = px + 11, cz2 = pz + 11;
+        cam.position.set(cx2, ctx.terrain.heightAt(cx2, cz2) + 1.7, cz2);
+        cam.lookAt(px, ctx.terrain.heightAt(px, pz) + 2.0, pz);
+        cam.updateMatrixWorld(true);
+      })()`);
+    }
     if (s4targets.yardT) console.log(`[chunk-vista] regional wreck-yard at ${s4targets.yardT.x.toFixed(0)},${s4targets.yardT.z.toFixed(0)}`);
     await walkShoot('regional-wreck-yard', s4targets.yardT, 1.2);
     if (s4targets.yardT) {
@@ -2488,6 +2519,120 @@ const SCENARIOS = {
       }, s4targets.yardT);
       console.log('[chunk-vista] yard diag: ' + JSON.stringify(diag));
     }
+  },
+
+  // ── M7 SKYFALL — a DEDICATED fast exterior framer for the crashed heavy
+  //    freighter blockout (S1). Copies the chunk-vista teleport-stream pattern
+  //    but skips the whole 1500m biome sweep: spiral-scan for the nearest
+  //    region-rolled 'skyfall_freighter', hop the player there (~140m steps so
+  //    chunks stream + the deferred build fires), read the wreck's true yaw off
+  //    the built group, then shoot 4 player-eye reads keyed to the hull axis:
+  //    a long broadside silhouette (~70m), an approach (~40m), a close broadside
+  //    (~20m), and a bow close-quarter (~12m). ~1 min vs ~5.
+  //    Run: node scripts/rig-shot.mjs --scenario=skyfall-shot --seed=1337 --port=5760
+  'skyfall-shot': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      g.setTime(0.40);                                 // mid-morning: raking front light, form reads
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1280, 720, false);    // wide frame — length must dominate
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1280 / 720; cam.updateProjectionMatrix(); }
+      await frames(4);
+    });
+    // Spiral-scan the descriptor grid for the nearest skyfall freighter.
+    const skyT = await page.evaluate(() => {
+      const g = window.__game;
+      for (let r = 1; r <= 10; r++) {
+        for (let cx = -r * 16; cx <= r * 16; cx += 4) {
+          for (let cz = -r * 16; cz <= r * 16; cz += 4) {
+            for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              if (d.landmark.present && d.landmark.kind === 'skyfall_freighter') {
+                return { x: d.landmark.x, z: d.landmark.z };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    if (!skyT) { console.log('[skyfall-shot] no skyfall freighter found in scan window (check FEATURES.skyfall / seed)'); return; }
+    console.log(`[skyfall-shot] SKYFALL freighter at ${skyT.x.toFixed(0)},${skyT.z.toFixed(0)}`);
+    // Hop the player there in ~140m steps so chunks stream in along the way,
+    // then park adjacent and wait for the deferred landmark thunk to build.
+    await page.evaluate(async (t) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const from = ctx.player.body.body.translation();
+      const dist = Math.hypot(t.x - from.x, t.z - from.z);
+      const steps = Math.max(4, Math.ceil(dist / 140));
+      for (let i = 1; i <= steps; i++) {
+        const x = from.x + (t.x - from.x) * (i / steps);
+        const z = from.z + (t.z - from.z) * (i / steps);
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+        for (let f = 0; f < 14; f++) await raf();
+      }
+      // Park ~30m off the wreck so its home chunk stays loaded, then let the
+      // deferred build (1 piece/frame) fire + merge.
+      ctx.player.body.body.setTranslation({ x: t.x - 30, y: ctx.terrain.heightAt(t.x - 30, t.z) + 1.6, z: t.z }, true);
+      for (let f = 0; f < 140; f++) await raf();
+    }, skyT);
+    // Read the wreck's true yaw + center off the built group (the builder stashes
+    // it on root.userData) so the camera can frame a genuine broadside/bow read.
+    const info = await page.evaluate((t) => {
+      const ctx = window.__game.ctx;
+      let wreck = null, bestD = Infinity;
+      ctx.three.scene.traverse((o) => {
+        if (o.name === 'skyfallWreck' && o.userData && o.userData.skyfallCenter) {
+          const c = o.userData.skyfallCenter;
+          const dd = (c.x - t.x) ** 2 + (c.z - t.z) ** 2;
+          if (dd < bestD) { bestD = dd; wreck = o; }
+        }
+      });
+      if (!wreck) return { built: false };
+      return { built: true, yaw: wreck.userData.skyfallYaw, cx: wreck.userData.skyfallCenter.x, cz: wreck.userData.skyfallCenter.z };
+    }, skyT);
+    if (!info.built) { console.log('[skyfall-shot] WARN: wreck group not found near target (deferred build did not fire?)'); }
+    const yaw = info.built ? info.yaw : 0;
+    console.log(`[skyfall-shot] wreck built=${info.built} yaw=${(yaw).toFixed(2)}rad`);
+    // Hull local +Z (forward) maps to world (sin yaw, cos yaw) under the Y-rot;
+    // broadside is perpendicular. skyfallCenter is the BOW origin, so aim at a
+    // point ~22m forward = the whole-wreck midpoint (fore + snap + stern), so
+    // the long/broadside reads capture the full length AND the snapped stern.
+    const fwd = [Math.sin(yaw), Math.cos(yaw)];
+    const broad = [Math.cos(yaw), -Math.sin(yaw)];
+    const norm = (v) => { const m = Math.hypot(v[0], v[1]) || 1; return [v[0] / m, v[1] / m]; };
+    const bcx = info.cx ?? skyT.x, bcz = info.cz ?? skyT.z;
+    // aimAlong = forward offset (m) of the look target from the bow origin.
+    const shot = async (name, camDir, dist, lift, lookY, aimAlong = 22) => {
+      const ax = bcx + fwd[0] * aimAlong, az = bcz + fwd[1] * aimAlong;
+      await page.evaluate(({ ax, az, dx, dz, dist, lift, lookY }) => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = ax + dx * dist, pz = az + dz * dist;
+        const gy = ctx.terrain.heightAt(px, pz);
+        cam.position.set(px, gy + lift, pz);
+        cam.lookAt(ax, ctx.terrain.heightAt(ax, az) + lookY, az);
+        cam.updateMatrixWorld(true);
+      }, { ax, az, dx: camDir[0], dz: camDir[1], dist, lift, lookY });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-skyfall-${name}.png`), timeout: 60000 });
+      console.log(`[skyfall-shot] saved scen-skyfall-${name}.png`);
+    };
+    const threeQ = norm([broad[0] * 0.8 + fwd[0] * 0.6, broad[1] * 0.8 + fwd[1] * 0.6]);
+    const bowDir = norm([fwd[0] * 0.7 + broad[0] * 0.5, fwd[1] * 0.7 + broad[1] * 0.5]);
+    await shot('long', broad, 72, 4.0, 2.0, 20);      // long broadside silhouette — full length + snap
+    await shot('approach', threeQ, 42, 3.0, 2.5, 20); // 3/4 approach
+    await shot('broadside', broad, 22, 2.6, 2.5, 20); // close broadside — bridge + containers + snap
+    await shot('close', bowDir, 12, 1.9, 2.4, 5);     // bow close-quarter — burial + blunt bow read
+    await shot('snap', threeQ, 18, 2.6, 1.5, 36);     // the SNAP: fracture mouths + stern engine block + gap
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/
