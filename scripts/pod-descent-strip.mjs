@@ -18,7 +18,7 @@ const PORT = Number(argv.port || 5191);
 const PFIX = Number(argv.p || 0.28);   // re-entry peak is ~0.24; hold here for the time-strip
 const FRAMES = Number(argv.frames || 8);
 
-const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: (process.env.RIG_GL === 'swiftshader' ? ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] : ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']) });
 const page = await (await browser.newContext({ viewport: { width: 900, height: 900 } })).newPage();
 page.on('console', (m) => { const t = m.text(); if (t.startsWith('[strip]')) console.log(t); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
