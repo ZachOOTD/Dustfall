@@ -38,6 +38,7 @@ import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { placeRibcage } from './heroLandmarks.ts';
 import { placeSkyfallWreck } from './skyfallWreck.ts';
+import type { Journal } from './journal.ts';
 import { FEATURES } from '../config/features.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import { spawnDeadTreeAt } from './deadTree.ts';
@@ -176,6 +177,9 @@ interface LoadedChunk {
   wells: WaterSource[];
   cactiRecs: Cactus[];
   priorTaken: string[];
+  /** S6 — journals this chunk placed (the Skyfall crash-log); spliced out of
+   *  ctx.journals on unload (their meshes go with the group). */
+  journals: Journal[];
 }
 
 /** S5 — one chunk's deviations from its descriptor-pristine state
@@ -686,14 +690,37 @@ export function createChunkManager(
         deferred.push(() => {
           const c = chunkRef();
           if (!c) return;
-          const sw = placeSkyfallWreck(scene, world, terrain, lm.x, lm.z, makeRng(pieceSeed), c.group);
+          // S6 — the wreck registers interior salvage panels + the pilot's
+          // crash-log journal. Salvage rides the SAME transient/tag/diff chain
+          // as the knot (S5-proven persistence); the journal is tracked on the
+          // chunk for teardown (new — see unloadChunk).
+          const sw = placeSkyfallWreck(scene, world, terrain, lm.x, lm.z, makeRng(pieceSeed), c.group, {
+            salvage: salvageables,
+            journal: !!gameCtx,
+          });
           sw.group.userData.streamLandmark = lm.kind;
           // Shared module materials — tag geometry only (the _treeMat rule).
+          // (Salvage panels + the journal are added AFTER this traverse by the
+          // builder and carry their own tags, so they're unaffected here.)
           sw.group.traverse((o) => {
             const m = o as THREE.Mesh;
-            if (m.isMesh) m.userData.chunkGeo = true;
+            if (m.isMesh && m.userData.chunkGeo === undefined) m.userData.chunkGeo = true;
           });
           c.bodies.push(...sw.bodies);
+          // S5/S6 — the salvage is ALREADY in salvageables.list (registerSalvageable
+          // pushed it); mark transient + track on the chunk for teardown, tag with
+          // descriptor-derived ids, apply any diff (mirrors the knot path).
+          for (const rec of sw.salvage) {
+            rec.transient = true;
+            c.salvage.push(rec);
+          }
+          tagSalvage(sw.salvage, 'sky');
+          applySalvageDiff(key(cx, cz), sw.salvage);
+          // The journal → the live list + the chunk's teardown list.
+          if (sw.journal && gameCtx) {
+            gameCtx.journals.list.push(sw.journal);
+            c.journals.push(sw.journal);
+          }
         });
       } else {
         // wreck_knot — 5 heavy pieces. S6: DEFERRED, one piece per frame
@@ -868,6 +895,7 @@ export function createChunkManager(
       lizards: chunkLizards, shrews: chunkShrews,
       deferred, priorLooted,
       pickups: chunkPickups, wells: chunkWells, cactiRecs: chunkCacti, priorTaken,
+      journals: [],
     });
     const _ms = performance.now() - _t0;
     _perf.loads++;
@@ -941,6 +969,15 @@ export function createChunkManager(
     for (const rec of c.salvage) {
       const idx = salvageables.list.indexOf(rec);
       if (idx >= 0) salvageables.list.splice(idx, 1);
+    }
+    // S6 — splice this chunk's journals out of the live list (their meshes
+    // are children of c.group, so scene.remove(c.group) + the chunkGeo/chunkMat
+    // traverse above already disposed the geometry + per-call materials).
+    if (gameCtx) {
+      for (const j of c.journals) {
+        const ji = gameCtx.journals.list.indexOf(j);
+        if (ji >= 0) gameCtx.journals.list.splice(ji, 1);
+      }
     }
     for (const body of c.bodies) world.removeRigidBody(body);
   };

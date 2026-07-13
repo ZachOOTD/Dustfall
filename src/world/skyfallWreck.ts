@@ -22,11 +22,15 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
-import type { Rng } from '../core/rng.ts';
+import { type Rng, makeRng } from '../core/rng.ts';
 import { makeLoftedHull, makeFormerRings, mergeStaticByMaterial, type LoftStation } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
+import { registerSalvageable, type SalvageableRegistry, type Salvageable } from './salvage.ts';   // S6 — interior salvage loot
+import { addAccessPanel } from './wrecks.ts';                                                      // S6 — the pry-open panel builder
+import { placeJournal, type Journal } from './journal.ts';                                         // S6 — the pilot's crash-log
+import { generateCrashLog } from './crashLog.ts';
 
 // ── Shared materials (module singletons — one shader program set for every
 //    streamed Skyfall; meshes get chunkGeo so geometry unloads, materials stay).
@@ -109,6 +113,12 @@ const _mugMat = new THREE.MeshLambertMaterial({ color: 0xa85f3e, flatShading: tr
 export interface SkyfallResult {
   group: THREE.Group;
   bodies: RAPIER.RigidBody[];
+  /** S6 — the interior salvage panels this wreck registered (the caller tags
+   *  them `sky/N`, applies the chunk diff, and tracks them for teardown). */
+  salvage: Salvageable[];
+  /** S6 — the pilot's crash-log journal on the bow console (the caller pushes
+   *  it into ctx.journals + tracks it for teardown). Null if not requested. */
+  journal: Journal | null;
 }
 
 /** Place the Skyfall freighter wreck at (x, z), crashed pose derived from
@@ -122,6 +132,7 @@ export function placeSkyfallWreck(
   z: number,
   rand: Rng,
   parent?: THREE.Group,
+  opts: { salvage?: SalvageableRegistry; journal?: boolean } = {},
 ): SkyfallResult {
   const bodies: RAPIER.RigidBody[] = [];
   const root = new THREE.Group();
@@ -905,5 +916,53 @@ export function placeSkyfallWreck(
     if (b) bodies.push(b);
   }
 
-  return { group: root, bodies };
+  // ══ S6 — INTERIOR LOOT: the reward for walking to the bow ═══════════════
+  // 2 pry-open salvage panels on the cabin side walls + the pilot's crash-log
+  // journal on the bow console. Both parented to `fore` so they inherit the
+  // crash pose. A POSITION-SEEDED rng (NOT the main `rand`) drives the loot
+  // condition + log text, so adding loot does not perturb the exterior/pose
+  // determinism — it's purely additive + still deterministic per site. Both
+  // are added AFTER mergeStaticByMaterial so they stay live (interactable).
+  const salvage: Salvageable[] = [];
+  let journal: Journal | null = null;
+  const lootRand = makeRng((Math.abs(Math.round(x * 73.1 + z * 179.3)) % 0x7fffffff) || 1);
+  if (opts.salvage) {
+    // Starboard cabin-wall panel — face points -X into the room, body recesses
+    // +X into the wall (wrapper-Group pattern, mirrors crashedHull/engineBlock).
+    const pA = new THREE.Group();
+    addAccessPanel(pA, 0, 0, 0, 1, 0, 'fuselage');
+    pA.position.set(WALL_X, DECK_Y + 1.25, 10.4);
+    pA.rotation.y = -Math.PI / 2;
+    fore.add(pA);
+    // Port cabin-wall panel — face +X, body recesses -X into the wall.
+    const pB = new THREE.Group();
+    addAccessPanel(pB, 0, 0, 0, 1, 0, 'fuselage');
+    pB.position.set(-WALL_X, DECK_Y + 1.25, 9.2);
+    pB.rotation.y = Math.PI / 2;
+    fore.add(pB);
+    for (const p of [pA, pB]) {
+      p.updateWorldMatrix(true, false);
+      const w = new THREE.Vector3().setFromMatrixPosition(p.matrixWorld);
+      salvage.push(registerSalvageable(opts.salvage, p, 'massive', w, lootRand));
+    }
+  }
+  if (opts.journal) {
+    // The pilot's crash log on the bow console top (the story payoff). Built +
+    // returned; the CALLER pushes it into ctx.journals (placeJournal itself
+    // does not). Its per-call materials are tagged chunkGeo/chunkMat so the
+    // chunk teardown disposes them (streamed content — the D292 rule).
+    fore.updateMatrixWorld(true);
+    const jWorld = new THREE.Vector3(0.4, DECK_Y + 0.86, 7.05).applyMatrix4(fore.matrixWorld);
+    journal = placeJournal(
+      scene, jWorld, yaw + Math.PI, 'crashed_hull',
+      generateCrashLog((lootRand() * 0x7fffffff) >>> 0, 'freighter'),
+    );
+    fore.attach(journal.mesh);   // reparent under the wreck (preserves world pose) → tears down with the chunk
+    journal.mesh.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.userData.chunkGeo = true; m.userData.chunkMat = true; }
+    });
+  }
+
+  return { group: root, bodies, salvage, journal };
 }

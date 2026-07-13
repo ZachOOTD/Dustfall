@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 12,
-  "current_tier": "M7 - Skyfall S6 (integration: salvage loot + journal inside, occluder sweep, final gates)",
+  "cycles_completed": 13,
+  "current_tier": "M7 Skyfall LADDER COMPLETE (S1-S6) \u2014 awaiting the human post-blockout walk-test (feel/scale/lighting), then campaign end review",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 4400000
+    "total": 4750000
   },
   "ladder": [
     {
@@ -71,7 +71,7 @@
       "id": "M7",
       "name": "Skyfall enterable hero wreck",
       "kind": "feel-critical",
-      "status": "S1+S2 SHIPPED (D300/D302, enterable+gate-proven); probe infra GPU-default (D301); S3-S5 hero detail next; human walk-test = morning review",
+      "status": "COMPLETE (S1-S6 shipped: blockout/enterable/exterior-hero/interior-hero/loot). Owed: human walk-test (deferred to morning).",
       "pause_before": "hero-detail"
     }
   ],
@@ -181,6 +181,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 250000,
       "verify": "verify tsc clean - skyfall-walk PASS (furniture off lane) - verify-chunks PASS (digest unchanged 65f211f8) - 7-round hero iteration"
+    },
+    {
+      "n": 13,
+      "date": "2026-07-13",
+      "focus": "M7 S6 integration: interior salvage loot + crash-log journal (streamed-persistent) \u2014 LADDER COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 300000,
+      "verify": "verify:all PASS - smokes PASS - numeric loot probe (2 sky panels, journal 6->7->6 clean teardown, salvage persists) - skyfall-walk PASS - digest unchanged"
     }
   ]
 }

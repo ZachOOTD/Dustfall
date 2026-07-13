@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 13 — 2026-07-13 — M7 Skyfall S6: interior loot + crash-log journal — **the M7 LADDER IS COMPLETE** ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + smokes green; a numeric probe confirms loot registration + clean journal teardown (6→7→6) + salvage persistence (stripped `sky/0` stays stripped across unload→revisit); skyfall-walk PASS (loot off the walk lane); determinism digest unchanged (65f211f8).
+
+- **Salvage loot** — 2 pry-open salvage panels on the cabin walls (the `addAccessPanel` + `registerSalvageable` wrapper-Group idiom from crashedHull), riding the same transient/`tagSalvage('sky')`/`applySalvageDiff` chain as the wreck_knot → they PERSIST across save/reload like all streamed salvage (S5).
+- **The pilot's crash-log journal** on the bow console (`placeJournal` + `generateCrashLog(seed,'freighter')`) — the story payoff for reaching the bow. NEW `LoadedChunk.journals` + `unloadChunk` splice tears it out of `ctx.journals` on unload (per-call materials disposed via chunkGeo/chunkMat tags).
+- Loot is **position-seeded** (independent of the main rand) so it's purely additive to determinism. **Occluder registration dropped** (D303) — the registry has no removal path, so a streamed landmark would leak; backlogged as a removable variant.
+- **The M7 Skyfall ladder (S1 blockout → S2 enterable → S3 exterior hero → S4-S5 interior hero → S6 loot) is COMPLETE.** The enterable hero freighter is a rare far-field destination with a detailed wrecked interior, real salvage, and a story. Owed: the human post-blockout walk-test (feel/scale/lighting — deferred to the morning review).
+
 ## Campaign "Sharpen & Deepen" cycle 12 — 2026-07-13 — M7 Skyfall S4-S5: INTERIOR hero dressing to intro-ship detail (wrecked style) + lighting ✓ all gates
 
 `verified` — verify (tsc) + skyfall-walk (furniture off the walk lane) + verify-chunks all green; determinism digest UNCHANGED (65f211f8 — the interior layout consumes zero rand, deterministic from hull dims); perf landmark-piece 4.7ms (≪120ms tripwire). 7-round real-view hero iteration.
