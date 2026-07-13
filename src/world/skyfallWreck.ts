@@ -75,7 +75,6 @@ export function placeSkyfallWreck(
   const sternListSign = rand() < 0.5 ? 1 : -1;
   const sternList = (0.16 + rand() * 0.16) * sternListSign;
   const sternGap = 5.0 + rand() * 3.0;                            // the SNAP daylight (wider = reads)
-  const groundY = terrain.heightAt(x, z);
 
   // ── FORE HULL — the main mass: ~30m of boxy freighter loft, long-dominant
   //    (L:H ≈ 5:1). Local +Z = forward. Stations: blunt working bow → long
@@ -100,9 +99,66 @@ export function placeSkyfallWreck(
   foreRings.rotation.y = Math.PI / 2;   // rings space along +X → along the hull's +Z
   foreRings.position.set(0, 0, FORE_LEN - 1.4);
   fore.add(foreRings);
-  const foreBaffle = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 1.7, HALF_H * 1.7, 0.4), _voidMat);
-  foreBaffle.position.set(0, 0, FORE_LEN - 2.4);
-  fore.add(foreBaffle);
+  // (S1's dark mouth baffle is GONE — the fracture is now the real walk-in
+  //  entry; the S2 interior below provides the dark depth behind the mouth.)
+
+  // ══ S2 — THE ENTERABLE INTERIOR (greybox + exact collision) ══════════════
+  // Local frame: deck TOP at DECK_Y; ceiling underside at CEIL_Y (2.5m clear,
+  // DoD ≥2.4m); inner wall faces at ±WALL_X. Three compartments walked bow-
+  // ward from the fracture mouth: HOLD (z 20-30) → MID BAY (z 12-20) →
+  // FORE CABIN (z 6-12); the tapered nose (z<6) is a sealed mass. Entry is
+  // the fracture mouth at z=30 — the deck lip lands ~at outside grade (the
+  // hull center sits ≈ ground level from the deep bury), so you walk straight
+  // in off the sand. Bulkheads carry a doorway each (jamb panels + lintel +
+  // a 10cm anti-leak SILL — the shipScene threshold pattern).
+  const DECK_Y = -0.4;
+  const CEIL_Y = 2.1;
+  const WALL_X = HALF_W - 0.7;            // inner wall face (±3.1)
+  const DOOR_HW = 0.55;                   // doorway half-width (1.1m clear)
+  const DOOR_TOP = DECK_Y + 2.05;         // doorway clear height 2.05m
+  const doorX1 = (rand() - 0.5) * 3.2;    // cabin↔mid doorway x (bulkhead z=12)
+  const doorX2 = (rand() - 0.5) * 3.2;    // mid↔hold doorway x (bulkhead z=20)
+  // Deck plate — one long walkable plate, overhanging the mouth 0.6m so the
+  // lip meets the sand without a gap.
+  const deck = new THREE.Mesh(new THREE.BoxGeometry((WALL_X + 0.6) * 2, 0.3, 24.6), _hullDarkMat);
+  deck.position.set(0, DECK_Y - 0.15, 18.3);
+  fore.add(deck);
+  // Bow-closure wall (the interior's forward end, hiding the sealed nose).
+  const closure = new THREE.Mesh(new THREE.BoxGeometry((WALL_X + 0.6) * 2, 5.4, 0.35), _hullDarkMat);
+  closure.position.set(0, -0.2, 6.2);
+  fore.add(closure);
+  // Under-deck skirt at the mouth (closes the void below the deck lip).
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry((WALL_X + 0.6) * 2, 2.5, 0.3), _voidMat);
+  skirt.position.set(0, -1.65, 30.45);
+  fore.add(skirt);
+  // Bulkheads (visuals; colliders below mirror these exactly): two jamb
+  // panels + a lintel + a 10cm sill per doorway.
+  const bulkheadAt = (bz: number, doorX: number): void => {
+    const panelY = (CEIL_Y + DECK_Y) / 2, panelH = CEIL_Y - DECK_Y;
+    const leftW = (doorX - DOOR_HW) - (-WALL_X - 0.35);
+    const rightW = (WALL_X + 0.35) - (doorX + DOOR_HW);
+    const left = new THREE.Mesh(new THREE.BoxGeometry(leftW, panelH, 0.35), _hullDarkMat);
+    left.position.set((-WALL_X - 0.35) + leftW / 2, panelY, bz);
+    fore.add(left);
+    const right = new THREE.Mesh(new THREE.BoxGeometry(rightW, panelH, 0.35), _hullDarkMat);
+    right.position.set((doorX + DOOR_HW) + rightW / 2, panelY, bz);
+    fore.add(right);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(DOOR_HW * 2, CEIL_Y - DOOR_TOP, 0.35), _hullDarkMat);
+    lintel.position.set(doorX, (CEIL_Y + DOOR_TOP) / 2, bz);
+    fore.add(lintel);
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(DOOR_HW * 2, 0.1, 0.4), _frameMat);
+    sill.position.set(doorX, DECK_Y + 0.05, bz);
+    fore.add(sill);
+  };
+  bulkheadAt(12, doorX1);
+  bulkheadAt(20, doorX2);
+  // Dim emergency lighting — enough to WALK the greybox (S3 does the real
+  // lighting pass). Lights are group children → torn down with the chunk.
+  for (const [ly, lz] of [[1.5, 9], [1.6, 16], [1.5, 25]] as const) {
+    const pl = new THREE.PointLight(0xff9a55, 0.55, 10, 2);
+    pl.position.set(0, ly, lz);
+    fore.add(pl);
+  }
   // Bridge castle — FORWARD superstructure, offset to starboard (freighter
   // grammar: crew tower fore-starboard, cargo spine behind it). A distinct
   // 2-tier tower rising clear of the deck so it reads separately from cargo.
@@ -149,19 +205,41 @@ export function placeSkyfallWreck(
     post.position.set(-BR_X, HALF_H + (CN_H + 1.5) * 0.5 - 0.25, pz);
     fore.add(post);
   }
-  // Pose the fore hull: shallow bow-settle + list, sunk so the keel rides well
-  // UNDER the sand (foreBury = center-keel depth below ground). The long body
-  // lying low + the flank drift below kills the R1 float.
-  const foreBury = 2.8 + rand() * 0.4;    // sink ~half the 5.8m hull — buried-landmark read; carries the
-                                          // no-float read ALONE now (mounds retired per user steering)
-  fore.rotation.set(pitch, yaw, list, 'YXZ');
-  fore.position.set(x, groundY + HALF_H - foreBury, z);
-  root.add(fore);
-
-  // World-space frame helpers (yaw only — camera/drift framing, list/pitch are
-  // small). fwd = hull +Z; lateral = +X (starboard).
+  // World-space frame helpers (yaw only). fwd = hull +Z; lateral = +X.
   const fwd = new THREE.Vector2(Math.sin(yaw), Math.cos(yaw));
   const lat = new THREE.Vector2(Math.cos(yaw), -Math.sin(yaw));
+
+  // Pose the fore hull — SLOPE-CONFORMED (S2). Landmark sites roll anywhere
+  // (no flatness gate), so grade can drop meters bow→mouth; a bury measured
+  // only at the bow anchor leaves the mouth END floating over lower sand
+  // (the walk probe caught the capsule strolling UNDER the deck on terrain).
+  // Fix: pitch follows the bow→mouth grade (plus the small crash settle),
+  // and the DECK LIP is anchored ~0.15m above LOCAL grade at the mouth — the
+  // entry is a real step-in on every site, and the bow end digs in deeper
+  // uphill (which reads as the crash furrow).
+  const foreBury = 2.8 + rand() * 0.4;    // (kept draw) modulates the lip height a touch
+  const groundMouth = terrain.heightAt(x + fwd.x * FORE_LEN, z + fwd.y * FORE_LEN);
+  const lipH = 0.12 + (foreBury - 2.8) * 0.15;   // 0.12-0.18m step onto the deck
+  const mouthDeckY = groundMouth + lipH;
+  // Deck-line slope: start from the bow→mouth endpoint grade, then RAISE the
+  // pitch until the deck clears the grade at interior samples to within 0.3m
+  // (dune curvature can bulge ABOVE a two-point line mid-hull — seed-808's
+  // waist-deep sand in the mid bay). Residual ≤ ~0.3m reads as shin-deep
+  // ingress in the buried end (deliberate wreck language, probe-bounded 0.5).
+  let deckSlope = (terrain.heightAt(x + fwd.x * 2, z + fwd.y * 2) - groundMouth) / FORE_LEN;
+  for (const zi of [9, 16, 23] as const) {
+    const gi = terrain.heightAt(x + fwd.x * zi, z + fwd.y * zi);
+    deckSlope = Math.max(deckSlope, (gi - 0.3 - mouthDeckY) / (FORE_LEN - zi));
+  }
+  deckSlope = Math.min(Math.max(deckSlope, -0.06), 0.15);   // deck stays walkable (≤~8.5°)
+  // The conforming slope IS the final pitch — adding the cosmetic crash
+  // settle (`pitch`, ~1°) after the fit drooped the bow-end deck back under
+  // the grade constraint (seed-808). The LIST carries the crash read.
+  fore.rotation.set(Math.asin(deckSlope), yaw, list, 'YXZ');
+  const foreQ0 = new THREE.Quaternion().setFromEuler(fore.rotation);
+  const mouthDeckLocal = new THREE.Vector3(0, -0.4, FORE_LEN).applyQuaternion(foreQ0);
+  fore.position.set(x, mouthDeckY - mouthDeckLocal.y, z);
+  root.add(fore);
 
   // ── STERN PIECE — snapped off, ~10m: engine block + nozzles, settled with
   //    its own lean behind the fracture, gap showing daylight. Front mouth
@@ -193,7 +271,13 @@ export function placeSkyfallWreck(
   }
   // Pose the stern behind the fore hull's fracture, along the crashed axis,
   // sunk + tilted so it reads as a broken-off chunk (settled lower than the fore).
-  const aftDist = FORE_LEN * 0.5 + sternGap + STERN_LEN * 0.5;
+  // stern.position is the stern loft's FRONT face (its local z=0); the fore
+  // hull spans local z 0..FORE_LEN from fore.position (the BOW) — so the real
+  // snap daylight is aftDist − FORE_LEN. The S1 code measured from the hull
+  // MIDDLE (FORE_LEN*0.5), which embedded the stern's front 2-5m INSIDE the
+  // fore hull and parked its collider in the fracture mouth — caught by the
+  // S2 walk probe's mouth waypoint (visually masked: both masses dark + yawed).
+  const aftDist = FORE_LEN + sternGap;
   const sternBase = new THREE.Vector3(x + fwd.x * aftDist, 0, z + fwd.y * aftDist);
   const sternGroundY = terrain.heightAt(sternBase.x, sternBase.z);
   const sternBury = 2.65 + rand() * 0.4;   // deeper settle — no-float without mounds (user steering)
@@ -239,17 +323,71 @@ export function placeSkyfallWreck(
 
   // ── COLLIDERS (rule 9 — match the posed visible masses). Rotated cuboids
   //    aligned with each piece; the buried fraction sits below ground.
+  //    S2: the S1 single fore-hull cuboid is GONE (it filled the interior) —
+  //    replaced by an exact walkable set: deck, side walls, roof, bow mass,
+  //    bulkhead panels/lintels/sills, mouth skirt. The mouth itself has NO
+  //    collider — it is the entry.
   const foreQuat = new THREE.Quaternion().setFromEuler(fore.rotation);
-  const foreCol = makeStaticBox(
-    world,
-    { x: HALF_W, y: HALF_H, z: FORE_LEN / 2 },
-    fore.position.clone().add(new THREE.Vector3(0, 0, FORE_LEN / 2).applyQuaternion(foreQuat)),
-    foreQuat,
-  );
-  {
-    const b = foreCol.parent();
+  const localCol = (hx: number, hy: number, hz: number, lx: number, ly: number, lz: number): RAPIER.Collider => {
+    const c = makeStaticBox(
+      world, { x: hx, y: hy, z: hz },
+      fore.position.clone().add(new THREE.Vector3(lx, ly, lz).applyQuaternion(foreQuat)),
+      foreQuat,
+    );
+    const b = c.parent();
     if (b) bodies.push(b);
-  }
+    return c;
+  };
+  // Deck (the walkable floor — its handle is exported for the walk probe).
+  const deckCol = localCol(WALL_X + 0.6, 0.15, 12.3, 0, DECK_Y - 0.15, 18.3);
+  // Side walls (double as the exterior hull sides over the interior span).
+  localCol(0.35, HALF_H, 12, -(WALL_X + 0.35), 0, 18);
+  localCol(0.35, HALF_H, 12, WALL_X + 0.35, 0, 18);
+  // Roof (underside = the interior ceiling at CEIL_Y).
+  localCol(HALF_W, 0.4, 12, 0, CEIL_Y + 0.4, 18);
+  // Sealed bow mass (the tapered nose, z 0-6 — also the interior's end wall).
+  localCol(3.0, HALF_H * 0.9, 3.1, 0, 0.1, 3.0);
+  // Bulkhead colliders — mirror the visuals exactly (panels + lintel + sill).
+  const sillHandles: number[] = [];
+  const bulkheadCols = (bz: number, doorX: number): void => {
+    const panelY = (CEIL_Y + DECK_Y) / 2, panelHH = (CEIL_Y - DECK_Y) / 2;
+    const leftW = (doorX - DOOR_HW) - (-WALL_X - 0.35);
+    const rightW = (WALL_X + 0.35) - (doorX + DOOR_HW);
+    localCol(leftW / 2, panelHH, 0.175, (-WALL_X - 0.35) + leftW / 2, panelY, bz);
+    localCol(rightW / 2, panelHH, 0.175, (doorX + DOOR_HW) + rightW / 2, panelY, bz);
+    localCol(DOOR_HW, (CEIL_Y - DOOR_TOP) / 2, 0.175, doorX, (CEIL_Y + DOOR_TOP) / 2, bz);
+    // The anti-leak sill — standing IN a doorway means standing on it, so its
+    // handle counts as legitimate floor for the walk probe.
+    sillHandles.push(localCol(DOOR_HW, 0.05, 0.2, doorX, DECK_Y + 0.05, bz).handle);
+  };
+  bulkheadCols(12, doorX1);
+  bulkheadCols(20, doorX2);
+  // Under-deck skirt at the mouth (matches the visual plate).
+  localCol(WALL_X + 0.6, 1.25, 0.15, 0, -1.65, 30.45);
+  // ── Walk-probe data (rig-shot `skyfall-walk`): world-space waypoints down
+  //    the full walk path + the deck collider handle (a castDown from any
+  //    interior waypoint must hit THIS collider — terrain underneath sits
+  //    within ~0.4m of the deck, so height alone can't prove no-fall-through).
+  fore.updateMatrixWorld(true);
+  const wp = (name: string, lx: number, ly: number, lz: number): { name: string; x: number; y: number; z: number } => {
+    const v = fore.localToWorld(new THREE.Vector3(lx, ly, lz));
+    return { name, x: v.x, y: v.y, z: v.z };
+  };
+  root.userData.skyfallProbe = {
+    deckHandle: deckCol.handle,
+    floorHandles: [deckCol.handle, ...sillHandles],
+    waypoints: [
+      wp('outside', 0, DECK_Y, 33.0),
+      wp('mouth', 0, DECK_Y, 29.0),
+      wp('hold', 0, DECK_Y, 24.5),
+      wp('door2', doorX2, DECK_Y, 20.0),
+      wp('mid', 0, DECK_Y, 16.0),
+      wp('door1', doorX1, DECK_Y, 12.0),
+      wp('cabin', 0, DECK_Y, 9.0),
+    ],
+    ceilY: CEIL_Y - DECK_Y,   // clearance above deck (ray-up assert)
+    wallX: WALL_X,            // inner wall face distance (ray-side assert)
+  };
   // Bridge castle stands proud of the hull box — its own collider.
   const bridgeCol = makeStaticBox(
     world,

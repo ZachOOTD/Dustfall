@@ -201,7 +201,7 @@ interface DebugApi {
   };
   ctx: GameContext;
   RAPIER: typeof RAPIER;
-  castDown: (x: number, z: number, fromY?: number) => null | {
+  castDown: (x: number, z: number, fromY?: number, excludePlayer?: boolean) => null | {
     hitY: number;
     timeOfImpact: number;
     colliderHandle: number;
@@ -928,9 +928,14 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     chunkPerf: () => ({ terrain: ctx.terrain.perfStats(), chunks: ctx.chunks.stats().perf }),
     resetChunkPerf: () => { ctx.terrain.resetPerf(); ctx.chunks.resetPerf(); },
-    castDown(x, z, fromY = 100) {
+    castDown(x, z, fromY = 100, excludePlayer = false) {
+      // excludePlayer (M7-S2 walk probe): a ray cast from the capsule's own
+      // center otherwise hits the capsule at TOI 0 — the S1 probe lesson.
       const ray = new RAPIER.Ray({ x, y: fromY, z }, { x: 0, y: -1, z: 0 });
-      const hit = ctx.physics.world.castRay(ray, 500, true);
+      const hit = ctx.physics.world.castRay(
+        ray, 500, true, undefined, undefined, undefined,
+        excludePlayer ? ctx.player.body.body : undefined,
+      );
       if (!hit) return null;
       const hitY = fromY - hit.timeOfImpact;
       return {

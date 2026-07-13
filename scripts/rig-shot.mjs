@@ -2633,6 +2633,167 @@ const SCENARIOS = {
     await shot('broadside', broad, 22, 2.6, 2.5, 20); // close broadside — bridge + containers + snap
     await shot('close', bowDir, 12, 1.9, 2.4, 5);     // bow close-quarter — burial + blunt bow read
     await shot('snap', threeQ, 18, 2.6, 1.5, 36);     // the SNAP: fracture mouths + stern engine block + gap
+    // M7-S2 — interior reads (player-eye, from the builder's probe waypoints).
+    const probe = await page.evaluate(() => {
+      let p = null;
+      window.__game.ctx.three.scene.traverse((o) => { if (o.userData?.skyfallProbe) p = o.userData.skyfallProbe; });
+      return p ? { waypoints: p.waypoints } : null;
+    });
+    if (probe) {
+      const wpByName = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+      const interiorShot = async (name, fromW, toW) => {
+        await page.evaluate(({ f, t }) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera;
+          ctx.flags.paused = true;
+          cam.position.set(f.x, f.y + 1.6, f.z);
+          cam.lookAt(t.x, t.y + 1.2, t.z);
+          cam.updateMatrixWorld(true);
+        }, { f: fromW, t: toW });
+        await page.waitForTimeout(350);
+        await page.screenshot({ path: join(OUT, `scen-skyfall-${name}.png`), timeout: 60000 });
+        console.log(`[skyfall-shot] saved scen-skyfall-${name}.png`);
+      };
+      await interiorShot('int-mouth', wpByName.outside, wpByName.hold);     // standing outside, looking in
+      await interiorShot('int-hold', wpByName.hold, wpByName.door2);        // hold → the mid doorway
+      await interiorShot('int-mid', wpByName.mid, wpByName.door1);          // mid bay → the cabin doorway
+      await interiorShot('int-cabin', wpByName.cabin, wpByName.mid);        // cabin, looking back aft
+    }
+  },
+
+  // M7-S2 — the Skyfall WALK PROBE (rule 9, real motion): stream to the
+  // nearest skyfall freighter, then WALK the interior — outside → mouth →
+  // hold → doorway → mid → doorway → cabin → back out → re-enter — in small
+  // stepped moves with physics settling, asserting at every waypoint that a
+  // castDown hits the DECK collider (terrain sits within ~0.4m of the deck,
+  // so collider IDENTITY is the fall-through proof), that the capsule wasn't
+  // ejected (doorway/sill fit), and that ceiling + both walls answer rays.
+  'skyfall-walk': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; ctx.vultures.list.length = 0;
+      ctx.weather.intensity = 0; g.setTime(0.40);
+    });
+    const skyT = await page.evaluate(() => {
+      const g = window.__game;
+      for (let r = 1; r <= 10; r++) {
+        for (let cx = -r * 16; cx <= r * 16; cx += 4) {
+          for (let cz = -r * 16; cz <= r * 16; cz += 4) {
+            for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              if (d.landmark.present && d.landmark.kind === 'skyfall_freighter') {
+                return { x: d.landmark.x, z: d.landmark.z };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    if (!skyT) throw new Error('skyfall-walk: no skyfall freighter in the scan window');
+    const r = await page.evaluate(async (t) => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      const body = ctx.player.body.body;
+      // Stream to the site.
+      const from = body.translation();
+      const dist = Math.hypot(t.x - from.x, t.z - from.z);
+      const steps = Math.max(4, Math.ceil(dist / 140));
+      for (let i = 1; i <= steps; i++) {
+        const x = from.x + (t.x - from.x) * (i / steps);
+        const z = from.z + (t.z - from.z) * (i / steps);
+        body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+        await frames(14);
+      }
+      body.setTranslation({ x: t.x - 30, y: ctx.terrain.heightAt(t.x - 30, t.z) + 1.6, z: t.z }, true);
+      await frames(140);   // deferred landmark thunk + merge
+      // Fetch the builder's probe data.
+      let probe = null;
+      ctx.three.scene.traverse((o) => { if (o.userData?.skyfallProbe) probe = o.userData.skyfallProbe; });
+      if (!probe) return { fails: ['no skyfallProbe userData (wreck not built?)'] };
+      const wps = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+      const fails = [];
+      const CAP = 1.05;   // capsule-center height above feet used for placement
+      // Place at a waypoint (drop-in), settle under gravity/KCC.
+      const placeAt = async (w) => {
+        body.setTranslation({ x: w.x, y: w.y + CAP + 0.25, z: w.z }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        await frames(45);
+      };
+      // Walk from the current position to a waypoint in 0.5m steps at the
+      // CURRENT settled height — collisions (lip, sills, jambs) resolve per
+      // step; a blocked path shows up as failure to arrive.
+      const walkTo = async (w) => {
+        for (let i = 0; i < 200; i++) {
+          const p = body.translation();
+          const dx = w.x - p.x, dz = w.z - p.z;
+          const d = Math.hypot(dx, dz);
+          if (d < 0.35) break;
+          const s = Math.min(0.5, d);
+          body.setTranslation({ x: p.x + (dx / d) * s, y: p.y + 0.12, z: p.z + (dz / d) * s }, true);
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          await frames(6);
+        }
+        await frames(30);
+      };
+      const arrived = (w, name) => {
+        const p = body.translation();
+        const d = Math.hypot(w.x - p.x, w.z - p.z);
+        if (d > 0.8) fails.push(`${name}: did not arrive (blocked ${d.toFixed(2)}m short)`);
+        return d <= 0.8;
+      };
+      const floorSet = new Set(probe.floorHandles ?? [probe.deckHandle]);
+      const onDeck = (name, w) => {
+        const p = body.translation();
+        const hit = g.castDown(p.x, p.z, p.y, true);   // exclude the player capsule
+        if (!hit) { fails.push(`${name}: castDown hit NOTHING`); return; }
+        if (floorSet.has(hit.colliderHandle)) return;
+        // Terrain AT-or-slightly-above the deck line = sand ingress in the
+        // buried end (walkable, shin-deep max — legit wreck language).
+        // Terrain BELOW the deck line = the capsule fell through. The bound
+        // also fails waist-deep ingress (an unwalkable compartment).
+        if (hit.hitY >= w.y - 0.05 && hit.hitY <= w.y + 0.5) return;
+        fails.push(`${name}: on collider ${hit.colliderHandle} (deck=${probe.deckHandle} shape=${hit.shape}) hitY=${hit.hitY.toFixed(2)} py=${p.y.toFixed(2)} deckY=${w ? w.y.toFixed(2) : '?'} (FALL-THROUGH or deep ingress)`);
+      };
+      // ── The walk ──
+      await placeAt(wps.outside);                          // on the sand off the mouth
+      await walkTo(wps.mouth);                             // ENTER through the fracture
+      if (arrived(wps.mouth, 'enter-mouth')) onDeck('enter-mouth', wps.mouth);
+      await walkTo(wps.hold); if (arrived(wps.hold, 'hold')) onDeck('hold', wps.hold);
+      await walkTo(wps.door2); if (arrived(wps.door2, 'door2 (mid↔hold doorway)')) onDeck('door2', wps.door2);
+      await walkTo(wps.mid); if (arrived(wps.mid, 'mid')) onDeck('mid', wps.mid);
+      await walkTo(wps.door1); if (arrived(wps.door1, 'door1 (cabin↔mid doorway)')) onDeck('door1', wps.door1);
+      await walkTo(wps.cabin); if (arrived(wps.cabin, 'cabin')) onDeck('cabin', wps.cabin);
+      // Exit the full length + off the ship, then RE-ENTER to the hold.
+      await walkTo(wps.mouth); if (arrived(wps.mouth, 'exit-mouth')) onDeck('exit-mouth', wps.mouth);
+      await walkTo(wps.outside);
+      {
+        const p = body.translation();
+        if (Math.hypot(wps.outside.x - p.x, wps.outside.z - p.z) > 0.8) fails.push('exit: did not get back OUT of the mouth');
+      }
+      await walkTo(wps.hold); if (arrived(wps.hold, 're-enter hold')) onDeck('re-enter hold', wps.hold);
+      // Ceiling presence: the capsule settled UNDER the roof everywhere it
+      // stood — prove clearance is bounded (not open sky) by the deck-relative
+      // ceiling value the builder exported: place mid, check headroom via a
+      // high drop (a capsule dropped from +5 must still settle ON the deck —
+      // the roof blocks a re-placement THROUGH it from above).
+      body.setTranslation({ x: wps.mid.x, y: wps.mid.y + 6.0, z: wps.mid.z }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      await frames(50);
+      {
+        const p = body.translation();
+        const hit = g.castDown(p.x, p.z, p.y, true);
+        if (hit && hit.colliderHandle === probe.deckHandle) {
+          fails.push('roof: a capsule dropped from ABOVE the hull landed on the interior deck (hole in the roof colliders)');
+        }
+      }
+      return { fails, wps: probe.waypoints.length };
+    }, skyT);
+    const pass = r.fails.length === 0;
+    console.log(`SKYFALL-WALK pass=${pass ? 1 : 0} waypoints=${r.wps ?? 0} fails=${r.fails.length}`);
+    console.log(`[skyfall-walk] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('skyfall-walk GATE FAILED');
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/

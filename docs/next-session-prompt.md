@@ -1,4 +1,29 @@
-# Next session — cycle 10: M7 Skyfall S2 (enterable interior + colliders + walk probe)
+# Next session — RESUME MID-CYCLE-10 (user paused 2026-07-12 evening, PC cooldown)
+
+**⚠ Cycle 10 is MID-FLIGHT (the `.gamedev-framework/campaign-cycle.inprogress` marker is TRUE —
+this pause is deliberate, not a crash).** The S2 build is CODE-COMPLETE and committed as a WIP
+checkpoint; the walk gate is green on seeds 1337 + 808 (seed 7 passed pre-fix baseline; re-confirm).
+Two REAL bugs were probe-caught + fixed this cycle: (1) the stern collider was embedded in the
+fracture mouth (aftDist measured from hull middle, not the fracture); (2) the hull FLOATED over
+sloped dunes — now slope-conformed (sampled deck-line fit, lip anchored 0.12-0.18m above grade at
+the mouth, ≤0.3m sand ingress at the buried end; the cosmetic crash pitch must NOT be added after
+the fit — it drooped the line, seed-808).
+
+## Remaining to CLOSE cycle 10 (~30-45 min of probe CPU)
+1. `skyfall-walk` seed 7 re-confirm (gate now in verify:chunks as leg 4).
+2. Full `verify:all` + the 5 smokes.
+3. `skyfall-shot` re-run (the stern moved aft + slope pose changed the framing) — view ALL shots
+   incl. the new int-mouth/int-hold/int-mid/int-cabin interior reads; check the mouth/lip and the
+   stern gap visually.
+4. Docs: D301 (S2 + the two probe-caught bugs), changelog, CLAUDE.md, roadmap S2→shipped.
+5. Final commit + cycle-10 campaign bookkeeping (spend ~+300K this cycle).
+6. **Then the ⏸ post-blockout WALK-TEST pause** (charter pause #1): set `awaiting_approval: true`,
+   `stop_reasons: ["feel-review"]`, status paused; surface the nearest skyfall coords + a teleport
+   line for the human (seed-dependent; 1337 site: 2154,-2555 — `__game.ctx.player.body.body.
+   setTranslation({x:2154, y:<ground+2>, z:-2525}, true)` after riding/streaming near). Human walks
+   the greybox interior, then `/campaign-approve` → S3-S5 hero detail.
+
+## The original cycle-10 mission brief (context)
 
 **State:** campaign "Sharpen & Deepen" `active`, resumed at M7 on branch `campaign/2026-07-12-skyfall`
 (cycle 9 done, ~3.55M/10M tokens). M7-S1 SHIPPED (D300): `src/world/skyfallWreck.ts` — the ~46m crashed

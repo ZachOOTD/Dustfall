@@ -100,6 +100,19 @@ if (!pm) {
   rows.push(`perf: slice ${pm[2]}ms (fill ${pm[3]} / geo ${pm[4]} / fin ${pm[5]}), ${pm[6]} steps, load ${pm[7]}ms, landmark-piece ${pm[8]}ms, draw ${pm[9]}→${pm[10]}, bodies ${pm[11]}→${pm[12]}→${pm[13]}, ${pm[14]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
+// ── 4. M7-S2 — the Skyfall interior walk (rule 9 real-motion: enter through
+//      the fracture, walk all 3 compartments + both doorways, exit, re-enter;
+//      castDown collider-identity proves no fall-through). ──
+const wm = runParsed('skyfall-walk', 1337, 5495, /SKYFALL-WALK pass=(\d) waypoints=(\d+) fails=(\d+)/, 900000);
+if (!wm) {
+  allPass = false;
+  rows.push('skyfall-walk: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
+} else {
+  const ok = wm[1] === '1';
+  if (!ok) allPass = false;
+  rows.push(`skyfall-walk: ${wm[2]} waypoints walked (enter/exit/re-enter + both doorways), ${wm[3]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass
