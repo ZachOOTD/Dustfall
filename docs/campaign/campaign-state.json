@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 11,
-  "current_tier": "M7 - Skyfall S4-S5 (interior hero dressing to intro-ship detail in wrecked style + lighting)",
+  "cycles_completed": 12,
+  "current_tier": "M7 - Skyfall S6 (integration: salvage loot + journal inside, occluder sweep, final gates)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 4150000
+    "total": 4400000
   },
   "ladder": [
     {
@@ -173,6 +173,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 250000,
       "verify": "verify tsc clean - skyfall-walk PASS (interior undisturbed) - verify-chunks PASS - 6-round hero iteration + seed-808 check"
+    },
+    {
+      "n": 12,
+      "date": "2026-07-13",
+      "focus": "M7 S4-S5 interior hero dressing (intro-ship detail, wrecked style) + lighting",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc clean - skyfall-walk PASS (furniture off lane) - verify-chunks PASS (digest unchanged 65f211f8) - 7-round hero iteration"
     }
   ]
 }

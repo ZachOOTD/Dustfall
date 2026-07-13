@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 12 — 2026-07-13 — M7 Skyfall S4-S5: INTERIOR hero dressing to intro-ship detail (wrecked style) + lighting ✓ all gates
+
+`verified` — verify (tsc) + skyfall-walk (furniture off the walk lane) + verify-chunks all green; determinism digest UNCHANGED (65f211f8 — the interior layout consumes zero rand, deterministic from hull dims); perf landmark-piece 4.7ms (≪120ms tripwire). 7-round real-view hero iteration.
+
+- **The steering's headline requirement met** — the interior now reads at intro-ship detail density, in the wrecked style. **HOLD** (at the breach): tie-down rails/cleats, lashed + spilled cargo crates with corner castings, torn net, sand drifted in from the mouth. **MID BAY**: a dead console bank, ripped-open wall panels with a red/copper wire loom spilling out, ceiling cable runs (some hanging), floor hatch, pipe/valve. **CABIN** (bow): 2 stripped crew seats, a dead-MFD bow crew console, wall lockers, personal effects (mug/helmet/datapads).
+- **Wall-panelling pass** (the biggest gap vs the intro ship): seam rails + skirting + frame straps + high conduit runs full-length both walls, plus wall props (hazard placard, fire-bottle bracket, junction box) — the flat hull-skin walls now read as a plated, framed, cabled compartment.
+- **Lighting** — "power's out, sun leaks in through the tear": warm daylight floods the hold from the breach and falls off bow-ward into failing red emergency strips + a cool bounce fill. Dark-but-legible.
+- 14 new module-singleton materials, 8 wall-hugging furniture colliders (all clear of the walk lane — gate green). `skyfall-shot` gained 2 interior cameras (int-cabin-fwd, int-mid-wall). Bow console top + bow wall left bare as the S6 journal/salvage focal point.
+
 ## Campaign "Sharpen & Deepen" cycle 11 — 2026-07-13 — M7 Skyfall S3: EXTERIOR hero detail (reads as a real crashed cargo hauler) ✓ all gates
 
 `verified` — verify (tsc) + skyfall-walk (interior/colliders undisturbed) + verify-chunks all green; 6-round real-view hero iteration + seed-808 generality check. The exterior clears the HERO bar at distance and up close.

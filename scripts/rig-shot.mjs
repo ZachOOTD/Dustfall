@@ -2678,6 +2678,26 @@ const SCENARIOS = {
       await interiorShot('int-hold', wpByName.hold, wpByName.door2);        // hold → the mid doorway
       await interiorShot('int-mid', wpByName.mid, wpByName.door1);          // mid bay → the cabin doorway
       await interiorShot('int-cabin', wpByName.cabin, wpByName.mid);        // cabin, looking back aft
+      // bow-ward look at the cabin console + bow wall (the S6 focal point) —
+      // the bow is DECREASING local z = the −fwd world direction from the cabin.
+      await interiorShot('int-cabin-fwd', wpByName.cabin, { x: wpByName.cabin.x - fwd[0] * 4, y: wpByName.cabin.y, z: wpByName.cabin.z - fwd[1] * 4 });
+      // HEAD-ON read of the mid-bay PORT wall (the ripped-open machine-room
+      // signature): stand toward the starboard side of the mid bay, look at the
+      // torn panel + exposed conduit/wire loom. local +X = broad, +Z = fwd.
+      {
+        const mid = wpByName.mid;
+        const atLocal = (lx, lz, ly) => ({ x: mid.x + broad[0] * lx + fwd[0] * (lz - 16), y: mid.y + ly, z: mid.z + broad[1] * lx + fwd[1] * (lz - 16) });
+        await page.evaluate(({ f, t }) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera;
+          ctx.flags.paused = true;
+          cam.position.set(f.x, f.y, f.z);
+          cam.lookAt(t.x, t.y, t.z);
+          cam.updateMatrixWorld(true);
+        }, { f: atLocal(2.2, 16.8, 1.5), t: atLocal(-3.0, 14.4, 1.3) });
+        await page.waitForTimeout(350);
+        await page.screenshot({ path: join(OUT, 'scen-skyfall-int-mid-wall.png'), timeout: 60000 });
+        console.log('[skyfall-shot] saved scen-skyfall-int-mid-wall.png');
+      }
     }
   },
 
