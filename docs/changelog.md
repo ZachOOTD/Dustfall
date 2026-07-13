@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 10 — 2026-07-13 — M7 Skyfall S2: the freighter is ENTERABLE + a ~10× faster/cooler probe rig ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks incl. the NEW skyfall-walk leg) + all 5 smokes green; the enterable interior renders correctly at greybox (int-mouth/hold/mid/cabin reads). Two probe-caught bugs fixed. FEEL walk-test deferred to the human (charter pause #1).
+
+- **Probe infra (D301)** — user reported dev felt slow + CPU pinned. GPU headless is now the DEFAULT rig-shot backend (`--use-angle=d3d11`, was swiftshader software render that pinned every core); `streamToSite()` single-teleport streaming replaces the multi-hop walk. Content digests byte-identical; renders correct + cleaner. **skyfall-shot 8min→26s, verify:chunks ~15min→2m41s, full suite ~30min→6min, CPU cores freed.** `RIG_GL=swiftshader` is the fallback.
+- **The interior (D302)** — the S1 fore hull opens into a walkable greybox: deck, 3 compartments (hold/mid/cabin), 2 bulkheads with doorways (jamb + lintel + 10cm anti-leak sills), bow-closure wall, mouth skirt, dim emergency lights, former rings framing the walk-in. The S1 solid hull collider is replaced by an exact walkable set (deck/walls/roof/bow/bulkheads/skirt; the fracture mouth is open = the entry).
+- **Probe-caught fixes**: the stern collider was embedded in the fracture mouth (aftDist measured from the hull middle); the hull FLOATED over sloped sites — pose is now slope-conformed (deck-line fit to bow→mouth grade + interior samples; lip anchored 0.12-0.18m above local grade; ≤0.3m sand ingress at the buried end).
+- **NEW permanent `skyfall-walk` gate** (verify:chunks leg 4): stream in, WALK all 3 compartments + both doorways + exit + re-enter, castDown collider-IDENTITY fall-through asserts (capsule-excluded ray) + a roof-drop test. Green seeds 1337/808/7. Next: the ⏸ human walk-test, then S3-S5 hero detail.
+
 ## Campaign "Sharpen & Deepen" cycle 9 — 2026-07-12 — M7 Skyfall S1: the freighter EXISTS in the far field (exterior blockout) ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) + all 5 smokes green; 4-round real-view silhouette iteration + a second-seed generality check; visual proof scen-skyfall-{long,approach,broadside,close,snap}.png. Campaign resumed post-merge on branch `campaign/2026-07-12-skyfall` (plan approved with changes: S4 far-field slot / ~30m+ heavy freighter / FEATURES.skyfall).

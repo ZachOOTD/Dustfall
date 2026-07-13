@@ -111,3 +111,13 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~350K (campaign total ~3.55M / 10M; cycle 9/50)
 - Commit: (this cycle's commit — see git log on campaign/2026-07-12-skyfall)
 - Next: cycle 10 = S2 enterable interior + colliders + the skyfall-walk probe → then the ⏸ post-blockout walk-test pause.
+
+## Cycle 10 — M7 Skyfall S2 (enterable interior) + probe infra (2026-07-13) — SHIPPED
+- Planned: enterable greybox interior + colliders + the skyfall-walk real-motion gate. (User pre-cycle: do the probe-infra speedups first, then finish the campaign overnight.)
+- Shipped: (infra, D301) GPU headless default + streamToSite single-teleport streaming → skyfall-shot 8min→26s, verify:chunks ~15min→2m41s, full suite ~30min→6min, CPU freed. (S2, D302) fore hull opens into a walkable interior — deck, 3 compartments, 2 doorways w/ sills, former-ring entry, exact collider set; NEW permanent skyfall-walk gate; stern-collider-in-mouth + hull-float-over-slopes bugs probe-caught + fixed.
+- Verify: verify:all PASS (placement 5-seed, colliders, chunks incl skyfall-walk seeds 1337/808/7) · 5 smokes PASS · interior shots render correct.
+- Visual iteration: interior is greybox (correct for S2 — S3 does hero-detail + lighting). Confirmed by my own read of int-mouth/hold/mid/cabin.
+- DECISION (transparency): the charter's ⏸ post-blockout human walk-test (feel-review) is CONVERTED to a morning review item, NOT a mid-build stop — the user explicitly authorized an overnight "finish the campaign, want it done when I wake up" run. Collision is gate-proven (skyfall-walk); the un-automatable part (subjective feel/scale) becomes the morning walk-test. Building S3-S5 on top of gate-proven collision maximizes what the user wakes up to.
+- Spend: ~350K (campaign total ~3.9M / 10M; cycle 10/50)
+- Commit: (this cycle's commit — see git log)
+- Next: S3-S5 hero detail (exterior plating/weathering + interior to intro-ship detail in the wrecked style + lighting + Skyfall landing-fire fix), then S6 integration+loot, then the morning walk-test + summary handoff.

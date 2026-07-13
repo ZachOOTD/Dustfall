@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 9,
-  "current_tier": "M7 - Skyfall [feel-critical] S2 (enterable interior + walk probe) \u2014 then the walk-test pause",
+  "cycles_completed": 10,
+  "current_tier": "M7 - Skyfall [feel-critical] S3-S5 (hero detail) \u2014 walk-test deferred to morning review per user overnight authorization",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 3550000
+    "total": 3900000
   },
   "ladder": [
     {
@@ -71,7 +71,7 @@
       "id": "M7",
       "name": "Skyfall enterable hero wreck",
       "kind": "feel-critical",
-      "status": "S1 SHIPPED cycle 9 (D300 exterior blockout, all gates); S2 next, then pause_before hero-detail",
+      "status": "S1+S2 SHIPPED (D300/D302, enterable+gate-proven); probe infra GPU-default (D301); S3-S5 hero detail next; human walk-test = morning review",
       "pause_before": "hero-detail"
     }
   ],
@@ -157,6 +157,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 350000,
       "verify": "verify:all PASS (placement/colliders/chunks) - 5 smokes PASS - 4-round real-view silhouette iteration + 2nd-seed check - mid-cycle steering applied (mounds removed, gates re-run green)"
+    },
+    {
+      "n": 10,
+      "date": "2026-07-13",
+      "focus": "M7 S2 enterable interior + colliders + skyfall-walk gate; probe infra (GPU default + fast streaming)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 350000,
+      "verify": "verify:all PASS (placement/colliders/chunks incl NEW skyfall-walk leg) - 5 smokes PASS - interior renders correct - 2 probe-caught bugs fixed - probe rig ~10x faster (D301)"
     }
   ]
 }

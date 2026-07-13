@@ -142,10 +142,12 @@ and promotes the second.
 >   starboard bridge tower, engine block + triple nozzles, snapped stern, dark-baffled torn mouths, deep
 >   keel bury, NO mounds) iterated 4 rounds against the real streamed view (`skyfall-shot` scenario);
 >   research digest `docs/research/crashed-freighter-silhouettes.md`. All gates green.
-> - **S2 — enterable interior + colliders** (NEXT, cycle 10): walkable compartments in the hull frame,
->   floor/wall/ceiling box colliders + threshold sills + jamb sealing, a real breach entry; NEW
->   `skyfall-walk` real-motion probe (spawn inside, push every wall, exit+re-enter). Then the
->   **⏸ post-blockout WALK-TEST pause** (charter pause #1) before any hero detail.
+> - **✅ S2 — enterable interior + colliders** — SHIPPED cycle 10 (2026-07-13, D302). The fore hull
+>   opens into a walkable greybox: deck, 3 compartments (hold/mid/cabin), 2 bulkheads with doorways
+>   (jamb + lintel + 10cm sills), former rings framing the walk-in; exact walkable collider set
+>   replaces the S1 solid hull. NEW permanent `skyfall-walk` gate (verify:chunks leg 4). Slope-conform
+>   + stern-collider bugs probe-caught + fixed. Probe infra sped ~10× (D301, GPU default).
+>   ⏸ The charter's post-blockout human WALK-TEST is deferred to the morning review (overnight run).
 > - S3-S5 — hero-detail passes (adversarial gate, HERO bar; interior to INTRO-SHIP detail in the
 >   wrecked style per steering) + the Skyfall landing-fire fix fold-in.
 > - S6 — integration + loot (salvage panels + journal inside via chunkDiffs content ids, occluder
