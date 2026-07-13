@@ -30,9 +30,54 @@ import { makeStaticBox } from '../physics/bodies.ts';
 
 // ── Shared materials (module singletons — one shader program set for every
 //    streamed Skyfall; meshes get chunkGeo so geometry unloads, materials stay).
-const _hullMat = createRustedHullMaterial({ baseColor: 0x4a4238, streakIntensity: 0.7, chalkStrength: 0.22 });
-const _hullDarkMat = createRustedHullMaterial({ baseColor: 0x3a332c, streakIntensity: 0.55, chalkStrength: 0.14 });
-const _frameMat = createMetalMaterial(0x51493d, { wornScale: 4.0, scratchStrength: 0.12 });
+// S3 WEATHERING — the S1 config leaned on `chalkStrength` (a pale UV veil) +
+// the material's default cool bare-metal flecks (0x9ea2a6), which the flat
+// shading + high smoothstep thresholds rendered as bright WHITE speckle —
+// "snow on a rusty ship" (the S3 nit #1). Fixed by killing chalk, warming +
+// dimming the flecks to worn brown metal, and leaning the corrosion into WARM
+// channels: rust-orange side oxidation, deep underside/belly rust, seam-pooled
+// drip rust running DOWN the flanks, warm ochre deck dust, and a light warm
+// sand-scour. Result reads grime/rust/oxidation, not frost.
+const _skyfallWeather = {
+  rustHex: 0x5a2c14,          // warm rust for streaks + seam drips (was reading near-shadow)
+  oxHex: 0x9a5024,            // saturated rust-ORANGE side oxidation
+  oxDeepHex: 0x7a3a18,        // deep belly/underside rust (saturated, not mud)
+  dustHex: 0x8f7c58,          // WARM ochre desert dust on the decks (was cool grey)
+  bareMetalHex: 0x6f5c46,     // WARM worn steel for scuffs (was cool 0x9ea2a6 → the "snow")
+  streakIntensity: 0.60,
+  wearAmplitude: 0.26,
+  aoStrength: 0.30,
+  fleckStrength: 0.16,        // was 0.7 — sparse warm scrapes, not a blizzard
+  oxStrength: 0.56,
+  oxTopStrength: 0.34,
+  dustStrength: 0.42,
+  chalkStrength: 0.0,         // was 0.22/0.14 — the white-veil source, OFF
+  oxDeepStrength: 0.52,
+  seamRustStrength: 0.50,     // warm rust drips DOWN the flanks (the wanted streak)
+  abrasionStrength: 0.18,     // light warm sand-scour on the lower hull
+} as const;
+const _hullMat = createRustedHullMaterial({ baseColor: 0x4a4238, ..._skyfallWeather });
+const _hullDarkMat = createRustedHullMaterial({ baseColor: 0x3a332c, ..._skyfallWeather, oxStrength: 0.46, seamRustStrength: 0.42 });
+const _frameMat = createMetalMaterial(0x51493d, { wornScale: 4.0, scratchStrength: 0.12, rustLevel: 0.35 });
+// Faded container livery — a cargo hauler reads via MULTICOLOURED containers, not
+// one monotone hull. All via createRustedHullMaterial (same injected GLSL → Three
+// shares ONE program; only the uniform colours differ). Containers use a LIGHTER
+// weathering profile than the hull — painted steel fades but doesn't rust to mud,
+// so the heavy warm-oxidation of _skyfallWeather is dialled WAY back here and the
+// livery COLOUR reads (the round-6 nit: full hull rust turned every box brown).
+const _cnWeather = {
+  ..._skyfallWeather,
+  oxStrength: 0.20, oxTopStrength: 0.12, oxDeepStrength: 0.24,
+  seamRustStrength: 0.26, streakIntensity: 0.42, dustStrength: 0.34,
+  fleckStrength: 0.12, abrasionStrength: 0.10, wearAmplitude: 0.22,
+} as const;
+const _cnBlue = createRustedHullMaterial({ baseColor: 0x2c5a72, ..._cnWeather });   // faded maritime blue
+const _cnRust = createRustedHullMaterial({ baseColor: 0x8a3a22, ..._cnWeather });   // red-oxide / cargo red
+const _cnTan  = createRustedHullMaterial({ baseColor: 0xa89268, ..._cnWeather });   // sun-bleached tan (pops)
+// Faded warning-ochre — hazard stripes + hull-number plate (freighter livery,
+// sun-bleached from a bright yellow to a dull ochre). Stock Lambert → shares the
+// Lambert program; flat-shaded to match the wreck palette.
+const _hazardMat = new THREE.MeshLambertMaterial({ color: 0x8f7220, flatShading: true });
 // Near-black interior baffle — sits recessed inside torn/open mouths so a
 // sightline into the fracture hits DARK structure, not a lit pale inner skin
 // (the S1 first-visit nit). DoubleSide so it reads from any grazing angle.
@@ -183,13 +228,19 @@ export function placeSkyfallWreck(
   //    askew for the crash. Fixed 6-draw jitter budget.
   const CN_W = 2.5, CN_H = 2.3, CN_L = 3.2;
   const rowZ0 = 11.5, rowStep = CN_L + 0.7;
+  // Collected for the S3 container-detail pass (decorated as CHILDREN so the
+  // corrugation/doors/castings inherit each box's crash jitter, and bake into
+  // the merge with it). breached: a couple caved-in for crash language.
+  const dorsalBoxes: { box: THREE.Mesh; hazard: boolean; breach: boolean }[] = [];
+  const cnPalette = [_hullDarkMat, _cnBlue, _cnRust, _cnTan, _cnBlue, _frameMat] as const;
   for (let i = 0; i < 6; i++) {
     const j = rand();                                    // fixed per-container jitter draw
     const cz = rowZ0 + i * rowStep;
-    const box = new THREE.Mesh(new THREE.BoxGeometry(CN_W, CN_H, CN_L), i % 2 === 0 ? _frameMat : _hullDarkMat);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(CN_W, CN_H, CN_L), cnPalette[i]);
     box.position.set((j - 0.5) * 0.5, HALF_H + CN_H * 0.5 - 0.25, cz);
     box.rotation.set((j - 0.5) * 0.10, (j - 0.5) * 0.22, (j - 0.5) * 0.14);
     fore.add(box);
+    dorsalBoxes.push({ box, hazard: i === 1 || i === 4, breach: j > 0.72 });
   }
   // A crane GANTRY rail on posts running the cargo length (a strong freighter
   // silhouette cue; also draws the eye down the LENGTH). Breaks before the
@@ -289,6 +340,7 @@ export function placeSkyfallWreck(
   //    low-list flank (breaks the neat row read; crash language). Each gets a
   //    collider (reachable, rule 9).
   const spillCols: { hx: number; hy: number; hz: number; pos: THREE.Vector3; quat: THREE.Quaternion }[] = [];
+  const spillBoxes: THREE.Mesh[] = [];
   for (let i = 0; i < 2; i++) {
     const j = rand();
     const along = FORE_LEN * (0.4 + i * 0.35);
@@ -296,12 +348,13 @@ export function placeSkyfallWreck(
     const sx = x + fwd.x * along + lat.x * outward;
     const sz = z + fwd.y * along + lat.y * outward;
     const sgy = terrain.heightAt(sx, sz);
-    const cbox = new THREE.Mesh(new THREE.BoxGeometry(CN_W, CN_H, CN_L), i % 2 === 0 ? _hullDarkMat : _frameMat);
+    const cbox = new THREE.Mesh(new THREE.BoxGeometry(CN_W, CN_H, CN_L), i % 2 === 0 ? _cnRust : _cnTan);
     const cyaw = yaw + (j - 0.5) * 1.4;
     const croll = (j - 0.5) * 0.6;
     cbox.rotation.set(0.1 * (j - 0.5), cyaw, croll, 'YXZ');
     cbox.position.set(sx, sgy + CN_H * 0.32, sz);
     root.add(cbox);
+    spillBoxes.push(cbox);
     spillCols.push({
       hx: CN_W / 2, hy: CN_H / 2, hz: CN_L / 2,
       pos: cbox.position.clone(),
@@ -317,6 +370,160 @@ export function placeSkyfallWreck(
   //    NOTE the rand draws the mounds consumed are gone — this generator has
   //    no cross-version determinism obligation (no save coupling), draw budget
   //    stays fixed WITHIN a build, which is all D290 requires.
+
+  // ══ S3 — EXTERIOR HERO DETAIL ═══════════════════════════════════════════
+  // Plating + freighter grammar layered onto the posed masses so the blockout
+  // reads as a REAL crashed heavy freighter at 20-40m and holds up close. All
+  // DECORATION (no colliders — the hull/bulkhead/stern/spill colliders stand);
+  // all use the SHARED materials so mergeStaticByMaterial folds them to one
+  // draw per material. Added as children of `fore`/`stern` in LOCAL coords so
+  // they inherit each mass's crash transform.
+  const dBox = (
+    parent: THREE.Object3D, mat: THREE.Material,
+    w: number, h: number, d: number, px: number, py: number, pz: number,
+    rx = 0, ry = 0, rz = 0,
+  ): THREE.Mesh => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(px, py, pz);
+    if (rx || ry || rz) m.rotation.set(rx, ry, rz);
+    parent.add(m);
+    return m;
+  };
+
+  // ── Hull-side PLATING (fore flanks) — the S1 flanks read as smooth painted
+  //    slabs. A rubbing strake (belt rail) + a lower chine strake + regularly-
+  //    spaced vertical frame straps break the flat into a plated, framed hull.
+  //    Visible flank is local y ≈ [-0.4 grade .. +1.3 top-chine]; strakes at
+  //    mid-height, protruding ~0.15m (rule 7).
+  for (const s of [-1, 1] as const) {
+    const fx = HALF_W * s;
+    dBox(fore, _frameMat, 0.18, 0.36, 25, fx + 0.06 * s, 0.62, 16.5);    // rubbing strake (belt)
+    dBox(fore, _hullDarkMat, 0.16, 0.24, 24, fx + 0.05 * s, -0.35, 16.5); // lower chine strake
+    for (let i = 0; i < 8; i++) {                                         // vertical frame straps
+      const fz = 6.5 + i * 3.05;
+      dBox(fore, _frameMat, 0.14, 1.75, 0.30, fx + 0.04 * s, 0.30, fz);
+    }
+  }
+  // Deck-edge bulwark coaming — a low raised rim along the two dorsal deck
+  // edges (cargo-deck grammar; reads as a strong parallel line at distance).
+  for (const s of [-1, 1] as const) {
+    dBox(fore, _hullDarkMat, 0.22, 0.42, 25, HALF_W * 0.44 * s, HALF_H + 0.16, 16.5);
+  }
+
+  // ── CONTAINER DETAIL — the S1 cargo were plain boxes. Give them freighter-
+  //    grade grammar: corrugation ribs on the long sides, corner castings at
+  //    all 8 corners, an end-door recess (twin doors + locking rods), faded
+  //    hazard stripes on a couple, and a caved-in breach on the crash-crushed
+  //    ones. Added as CHILDREN of each box (inherits its jitter; bakes into
+  //    the merge). Corner castings + rods = _frameMat; doors = _voidMat gap.
+  const detailContainer = (box: THREE.Mesh, hazard: boolean, breach: boolean): void => {
+    const hw = CN_W / 2, hh = CN_H / 2, hl = CN_L / 2;
+    // Corrugation — proud vertical ribs on the two long (±x) faces.
+    for (const s of [-1, 1] as const) {
+      for (let r = 0; r < 6; r++) {
+        const rz = -hl + 0.35 + r * ((CN_L - 0.7) / 5);
+        dBox(box, box.material as THREE.Material, 0.10, CN_H - 0.36, 0.14, s * (hw + 0.03), 0, rz);
+      }
+    }
+    // Corner castings — the ISO cube fittings at all 8 corners.
+    for (const sx of [-1, 1] as const) for (const sy of [-1, 1] as const) for (const sz of [-1, 1] as const) {
+      dBox(box, _frameMat, 0.30, 0.30, 0.30, sx * (hw - 0.02), sy * (hh - 0.02), sz * (hl - 0.02));
+    }
+    // End-door face (+z end): recessed dark gap + a central seam + locking rods.
+    dBox(box, _voidMat, CN_W - 0.5, CN_H - 0.5, 0.06, 0, 0, hl + 0.03);        // door recess (dark)
+    dBox(box, _frameMat, 0.12, CN_H - 0.4, 0.10, 0, 0, hl + 0.07);             // centre seam
+    for (const rx of [-0.72, -0.32, 0.32, 0.72] as const) {
+      dBox(box, _frameMat, 0.06, CN_H - 0.55, 0.10, rx, 0, hl + 0.07);         // locking rods
+    }
+    // Hazard stripe — a faded warning band across the door end, cut by two dark
+    //    diagonal slashes (reads as hazard chevrons at distance).
+    if (hazard) {
+      dBox(box, _hazardMat, CN_W - 0.5, 0.5, 0.05, 0, hh - 0.55, hl + 0.05);
+      dBox(box, _hullDarkMat, 0.28, 0.6, 0.06, -0.5, hh - 0.55, hl + 0.06, 0, 0, 0.6);
+      dBox(box, _hullDarkMat, 0.28, 0.6, 0.06, 0.5, hh - 0.55, hl + 0.06, 0, 0, 0.6);
+    }
+    // Breach — a caved-in dark maw on the top + a couple bent torn plates
+    //    (crash crush language). Only on flagged boxes.
+    if (breach) {
+      dBox(box, _voidMat, CN_W - 0.9, 0.5, CN_L - 1.1, 0.2, hh - 0.12, -0.1);  // sunken dark top
+      dBox(box, box.material as THREE.Material, CN_W - 0.7, 0.14, 1.0, 0.2, hh - 0.02, 0.5, 0.5, 0.2, 0.1); // bent lid plate
+      dBox(box, _frameMat, 0.9, 0.12, 0.5, -0.4, hh + 0.05, -0.6, -0.4, 0.1, -0.2);   // torn flap
+    }
+  };
+  for (const d of dorsalBoxes) detailContainer(d.box, d.hazard, d.breach);
+  detailContainer(spillBoxes[0], true, false);
+  detailContainer(spillBoxes[1], false, true);
+
+  // ── FREIGHTER GREEBLES — the grammar that says "working heavy freighter,"
+  //    prioritised for what reads at 20-40m: a bridge sensor mast + dish that
+  //    break the sky silhouette, a boarding ladder + pipe runs (strong
+  //    vertical/horizontal lines), flank intake vents, a bow hull-number
+  //    plate (identity), deck tie-down cleats, and an exhaust funnel.
+  const dCyl = (
+    parent: THREE.Object3D, mat: THREE.Material,
+    rt: number, rb: number, len: number, px: number, py: number, pz: number,
+    rx = 0, ry = 0, rz = 0, seg = 8,
+  ): THREE.Mesh => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, len, seg), mat);
+    m.position.set(px, py, pz);
+    if (rx || ry || rz) m.rotation.set(rx, ry, rz);
+    parent.add(m);
+    return m;
+  };
+  // Bridge sensor array — a radar crossyard on the existing mast + a whip
+  //    antenna + a comms dish + a small exhaust funnel behind the castle.
+  dBox(fore, _frameMat, 1.7, 0.09, 0.09, BR_X + 1.0, HALF_H + 6.7, 6.4);        // radar crossyard
+  dBox(fore, _frameMat, 0.09, 0.09, 1.1, BR_X + 1.0, HALF_H + 6.4, 6.4);        // crossyard fore/aft arm
+  dCyl(fore, _frameMat, 0.04, 0.05, 2.6, BR_X - 0.7, HALF_H + 4.9, 7.2);        // whip antenna
+  dCyl(fore, _frameMat, 0.5, 0.5, 0.16, BR_X + 0.5, HALF_H + 4.5, 7.7, Math.PI * 0.35, 0, 0, 10); // comms dish face
+  dCyl(fore, _frameMat, 0.9, 1.05, 1.4, BR_X - 0.4, HALF_H + 4.0, 4.6, 0, 0, 0, 10);              // exhaust funnel
+  dBox(fore, _hullDarkMat, 1.7, 0.2, 1.7, BR_X - 0.4, HALF_H + 4.75, 4.6);      // funnel cap rim
+  // Boarding ladder — rails + rungs up the bridge front face (deck → bridge).
+  for (const s of [-1, 1] as const) dBox(fore, _frameMat, 0.06, 3.0, 0.06, BR_X + 0.35 * s, HALF_H + 1.5, 8.75);
+  for (let r = 0; r < 7; r++) dBox(fore, _frameMat, 0.7, 0.05, 0.05, BR_X, HALF_H + 0.1 + r * 0.42, 8.75);
+  // Pipe runs — twin conduits running ALONG the port flank just under the belt
+  //    rail (rx=π/2 aligns the cylinder axis to the hull's +Z length).
+  for (const dy of [0, 0.26] as const) dCyl(fore, _frameMat, 0.11, 0.11, 19, HALF_W + 0.08, 1.05 - dy, 15.5, Math.PI / 2, 0, 0, 8);
+  for (let i = 0; i < 5; i++) dBox(fore, _frameMat, 0.14, 0.5, 0.12, HALF_W + 0.02, 0.85, 8 + i * 4.2);  // pipe brackets
+  // Flank intake vents — flush recessed louvered grilles on the starboard flank
+  //    (a thin frame + dark mouth + a few slats; protrudes only ~0.06m).
+  for (const vz of [10, 18, 25] as const) {
+    dBox(fore, _voidMat, 0.05, 0.9, 1.2, -(HALF_W - 0.06), 0.55, vz);           // recessed dark mouth (inset)
+    for (let l = 0; l < 4; l++) dBox(fore, _frameMat, 0.06, 0.07, 1.2, -(HALF_W + 0.02), 0.2 + l * 0.24, vz);  // louvers (flush)
+    dBox(fore, _frameMat, 0.07, 1.05, 0.1, -(HALF_W + 0.02), 0.55, vz - 0.6);   // vent frame edge
+    dBox(fore, _frameMat, 0.07, 1.05, 0.1, -(HALF_W + 0.02), 0.55, vz + 0.6);   // vent frame edge
+  }
+  // Bow hull-number plate — a faded ochre plate near the bow with dark digit
+  //    blocks (abstract ID; reads as painted hull markings at distance).
+  for (const s of [-1, 1] as const) {
+    dBox(fore, _hazardMat, 0.06, 0.9, 2.4, HALF_W * 0.99 * s, 1.0, 4.0);        // number plate
+    for (const dz of [-0.75, -0.05, 0.65] as const) dBox(fore, _hullDarkMat, 0.08, 0.5, 0.28, HALF_W * 0.99 * s + 0.02 * s, 1.0, 4.0 + dz);  // digits
+  }
+  // Deck tie-down cleats — small bollards along both deck-edge coamings.
+  for (const s of [-1, 1] as const) for (let i = 0; i < 6; i++) {
+    dBox(fore, _frameMat, 0.22, 0.28, 0.22, HALF_W * 0.44 * s, HALF_H + 0.42, 8 + i * 3.6);
+  }
+  // Bridge window frame + mullions around the dark forward window band.
+  const bwY = HALF_H + 2.2, bwZ = 7.0 + 1.9, bwW = HALF_W * 0.72;
+  dBox(fore, _frameMat, bwW + 0.2, 0.12, 0.12, BR_X, bwY + 0.52, bwZ + 0.02);   // top rail
+  dBox(fore, _frameMat, bwW + 0.2, 0.12, 0.12, BR_X, bwY - 0.52, bwZ + 0.02);   // sill rail
+  for (const s of [-1, 1] as const) dBox(fore, _frameMat, 0.12, 1.1, 0.12, BR_X + (bwW / 2 + 0.06) * s, bwY, bwZ + 0.02); // jambs
+  for (const mx of [-0.9, 0, 0.9] as const) dBox(fore, _frameMat, 0.08, 1.0, 0.10, BR_X + mx, bwY, bwZ + 0.03);           // mullions
+
+  // ── STERN mechanical detail — nozzle throat rings + a finned engine radiator
+  //    on the snapped engine block (cylinders/tori are inherently thick).
+  for (const [nx, ny] of [[-2.0, 0.7], [2.0, 0.7], [0, -1.1]] as const) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.16, 8, 14), _frameMat);
+    ring.position.set(nx, ny, STERN_LEN + 2.0);
+    stern.add(ring);                                                            // nozzle throat ring
+    const innerRing = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.10, 8, 12), _frameMat);
+    innerRing.position.set(nx, ny, STERN_LEN + 1.4);
+    stern.add(innerRing);                                                       // inner throat
+  }
+  for (let f = 0; f < 6; f++) {                                                 // engine cooling fins
+    dBox(stern, _frameMat, 0.10, 0.7, 2.4, -2.6 + f * 1.05, HALF_H * 0.95, STERN_LEN - 0.4);
+  }
+  dBox(stern, _frameMat, HALF_W * 1.7, 0.16, 2.5, 0, HALF_H * 0.55, STERN_LEN - 0.4);  // fin base manifold
 
   // PERF — one draw per material.
   mergeStaticByMaterial(root);

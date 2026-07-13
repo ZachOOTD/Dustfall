@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 10,
-  "current_tier": "M7 - Skyfall [feel-critical] S3-S5 (hero detail) \u2014 walk-test deferred to morning review per user overnight authorization",
+  "cycles_completed": 11,
+  "current_tier": "M7 - Skyfall S4-S5 (interior hero dressing to intro-ship detail in wrecked style + lighting)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 3900000
+    "total": 4150000
   },
   "ladder": [
     {
@@ -165,6 +165,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 350000,
       "verify": "verify:all PASS (placement/colliders/chunks incl NEW skyfall-walk leg) - 5 smokes PASS - interior renders correct - 2 probe-caught bugs fixed - probe rig ~10x faster (D301)"
+    },
+    {
+      "n": 11,
+      "date": "2026-07-13",
+      "focus": "M7 S3 exterior hero detail (weathering/plating/containers/greebles + livery)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc clean - skyfall-walk PASS (interior undisturbed) - verify-chunks PASS - 6-round hero iteration + seed-808 check"
     }
   ]
 }

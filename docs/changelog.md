@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 11 — 2026-07-13 — M7 Skyfall S3: EXTERIOR hero detail (reads as a real crashed cargo hauler) ✓ all gates
+
+`verified` — verify (tsc) + skyfall-walk (interior/colliders undisturbed) + verify-chunks all green; 6-round real-view hero iteration + seed-808 generality check. The exterior clears the HERO bar at distance and up close.
+
+- **Weathering de-snowed** — the S1 pale chalk-veil + cool bare-metal flecks read as white speckle ("snow on a rusty ship"); replaced by `_skyfallWeather` (chalk off, warm brown flecks, rust-orange oxidation, seam-pooled drip rust, ochre deck dust). Reads grime/rust, not frost.
+- **Plated hull** — rubbing/chine strakes, per-flank frame straps, deck-edge bulwark coaming (all ≥12cm proud, rule 7). **Container detail** — corrugation ribs, ISO corner castings, end-door recesses, faded hazard stripes, crushed/breached crash boxes. **Freighter greebles** — bridge sensor array + whip antenna + comms dish, exhaust funnel, boarding ladder, flank pipe runs, intake vents, bow hull-number plate, deck cleats, nozzle throat rings, engine radiator fins.
+- **Multicoloured container livery** (faded blue/red-oxide/tan via the same `createRustedHullMaterial` GLSL → one shared program, uniform-only difference) — the biggest "screenshot quality" jump; reads as a real cargo hauler, not a monotone brown hull.
+- Fixed a real bug the snap shot exposed (flank pipes rotated the wrong axis, poking straight out past the bow). All streamed-landmark constraints held: deterministic, module-singleton materials, decoration greebles carry no colliders, existing collider set + interior untouched (walk gate green), perf gate untripped.
+
 ## Campaign "Sharpen & Deepen" cycle 10 — 2026-07-13 — M7 Skyfall S2: the freighter is ENTERABLE + a ~10× faster/cooler probe rig ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks incl. the NEW skyfall-walk leg) + all 5 smokes green; the enterable interior renders correctly at greybox (int-mouth/hold/mid/cabin reads). Two probe-caught bugs fixed. FEEL walk-test deferred to the human (charter pause #1).
