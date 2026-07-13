@@ -96,6 +96,44 @@ async function enterLive(page, thirdPerson) {
   await page.waitForTimeout(500); // let several ticks run so the rig settles at the body
 }
 
+/** FAST STREAM-TO-SITE (2026-07-13 probe-infra pass). Replaces the old
+ *  multi-hop 140m streaming walk that dominated skyfall probe wall-clock (~1-2
+ *  min/run at 14fps/hop). A SINGLE teleport past the anchor margin re-anchors
+ *  the chunk ring at the destination in a few frames — the gradual hop was
+ *  cargo-culted caution. Parks ~`park`m off the target, then POLLS (not a
+ *  fixed 140-frame wait) until the deferred landmark thunk has built the named
+ *  group near the site, or a frame cap. Streaming CORRECTNESS is covered by the
+ *  chunk-streaming gate; re-proving it in every shot is pure tax.
+ *  Returns { built, frames } — built=false means the group never appeared. */
+async function streamToSite(page, x, z, { park = 30, groupName = 'skyfallWreck', maxFrames = 240 } = {}) {
+  return page.evaluate(async ({ x, z, park, groupName, maxFrames }) => {
+    const ctx = window.__game.ctx;
+    ctx.flags.paused = false;
+    const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+    // ONE jump to the park spot (past the anchor margin → full re-anchor).
+    const px = x - park;
+    ctx.player.body.body.setTranslation({ x: px, y: ctx.terrain.heightAt(px, z) + 1.6, z }, true);
+    ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    // Poll: the chunk streams in + its ONE deferred skyfall thunk builds (a
+    // few frames), then the merged group appears. Stop as soon as it's there.
+    let built = false, f = 0;
+    for (; f < maxFrames; f++) {
+      await raf();
+      let found = false;
+      ctx.three.scene.traverse((o) => {
+        if (o.name === groupName && o.userData && o.userData.skyfallCenter) {
+          const c = o.userData.skyfallCenter;
+          if ((c.x - x) ** 2 + (c.z - z) ** 2 < 4) found = true;
+        }
+      });
+      if (found) { built = true; break; }
+    }
+    // A few settle frames so colliders register + the merge finalizes.
+    for (let i = 0; i < 12; i++) await raf();
+    return { built, frames: f };
+  }, { x, z, park, groupName, maxFrames });
+}
+
 /** Capture FRAMES screenshots spaced INTERVAL ms apart. `perFrame` (optional)
  *  is a function string run in-page each frame before the wait (gets the frame
  *  index) — used to drive aim sweep / trigger fire / re-aim a tracking camera. */
@@ -2564,26 +2602,9 @@ const SCENARIOS = {
     });
     if (!skyT) { console.log('[skyfall-shot] no skyfall freighter found in scan window (check FEATURES.skyfall / seed)'); return; }
     console.log(`[skyfall-shot] SKYFALL freighter at ${skyT.x.toFixed(0)},${skyT.z.toFixed(0)}`);
-    // Hop the player there in ~140m steps so chunks stream in along the way,
-    // then park adjacent and wait for the deferred landmark thunk to build.
-    await page.evaluate(async (t) => {
-      const ctx = window.__game.ctx;
-      ctx.flags.paused = false;
-      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
-      const from = ctx.player.body.body.translation();
-      const dist = Math.hypot(t.x - from.x, t.z - from.z);
-      const steps = Math.max(4, Math.ceil(dist / 140));
-      for (let i = 1; i <= steps; i++) {
-        const x = from.x + (t.x - from.x) * (i / steps);
-        const z = from.z + (t.z - from.z) * (i / steps);
-        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
-        for (let f = 0; f < 14; f++) await raf();
-      }
-      // Park ~30m off the wreck so its home chunk stays loaded, then let the
-      // deferred build (1 piece/frame) fire + merge.
-      ctx.player.body.body.setTranslation({ x: t.x - 30, y: ctx.terrain.heightAt(t.x - 30, t.z) + 1.6, z: t.z }, true);
-      for (let f = 0; f < 140; f++) await raf();
-    }, skyT);
+    // FAST: single-teleport stream + poll-until-built (was a multi-hop walk).
+    const streamed = await streamToSite(page, skyT.x, skyT.z, { park: 30 });
+    console.log(`[skyfall-shot] streamed in ${streamed.frames} frames (built=${streamed.built})`);
     // Read the wreck's true yaw + center off the built group (the builder stashes
     // it on root.userData) so the camera can frame a genuine broadside/bow read.
     const info = await page.evaluate((t) => {
@@ -2672,6 +2693,10 @@ const SCENARIOS = {
       const g = window.__game; const ctx = g.ctx;
       ctx.sandWorms.list.length = 0; ctx.vultures.list.length = 0;
       ctx.weather.intensity = 0; g.setTime(0.40);
+      // TINY CANVAS (2026-07-13 probe-infra): a physics/collision probe needs
+      // NO pixels — shrink the render target so swiftshader fill cost is ~nil
+      // (this is the CPU-heat lever for walk probes). 64² still ticks rAF.
+      ctx.three.renderer.setSize(64, 64, false);
     });
     const skyT = await page.evaluate(() => {
       const g = window.__game;
@@ -2690,24 +2715,15 @@ const SCENARIOS = {
       return null;
     });
     if (!skyT) throw new Error('skyfall-walk: no skyfall freighter in the scan window');
+    // FAST: single-teleport stream + poll-until-built (was a multi-hop walk).
+    const streamed = await streamToSite(page, skyT.x, skyT.z, { park: 30 });
+    console.log(`[skyfall-walk] streamed in ${streamed.frames} frames (built=${streamed.built})`);
     const r = await page.evaluate(async (t) => {
       const g = window.__game; const ctx = g.ctx;
       const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
       const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
       ctx.flags.paused = false;
       const body = ctx.player.body.body;
-      // Stream to the site.
-      const from = body.translation();
-      const dist = Math.hypot(t.x - from.x, t.z - from.z);
-      const steps = Math.max(4, Math.ceil(dist / 140));
-      for (let i = 1; i <= steps; i++) {
-        const x = from.x + (t.x - from.x) * (i / steps);
-        const z = from.z + (t.z - from.z) * (i / steps);
-        body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
-        await frames(14);
-      }
-      body.setTranslation({ x: t.x - 30, y: ctx.terrain.heightAt(t.x - 30, t.z) + 1.6, z: t.z }, true);
-      await frames(140);   // deferred landmark thunk + merge
       // Fetch the builder's probe data.
       let probe = null;
       ctx.three.scene.traverse((o) => { if (o.userData?.skyfallProbe) probe = o.userData.skyfallProbe; });
@@ -10177,9 +10193,18 @@ async function main() {
   console.log(`[rig-shot] starting dev server on ${PORT}…`);
   const dev = await startDev();
   console.log(`[rig-shot] dev up; launching chromium…`);
-  const browser = await chromium.launch({
-    args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
-  });
+  // GL backend (2026-07-13 probe-infra): swiftshader is SOFTWARE rendering —
+  // it pins every CPU core (the machine-heat complaint). RIG_GL=angle switches
+  // to the platform GPU via ANGLE/D3D11 on Windows (headless=new exposes it
+  // when a real GPU is present) — far cooler + faster for SHOT scenarios.
+  // Content gates (determinism/streaming/walk) are pixel-independent, so the
+  // backend can't change their result; only screenshots differ, and those are
+  // A/B-validated before adoption. Falls back to swiftshader on any doubt.
+  const glMode = process.env.RIG_GL || 'angle';   // DEFAULT GPU (2026-07-13): validated identical digest + correct renders, ~10× faster, CPU-cool. RIG_GL=swiftshader forces the old software path.
+  const glArgs = glMode === 'angle'
+    ? ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']
+    : ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
+  const browser = await chromium.launch({ args: glArgs });
   try {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1100 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
