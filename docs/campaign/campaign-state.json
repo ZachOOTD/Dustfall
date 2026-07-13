@@ -1,12 +1,14 @@
 {
   "campaign": "Sharpen & Deepen",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
   "cycles_completed": 13,
   "current_tier": "M7 Skyfall LADDER COMPLETE (S1-S6) \u2014 awaiting the human post-blockout walk-test (feel/scale/lighting), then campaign end review",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "awaiting_approval": true,
+  "stop_reasons": [
+    "feel-review"
+  ],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",

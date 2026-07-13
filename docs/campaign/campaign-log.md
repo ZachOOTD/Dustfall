@@ -121,3 +121,15 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~350K (campaign total ~3.9M / 10M; cycle 10/50)
 - Commit: (this cycle's commit — see git log)
 - Next: S3-S5 hero detail (exterior plating/weathering + interior to intro-ship detail in the wrecked style + lighting + Skyfall landing-fire fix), then S6 integration+loot, then the morning walk-test + summary handoff.
+
+## Cycles 11-13 — M7 Skyfall S3/S4-S5/S6 + probe infra (2026-07-13, overnight) — SHIPPED · M7 LADDER COMPLETE
+- Context: user reported dev felt slow + CPU pinned; authorized an overnight "do the infra speedups, then finish Skyfall" run (switched to Opus 4.8 partway).
+- Probe infra (D301): GPU headless default (~10× faster, CPU-cool) + single-teleport streaming. skyfall-shot 8min→26s, verify:chunks ~15min→2m41s, suite ~30min→6min.
+- Cycle 11 (S3): exterior hero detail — cargo-hauler read (multicoloured containers, plating, greebles, de-snowed weathering). procedural-modeler, 6 rounds.
+- Cycle 12 (S4-S5): interior hero detail to intro-ship density in the wrecked style (hold/machine-bay/cabin) + "sun through the tear" lighting. procedural-modeler, 7 rounds. Digest unchanged (interior consumes zero rand).
+- Cycle 13 (S6, D303): interior salvage loot (2 cabin panels, persist via the S5 chunkDiffs chain) + the pilot's crash-log journal (clean teardown, numeric-probe-verified). Occluder registration dropped (no removal path for streamed content). Position-seeded loot → determinism byte-unchanged.
+- Gates: every cycle verify:all + smokes green; skyfall-walk green throughout; digest stable 65f211f8; released origin world + intro byte-unchanged.
+- DECISION (transparency): the charter's post-blockout human walk-test (feel-review) was deferred to the morning review per the user's explicit overnight "finish it" instruction — collision is gate-proven, so S3-S6 built on top; the un-automatable feel/scale/lighting judgment is the owed morning step. Campaign set to paused/awaiting_approval/feel-review.
+- Spend: ~800K across 3 cycles (campaign total ~4.75M / 10M; cycles 11-13/50).
+- Commits: fc3da47 (S3), 907e93d (S4-S5), 53fbec8 (S6) + bd8c819 (infra) on campaign/2026-07-12-skyfall.
+- Next: the human walk-test (morning-summary-2026-07-13.md), then /campaign-approve → merge review.

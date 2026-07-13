@@ -148,10 +148,18 @@ and promotes the second.
 >   replaces the S1 solid hull. NEW permanent `skyfall-walk` gate (verify:chunks leg 4). Slope-conform
 >   + stern-collider bugs probe-caught + fixed. Probe infra sped ~10× (D301, GPU default).
 >   ⏸ The charter's post-blockout human WALK-TEST is deferred to the morning review (overnight run).
-> - S3-S5 — hero-detail passes (adversarial gate, HERO bar; interior to INTRO-SHIP detail in the
->   wrecked style per steering) + the Skyfall landing-fire fix fold-in.
-> - S6 — integration + loot (salvage panels + journal inside via chunkDiffs content ids, occluder
->   registration sweep, full gate pass).
+> - **✅ S3 — exterior hero detail** — SHIPPED cycle 11. Reads as a real crashed cargo hauler
+>   (multicoloured containers, plated hull, freighter greebles, warm-rust weathering).
+> - **✅ S4-S5 — interior hero detail + lighting** — SHIPPED cycle 12. Intro-ship detail density in
+>   the wrecked style (cargo hold / dead-console machine bay / crew cabin) + "sun through the tear"
+>   lighting. (Skyfall landing-fire item was moot — no fire code existed in the fresh streamed build.)
+> - **✅ S6 — integration + loot** — SHIPPED cycle 13 (D303). 2 cabin salvage panels (persist via the
+>   S5 chunkDiffs chain) + the pilot's crash-log journal. Occluder registration dropped (no removal
+>   path for streamed content — backlogged as a removable variant).
+>
+> **🏁 THE M7 SKYFALL LADDER IS COMPLETE (S1-S6, cycles 9-13).** Campaign PAUSED at the sanctioned
+> post-blockout human WALK-TEST (feel/scale/lighting — `docs/campaign/morning-summary-2026-07-13.md`).
+> `/campaign-approve` after the walk-test → M7 done → merge review (branch `campaign/2026-07-12-skyfall`).
 
 > **✔ MERGED — "Infinite Sands" (infinite procgen, 2026-07-10→12, merged to master + deployed 2026-07-12).**
 > Charter + answered design questions: [campaign/campaign.md](campaign/campaign.md); authoritative feature
