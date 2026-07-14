@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 24 — 2026-07-13 — M12: the ash-barren biome — **THE +4M OVERNIGHT QUEUE IS COMPLETE** ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) green; a numeric probe found an ash_barren zone (biomeAt confirmed) + a shot showed the dark scorched ground reading distinct. **Campaign `completed` (until-met: ladder-complete), UNDER the 8.75M budget cap.**
+
+- **NEW biome `ash_barren`** — a rare regional-anchored scorched-flats zone (dark charred ground + cinder mottle + a low flatten + an industrial/derelict POI mix), mirroring the wreck-yard regional-anchor pattern (own appended seed → yard byte-identical; far-field only, ≥2600m from origin). Distinct from the light salt/dune/rocky desert. D307. Residual: the dark read could be pushed more dramatic (polish — flagged for review).
+
+**🏁 THE WHOLE M7-R→M12 QUEUE IS DONE** (cycles 14-24, one overnight): M7-R Skyfall refinement (6 walk-test fixes) · M8 far-field vultures · M9 3 new POI archetypes (refinery/dome/rail-car) · M10 3 new story vignettes · M11 legacy tube-wreck retirement · M12 the ash-barren biome. All gate-green, one revertible commit each, ~2.6M spent (5 more added since the pre-overnight 4.75M). Awaiting Zach's morning walk-test + merge review.
+
 ## Campaign "Sharpen & Deepen" cycle 23 — 2026-07-13 — M11: retire the legacy tube-wreck (no far-field wreck is a tube) ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) green; a numeric far-field histogram (278 POIs) confirms `ship` = 0 + a varied spread.

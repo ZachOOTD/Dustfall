@@ -766,6 +766,10 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   salt:       [['derelict', 0.23], ['satellite', 0.08], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04], ['hab_dome', 0.04], ['transit_car', 0.06]],
   rocky:      [['derelict', 0.16], ['satellite', 0.05], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06], ['transit_car', 0.04]],
   dune:       [['derelict', 0.18], ['satellite', 0.04], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06], ['transit_car', 0.06]],
+  // M12 — ash-barren scorched-flats: a burned industrial dead-zone. Favor the
+  // heavy industrial + torn-derelict mix (refinery, tank, derelict, debris);
+  // sparse on the lighter/domestic archetypes. No ship (retired). Sums ≈1.0.
+  ash_barren: [['derelict', 0.20], ['wrecked_tank', 0.14], ['refinery_stack', 0.12], ['debris_field', 0.12], ['hollow_husk', 0.10], ['debris_trail', 0.07], ['cargo_crawler', 0.06], ['transit_car', 0.05], ['buried_pipeline', 0.05], ['relay_mast', 0.05], ['enterable_wreck', 0.04]],
   wreck_yard: [['derelict', 0.12], ['satellite', 0.07], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04], ['transit_car', 0.04]],
 };
 

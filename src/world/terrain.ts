@@ -44,6 +44,10 @@ const BIOME_COLOR_WRECK_YARD_OIL: readonly [number, number, number] = [0x26 / 25
 const BIOME_COLOR_WRECK_YARD_ASH: readonly [number, number, number] = [0x71 / 255, 0x64 / 255, 0x52 / 255];
 // ACAR2 — Sarlacc crater interior: a shadowed dusky dune-brown so the recessed
 // funnel reads as a pit (darkest at center, fading to dune at the rim).
+// M12 — the ash-barren scorched-flats zone: a dark charred ground (distinct
+// from the light salt/tan-dune/rocky), with a slightly warmer cinder mottle.
+const BIOME_COLOR_ASH_BARREN: readonly [number, number, number] = [0x2b / 255, 0x27 / 255, 0x22 / 255];
+const BIOME_COLOR_ASH_BARREN_CINDER: readonly [number, number, number] = [0x3e / 255, 0x2c / 255, 0x20 / 255];
 const BIOME_COLOR_SARLACC_PIT: readonly [number, number, number] = [0x5a / 255, 0x44 / 255, 0x30 / 255];
 // M8 ⑨ (C47) — the deep-cave MOUTH reads DARKER than the Sarlacc pit (a shadowed descent into
 // the earth, not just a sand bowl): a near-black shadowed brown, deepening to the center.
@@ -179,6 +183,8 @@ export function createTerrain(
     let flatness = biomeHeightScale(biomes.rawAt(x, z));
     const wyH = biomes.wreckYardAt(x, z);   // Cycle 8 — flatten the graveyard floor
     if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
+    const ashH = biomes.ashBarrenAt(x, z);  // M12 — a low scorched flat
+    if (ashH > 0) flatness = flatness * (1 - ashH) + Tuning.ASH_BARREN_HEIGHT_SCALE * ashH;
     const pitH = biomes.sarlaccPitAt(x, z);  // ACAR — flatten a sand bowl around the maw
     if (pitH > 0) flatness = flatness * (1 - pitH) + 0.05 * pitH;
     let h = sampleHeight(noise, x, z) * flatness;
@@ -302,6 +308,13 @@ export function createTerrain(
             ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
             : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
           c = lerp3(c, stain, wyC);
+        }
+        // M12 — the ash-barren zone: char the ground dark with a cinder mottle.
+        const ashC = biomes.ashBarrenAt(wx2, wz2);
+        if (ashC > 0) {
+          const amot = noise(wx2 * 0.045 - 5.7, wz2 * 0.045 + 9.2);   // -1..1 cinder streaks
+          const ashStain = lerp3(BIOME_COLOR_ASH_BARREN, BIOME_COLOR_ASH_BARREN_CINDER, Math.max(0, amot) * 0.8);
+          c = lerp3(c, ashStain, ashC * 0.9);
         }
         // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
         // funnel READS as a shadowed pit even under flat overhead light.

@@ -1,12 +1,14 @@
 {
   "campaign": "Sharpen & Deepen",
-  "status": "active",
+  "status": "completed",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 23,
-  "current_tier": "M11 retire legacy tube-wrecks COMPLETE (D306) \u2014 next: M12 new biome (budget ~1.85M left)",
+  "cycles_completed": 24,
+  "current_tier": "LADDER COMPLETE (M7-R..M12 all shipped, cycles 14-24) \u2014 awaiting the human morning review + merge",
   "awaiting_approval": false,
-  "stop_reasons": [],
+  "stop_reasons": [
+    "until-met"
+  ],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
@@ -28,7 +30,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 6900000
+    "total": 7250000
   },
   "ladder": [
     {
@@ -108,7 +110,7 @@
       "id": "M12",
       "name": "New far-field biome (ground/palette/scatter/hazards)",
       "kind": "gate-verified",
-      "status": "queued (NEXT \u2014 likely hits the budget cap)"
+      "status": "COMPLETE (cycle 24, D307): ash_barren scorched-flats biome (regional-anchored, dark ground + industrial POI mix)"
     }
   ],
   "sanctioned_pauses": [
@@ -306,6 +308,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 150000,
       "verify": "verify:all PASS - numeric histogram: ship 0/278 far-field POIs, varied spread - D306"
+    },
+    {
+      "n": 24,
+      "date": "2026-07-13",
+      "focus": "M12 the ash-barren biome (regional scorched-flats zone) \u2014 QUEUE COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 350000,
+      "verify": "verify:all PASS - numeric: ash_barren zone found + biomeAt confirmed - shot: distinct dark ground - D307"
     }
   ]
 }

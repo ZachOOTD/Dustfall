@@ -151,7 +151,14 @@ and promotes the second.
 > - **✅ M11 — Retire legacy tube-wrecks COMPLETE** (cycle 23, D306): `ship` removed from the world-gen
 >   roulette (weight → the socket `derelict`; fallback retargeted) — 0/278 far-field POIs are tubes, by
 >   construction. The low-risk endpoint of the D227/D249 strategy (not the rewrite they rejected).
-> - **M12 — New far-field biome** (ground/palette/scatter/hazards; descriptor-pure + teardown-safe).
+> - **✅ M12 — New far-field biome COMPLETE** (cycle 24, D307): `ash_barren` — a rare regional-anchored
+>   scorched-flats zone (dark charred ground + cinder mottle + a low flatten + a burned-industrial POI
+>   mix), mirroring the wreck-yard regional anchor (own appended seed → yard byte-identical; far-field
+>   only, ≥2600m from origin). Reads distinct from the light desert. Gate-clean. Residual: the dark
+>   read could be pushed more dramatic (polish, flagged for the human review).
+>
+> **🏁 THE WHOLE M7-R→M12 QUEUE IS COMPLETE (cycles 14-24, one overnight, UNDER the 8.75M cap).**
+> Campaign `completed` (until-met). Awaiting Zach's morning walk-test + merge review — nothing pushed.
 >
 > Standing constraints: **models-need-thickness** (no paper-thin double-sided), **100% collision**
 > (rule 9 swept). Probe rig is GPU-default (~10× faster). See `docs/campaign/` + `next-session-prompt.md`.
