@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 15,
-  "current_tier": "M7-R Skyfall refinement \u2014 parts 1-2 done (thickness+collision, floating-audit+detail); part 3 next (broken cockpit glass + small cabin visibility lift), then captain-log",
+  "cycles_completed": 16,
+  "current_tier": "M7-R Skyfall refinement \u2014 parts 1-3 done (thickness+collision, floating-audit+detail, glass+cabin-light); part 4 next = captain-log story (LAST M7-R fix)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 5250000
+    "total": 5450000
   },
   "ladder": [
     {
@@ -78,7 +78,7 @@
       "id": "M7-R",
       "name": "Skyfall refinement (real hull thickness / floating-model audit / 100% collision / more interior detail / cockpit glass / captain-log story)",
       "kind": "gate-verified+feel",
-      "status": "IN PROGRESS \u2014 thickness+collision (c14) + floating-audit+detail (c15) SHIPPED; broken glass + captain-log remain (+ a flagged cabin-visibility lift)"
+      "status": "IN PROGRESS \u2014 thickness+collision (c14) + floating-audit+detail (c15) + broken glass+cabin-light (c16) SHIPPED; captain-log remains"
     },
     {
       "id": "M8",
@@ -242,6 +242,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 200000,
       "verify": "verify tsc - skyfall-walk PASS - verify-chunks (det 8/8, no-leak, perf ok) - 2-round + seed-808"
+    },
+    {
+      "n": 16,
+      "date": "2026-07-13",
+      "focus": "M7-R part 3: Skyfall broken cockpit glass (shattered canopy) + reversible cabin-visibility fill",
+      "outcome": "SHIPPED",
+      "spend_estimate": 200000,
+      "verify": "verify tsc - skyfall-walk PASS - verify-chunks (det 8/8, no-leak, perf ok) - 3-round glass + 2-round cabin + seed-808"
     }
   ]
 }

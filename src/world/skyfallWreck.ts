@@ -124,6 +124,28 @@ const _mugMat = new THREE.MeshLambertMaterial({ color: 0xa85f3e, flatShading: tr
 const _paperMat = new THREE.MeshLambertMaterial({ color: 0x9a917c, flatShading: true });      // grimy pinned manifest / label / clipboard sheet (dull bone)
 const _rubberMat = new THREE.MeshLambertMaterial({ color: 0x201d1a, flatShading: true });     // dark rubber — coiled hose / gasket / boot (near-black warm)
 
+// ── COCKPIT CANOPY GLASS (M7-R part 3) — the bridge windscreen glazing, mirroring
+//    shipScene's `_glass` vocabulary but WRECKED (crash-grimy, shattered). Shared
+//    module singletons (per-call pane geometry unloads via chunkGeo; materials
+//    persist). Transparent → mergeStaticByMaterial leaves the panes UNMERGED, so
+//    each keeps its own depth-sorted draw; they render in the transparent pass
+//    AFTER the opaque hull, and depthTest against the opaque depth buffer means the
+//    frame/backing correctly occlude them (no z-fight, no wrong occlusion). Low
+//    opacity + a whisper of cool emissive so the dark bridge reads THROUGH as a
+//    real tinted pane, not a lit slab.
+const _cockpitGlass = new THREE.MeshLambertMaterial({
+  color: 0x445e66, emissive: 0x0b141a, emissiveIntensity: 0.4,
+  transparent: true, opacity: 0.4, side: THREE.DoubleSide,
+  depthWrite: false, flatShading: true,
+});
+// Frosted crack lattice — the pale stress-lines on an intact-but-shattered pane +
+// the jagged glass teeth clinging in a blown-out opening. OPAQUE → folds into the
+// merge (one draw), and being proud of the glass it reads ON the pane surface.
+const _glassCrack = new THREE.MeshLambertMaterial({ color: 0xbcc9c6, emissive: 0x283634, emissiveIntensity: 0.35, flatShading: true });
+// Fallen glass shard on the deck/sill below the canopy — a small angular frosted
+// chip (translucent so it catches light + reads as safety glass, not a pale tile).
+const _glassShard = new THREE.MeshLambertMaterial({ color: 0x8ea6ad, emissive: 0x17232a, emissiveIntensity: 0.5, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false, flatShading: true });
+
 export interface SkyfallResult {
   group: THREE.Group;
   bodies: RAPIER.RigidBody[];
@@ -262,11 +284,8 @@ export function placeSkyfallWreck(
   const bridgeCap = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 0.58, 1.5, 2.2), _hullDarkMat);
   bridgeCap.position.set(BR_X, HALF_H + 3.7, 6.6);
   fore.add(bridgeCap);
-  // A dark forward window band on the bridge front (thin recessed inset — depth
-  // reads at the sill graze, >10cm per rule 7).
-  const bridgeWin = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 0.72, 0.9, 0.25), _voidMat);
-  bridgeWin.position.set(BR_X, HALF_H + 2.2, 7.0 + 1.9);
-  fore.add(bridgeWin);
+  // (The cockpit windscreen/canopy that fronts the bridge is built in the S3
+  //  section below — it needs the dBox/dCyl helpers + the solved pose.)
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 3.4, 6), _frameMat);
   mast.position.set(BR_X + 1.0, HALF_H + 5.1, 6.4);
   fore.add(mast);
@@ -556,12 +575,103 @@ export function placeSkyfallWreck(
   for (const s of [-1, 1] as const) for (let i = 0; i < 6; i++) {
     dBox(fore, _frameMat, 0.22, 0.28, 0.22, HALF_W * 0.44 * s, HALF_H + 0.42, 8 + i * 3.6);
   }
-  // Bridge window frame + mullions around the dark forward window band.
-  const bwY = HALF_H + 2.2, bwZ = 7.0 + 1.9, bwW = HALF_W * 0.72;
-  dBox(fore, _frameMat, bwW + 0.2, 0.12, 0.12, BR_X, bwY + 0.52, bwZ + 0.02);   // top rail
-  dBox(fore, _frameMat, bwW + 0.2, 0.12, 0.12, BR_X, bwY - 0.52, bwZ + 0.02);   // sill rail
-  for (const s of [-1, 1] as const) dBox(fore, _frameMat, 0.12, 1.1, 0.12, BR_X + (bwW / 2 + 0.06) * s, bwY, bwZ + 0.02); // jambs
-  for (const mx of [-0.9, 0, 0.9] as const) dBox(fore, _frameMat, 0.08, 1.0, 0.10, BR_X + mx, bwY, bwZ + 0.03);           // mullions
+  // ── COCKPIT WINDSCREEN / CANOPY (M7-R part 3 headline) — a proper framed,
+  //    SHATTERED bridge windscreen across the fore-face of the bridge castle,
+  //    mirroring the intro ship's canopy vocabulary but wrecked to fit the crash.
+  //    A solid metal FRAME (perimeter + column mullions + a transom) defines an
+  //    8-cell grid; each cell is deterministically either an intact-but-CRACKED
+  //    tinted pane or a SHATTERED-OUT opening (dark cockpit shows through), with a
+  //    punched-through impact break + fallen shards on the deck. Determinism: a
+  //    FIXED 8-draw budget (one rand per cell) seeds the shatter pattern; crack/
+  //    tooth detail is derived arithmetically from that draw (no extra rand). The
+  //    canopy is a raked group so the header tips forward over the deck (cockpit
+  //    read); frame/cracks are OPAQUE (fold into the merge), glass panes are the
+  //    shared transparent singletons (stay unmerged, correct depth sort). NO
+  //    collider — decoration on the bridge exterior; the bridge-block collider
+  //    stands and the interior walk lane is untouched (the glass is on top).
+  {
+    // Dark cockpit recess behind the glazing (a solid _voidMat box flush on the
+    // bridge front, front face just proud of z=8.8) — so a SHATTERED cell reads as
+    // a hole into darkness and an intact pane reads as tinted DARK glass.
+    dBox(fore, _voidMat, 3.0, 1.95, 0.34, BR_X, HALF_H + 1.85, 8.64);
+    const canopy = new THREE.Group();
+    canopy.position.set(BR_X, HALF_H + 1.85, 8.9);   // proud of the bridge front (z=8.8)
+    canopy.rotation.x = 0.10;                          // rake: header tips forward over the deck
+    fore.add(canopy);
+    const FD = 0.18, FT = 0.13;                        // frame depth / member thickness (rule-7 solid)
+    // Perimeter + grid.
+    dBox(canopy, _frameMat, 3.0 + FT, FT, FD, 0, 0.95, 0);              // header rail
+    dBox(canopy, _frameMat, 3.0 + FT, FT + 0.05, FD + 0.05, 0, -0.95, 0); // sill rail (a touch deeper)
+    for (const s of [-1, 1] as const) dBox(canopy, _frameMat, FT, 1.9 + FT, FD, s * 1.5, 0, 0);  // corner posts
+    for (const mx of [-0.75, 0, 0.75] as const) dBox(canopy, _frameMat, FT * 0.85, 1.9, FD * 0.9, mx, 0, 0); // column mullions
+    dBox(canopy, _frameMat, 3.0, FT * 0.85, FD * 0.9, 0, 0, 0);         // transom (row divider)
+    // 8-cell grid: intact-cracked OR shattered-out (fixed 8-draw rand budget).
+    const cellCols = [-1.125, -0.375, 0.375, 1.125] as const;   // column centres (width 0.75)
+    const cellRows = [0.475, -0.475] as const;                  // row centres (height 0.95)
+    const CW = 0.60, CH = 0.80;                                 // glass pane extents (inside the frame)
+    const GZ = 0.055;                                           // glass sits flush in the frame front
+    let shattered = 0;                                          // → deck-shard count
+    let firstShatterTop: number | null = null;                 // → the punch-through mullion break
+    for (let ci = 0; ci < 4; ci++) for (let ri = 0; ri < 2; ri++) {
+      const cx = cellCols[ci], cy = cellRows[ri];
+      const r = rand();                                         // the ONE per-cell draw
+      if (r < 0.46) {
+        // INTACT-but-CRACKED pane — a tinted transparent box, framed flush.
+        const pane = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.04), _cockpitGlass);
+        pane.position.set(cx, cy, GZ);
+        canopy.add(pane);
+        // Crack lattice — radiating slivers from a seeded impact point (derived
+        // from r, no extra rand) + a couple cross-fractures. Frosted, proud of glass.
+        const ix = (r * 2 - 0.5) * CW * 0.28, iy = ((r * 7) % 1 - 0.5) * CH * 0.30;
+        const base = r * Math.PI * 2;
+        for (let k = 0; k < 4; k++) {
+          const ang = base + k * (Math.PI / 2) + (((r * (k + 3)) % 1) - 0.5) * 0.5;
+          const len = CH * (0.55 + ((r * (k + 1)) % 1) * 0.4);
+          dBox(canopy, _glassCrack, len, 0.018, 0.02,
+            cx + ix + Math.cos(ang) * len * 0.5, cy + iy + Math.sin(ang) * len * 0.5, GZ + 0.03, 0, 0, ang);
+        }
+        // one short cross-crack for a facet read
+        dBox(canopy, _glassCrack, CW * 0.5, 0.016, 0.02, cx + ix * 0.4, cy + iy, GZ + 0.03, 0, 0, base + 1.2);
+      } else {
+        // SHATTERED-OUT opening — empty (the dark recess shows through) with a few
+        // jagged glass TEETH clinging to the cell edges (frosted, opaque).
+        shattered++;
+        if (ri === 0 && firstShatterTop === null) firstShatterTop = cx;
+        const teeth = 3;
+        for (let k = 0; k < teeth; k++) {
+          const edge = k % 2 === 0 ? 1 : -1;                    // alternate top/bottom edge
+          const tw = 0.10 + ((r * (k + 2)) % 1) * 0.10;
+          const tx = cx + (((r * (k + 5)) % 1) - 0.5) * CW * 0.7;
+          const ty = cy + edge * CH * 0.42;
+          dBox(canopy, _glassCrack, tw, tw * 1.4, 0.03, tx, ty, GZ + 0.01, 0, 0, edge * (0.4 + (r % 1) * 0.6));
+        }
+      }
+    }
+    // PUNCH-THROUGH impact damage — a column mullion snapped + bent out at the
+    // first shattered top cell (reads as "something came through the glass").
+    if (firstShatterTop !== null) {
+      dBox(canopy, _frameMat, FT * 0.85, 0.9, FD * 0.9, firstShatterTop < 0 ? firstShatterTop + 0.375 : firstShatterTop - 0.375, 0.3, 0.06, 0.25, 0, 0.5);  // bent broken mullion stub
+      dBox(canopy, _frameMat, 0.5, FT * 0.7, FD * 0.7, firstShatterTop, 0.95, 0.04, 0.3, 0, -0.2);  // torn header lip over the hole
+    }
+    // A couple of shards caught in the canopy sill (the low frame ledge).
+    for (let k = 0; k < 2; k++) {
+      const sh = new THREE.Mesh(new THREE.BoxGeometry(0.12 + k * 0.04, 0.03, 0.10), _glassShard);
+      sh.position.set(-0.6 + k * 1.1, -0.88, 0.10);
+      sh.rotation.set(-0.3, 0.4 * (k ? 1 : -1), 0.2 * (k ? -1 : 1));
+      canopy.add(sh);
+    }
+    // FALLEN GLASS SHARDS on the deck below/forward of the canopy (one per shattered
+    // cell, capped) — small angular translucent chips, deterministic placement.
+    const nShards = Math.min(shattered, 6);
+    for (let k = 0; k < nShards; k++) {
+      const t = k / Math.max(nShards - 1, 1);
+      const sw2 = 0.13 + (k % 3) * 0.06;
+      const sh = new THREE.Mesh(new THREE.BoxGeometry(sw2, 0.04, sw2 * 1.3), _glassShard);
+      sh.position.set(BR_X - 1.0 + t * 2.0 + (k % 2 ? 0.2 : -0.2), HALF_H + 0.06, 9.1 + (k % 3) * 0.24);
+      sh.rotation.set(0, k * 1.3, (k % 2 ? 0.25 : -0.2));
+      fore.add(sh);
+    }
+  }
 
   // ── STERN mechanical detail — nozzle throat rings + a finned engine radiator
   //    on the snapped engine block (cylinders/tori are inherently thick).
@@ -926,6 +1036,15 @@ export function placeSkyfallWreck(
   // station stay dark-but-LEGIBLE without a light source the wreck can't have
   // (the player carries none yet — this is faked ambient bounce, kept low).
   addLight(0x52627c, 0.72, 18, 0, 1.55, 10.6);   // cabin+mid cool fill (pulled into the cabin so the aft walls/lockers read)
+  // ── CABIN-VISIBILITY LIFT (M7-R part 3) — the crew cabin (z 6.2-12) read too
+  //    dark 3× in walk-tests, so its detail/loot/journal were flush but barely
+  //    legible. A SINGLE modest warm fill lifts the crew station just enough to
+  //    read the props WITHOUT daylighting the wreck (short range keeps it scoped
+  //    to the cabin; the "power's out / sun through the tear" mood is preserved
+  //    aft). FLAGGED for Zach's moody-vs-lit call — set SKYFALL_CABIN_FILL to 0
+  //    for a one-line revert to the darker cabin.
+  const SKYFALL_CABIN_FILL = 1.05;
+  addLight(0xc2a074, SKYFALL_CABIN_FILL, 8.5, 0.2, 1.45, 8.0);   // warm cabin fill (scoped: crew station + console + journal + salvage panels)
 
   // PERF — one draw per material.
   mergeStaticByMaterial(root);

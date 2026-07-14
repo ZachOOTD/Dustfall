@@ -1,33 +1,31 @@
-# Next cycle (16) — M7-R part 3: broken cockpit glass + small cabin-visibility lift
+# Next cycle (17) — M7-R part 4 (FINAL): the captain's-log story
 
-**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (15 cycles, ~5.25M/8.75M
-spent; +4M overnight cap → ~3.5M left). Checkpoint none. Queue: **M7-R (in progress) → M8 → M9 → M10 → M11 → M12**.
+**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (16 cycles, ~5.45M/8.75M
+spent; ~3.3M left of the +4M cap). Checkpoint none. Queue: **M7-R (final fix) → M8 → M9 → M10 → M11 → M12**.
 
 ## M7-R progress
 - ✅ part 1 (c14, D304): real hull thickness (paper-thin fix) + 100% exterior collision.
-- ✅ part 2 (c15): interior floating-model audit (8 floaters grounded flush) + more interior detail.
-- **REMAINING** (spec = `docs/feature-skyfall.md` M7-R section):
-  1. **Broken cockpit glass** (cycle 16) — add a canopy/windscreen to the bridge (fore-starboard
-     superstructure; `bridge`/`bridgeCap` blocks, BR_X ≈ HALF_W*0.34) like the intro ship's
-     `shipScene.ts` `_glass`/dome vocabulary, SHATTERED to fit the crash (cracked panes, a hole,
-     missing shards, maybe a few fallen shard bits). Hero read from the bridge. Give it real
-     thickness per rule 7 (glass panes are thin but framed; no zero-thickness double-sided card).
-  2. **+ Small cabin-visibility lift** (fold into cycle 16) — the CABIN reads too dark (flagged 3×);
-     the loot/journal/new detail are flush but barely visible. Add a SMALL, tasteful, REVERSIBLE
-     interior fill (a modest ambient/hemisphere term or a low cabin lamp) that lifts the floor/walls
-     just enough to read the detail WITHOUT killing the "power's out / sun through the tear" mood.
-     Document it as flagged for Zach's moody-vs-lit call (revert = one line). Do NOT over-brighten.
-  3. **Captain's-log story** (cycle 17) — the crew EJECTED IN THE DROP PODS before/at the crash;
-     bespoke journal content in `crashLog.ts` (a short melancholy log — the captain ordering the
-     pod evac, the freighter going down — NOT generic freighter lore). This ties the empty wreck to
-     the world (and a future drop-pod feature).
+- ✅ part 2 (c15): interior floating-model audit (8 grounded flush) + more interior detail.
+- ✅ part 3 (c16): broken cockpit glass (shattered canopy) + reversible cabin-visibility fill
+  (`SKYFALL_CABIN_FILL`; =0 for darker).
+- **FINAL (cycle 17): the captain's-log story.** User: "need some kind of captains log... maybe says
+  the crew is ejecting in the drop pods and have a little story." The wreck already has a crash-log
+  journal on the bow console (S6 — `placeSkyfallWreck` → `placeJournal` + `generateCrashLog(seed,'freighter')`).
+  Replace the generic freighter lore with a BESPOKE Skyfall log: the captain ordering the crew to
+  EVACUATE IN THE DROP PODS as the freighter goes down — a short, melancholy, environmental-story log
+  (the GDD's "the world tells you what happened by what's left"). Likely: add a dedicated Skyfall crash
+  role / content in `crashLog.ts` (or pass explicit `content` from `skyfallWreck.ts`), a few dated
+  entries building to the evac order + the captain staying / going down with the ship. Keep it short
+  (fits the journal panel), no new save schema (journal content is text). Ties the empty wreck to the
+  world + a future drop-pod feature.
+  Gate: verify:all + skyfall-walk PASS + the loot/journal numeric probe (journal still registers +
+  tears down clean); read the log text in-panel if a probe can (or just verify it's wired).
+  **After this ships, M7-R is COMPLETE** → session-end moves M7-R to Shipped; next cycle picks up M8.
 
-Gates every cycle: verify:all + skyfall-walk (PASS) + verify-chunks (det stable per seed) + the
-adversarial visual gate for the glass (hero). GPU probes ~26s.
-
-## After M7-R → the world queue
+## The world-deepening queue (after M7-R)
 M8 far-field vultures → M9 new POI archetypes → M10 story vignettes → M11 retire legacy tube-wrecks
-(ship→socket, D227/D249) → M12 new far-field biome. Each its own `/feature-slice` when reached.
+(ship→socket, D227/D249) → M12 new far-field biome. Each its own `/feature-slice` when reached
+(M8 first: solve the D294 chunk-model tension for aerial life — region-rolled perch/placement rework).
 
 ## Standing constraints (steering.md)
 - **models-need-thickness** (rule 7) · **100% collision** (rule 9, swept) · determinism (D290) +

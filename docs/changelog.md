@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 16 — 2026-07-13 — M7-R part 3: Skyfall broken cockpit glass + cabin-visibility lift ✓ all gates
+
+`verified` — verify tsc clean, skyfall-walk PASS, verify-chunks (det 8/8 both seeds, no-leak, perf untripped); 3-round glass iteration + 2-round cabin + seed-808.
+
+- **Broken cockpit glass (the headline)** — the old flat dark window band is now a proper SHATTERED cockpit windscreen across the bridge castle: a raked canopy with a solid `_frameMat` mullion grid (8 cells), per-cell intact-cracked / blown-out state (fixed 8-draw `rand` budget), a punch-through impact break (bent mullion + torn header lip), sill + fallen deck shards. 3 new module-singleton materials (`_cockpitGlass` transparent / `_glassCrack` / `_glassShard`); transparent panes stay unmerged for correct depth sort. Reads as a real shattered canopy (confirmed head-on + seed-808).
+- **Cabin-visibility lift (reversible)** — one warm scoped fill (`SKYFALL_CABIN_FILL = 1.05`, range 8.5) so the cabin detail + loot + journal are legible; the aft mid-bay stays dark so the "power's out / sun through the tear" mood is preserved. **Flagged in-code for the moody-vs-lit call**: set `SKYFALL_CABIN_FILL = 0` for the darker cabin (0.78 is a subtler middle).
+- Cycles 14-15 work + all colliders + skyfallProbe untouched (walk gate green). Remaining M7-R: the captain's-log story (final cycle).
+
 ## Campaign "Sharpen & Deepen" cycle 15 — 2026-07-13 — M7-R part 2: Skyfall interior floating-model audit + more detail ✓ all gates
 
 `verified` — verify tsc clean, skyfall-walk PASS (detail off the lane), verify-chunks (det 8/8 both seeds, no-leak, perf untripped); 2-round real-view iteration + seed-808.

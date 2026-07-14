@@ -158,3 +158,12 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~200K (campaign total ~5.25M / 8.75M; cycle 15/50)
 - Commit: see git log
 - Next: cycle 16 = broken cockpit glass + small cabin-visibility lift; then cycle 17 = captain's-log story.
+
+## Cycle 16 — M7-R part 3: Skyfall broken cockpit glass + cabin light (2026-07-13) — SHIPPED
+- Planned: a shattered cockpit windscreen (user: "glass front in the cockpit like the intro ship, could make it broken") + a small reversible cabin-visibility lift (dark-cabin flagged 3×).
+- Shipped: broken canopy on the bridge (mullion grid, cracked/blown cells, impact punch-through, sill+deck shards; 3 module-singleton glass materials, transparent panes unmerged); scoped warm cabin fill SKYFALL_CABIN_FILL=1.05 (aft stays dark → mood preserved; =0 reverts).
+- Verify: verify tsc · skyfall-walk PASS · verify-chunks (det 8/8 both seeds, no-leak, perf untripped).
+- Visual iteration: 3-round glass + 2-round cabin (procedural-modeler) + seed-808; my read confirms the shattered canopy + the now-legible cabin.
+- Spend: ~200K (campaign total ~5.45M / 8.75M; cycle 16/50)
+- Commit: see git log
+- Next: cycle 17 = captain's-log story (crew ejected in drop pods) — the LAST M7-R fix; then the M8 world queue.
