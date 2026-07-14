@@ -381,6 +381,22 @@ export const Tuning = {
   // bakes byte-identically (the placement gate is the tripwire).
   WRECK_YARD_REGION_CHANCE: 0.08,
   WRECK_YARD_REGION_MIN_DIST: 2200,
+  // bone_field — a titan graveyard: pale sun-bleached leviathan bones half-
+  // buried in the sand (replaces the reverted ash_barren, which failed for
+  // being too subtle — a mere dark tint, no props). The POP is TWO things:
+  // (a) a bold bleached bone-white ground that contrasts hard with the warm-
+  // tan desert, and (b) real half-buried bone SCATTER props strewn across the
+  // zone. Rare regional anchor with its OWN appended region seed (the wreck-
+  // yard stays byte-identical); NO origin anchor (far-field only).
+  BONE_FIELD_REGION_CHANCE: 0.05,
+  BONE_FIELD_REGION_MIN_DIST: 2600,
+  BONE_FIELD_RADIUS: 150,
+  BONE_FIELD_HEIGHT_SCALE: 0.12,       // a gentle flatten — a settled graveyard basin
+  // Bone SCATTER density per bone_field chunk (deterministic; fixed draw
+  // budget). Candidates rolled per chunk; kept only where biomeAt is
+  // bone_field, so a central zone chunk keeps most (strewn), an edge chunk few.
+  BONE_SCATTER_CANDIDATES: 24,
+  BONE_SCATTER_RIBCAGE_SHARE: 0.28,    // ~1/4 are collidered ribcages; the rest cheap MERGED bits (near-free density)
   // Infinite Sands parity (D299) — the far field carries EVERYTHING the
   // origin has. Densities calibrated to the boot spawners' landed counts
   // over the boot area (then nudged up where the origin's read comes from

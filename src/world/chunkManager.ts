@@ -38,6 +38,8 @@ import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { spawnCirclingVultureAt, removeVultureFromWorld, type Vulture } from '../enemies/vulture.ts';   // M8 — streamed far-field aerial life
 import { placeRibcage } from './heroLandmarks.ts';
+import { buildBoneBit, BONE_BIT_KINDS, type BoneBitKind } from './boneScatter.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { placeSkyfallWreck } from './skyfallWreck.ts';
 import type { Journal } from './journal.ts';
 import { FEATURES } from '../config/features.ts';
@@ -140,6 +142,18 @@ export interface ChunkLandmarkDesc {
   seed: number;
 }
 
+/** bone_field scatter — one half-buried bone prop. `ribcage` bits render via
+ *  placeRibcage (a real collidered hero silhouette); the cheap decoration bits
+ *  (`skull`/`ribarch`/`spine`/`longbone`) render merged, no collider (the
+ *  scatter-rock rule). Present only on bone_field chunks. */
+export interface ChunkBoneDesc {
+  x: number;
+  z: number;
+  scale: number;
+  kind: 'ribcage' | BoneBitKind;
+  seed: number;
+}
+
 /** The full deterministic content descriptor for one chunk. */
 export interface ChunkDesc {
   cx: number;
@@ -152,6 +166,8 @@ export interface ChunkDesc {
   fauna: ChunkFaunaDesc;
   landmark: ChunkLandmarkDesc;
   dressing: ChunkDressingDesc;
+  /** bone_field titan-graveyard scatter (empty off-biome). */
+  bones: ChunkBoneDesc[];
 }
 
 interface LoadedChunk {
@@ -484,6 +500,37 @@ export function createChunkManager(
     if (outsideOrigin && vRoll < Tuning.CHUNK_VULTURE_CHANCE) {
       fauna.roamVultures = [{ x: vvx, z: vvz }];
     } else fauna.roamVultures = [];
+    // ── bone_field — the titan-graveyard bone SCATTER (the biome's POP). A
+    //    dedicated stream; fixed draw budget (5 draws/candidate, always) so
+    //    the earlier streams stay byte-stable. A candidate is kept only where
+    //    biomeAt is bone_field (so a core zone chunk keeps most = strewn, an
+    //    edge chunk few) and outside the origin field. ~1/3 are collidered
+    //    ribcage silhouettes; the rest cheap merged decoration bits. ──
+    const boneRand = makeRng((seed ^ 0xb04e5) >>> 0);
+    const bones: ChunkBoneDesc[] = [];
+    for (let b = 0; b < Tuning.BONE_SCATTER_CANDIDATES; b++) {
+      const bx = cx * SIZE + boneRand() * SIZE;
+      const bz = cz * SIZE + boneRand() * SIZE;
+      const typeRoll = boneRand();
+      const scaleRoll = boneRand();
+      const bSeed = Math.floor(boneRand() * 0x100000000) >>> 0;
+      if (!outsideOrigin) continue;
+      if (biomes.biomeAt(bx, bz) !== 'bone_field') continue;
+      let kind: ChunkBoneDesc['kind'];
+      let scale: number;
+      if (typeRoll < Tuning.BONE_SCATTER_RIBCAGE_SHARE) {
+        kind = 'ribcage';
+        // Mostly small half-buried ribcages; a rare big hero one punctuates.
+        scale = scaleRoll < 0.15 ? 1.1 + scaleRoll * 3.0 : 0.28 + scaleRoll * 0.5;
+      } else {
+        // A cheap decoration bit — kind chosen from the remaining roll span.
+        const k = Math.floor(((typeRoll - Tuning.BONE_SCATTER_RIBCAGE_SHARE) /
+          (1 - Tuning.BONE_SCATTER_RIBCAGE_SHARE)) * BONE_BIT_KINDS.length);
+        kind = BONE_BIT_KINDS[Math.min(BONE_BIT_KINDS.length - 1, k)];
+        scale = 0.7 + scaleRoll * 1.1;
+      }
+      bones.push({ x: bx, z: bz, scale, kind, seed: bSeed });
+    }
     return {
       cx, cz, seed,
       markers: markerList,
@@ -493,6 +540,7 @@ export function createChunkManager(
       fauna,
       landmark,
       dressing: { trees, well: { present: wellPresent, x: wlx, z: wlz, seed: wSeed }, cacti },
+      bones,
     };
   };
 
@@ -876,6 +924,60 @@ export function createChunkManager(
         if ((o as THREE.Mesh).isMesh) o.userData.chunkGeo = true;
       });
       group.add(tableau);
+    }
+    // ── bone_field — the titan-graveyard bone SCATTER (the biome POP). Two
+    //    classes: `ribcage` bits are REAL collidered hero silhouettes (via
+    //    placeRibcage → the collider body tracked in bodies[], removed on
+    //    unload); the cheap decoration bits (skull/ribarch/spine/longbone)
+    //    render MERGED into ONE draw call, half-buried, no collider (the
+    //    established scatter-rock rule). Bit geometry is disposed on unload
+    //    via the merge's noCollider tag; the shared bone material survives. ──
+    if (desc.bones.length) {
+      const bitRoot = new THREE.Group();
+      let bitCount = 0;
+      for (const bd of desc.bones) {
+        const bRand = makeRng(bd.seed);
+        const y = terrain.heightAt(bd.x, bd.z);
+        if (bd.kind === 'ribcage') {
+          const rc = placeRibcage(scene, world, new THREE.Vector3(bd.x, y, bd.z), bRand, group, bd.scale);
+          rc.group.userData.streamBone = true;
+          rc.group.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.isMesh) {
+              m.userData.chunkGeo = true; m.userData.chunkMat = true;
+              // placeRibcage's default bone tone (HSL L≈0.55) reads as dark tan.
+              // In the sun-bleached graveyard, brighten it to a cool pale bone +
+              // a matching cool emissive so it POPS against the warm sand under
+              // the game's warm sun (a plain-ivory hero ribcage collapses to tan
+              // and vanishes — same failure as the scatter bits). Per-call
+              // material → only THIS field's ribcages, not the landmark ones.
+              const mat = m.material as THREE.MeshLambertMaterial;
+              if (mat && mat.color) {
+                mat.color.setHSL(0.58, 0.05, 0.88);
+                mat.emissive = new THREE.Color(0x4a5766);
+                mat.emissiveIntensity = 0.85;
+              }
+            }
+          });
+          const body = rc.collider.parent();
+          if (body) bodies.push(body);
+        } else {
+          const bit = buildBoneBit(bd.kind, bRand);
+          bit.scale.setScalar(bd.scale);
+          // Half-buried: sink a fraction of the bit into the sand so it reads
+          // as emerging from the ground, not resting on it.
+          const bury = (0.25 + bRand() * 0.35) * bd.scale;
+          bit.position.set(bd.x, y - bury, bd.z);
+          bit.rotation.y = bRand() * Math.PI * 2;
+          bitRoot.add(bit);
+          bitCount++;
+        }
+      }
+      if (bitCount > 0) {
+        bitRoot.userData.streamBone = true;
+        mergeStaticByMaterial(bitRoot);   // → one draw call; merged mesh tagged noCollider
+        group.add(bitRoot);
+      }
     }
     if (markers) {
       for (let m = 0; m < desc.markers.length; m++) {

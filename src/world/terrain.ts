@@ -42,6 +42,18 @@ const BIOME_COLOR_WRECK_YARD: readonly [number, number, number] = [0x47 / 255, 0
 // and textured rather than a flat muddy tint.
 const BIOME_COLOR_WRECK_YARD_OIL: readonly [number, number, number] = [0x26 / 255, 0x20 / 255, 0x1b / 255];
 const BIOME_COLOR_WRECK_YARD_ASH: readonly [number, number, number] = [0x71 / 255, 0x64 / 255, 0x52 / 255];
+// bone_field — a titan graveyard: a BOLD bleached bone-white ground that
+// contrasts hard against the warm-tan desert (this is the POP — the reverted
+// ash_barren failed for being a mere dark tint). Cooler + paler than the salt
+// flat (which is a warm 0xf0e8d2) so it reads as bleached BONE, not salt: a
+// near-white cool ivory, with a duller dried-marrow / dust-in-the-cracks mottle
+// so it reads organic + textured rather than a flat mineral white.
+// Cool bleached-pan ivory (faintly cool so it separates from the WARM tan dunes
+// under the game's warm sun — a warm ivory just reads as more desert). The mottle
+// is a neutral dried-marrow grey, NOT warm tan (a warm mottle pulls the pan back
+// toward desert — the ash/first-bone failure).
+const BIOME_COLOR_BONE_FIELD: readonly [number, number, number] = [0xed / 255, 0xf0 / 255, 0xf1 / 255];
+const BIOME_COLOR_BONE_FIELD_MARROW: readonly [number, number, number] = [0xc9 / 255, 0xc7 / 255, 0xbf / 255];
 // ACAR2 — Sarlacc crater interior: a shadowed dusky dune-brown so the recessed
 // funnel reads as a pit (darkest at center, fading to dune at the rim).
 const BIOME_COLOR_SARLACC_PIT: readonly [number, number, number] = [0x5a / 255, 0x44 / 255, 0x30 / 255];
@@ -179,6 +191,8 @@ export function createTerrain(
     let flatness = biomeHeightScale(biomes.rawAt(x, z));
     const wyH = biomes.wreckYardAt(x, z);   // Cycle 8 — flatten the graveyard floor
     if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
+    const boneH = biomes.boneFieldAt(x, z);  // bone_field — a gentle graveyard basin
+    if (boneH > 0) flatness = flatness * (1 - boneH) + Tuning.BONE_FIELD_HEIGHT_SCALE * boneH;
     const pitH = biomes.sarlaccPitAt(x, z);  // ACAR — flatten a sand bowl around the maw
     if (pitH > 0) flatness = flatness * (1 - pitH) + 0.05 * pitH;
     let h = sampleHeight(noise, x, z) * flatness;
@@ -302,6 +316,15 @@ export function createTerrain(
             ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
             : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
           c = lerp3(c, stain, wyC);
+        }
+        // bone_field — bleach the ground to bone-white with a dried-marrow
+        // mottle. A near-total overlay (0.92) so the PALE read dominates from
+        // a distance; the mottle keeps it from going flat-mineral like salt.
+        const boneC = biomes.boneFieldAt(wx2, wz2);
+        if (boneC > 0) {
+          const bmot = noise(wx2 * 0.05 + 12.3, wz2 * 0.05 - 4.1);     // -1..1 marrow/dust streaks
+          const boneStain = lerp3(BIOME_COLOR_BONE_FIELD, BIOME_COLOR_BONE_FIELD_MARROW, Math.max(0, bmot) * 0.5);
+          c = lerp3(c, boneStain, boneC * 0.96);
         }
         // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
         // funnel READS as a shadowed pit even under flat overhead light.

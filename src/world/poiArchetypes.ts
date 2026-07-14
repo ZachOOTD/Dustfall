@@ -767,6 +767,11 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   rocky:      [['derelict', 0.16], ['satellite', 0.05], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06], ['transit_car', 0.04]],
   dune:       [['derelict', 0.18], ['satellite', 0.04], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06], ['transit_car', 0.06]],
   wreck_yard: [['derelict', 0.12], ['satellite', 0.07], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04], ['transit_car', 0.04]],
+  // bone_field — a titan graveyard, NOT an industrial yard. The zone's read
+  // comes from the bone SCATTER (chunkManager), so the sparse POI roll here
+  // favours organic/skeletal-adjacent reads: hollow husks, torn debris fields,
+  // stripped derelicts. Sparse machinery. Sums ≈1.0.
+  bone_field: [['hollow_husk', 0.22], ['debris_field', 0.18], ['derelict', 0.16], ['debris_trail', 0.12], ['wrecked_tank', 0.10], ['buried_pipeline', 0.08], ['well', 0.05], ['relay_mast', 0.05], ['cargo_crawler', 0.04]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

@@ -1384,6 +1384,9 @@ const HULL_SEGMENT_BIOME_WEIGHTS: Record<BiomeId, ReadonlyArray<number>> = {
   dune:  [1.0, 1.0, 1.0, 1.0, 1.2, 1.0, 1.0, 1.3],
   // Cycle 8 — wreck-yard graveyard: ancient corroded + stripped-to-frame + torn-open hulks.
   wreck_yard: [1.0, 1.3, 1.0, 1.3, 1.0, 1.0, 1.4, 1.0],
+  // bone_field — the few wrecks here are ancient + torn-open/stripped skeletons of ships
+  // (echoing the bone theme). Favor the torn-open + stripped-to-frame classes.
+  bone_field: [1.0, 1.2, 1.0, 1.3, 1.0, 1.0, 1.4, 1.1],
 };
 
 function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {

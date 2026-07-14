@@ -2255,6 +2255,153 @@ const SCENARIOS = {
   //   back1500 — same spot looking back toward the origin
   //   seam     — looking +X across the 800m terrain-tile boundary at x=1200
   //   marker   — close-up of a marker post (ground contact, not floating)
+  // ── bone_field — the titan-graveyard biome POP check. Finds the nearest
+  //    far-field bone_field zone, streams into it, and shoots the REAL player-
+  //    eye reads: (1) the ground-colour CONTRAST at the biome edge (bleached
+  //    bone vs tan desert in one frame), (2) an entry-distance vista over the
+  //    strewn field, (3) a close half-buried bone read. The bar: a fresh
+  //    viewer goes "whoa, a bone field" on sight.
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-field --port=5781
+  'bone-field': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0; g.setTime(0.5);          // noon — high neutral sun so the pale ground + bleached bone read true
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    // Find the nearest bone_field core, then REFINE to the true field centroid
+    // (a coarse grid cell can sit near the rim → cameras placed off it land on
+    // dune; the probe caught exactly that). The centroid of all bf>0.5 cells in
+    // a local fine sweep is the plateau centre — cameras offset from it stay
+    // solidly inside the field.
+    const center = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let coarse = null, bestD = Infinity;
+      for (let x = -13000; x <= 13000; x += 200) {
+        for (let z = -13000; z <= 13000; z += 200) {
+          if (x * x + z * z < 2600 * 2600) continue;
+          if (ctx.biomes.boneFieldAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; coarse = { x, z }; }
+          }
+        }
+      }
+      if (!coarse) return null;
+      let sx = 0, sz = 0, w = 0;
+      for (let dx = -200; dx <= 200; dx += 8) {
+        for (let dz = -200; dz <= 200; dz += 8) {
+          const bf = ctx.biomes.boneFieldAt(coarse.x + dx, coarse.z + dz);
+          if (bf > 0.5) { sx += coarse.x + dx; sz += coarse.z + dz; w++; }
+        }
+      }
+      return w ? { x: Math.round(sx / w), z: Math.round(sz / w) } : coarse;
+    });
+    if (!center) { console.log('[bone-field] no bone_field zone found in the 13km scan (seed-dependent)'); return; }
+    console.log(`[bone-field] zone core at ${center.x.toFixed(0)},${center.z.toFixed(0)} (dist ${Math.hypot(center.x, center.z).toFixed(0)}m)`);
+    // Stream the zone in: one teleport past the anchor margin, then wait for
+    // the ring (incl. the bone scatter, built synchronously in loadChunk).
+    await page.evaluate(async (c) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: c.x, y: ctx.terrain.heightAt(c.x, c.z) + 1.6, z: c.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 150; f++) await raf();
+    }, center);
+    // Diagnostics: bone-scatter descriptor density + the biome-edge location.
+    const diag = await page.evaluate((c) => {
+      const g = window.__game; const ctx = g.ctx;
+      const SIZE = 112;
+      const cx0 = Math.floor(c.x / SIZE), cz0 = Math.floor(c.z / SIZE);
+      let ribcages = 0, bits = 0, chunksWithBones = 0;
+      let ribT = null, ribScale = 0;
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const d = g.chunkDescribe(cx0 + dx, cz0 + dz);
+          if (d.bones.length) chunksWithBones++;
+          for (const b of d.bones) {
+            if (b.kind === 'ribcage') { ribcages++; if (b.scale > ribScale) { ribScale = b.scale; ribT = { x: b.x, z: b.z, scale: b.scale }; } }
+            else bits++;
+          }
+        }
+      }
+      // Walk outward from core to find the bone/desert edge (boneFieldAt→0).
+      let edge = null;
+      for (let r = 20; r <= 260; r += 6) {
+        const ex = c.x + r, ez = c.z;
+        if (ctx.biomes.biomeAt(ex, ez) !== 'bone_field') { edge = { x: ex, z: ez }; break; }
+      }
+      // Ground truth: boneFieldAt + the nearest BAKED terrain vertex colour at
+      // the core and at the entry-camera spot (is the pale overlay real, not fog?).
+      const sampleVtx = (sx, sz) => {
+        let best = null;
+        for (const m of ctx.terrain.meshes) {
+          const posA = m.geometry.getAttribute('position');
+          const colA = m.geometry.getAttribute('color');
+          if (!colA) continue;
+          for (let i = 0; i < posA.count; i += 37) {
+            const wx = posA.getX(i) + m.position.x;
+            const wz = posA.getZ(i) + m.position.z;
+            const dd = (wx - sx) ** 2 + (wz - sz) ** 2;
+            if (!best || dd < best.dd) best = { dd, r: colA.getX(i), g: colA.getY(i), b: colA.getZ(i) };
+          }
+        }
+        return best ? { rgb: [best.r.toFixed(2), best.g.toFixed(2), best.b.toFixed(2)], at: Math.sqrt(best.dd).toFixed(0) + 'm' } : null;
+      };
+      const core = { bf: +ctx.biomes.boneFieldAt(c.x, c.z).toFixed(2), vtx: sampleVtx(c.x, c.z) };
+      const cam = { x: c.x - 38, z: c.z - 24 };
+      const camPt = { bf: +ctx.biomes.boneFieldAt(cam.x, cam.z).toFixed(2), vtx: sampleVtx(cam.x, cam.z) };
+      return { ribcages, bits, chunksWithBones, ribT, edge, core, camPt };
+    }, center);
+    console.log(`[bone-field] scatter (5x5 chunks): ${diag.ribcages} ribcages + ${diag.bits} bits across ${diag.chunksWithBones} chunks`);
+    console.log(`[bone-field] core boneFieldAt=${diag.core.bf} vtxColor=${JSON.stringify(diag.core.vtx)}`);
+    console.log(`[bone-field] entry-cam boneFieldAt=${diag.camPt.bf} vtxColor=${JSON.stringify(diag.camPt.vtx)}`);
+    const aim = (fx, fz, tx, tz, lift = 1.7, tiltDown = 0) => `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      cam.position.set(${fx}, ctx.terrain.heightAt(${fx}, ${fz}) + ${lift}, ${fz});
+      cam.lookAt(${tx}, ctx.terrain.heightAt(${tx}, ${tz}) - ${tiltDown}, ${tz});
+      cam.updateMatrixWorld(true);
+    })()`;
+    const shot = async (name, code) => {
+      await page.evaluate(code);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-bone-field-${name}.png`), timeout: 60000 });
+      console.log(`[bone-field] saved scen-bone-field-${name}.png`);
+    };
+    // (1) EDGE contrast — stand ~25m out on the tan desert, look across the
+    //     boundary into the pale field (both grounds in one frame).
+    if (diag.edge) {
+      const ex = diag.edge.x + 25, ez = diag.edge.z;
+      await shot('edge-contrast', aim(ex, ez, center.x, center.z, 1.8, 0.55));
+    }
+    // (2) ENTRY vista — INSIDE the field at eye level, looking across the
+    //     strewn floor (bones in the near/mid ground, pale floor filling the
+    //     lower frame). tiltDown drops the horizon so it's field, not sky.
+    await shot('entry-vista', aim(center.x - 38, center.z - 24, center.x - 6, center.z - 2, 1.7, 0.45));
+    // (3) A second entry angle for coverage.
+    await shot('entry-vista2', aim(center.x + 34, center.z + 28, center.x + 4, center.z + 4, 1.7, 0.45));
+    // (4) CLOSE read — the biggest nearby ribcage from ~10m, half-buried.
+    if (diag.ribT) {
+      console.log(`[bone-field] close ribcage at ${diag.ribT.x.toFixed(0)},${diag.ribT.z.toFixed(0)} scale ${diag.ribT.scale.toFixed(2)}`);
+      const rx = diag.ribT.x, rz = diag.ribT.z;
+      await shot('close-ribcage', aim(rx - 9, rz - 7, rx, rz, 1.6, 0.9));
+    }
+    // (5) A top-down-ish ground read to confirm the pale colour + mottle.
+    await shot('ground', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      const px = ${center.x}, pz = ${center.z};
+      cam.position.set(px, ctx.terrain.heightAt(px, pz) + 8, pz);
+      cam.lookAt(px + 6, ctx.terrain.heightAt(px + 6, pz), pz + 6);
+      cam.updateMatrixWorld(true);
+    })()`);
+  },
+
   'chunk-vista': async (page) => {
     await page.evaluate(async () => {
       const g = window.__game; const ctx = g.ctx;
