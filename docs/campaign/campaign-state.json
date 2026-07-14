@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 21,
-  "current_tier": "M9 new POI archetypes COMPLETE (refinery_stack, hab_dome, transit_car) \u2014 next: M10 story vignettes",
+  "cycles_completed": 22,
+  "current_tier": "M10 story vignettes COMPLETE (3 new no-body tableaus) \u2014 next: M11 retire legacy tube-wrecks (budget ~2M left)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 6600000
+    "total": 6750000
   },
   "ladder": [
     {
@@ -96,13 +96,13 @@
       "id": "M10",
       "name": "More story vignettes (wordless environmental storytelling tableaus)",
       "kind": "gate-verified",
-      "status": "queued (NEXT)"
+      "status": "COMPLETE (cycle 22): 3 new no-body vignettes (cold camp, stripped, cache) + 4 props"
     },
     {
       "id": "M11",
       "name": "Retire legacy tube-wrecks (ship->socket migration, D227/D249)",
       "kind": "gate-verified",
-      "status": "queued"
+      "status": "queued (NEXT \u2014 may hit the budget cap)"
     },
     {
       "id": "M12",
@@ -290,6 +290,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 250000,
       "verify": "verify tsc - verify:placement 0 fails - verify:colliders covered - verify-chunks no leak - 4-round"
+    },
+    {
+      "n": 22,
+      "date": "2026-07-13",
+      "focus": "M10 story vignettes (3 new no-body wordless tableaus + 4 props)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 150000,
+      "verify": "verify:all PASS (placement/colliders/chunks) - 2 new vignettes confirmed reading in-world"
     }
   ]
 }

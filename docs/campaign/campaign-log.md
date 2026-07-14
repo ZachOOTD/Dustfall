@@ -210,3 +210,11 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~250K (campaign total ~6.6M / 8.75M; cycle 21/50)
 - Commit: see git log
 - Next: cycle 22 = M10 story vignettes (expand the wordless tableaus).
+
+## Cycle 22 — M10 story vignettes (2026-07-13) — SHIPPED
+- Planned: more wordless environmental-story tableaus.
+- Shipped: 3 new NO-body vignettes (cold camp / stripped / the cache) + 4 props (bedroll/crate/wheel/tool) in wordlessScenes.ts (ARCHETYPES 2→5). Variety vs the 2 skeleton scenes; "the crew is gone, implied by what's left." Decoration-only, shared materials, real thickness, no mounds, deterministic.
+- Verify: verify:all PASS · 2 new vignettes confirmed reading their story in-world (cold-camp, stripped).
+- Spend: ~150K (campaign total ~6.75M / 8.75M; cycle 22/50)
+- Commit: see git log
+- Next: cycle 23 = M11 retire legacy tube-wrecks (ship->socket, D227/D249) — a systems refactor; ~2M budget left (may hit the cap mid-M11 → stops cleanly at 'budget').

@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 22 — 2026-07-13 — M10: more story vignettes (wordless environmental storytelling) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) green; 2 of the 3 new vignettes confirmed reading their story in-world (cold-camp, stripped).
+
+- **3 NEW no-body "what was left behind" vignettes** in `wordlessScenes.ts` (the ARCHETYPES rotation 2→5): **cold camp** (an unrolled bedroll + a spent fire + a dropped canteen — someone slept here and walked on), **stripped** (a half-sunk wheel + a torn hull panel + a dropped tool + scrap — a broke-down vehicle cannibalised), **the cache** (crates, one open + rifled, scrap spilling + a canteen — a sorted haul, abandoned). The crew is GONE, implied by what remains (GDD "the world tells you what happened by what's left") — variety vs the 2 existing single-skeleton vignettes. + 4 new simple props (bedroll, crate, stripped-wheel, tool), all shared-material + real thickness (rule 7), no sand mounds, decoration-only (no colliders — gates unaffected). Deterministic (dedicated rng); stream via the scene roll + the boot set. M10 COMPLETE.
+
 ## Campaign "Sharpen & Deepen" cycle 21 — 2026-07-13 — M9 archetype 3/3: `transit_car` — **M9 COMPLETE** ✓ all gates
 
 `verified` — verify tsc clean, verify:placement (0 fails, 5 seeds), verify:colliders (transit_car covered, 0 fails), verify-chunks (det stable, no leak, perf ok); 4-round real-view iteration.

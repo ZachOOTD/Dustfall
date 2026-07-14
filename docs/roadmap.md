@@ -146,7 +146,8 @@ and promotes the second.
 > - **✅ M9 — New POI archetypes COMPLETE** (cycles 19-21): `refinery_stack` (cracking-tower ruin),
 >   `hab_dome` (collapsed habitat domes), `transit_car` (derailed rail car) — 3 new streamed far-field
 >   destinations, each gate-verified (placement/colliders/chunks), real thickness, no sand mounds.
-> - **M10 — More story vignettes** (wordless environmental-storytelling tableaus).
+> - **✅ M10 — More story vignettes COMPLETE** (cycle 22): 3 new no-body wordless tableaus (cold camp,
+>   stripped vehicle, the abandoned cache) + 4 props — the mid-field storytelling tripled (2→5 scenes).
 > - **M11 — Retire legacy tube-wrecks** (ship→socket migration, D227/D249 — no wreck reads as a tube).
 > - **M12 — New far-field biome** (ground/palette/scatter/hazards; descriptor-pure + teardown-safe).
 >

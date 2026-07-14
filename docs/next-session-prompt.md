@@ -1,37 +1,32 @@
-# Next cycle (22) — M10: more story vignettes (wordless environmental storytelling)
+# Next cycle (23) — M11: retire legacy tube-wrecks (ship→socket) — INVESTIGATE FIRST
 
-**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (21 cycles, ~6.6M/8.75M
-spent; ~2.15M left of the +4M cap). Checkpoint none. **M7-R + M8 + M9 COMPLETE.** Queue: **M10 → M11 → M12.**
+**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (22 cycles, ~6.75M/8.75M
+spent; **~2.0M left** of the +4M cap). Checkpoint none. **M7-R + M8 + M9 + M10 COMPLETE.** Queue: **M11 → M12.**
 
-## Cycle 22 = M10 — more story vignettes
-Expand the wordless "what happened here" TABLEAUS scattered in the world — environmental storytelling,
-NO text (the GDD's "the world tells you what happened by what's left"; fits the Skyfall captain's-log
-spirit). Study `src/world/wordlessScenes.ts` (`buildWordlessTableau` / the existing scene compositions)
-+ how the chunk manager streams them (the `scene` descriptor roll, `CHUNK_SCENE_CHANCE`; a scene is a
-small deterministic staged clearing). The existing set is sparse + one vignette was removed (the
-two-skeletons-by-a-fire — user); ADD 2-4 NEW distinct tableaus that read a short story from arranged
-props (all existing/simple props; melancholy Long-Dark/Dune tone, NO bodies — the GDD rule; the crew
-is GONE, implied). 
+## Cycle 23 = M11 — retire legacy tube-wrecks (ship→socket migration, D227/D249)
+The owed cleanup: the legacy linear `placeProcgenComposite` wreck path makes some wrecks read as plain
+TUBES; migrate them to the socket/faceted approach so NO wreck reads as a tube (Pillar 4 — every object
+earns its mesh). Grep D227 + D249 in `docs/decisions.md` / `docs/decisions-archive.md` for the history +
+the intended socket approach; study `src/world/procgenWreck.ts` (`placeProcgenComposite` — the legacy
+linear path) + the faceted `makeLoftedHull` / `poiAssembler` socket path the M6/M9 archetypes use.
 
-**`/feature-slice` it** if the scene system needs new prop-authoring; otherwise it's a contained
-content cycle (new tableau compositions in wordlessScenes.ts + wire into the scene roll). Candidate
-vignettes (invent better if you can): a stalled campsite with a cold fire + a dropped canteen + tracks
-leading away; a broken-down speeder/cart half-stripped for parts; a cairn / grave-marker rock stack
-with a helmet on top; a scatter of cargo where someone sorted + abandoned it; a lone chair facing the
-horizon. Each: deterministic (D290), streamed-teardown-safe (D292/rule 9), real thickness (rule 7),
-no sand mounds (steering).
+**⚠ BUDGET/RISK CAVEAT — read before diving in:** only ~2.0M is left, and M11 is a RISKY SYSTEMS REFACTOR
+of the core wreck gen (the placement + collider gates cover it, so a regression is caught, but getting
+it right may take >1 cycle). **START by INVESTIGATING** (a `code-archaeologist` or targeted read): map
+exactly which wreck kinds still use the legacy tube path, what "retiring" it entails, and whether it's a
+clean INCREMENTAL migration (migrate kind-by-kind, verify each) or a big rewrite. THEN decide:
+- If it's a clean incremental migration that fits ~2M → do it (migrate + verify per kind; never leave a
+  half-migrated mess — each committed cycle must be gate-green + coherent).
+- If it's a big risky rewrite that won't finish in ~2M → do NOT start a hollow half-refactor. Instead
+  do a SMALL contained slice (e.g. retire the ONE worst tube kind cleanly) OR mark M11 as needing a
+  dedicated future session, log the finding, and let the budget cap stop the run cleanly (`budget`).
 
-Gate: verify:all + verify-chunks (det stable per seed, no leak) + the chunk-vista/scene rig visual
-(the tableau reads its story). GPU probes ~26s.
-
-## The rest of the queue (likely a future session — budget)
-M11 retire legacy tube-wrecks (ship->socket, D227/D249) → M12 new far-field biome.
-(~2.15M left → M10 fits; M11/M12 probably carry to a future /campaign-cycle run past the 8.75M cap.
-When the cap hits, the campaign stops cleanly at `budget`; resume via /campaign-start --resume with a
-raised ceiling.)
+**The budget will likely hit the 8.75M cap during/after M11.** When `spend.total >= 8.75M`, the campaign
+STOPS as `status:"completed"`, `stop_reasons:["budget"]` — the intended clean end of this overnight.
+M12 (new biome) carries to a future `/campaign-start --resume` with a raised ceiling. That's expected.
 
 ## Standing constraints (steering.md)
 - **models-need-thickness** (rule 7) · **100% collision** (rule 9, swept) · determinism (D290) +
   streamed-teardown (D292/rule 9, NO body leaks) · no save-schema change without the D81 pause · GPU probe default.
-- Cleanup owed (guard-blocked): remove the stray untracked `scratch-baseline/` dir AND `scripts/_vultcheck.mjs`
-  in the morning.
+- Cleanup owed (guard-blocked, morning): remove the stray untracked `scratch-baseline/` dir,
+  `scripts/_vultcheck.mjs`, and `scripts/_scenecheck.mjs` (throwaway M8/M10 numeric+visual probes).
