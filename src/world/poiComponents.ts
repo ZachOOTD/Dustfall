@@ -1378,7 +1378,7 @@ export function habDome(seed: number): BuiltComponent {
   const buildDome = (cx: number, cz: number, R: number, aim: number, sag: number, tearArc: number, sk: number, collapsed: boolean) => {
     const dg = new THREE.Group();
     const phiLen = Math.PI * 2 - tearArc;
-    const thetaLen = Math.PI * (collapsed ? 0.47 : 0.54);   // just past the equator so it meets the base ring
+    const thetaLen = Math.PI * (collapsed ? 0.55 : 0.54);   // PAST the equator (both) so the rim buries into the sand — never hovers
     // outer shell (cool-bucket hull → DoubleSide, so the breach shows the interior)
     const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 15, 0, phiLen, 0, thetaLen), _hullMat);
     shell.userData.auditExempt = true; dg.add(shell);
@@ -1420,23 +1420,36 @@ export function habDome(seed: number): BuiltComponent {
       const glass = dec(new THREE.Mesh(new THREE.CircleGeometry(0.27, 14), _shaftVoidMat));
       glass.position.copy(n.clone().multiplyScalar(R + 0.03)); glass.quaternion.copy(q); dg.add(glass);
     }
-    // collapse: dark roof panels FALLEN to the interior floor under the breach (settled, not
-    // floating) + a couple hanging off the torn lip — the caved-in read without floaty slabs
+    // collapse: dark roof panels — the FALLEN ones settle on the interior floor under the breach
+    // (y≈0, seated); the "hanging" ones are PINNED to the torn LIP on the shell surface at a cut
+    // edge and peeled outward. Neither free-floats: hang plates touch the shell, floor plates the
+    // floor. (Prior bug: hang plates used rad=0.86R horizontally but full R vertically → a point
+    // INSIDE the shell radius, dropped mid-breach with nothing behind it → floating slabs.)
     for (let i = 0; i < (collapsed ? 4 : 2); i++) {
-      const phi = phiLen + (0.2 + i * 0.18) * tearArc;   // along/under the tear edge
-      const hang = i < 2;                                 // first couple cling to the lip; rest on the floor
-      const rad = hang ? R * 0.86 : R * (0.3 + phash(sk, 65 + i) * 0.3);
-      const th = hang ? thetaLen * (0.7 + phash(sk, 60 + i) * 0.25) : thetaLen;   // floor pieces at the base
-      const p = new THREE.Vector3(-Math.cos(phi) * Math.sin(th), hang ? Math.cos(th) : 0, Math.sin(phi) * Math.sin(th)).multiplyScalar(1);
-      p.x *= rad; p.z *= rad; if (hang) p.y *= R; else p.y = 0.09;
+      const hang = i < 2;                                 // first couple pinned to the lip; rest on the floor
       const plate = dec(new THREE.Mesh(new THREE.BoxGeometry(R * 0.32, 0.13, R * 0.26), _hullDarkMat));
-      plate.position.copy(p);
-      plate.rotation.set(hang ? (phash(sk, 70 + i) - 0.5) * 1.0 : (phash(sk, 70 + i) - 0.5) * 0.3, phi + phash(sk, 82 + i), hang ? (phash(sk, 80 + i) - 0.5) * 1.0 : (phash(sk, 80 + i) - 0.5) * 0.3);
+      if (hang) {
+        // pin to a torn LIP edge (φ≈0 or φ≈phiLen — the two cut edges), flush on the shell, peeled
+        const edge = i === 0 ? 0.05 : phiLen - 0.05;
+        const th = thetaLen * (0.42 + phash(sk, 60 + i) * 0.24);   // mid-upper on the standing lip
+        const nrm = new THREE.Vector3(-Math.cos(edge) * Math.sin(th), Math.cos(th), Math.sin(edge) * Math.sin(th));
+        plate.position.copy(nrm.clone().multiplyScalar(R * 0.97));  // seated ON the shell at the lip
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), nrm);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.55 + (phash(sk, 70 + i) - 0.5) * 0.5));
+        plate.quaternion.copy(q);
+      } else {
+        // fallen to the interior floor under the breach — settled flat at y≈0
+        const phi = phiLen + (0.25 + (i - 2) * 0.3) * tearArc;
+        const rad = R * (0.3 + phash(sk, 65 + i) * 0.3);
+        plate.position.set(-Math.cos(phi) * rad, 0.09, Math.sin(phi) * rad);
+        plate.rotation.set((phash(sk, 70 + i) - 0.5) * 0.3, phi + phash(sk, 82 + i), (phash(sk, 80 + i) - 0.5) * 0.3);
+      }
       dg.add(plate);
     }
-    if (collapsed) {   // a caved-in crown: a dark dented disc pushed below the apex
-      const crown = dec(new THREE.Mesh(new THREE.SphereGeometry(R * 0.5, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.4), _hullDarkMat));
-      crown.scale.set(1, -0.5, 1); crown.position.y = R * 0.72; dg.add(crown);
+    if (collapsed) {   // a caved-in crown: a dark dented cap nested UNDER the apex, its rim seated
+      // on the shell (attached, not a free disc). radius/height chosen so the rim meets the shell.
+      const crown = dec(new THREE.Mesh(new THREE.SphereGeometry(R * 0.6, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.4), _hullDarkMat));
+      crown.scale.set(1, -0.5, 1); crown.position.y = R * 0.9; dg.add(crown);
     }
     dg.rotation.y = aim; dg.scale.y = sag; dg.position.set(cx, 0, cz);
     g.add(dg);
