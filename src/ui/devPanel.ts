@@ -87,10 +87,11 @@ function makeActionsSection(): HTMLDivElement {
     ['fire', () => { g()?.spawnFire(); toast('fire lit ahead'); }],
     ['raider', () => spawnRaiderAhead()],
   ]);
-  // Review (2026-07-14) — one-click reach for the overnight batch (Skyfall + new POIs).
+  // Review (2026-07-14) — one-click reach for the overnight batch + the new biome.
   group('review', [
     ['skyfall', () => { g()?.spawnSkyfall(); }],
     ['new POIs', () => { g()?.spawnNewPois(); }],
+    ['bone field', () => { g()?.gotoBoneField(); }],
   ]);
   group('stats', [
     ['full', () => { g()?.setStats({ thirst: 1, hunger: 1, stamina: 1, health: 1, temperature: 0 }); toast('stats restored'); }],
