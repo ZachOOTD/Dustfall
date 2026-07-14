@@ -133,3 +133,9 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~800K across 3 cycles (campaign total ~4.75M / 10M; cycles 11-13/50).
 - Commits: fc3da47 (S3), 907e93d (S4-S5), 53fbec8 (S6) + bd8c819 (infra) on campaign/2026-07-12-skyfall.
 - Next: the human walk-test (morning-summary-2026-07-13.md), then /campaign-approve → merge review.
+
+## Setup — 2026-07-13 (evening) — M7 walk-test feedback → M7-R + M8-M12 queue, +4M overnight
+- Zach walk-tested the shipped Skyfall wreck and gave M7-R feedback (real hull thickness / no paper-thin double-sided models / floating-model audit / 100% collision incl. the dorsal containers / more interior detail / broken cockpit glass / captain-log "crew ejected in drop pods" story). Spec: `docs/feature-skyfall.md` M7-R section.
+- Chose the world-deepening queue for after Skyfall: M8 far-field vultures, M9 new POI archetypes, M10 more story vignettes, M11 retire legacy tube-wrecks (ship->socket), M12 new far-field biome.
+- Cleared the M7 feel-review pause (walk-test done). Campaign active; budget capped +4M (ceiling 8.75M); checkpoint none (overnight). New locked_constraint: models-need-thickness.
+- Next: cycle 14 = M7-R Skyfall refinement (start with the hull-thickness rebuild + collision sweep).

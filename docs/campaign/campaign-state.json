@@ -1,14 +1,12 @@
 {
   "campaign": "Sharpen & Deepen",
-  "status": "paused",
+  "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
   "cycles_completed": 13,
-  "current_tier": "M7 Skyfall LADDER COMPLETE (S1-S6) \u2014 awaiting the human post-blockout walk-test (feel/scale/lighting), then campaign end review",
-  "awaiting_approval": true,
-  "stop_reasons": [
-    "feel-review"
-  ],
+  "current_tier": "M7-R Skyfall refinement (walk-test fixes) \u2014 then the M8-M12 world-deepening queue",
+  "awaiting_approval": false,
+  "stop_reasons": [],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
@@ -25,7 +23,7 @@
   "consecutive_no_progress": 0,
   "ceiling": {
     "max_cycles": 50,
-    "total": 10000000,
+    "total": 8750000,
     "per_cycle": null,
     "unit": "tokens"
   },
@@ -73,8 +71,44 @@
       "id": "M7",
       "name": "Skyfall enterable hero wreck",
       "kind": "feel-critical",
-      "status": "COMPLETE (S1-S6 shipped: blockout/enterable/exterior-hero/interior-hero/loot). Owed: human walk-test (deferred to morning).",
+      "status": "COMPLETE (S1-S6). Walk-tested 2026-07-13; refinement fixes queued as M7-R.",
       "pause_before": "hero-detail"
+    },
+    {
+      "id": "M7-R",
+      "name": "Skyfall refinement (real hull thickness / floating-model audit / 100% collision / more interior detail / cockpit glass / captain-log story)",
+      "kind": "gate-verified+feel",
+      "status": "queued (NEXT) \u2014 user walk-test feedback 2026-07-13"
+    },
+    {
+      "id": "M8",
+      "name": "Far-field vultures (aerial life for the infinite world; region-rolled placement rework, D294)",
+      "kind": "gate-verified",
+      "status": "queued"
+    },
+    {
+      "id": "M9",
+      "name": "New POI archetypes (2-3 new far-field destination types)",
+      "kind": "gate-verified",
+      "status": "queued"
+    },
+    {
+      "id": "M10",
+      "name": "More story vignettes (wordless environmental storytelling tableaus)",
+      "kind": "gate-verified",
+      "status": "queued"
+    },
+    {
+      "id": "M11",
+      "name": "Retire legacy tube-wrecks (ship->socket migration, D227/D249)",
+      "kind": "gate-verified",
+      "status": "queued"
+    },
+    {
+      "id": "M12",
+      "name": "New far-field biome (ground/palette/scatter/hazards)",
+      "kind": "gate-verified",
+      "status": "queued"
     }
   ],
   "sanctioned_pauses": [
@@ -85,7 +119,8 @@
     "no-endgame",
     "no-tone-change",
     "additive-save-only",
-    "no-new-pillars"
+    "no-new-pillars",
+    "models-need-thickness"
   ],
   "cycles": [
     {

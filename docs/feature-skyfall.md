@@ -67,3 +67,42 @@ The human is low on Fable 5 usage and may switch to Opus 4.8 mid-campaign. Campa
 ### Steering fold-in (2026-07-12, mid-cycle-9 — user directives, binding)
 1. **NO SAND MOUNDS.** The drift banks/mounds around the wreck read as geometric orange piles — removed from the S1 blockout; `makeSandMound` is retired for ALL Skyfall work going forward. The no-float read is carried by the deep keel bury alone (~half the hull below the pan). If a future pose reads floaty, deepen the bury or reshape terrain interaction some other way — never mounds.
 2. **Interior detail bar = the INTRO SHIP.** S2's enterable interior must ultimately reach the same detail level as the escape-pod intro ship (`shipScene.ts` — consoles, cabling, panel detail, lighting), but in the WRECKED art style of this hull (torn, sand-drifted, dead systems, scavenger-stripped). S2 ships the walkable greybox + collision (the walk-test pause gates it); S3-S5 hero passes carry the interior to that bar — treat interior detail as HERO work (adversarial gate, positive quality target), not set dressing.
+
+---
+
+## M7-R — REFINEMENT PASS (user walk-test feedback, 2026-07-13) — NEXT
+
+Zach walk-tested the shipped Skyfall wreck in-app and gave this feedback. These are the
+M7-R fixes (priority order). All are geometry/collision/text — **no save-schema changes**.
+
+1. **Real hull thickness — kill the paper-thin double-sided look.** The exterior hull reads
+   as a super-thin double-sided shell (unrealistic). Rebuild it to read as a THICK SOLID —
+   torn/fracture edges must show a real wall cross-section, not a paper edge. Bump the loft
+   wall thickness substantially (0.35m reads thin at 46m scale) and/or add a proper inner
+   skin so the hull has visible mass. Audit ALL Skyfall geometry — hull, cargo containers,
+   plating strakes, greebles, the `_voidMat`/baffle shells — and switch any zero-thickness
+   double-sided surface to a solid with depth.
+   **→ STANDING PROJECT RULE (add to CLAUDE.md when this ships):** models get real thickness;
+   no paper-thin zero-thickness double-sided shells. Extends rule 7 (box-decoration depth) to
+   hull/wall/canopy surfaces. Verify from grazing/edge angles, not just face-on.
+2. **Interior floating-model audit.** Sweep the interior — every panel/prop/greeble must sit
+   EXACTLY flush on its wall/surface. No floating panels, no gaps. (Wall panels especially:
+   neatly placed on the wall, not hovering off it.)
+3. **100% accurate collision (rule 9 sweep).** Every visible mass needs a matching collider.
+   CONFIRMED GAP: the dorsal cargo containers (on top of the hull) have NO collision — the
+   player walks through them. Add colliders for those + sweep the whole wreck (exterior masses
+   + interior furniture + new geometry) so collision matches the visible model everywhere.
+4. **More interior detail.** The interior wants another density pass (more lived-in tells,
+   props, wear) on top of the S4-S5 dressing.
+5. **Cockpit glass front.** Add a canopy/windscreen to the bridge/cockpit like the intro
+   ship's (`shipScene.ts` `_glass` / dome canopy vocabulary), most likely SHATTERED/broken to
+   fit the crash (cracked panes, a hole, missing shards). A hero read from the bridge.
+6. **Captain's log — a real story.** The crash-log journal should tell a specific story: the
+   CREW EJECTED IN THE DROP PODS before/at the crash (ties the empty wreck to the world — and
+   to a future drop-pod feature). Author it as bespoke journal content (extend `crashLog.ts` /
+   the journal's `content`), a short melancholy log, NOT generic freighter lore.
+
+**Gates:** verify:all (esp. verify:colliders for the new colliders + skyfall-walk still PASS)
++ the 5 smokes + the adversarial visual gate for the thickness/glass/interior (HERO bar) +
+the numeric loot/journal probe. Determinism digest may shift (geometry changes) — must stay
+STABLE per-seed. Run overnight (checkpoint none); Zach reviews the batch in the morning.

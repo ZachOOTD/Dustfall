@@ -132,7 +132,25 @@ and promotes the second.
 
 ## Up next
 
-> **⚙ ACTIVE CAMPAIGN — "Sharpen & Deepen" RESUMED at M7 Skyfall (2026-07-12, branch `campaign/2026-07-12-skyfall`).**
+> **⚙ ACTIVE CAMPAIGN — "Sharpen & Deepen" +4M overnight batch (2026-07-13, branch `campaign/2026-07-12-skyfall`).**
+> After Zach's M7 Skyfall walk-test, the campaign extends with a refinement pass + a world-deepening
+> queue (priority order; ~4M cap = ceiling 8.75M; checkpoint none, morning batch review):
+> - **M7-R — Skyfall refinement** (walk-test fixes): real hull thickness (kill the paper-thin
+>   double-sided look — NEW standing rule), floating-model audit, 100% collision (dorsal containers
+>   had none), more interior detail, broken cockpit glass, captain's-log "crew ejected in drop pods"
+>   story. Spec: [feature-skyfall.md](feature-skyfall.md) M7-R section.
+> - **M8 — Far-field vultures** (aerial life for the infinite world; D294 placement-model rework).
+> - **M9 — New POI archetypes** (2-3 new far-field destination types; M6-style gate-verified).
+> - **M10 — More story vignettes** (wordless environmental-storytelling tableaus).
+> - **M11 — Retire legacy tube-wrecks** (ship→socket migration, D227/D249 — no wreck reads as a tube).
+> - **M12 — New far-field biome** (ground/palette/scatter/hazards; descriptor-pure + teardown-safe).
+>
+> Standing constraints: **models-need-thickness** (no paper-thin double-sided), **100% collision**
+> (rule 9 swept). Probe rig is GPU-default (~10× faster). See `docs/campaign/` + `next-session-prompt.md`.
+
+> **✔ M7 SKYFALL BASE COMPLETE (S1-S6, cycles 9-13, 2026-07-13)** — walk-tested; refinement = M7-R above.
+
+> **⚙ (superseded header) — "Sharpen & Deepen" RESUMED at M7 Skyfall (2026-07-12, branch `campaign/2026-07-12-skyfall`).**
 > Plan (approved with changes — S4 far-field slot / larger ~30m+ freighter / FEATURES.skyfall):
 > [feature-skyfall.md](feature-skyfall.md). Steering fold-ins: NO sand mounds (retired for Skyfall);
 > interior bar = intro-ship detail in the wrecked art style. The M7 sub-ladder:
