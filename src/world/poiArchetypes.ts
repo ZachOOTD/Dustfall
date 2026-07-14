@@ -16,7 +16,7 @@ import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
   noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead, latticeMast,
-  pipeSegment, pipeJunction, crawlerBody,
+  pipeSegment, pipeJunction, crawlerBody, refineryStack,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -565,8 +565,31 @@ function assembleCargoCrawler(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// REFINERY STACK (M9 archetype 1, campaign Sharpen&Deepen) — a fuel-refinery / cracking-tower
+// ruin: a tall leaning distillation COLUMN + a storage DRUM + a spherical pressure TANK + a
+// thin FLARE stack + a chunky pipe MANIFOLD + a valve SKID. The HEAVY VERTICAL-INDUSTRIAL
+// silhouette (distinct from relay_mast's thin comms tower + cargo_crawler's low hauler) — a
+// chunky destination visible on the horizon. ONE seedOf draw; the component phashes the rest.
+// ════════════════════════════════════════════════════════════════════
+function assembleRefineryStack(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const stack = refineryStack(seedOf(rand));
+  a.place(stack, liftToGround(stack));
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
+  refinery_stack: {
+    id: 'refinery_stack',
+    // M9 archetype 1 — a heavy vertical industrial ruin. Stands (burySink false) with a modest
+    // industrial cant (the leaning column carries the "toppled" read; the crash-list adds a hair
+    // more); a small base bed (seatSink) plants the wide foundation. NO sand mound (user steering).
+    // dark bucket → heavy rust-industrial steel. A salvage panel on the valve/control skid.
+    params: { bucket: 'dark', burySink: false, bury: 0, list: 0.14, panelMin: 1, panelMax: 1, sandMound: false, seatSink: 0.16, salvageKind: 'cargo_container' },
+    assemble: assembleRefineryStack,
+  },
   cargo_crawler: {
     id: 'cargo_crawler',
     // A bogged/derelict hauler — the TRACKS must stay VISIBLE (they're the silhouette), so only
@@ -678,10 +701,13 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // `derelict` shaved again to keep each table summing ≈1.0 (the tail 'ship' fallback stays live).
   // M6 A3 (cycle 7) — cargo_crawler added ~0.04-0.06 (favor rocky/wreck_yard: hauler routes +
   // the graveyard); `ship`/`derelict` shaved to keep each table summing ≈1.0.
-  salt:       [['ship', 0.21], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04]],
-  rocky:      [['ship', 0.16], ['derelict', 0.09], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06]],
-  dune:       [['ship', 0.14], ['derelict', 0.09], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06]],
-  wreck_yard: [['ship', 0.12], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06]],
+  // M9 (campaign Sharpen&Deepen) — refinery_stack added ~0.04-0.06 (favor wreck_yard/rocky/dune:
+  // old heavy industry crashed in the highlands + the graveyard; lower on salt); the legacy `ship`
+  // tube shaved by the same so each table still sums ≈1.0 (the tail 'ship' fallback stays reachable).
+  salt:       [['ship', 0.17], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04]],
+  rocky:      [['ship', 0.10], ['derelict', 0.09], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06]],
+  dune:       [['ship', 0.09], ['derelict', 0.09], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05]],
+  wreck_yard: [['ship', 0.06], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

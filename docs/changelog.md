@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 19 — 2026-07-13 — M9 archetype 1/3: `refinery_stack` (new far-field POI) ✓ all gates
+
+`verified` — verify tsc clean, verify:colliders (60 audits, 0 fails; refinery_stack 7/7 covered/seed), verify:placement (0 bury fails, 5 seeds), verify-chunks (det stable, streaming no leak 335→335, perf ok); 3-round real-view iteration across seeds 1/42/1337/7.
+
+- **NEW POI archetype `refinery_stack`** — a fuel-refinery / cracking-tower ruin: a tall banded distillation column (leaning, walkway platforms + ladder), a spherical pressure tank + a conical-roof storage drum, a pipe manifold + overhead transfer line, a flare stack, a valve/control skid (salvage panel). A heavy VERTICAL industrial silhouette, distinct from relay_mast (thin) + cargo_crawler (low). Fully wired: `refineryStack` component (poiComponents.ts), `assembleRefineryStack` + `ARCHETYPES.refinery_stack` + `ARCH_WEIGHTS` (poiArchetypes.ts) — streams via the existing POI roll. `sandMound:false` (user steering), grounded by seatSink; real thickness (rule 7), 7/7 colliders (rule 9). M9 is 1/3 archetypes.
+
 ## Campaign "Sharpen & Deepen" cycle 18 — 2026-07-13 — M8: far-field vultures (aerial life for the infinite world) ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) + 5 smokes green; verify:chunks streaming NO body leak (332→332); a numeric probe found 6 circling vultures wheeling at altitude in the far field. Solves the D294 deferred problem.

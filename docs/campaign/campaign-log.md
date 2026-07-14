@@ -184,3 +184,11 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~250K (campaign total ~5.85M / 8.75M; cycle 18/50)
 - Commit: see git log
 - Next: cycle 19 = M9 new POI archetypes (feature-slice; M6-style gate-verified, 2-3 new far-field destination types).
+
+## Cycle 19 — M9 archetype 1/3: refinery_stack (2026-07-13) — SHIPPED
+- Planned: new POI archetype #1 (a fuel-refinery/cracking-tower ruin) — feature-sliced 3 concepts (docs/feature-poi-archetypes-m9.md).
+- Shipped: refinery_stack — a distinct vertical industrial silhouette (banded column, spherical + drum tanks, manifold, flare, valve skid w/ salvage panel); fully wired (poiComponents/poiArchetypes/ARCH_WEIGHTS), streams via the POI roll. sandMound:false (steering), real thickness, 7/7 colliders.
+- Verify: verify tsc · verify:colliders 0 fails · verify:placement 0 fails (5 seeds) · verify-chunks no body leak (335→335) · 3-round + 4-seed real-view.
+- Spend: ~250K (campaign total ~6.1M / 8.75M; cycle 19/50)
+- Commit: see git log
+- Next: cycle 20 = M9 archetype 2/3 = hab_dome (collapsed habitat-dome cluster; note the modeler's tip — getBucketMats forces DoubleSide so a torn dome shows interior; collision = side-wall boxes + auditExempt like huskShell).

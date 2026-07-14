@@ -1058,7 +1058,7 @@ const SCENARIOS = {
     // is exercised — seeds 1/42/1337/2024 all roll the linear/stacked forms (ACBB Tier 4).
     const seeds = (argv.seeds !== undefined ? String(argv.seeds) : '1,2,42,1337,2024')
       .split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
-    const archs = (argv.archetype ? String(argv.archetype) : 'satellite,wrecked_tank,debris_field,hollow_husk,derelict,well,debris_trail,enterable_wreck,relay_mast,buried_pipeline,cargo_crawler')
+    const archs = (argv.archetype ? String(argv.archetype) : 'satellite,wrecked_tank,debris_field,hollow_husk,derelict,well,debris_trail,enterable_wreck,relay_mast,buried_pipeline,cargo_crawler,refinery_stack')
       .split(',').map((s) => s.trim()).filter(Boolean);
     await page.waitForFunction(() => !!(window.__game && window.__game.auditPOIColliders), { timeout: 20000 });
     const rows = await page.evaluate(({ archs, seeds }) => {

@@ -1147,4 +1147,207 @@ export function crawlerBody(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }
 
+/** M9 archetype 1 (campaign Sharpen&Deepen) — REFINERY STACK: a fuel-refinery / cracking-tower
+ *  ruin. The heavy VERTICAL-INDUSTRIAL silhouette the POI set lacked (relay_mast is thin comms;
+ *  cargo_crawler is a low tracked hauler): a tall tapered distillation COLUMN buckled + leaning
+ *  off a planted foundation (banded with hoops, ringed by walkway PLATFORMS + a ladder), a big
+ *  vertical storage DRUM, a spherical pressure TANK on legs (the iconic Horton sphere), a thin
+ *  FLARE stack, a chunky pipe MANIFOLD tying them together, and a valve/control SKID carrying the
+ *  salvage panel. Collision = column + foundation + drum + sphere + manifold + flare + skid;
+ *  platforms/ladders/thin pipes/legs/hoops/greebles are decoration. Determinism: phash only. */
+export function refineryStack(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const colliders: ColliderSpec[] = [];
+  const dec = (m: THREE.Mesh) => { m.userData.isWreckDecoration = true; g.add(m); return m; };
+  const cylBetween = (p0: THREE.Vector3, p1: THREE.Vector3, r: number, mat: THREE.Material, seg = 8) => {
+    const dir = new THREE.Vector3().subVectors(p1, p0); const len = dir.length();
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    m.position.copy(p0).addScaledVector(dir, 0.5);
+    return m;
+  };
+
+  // ── Cracking COLUMN — a planted foundation drum + a tall tapered stack leaning off it
+  //    (buckled at the base: the industry crashed). Built in a local +Y subgroup, then leaned. ──
+  const baseH = 0.9 + phash(seed, 1) * 0.4;
+  const rBot = 1.35 + phash(seed, 2) * 0.4;               // 1.35–1.75m
+  const rTop = rBot * (0.58 + phash(seed, 3) * 0.14);
+  const H = 9.6 + phash(seed, 4) * 3.0;                   // 9.6–12.6m stack above the foundation — floor RAISED so the column always out-tops the drum (the hero vertical)
+  const lean = 0.11 + phash(seed, 5) * 0.11;             // 0.11–0.22 rad lean toward +X
+  const qLean = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -lean);
+  const pivot = new THREE.Vector3(0, baseH, 0);
+
+  // foundation (upright, planted — collidable)
+  const found = new THREE.Mesh(new THREE.CylinderGeometry(rBot * 1.04, rBot * 1.16, baseH, 16), _hullMat);
+  found.position.y = baseH / 2; g.add(found);
+  colliders.push({ kind: 'cylinder', halfHeight: baseH / 2, radius: rBot * 1.16, pos: { x: 0, y: baseH / 2, z: 0 } });
+  dec(new THREE.Mesh(new THREE.BoxGeometry(rBot * 3.0, 0.2, rBot * 3.0), _hullDarkMat)).position.y = 0.1;   // skirt pad hides the sand seam
+
+  // the leaning stack + all its dressing, in a LOCAL subgroup (+Y up the column) then leaned
+  const col = new THREE.Group();
+  const stack = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, H, 16), _hullMat);
+  stack.position.y = H / 2; col.add(stack);              // structural (collidable via the leaned cylinder below)
+  const radAt = (f: number) => rBot + (rTop - rBot) * f;
+  // hoop bands
+  for (let i = 0; i < 7; i++) {
+    const f = 0.06 + i * 0.14;
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(radAt(f) + 0.04, 0.06, 6, 18), _hullDarkMat);
+    hoop.rotation.x = Math.PI / 2; hoop.position.y = f * H; hoop.userData.isWreckDecoration = true; col.add(hoop);
+  }
+  // 2 walkway PLATFORMS (ring grating + railing + stanchions)
+  for (const f of [0.34, 0.66]) {
+    const pr = radAt(f) + 0.55;
+    const grate = new THREE.Mesh(new THREE.TorusGeometry(pr, 0.09, 6, 22), _rustMat);
+    grate.rotation.x = Math.PI / 2; grate.position.y = f * H; grate.userData.isWreckDecoration = true; col.add(grate);
+    const rail = new THREE.Mesh(new THREE.TorusGeometry(pr, 0.035, 5, 22), _hullDarkMat);
+    rail.rotation.x = Math.PI / 2; rail.position.y = f * H + 0.5; rail.userData.isWreckDecoration = true; col.add(rail);
+    for (let s = 0; s < 8; s++) {
+      const a = (s / 8) * Math.PI * 2;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.05), _hullDarkMat);
+      post.position.set(Math.cos(a) * pr, f * H + 0.25, Math.sin(a) * pr);
+      post.userData.isWreckDecoration = true; col.add(post);
+    }
+  }
+  // ladder up the +Z flank (2 rails + rungs)
+  const ladTop = H * 0.68, ladZ = rBot + 0.12;
+  for (const sx of [-0.16, 0.16]) {
+    const railM = new THREE.Mesh(new THREE.BoxGeometry(0.05, ladTop, 0.05), _hullDarkMat);
+    railM.position.set(sx, ladTop / 2, ladZ); railM.userData.isWreckDecoration = true; col.add(railM);
+  }
+  for (let y = 0.4; y < ladTop; y += 0.42) {
+    const rung = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.05), _rustMat);
+    rung.position.set(0, y, ladZ); rung.userData.isWreckDecoration = true; col.add(rung);
+  }
+  // top cap dome + 2 outlet stubs bending off the crown
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(rTop * 0.5, rTop, rTop * 1.1, 14), _hullMat);
+  cap.position.y = H + rTop * 0.5; cap.userData.isWreckDecoration = true; col.add(cap);
+  for (const sz of [-1, 1]) {
+    const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, rTop * 1.3, 10), _rustMat);
+    stub.rotation.z = Math.PI / 2.4; stub.position.set(0, H + rTop * 0.8, sz * rTop * 0.6);
+    stub.userData.isWreckDecoration = true; col.add(stub);
+  }
+  col.position.copy(pivot); col.quaternion.copy(qLean); g.add(col);
+  // leaned-stack collider (local centre (0,H/2,0) → root)
+  const stackC = new THREE.Vector3(0, H / 2, 0).applyQuaternion(qLean).add(pivot);
+  colliders.push({ kind: 'cylinder', halfHeight: H / 2, radius: rBot * 1.02,
+    pos: { x: stackC.x, y: stackC.y, z: stackC.z }, quat: { x: qLean.x, y: qLean.y, z: qLean.z, w: qLean.w } });
+
+  // ── Vertical storage DRUM (collidable) — hoops + a domed roof + a manway scale-cue ──
+  const drumR = 1.7 + phash(seed, 6) * 0.5;
+  const drumH = 2.9 + phash(seed, 7) * 1.4;              // capped SHORTER than the column so it never competes as the hero mass
+  const drumX = -(rBot + drumR + 1.3), drumZ = 1.8;
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(drumR, drumR, drumH, 18), _hullMat);
+  drum.position.set(drumX, drumH / 2, drumZ); g.add(drum);
+  colliders.push({ kind: 'cylinder', halfHeight: drumH / 2, radius: drumR, pos: { x: drumX, y: drumH / 2, z: drumZ } });
+  const drumRoof = dec(new THREE.Mesh(new THREE.CylinderGeometry(drumR * 0.2, drumR * 1.02, drumR * 0.45, 18), _hullMat));   // LOW conical fixed-roof tank (was a hemisphere → read as a bullet nose)
+  drumRoof.position.set(drumX, drumH + drumR * 0.22, drumZ);
+  for (const ty of [0.22, 0.5, 0.78]) {
+    const hb = dec(new THREE.Mesh(new THREE.TorusGeometry(drumR + 0.03, 0.06, 6, 20), _hullDarkMat));
+    hb.rotation.x = Math.PI / 2; hb.position.set(drumX, drumH * ty, drumZ);
+  }
+  const manway = dec(new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.12, 12), _hullDarkMat));
+  manway.rotation.x = Math.PI / 2; manway.position.set(drumX, drumH * 0.42, drumZ + drumR);
+  for (let i = 0; i < 4; i++) {   // access rungs on the drum flank (scale cue)
+    const rung = dec(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.05), _rustMat));
+    rung.position.set(drumX, drumH * 0.42 - 0.5 - i * 0.34, drumZ + drumR + 0.06);
+  }
+
+  // ── Spherical pressure TANK on legs (collidable ball) — the iconic Horton sphere ──
+  const sphR = 1.5 + phash(seed, 8) * 0.45;
+  const legH = 1.2 + phash(seed, 9) * 0.4;
+  const sphX = -(rBot + sphR + 1.0), sphZ = -2.9, sphY = legH + sphR;
+  const sphC = new THREE.Vector3(sphX, sphY, sphZ);
+  const sph = new THREE.Mesh(new THREE.SphereGeometry(sphR, 18, 14), _hullMat);
+  sph.position.copy(sphC); g.add(sph);
+  colliders.push({ kind: 'ball', radius: sphR, pos: { x: sphX, y: sphY, z: sphZ } });
+  const eqb = dec(new THREE.Mesh(new THREE.TorusGeometry(sphR + 0.02, 0.07, 6, 22), _hullDarkMat));
+  eqb.position.copy(sphC);
+  for (let i = 0; i < 6; i++) {   // 6 splayed support legs + cross-braces (decoration)
+    const a = (i / 6) * Math.PI * 2;
+    const foot = new THREE.Vector3(sphX + Math.cos(a) * sphR * 0.95, 0, sphZ + Math.sin(a) * sphR * 0.95);
+    const attach = new THREE.Vector3(sphX + Math.cos(a) * sphR * 0.6, sphY - sphR * 0.6, sphZ + Math.sin(a) * sphR * 0.6);
+    dec(cylBetween(foot, attach, 0.11, _rustMat, 7));
+    const a2 = ((i + 1) / 6) * Math.PI * 2;   // brace ring near mid-leg
+    const b0 = new THREE.Vector3(sphX + Math.cos(a) * sphR * 0.78, legH * 0.5, sphZ + Math.sin(a) * sphR * 0.78);
+    const b1 = new THREE.Vector3(sphX + Math.cos(a2) * sphR * 0.78, legH * 0.5, sphZ + Math.sin(a2) * sphR * 0.78);
+    dec(cylBetween(b0, b1, 0.045, _hullDarkMat, 5));
+  }
+
+  // ── Thin FLARE stack (collidable, slightly bent) + a crown of flare tips ──
+  const flareH = H * 0.82 + phash(seed, 10) * 1.6;
+  const flareR = 0.26 + phash(seed, 11) * 0.08;
+  const flareBend = (phash(seed, 12) - 0.5) * 0.16;
+  const flareX = rBot + 2.0, flareZ = -2.3;
+  const qFlare = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), flareBend);
+  const flareBase = new THREE.Vector3(flareX, 0, flareZ);
+  const flareC = new THREE.Vector3(0, flareH / 2, 0).applyQuaternion(qFlare).add(flareBase);
+  const flare = new THREE.Mesh(new THREE.CylinderGeometry(flareR * 0.8, flareR, flareH, 12), _hullMat);
+  flare.position.copy(flareC); flare.quaternion.copy(qFlare); g.add(flare);
+  colliders.push({ kind: 'cylinder', halfHeight: flareH / 2, radius: flareR, pos: { x: flareC.x, y: flareC.y, z: flareC.z }, quat: { x: qFlare.x, y: qFlare.y, z: qFlare.z, w: qFlare.w } });
+  const flareTop = new THREE.Vector3(0, flareH, 0).applyQuaternion(qFlare).add(flareBase);
+  const crown = dec(new THREE.Mesh(new THREE.CylinderGeometry(flareR * 2.5, flareR * 1.0, 0.85, 12), _hullDarkMat));   // a clearer flared bell tip
+  crown.position.copy(flareTop).addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(qFlare), 0.3); crown.quaternion.copy(qFlare);
+  for (let i = 0; i < 3; i++) {   // pilot-tip fingers
+    const tip = dec(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, 0.5, 6), _rustMat));
+    tip.position.copy(flareTop).addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(qFlare), 0.7 + i * 0.05);
+    tip.position.x += (i - 1) * 0.12;
+  }
+
+  // ── Chunky pipe MANIFOLD (collidable) low along X, tying the column base to the drum ──
+  const manR = 0.42 + phash(seed, 13) * 0.12;
+  const manY = 0.72, manZ = 0.95;
+  const manX0 = drumX + drumR * 0.4, manX1 = 0.4;
+  const manLen = Math.abs(manX1 - manX0), manCx = (manX0 + manX1) / 2;
+  const man = new THREE.Mesh(new THREE.CylinderGeometry(manR, manR, manLen, 14), _hullMat);
+  man.rotation.z = Math.PI / 2; man.position.set(manCx, manY, manZ); g.add(man);
+  colliders.push({ kind: 'cylinder', halfHeight: manLen / 2, radius: manR, pos: { x: manCx, y: manY, z: manZ }, quat: { x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 } });
+  for (const ex of [manX0, manX1]) {   // flange collars
+    const fl = dec(new THREE.Mesh(new THREE.CylinderGeometry(manR * 1.2, manR * 1.2, 0.14, 14), _hullDarkMat));
+    fl.rotation.z = Math.PI / 2; fl.position.set(ex, manY, manZ);
+  }
+  // connecting pipes + elbows (all decoration): manifold→column base, manifold→drum, drum→sphere, column→flare
+  dec(cylBetween(new THREE.Vector3(manX1, manY, manZ), new THREE.Vector3(0.2, baseH * 0.7, manZ * 0.6), manR * 0.7, _rustMat));
+  dec(cylBetween(new THREE.Vector3(manX0, manY, manZ), new THREE.Vector3(drumX, drumH * 0.3, drumZ), manR * 0.7, _rustMat));
+  dec(cylBetween(new THREE.Vector3(drumX, drumH * 0.55, drumZ - drumR), new THREE.Vector3(sphX, sphY - sphR * 0.3, sphZ + sphR), 0.24, _rustMat));
+  dec(cylBetween(new THREE.Vector3(0.3, baseH + 1.2, -manZ * 0.4), new THREE.Vector3(flareX, flareH * 0.28, flareZ), 0.22, _rustMat));
+  for (const e of [new THREE.Vector3(manX0, manY, manZ), new THREE.Vector3(manX1, manY, manZ), new THREE.Vector3(drumX, drumH * 0.3, drumZ)]) {
+    dec(new THREE.Mesh(new THREE.SphereGeometry(manR * 1.15, 8, 6), _hullDarkMat)).position.copy(e);
+  }
+  // a short pipe RACK (2 posts + a cross beam) under the drum→sphere run
+  for (const px of [drumX + 0.6, sphX - 0.4]) {
+    const post = dec(new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.4, 0.14), _hullDarkMat));
+    post.position.set(px, 0.7, (drumZ + sphZ) / 2);
+  }
+  // a mid-height TRANSFER LINE bridging the column to the drum roof — the classic refinery
+  // overhead-plumbing read (decoration; runs on a couple of pipe-rack posts).
+  const colMid = new THREE.Vector3(0, 0.42 * H, 0).applyQuaternion(qLean).add(pivot);
+  const drumTop = new THREE.Vector3(drumX + drumR * 0.4, drumH + drumR * 0.2, drumZ);
+  dec(cylBetween(colMid, drumTop, 0.2, _rustMat));
+  dec(cylBetween(new THREE.Vector3(drumTop.x, drumTop.y, drumZ), new THREE.Vector3(drumTop.x, 0, drumZ), 0.14, _hullDarkMat));   // riser post to ground
+
+  // ── Valve / control SKID (collidable) carrying the salvage panel on its clean +Z face ──
+  const conW = 1.2, conH = 1.0, conD = 0.72;
+  const conX = rBot + 1.1, conZ = 2.5;
+  const con = new THREE.Mesh(new THREE.BoxGeometry(conW, conH, conD), _hullMat);
+  con.position.set(conX, conH / 2, conZ); g.add(con);
+  colliders.push({ kind: 'box', half: { x: conW / 2, y: conH / 2, z: conD / 2 }, pos: { x: conX, y: conH / 2, z: conZ } });
+  const top = dec(new THREE.Mesh(new THREE.BoxGeometry(conW, 0.1, conD * 0.8), _hullDarkMat));   // slanted control top
+  top.position.set(conX, conH + 0.02, conZ); top.rotation.x = -0.25;
+  for (const wx of [-0.32, 0.32]) {   // valve handwheels on top
+    const wheel = dec(new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 6, 14), _rustMat));
+    wheel.rotation.x = Math.PI / 2; wheel.position.set(conX + wx, conH + 0.14, conZ - 0.15);
+  }
+  const gaugeBank = dec(new THREE.Mesh(new THREE.BoxGeometry(conW * 0.7, 0.28, 0.12), _hullDarkMat));   // gauge panel on -Z (back)
+  gaugeBank.position.set(conX, conH * 0.7, conZ - conD / 2 - 0.06);
+
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(conX, conH * 0.52, conZ + conD / 2), quat: FACE.posZ(), kind: 'cargo_container' as PanelKind },
+  ];
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.posY(), radius: rBot, tag: 'base' }];
+  g.updateMatrixWorld(true);
+  const bbox = new THREE.Box3().setFromObject(g);
+  bbox.min.y = 0;   // built from the ground plane up; keep liftToGround a no-op (no re-lift of the planted base)
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement
