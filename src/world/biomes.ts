@@ -13,7 +13,7 @@ import { Tuning } from '../config/tuning.ts';
 
 // Cycle 8 (ACAQ) — 'wreck_yard' is a rare DESTINATION biome, not a noise region:
 // a single distance-override disc around a seed-derived anchor far from spawn.
-export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard' | 'ash_barren';
+export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard';
 
 export interface BiomeSampler {
   biomeAt: (x: number, z: number) => BiomeId;
@@ -22,8 +22,6 @@ export interface BiomeSampler {
   /** Wreck-yard region strength 0..1 (1 in the core, smooth-fading to 0 at the
    *  radius edge). Drives terrain ground-tint + flatten blends. Cycle 8. */
   wreckYardAt: (x: number, z: number) => number;
-  /** M12 — ash-barren region strength 0..1 (regional scorched-flats zone). */
-  ashBarrenAt: (x: number, z: number) => number;
   /** The seed-derived wreck-yard region center (the rare destination). */
   wreckYardAnchor: { x: number; z: number };
   /** Wreck-yard region radius (m). */
@@ -137,7 +135,6 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
   // terrain ring (corner radius ≈1697m) + all boot placement never sample
   // a regional yard — the origin world bakes byte-identically. ──
   const regionSeed = Math.floor(rand() * 0x100000000) >>> 0;
-  const ashRegionSeed = Math.floor(rand() * 0x100000000) >>> 0;   // M12 — appended after the yard seed (yard stays byte-identical)
   const REGION_M = Tuning.CHUNK_REGION_CHUNKS * Tuning.CHUNK_SIZE;
   const regionMix = (rx: number, rz: number): number => {
     let h = regionSeed >>> 0;
@@ -198,75 +195,15 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return best;
   };
 
-  // ── M12 — ASH-BARREN regional anchors. A rare scorched-flats zone in the
-  //    far field (a "something burned through here" read), mirroring the
-  //    wreck-yard regional pattern with its OWN appended seed (so the yard
-  //    stays byte-identical) and NO origin anchor (purely far-field). Keeps
-  //    ASH_BARREN_REGION_MIN_DIST from origin. ──
-  const ashRadius = Tuning.ASH_BARREN_RADIUS;
-  const ashMix = (rx: number, rz: number): number => {
-    let h = ashRegionSeed >>> 0;
-    h = Math.imul(h ^ (rx | 0), 0x85ebca6b) >>> 0;
-    h = ((h << 13) | (h >>> 19)) >>> 0;
-    h = Math.imul(h ^ (rz | 0), 0xc2b2ae35) >>> 0;
-    h ^= h >>> 16;
-    h = Math.imul(h, 0x45d9f3b) >>> 0;
-    h ^= h >>> 15;
-    return h >>> 0;
-  };
-  const _regionAsh = new Map<string, { x: number; z: number } | null>();
-  const regionalAshAnchor = (rx: number, rz: number): { x: number; z: number } | null => {
-    const k = `${rx},${rz}`;
-    const memo = _regionAsh.get(k);
-    if (memo !== undefined) return memo;
-    const h = ashMix(rx, rz);
-    const roll = (h & 0xffff) / 0x10000;
-    let out: { x: number; z: number } | null = null;
-    if (roll < Tuning.ASH_BARREN_REGION_CHANCE) {
-      const u = ((h >>> 16) & 0xff) / 256;
-      const v = ((h >>> 24) & 0xff) / 256;
-      const margin = ashRadius;
-      const ax = rx * REGION_M + margin + u * (REGION_M - 2 * margin);
-      const az = rz * REGION_M + margin + v * (REGION_M - 2 * margin);
-      if (ax * ax + az * az >= Tuning.ASH_BARREN_REGION_MIN_DIST * Tuning.ASH_BARREN_REGION_MIN_DIST) {
-        out = { x: ax, z: az };
-      }
-    }
-    _regionAsh.set(k, out);
-    return out;
-  };
-  const ashFalloff = (d: number): number => {
-    if (d >= ashRadius) return 0;
-    if (d <= ashRadius * 0.6) return 1;
-    const t = (ashRadius - d) / (ashRadius * 0.4);
-    return t * t * (3 - 2 * t);
-  };
-  const ashBarrenAtFull = (x: number, z: number): number => {
-    let best = 0;
-    const rx0 = Math.floor(x / REGION_M);
-    const rz0 = Math.floor(z / REGION_M);
-    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) {
-      for (let rz = rz0 - 1; rz <= rz0 + 1; rz++) {
-        const a = regionalAshAnchor(rx, rz);
-        if (!a) continue;
-        const dx = x - a.x, dz = z - a.z;
-        const f = ashFalloff(Math.sqrt(dx * dx + dz * dz));
-        if (f > best) { best = f; if (best >= 1) return 1; }
-      }
-    }
-    return best;
-  };
-
   const biomeAt = (x: number, z: number): BiomeId => {
     if (wreckYardAtFull(x, z) > 0.5) return 'wreck_yard';
-    if (ashBarrenAtFull(x, z) > 0.5) return 'ash_barren';   // M12
     const n = rawAt(x, z);
     if (n < Tuning.BIOME_THRESHOLD_ROCKY) return 'rocky';
     if (n > Tuning.BIOME_THRESHOLD_SALT) return 'salt';
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, ashBarrenAt: ashBarrenAtFull, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
+  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

@@ -381,13 +381,6 @@ export const Tuning = {
   // bakes byte-identically (the placement gate is the tripwire).
   WRECK_YARD_REGION_CHANCE: 0.08,
   WRECK_YARD_REGION_MIN_DIST: 2200,
-  // M12 — the ash-barren biome: a rare regional-anchored scorched-flats zone
-  // (dark burned ground, sparse, a "something burned through here" read).
-  // Mirrors the wreck-yard regional anchor. Rarer than the yard.
-  ASH_BARREN_REGION_CHANCE: 0.055,
-  ASH_BARREN_REGION_MIN_DIST: 2600,
-  ASH_BARREN_RADIUS: 150,
-  ASH_BARREN_HEIGHT_SCALE: 0.16,       // a low scorched flat (not as dead-flat as the salt/yard)
   // Infinite Sands parity (D299) — the far field carries EVERYTHING the
   // origin has. Densities calibrated to the boot spawners' landed counts
   // over the boot area (then nudged up where the origin's read comes from

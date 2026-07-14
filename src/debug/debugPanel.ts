@@ -32,7 +32,6 @@ import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMat
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
 import { placeProcgenPOI, auditArchetypeColliders } from '../world/poiAssembler.ts';
 import { placeSkyfallWreck } from '../world/skyfallWreck.ts';   // review 2026-07-14 — __game.spawnSkyfall
-import { findBiomeCentroid } from '../world/biomes.ts';         // review 2026-07-14 — __game.gotoAsh
 import type { ArchetypeId } from '../world/poiArchetypes.ts';
 import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
 import { addAccessPanel, type PanelKind, type PanelArchetype } from '../world/wrecks.ts';   // ACAV — panel-studio
@@ -246,9 +245,6 @@ interface DebugApi {
   /** Review — teleport the player to (x,z) on the terrain surface (camera snaps; far-field
    *  content streams in around the landing). */
   warpTo: (x: number, z: number) => { x: number; y: number; z: number };
-  /** Review — find the nearest ash-barren biome zone and warp there (the M12 biome +
-   *  its industrial POI mix + any vultures en route). Null if none within range. */
-  gotoAsh: () => { x: number; z: number } | null;
   /** Dev — aim the crosshair at a wreck + call this to identify it (archetype / name /
    *  distance). The reliable way to name a specific procgen read for removal/tuning. */
   identifyWreck: () => { hit: boolean; archetype?: string; name?: string; dist?: number; userDataKeys?: string[] };
@@ -693,16 +689,6 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.player.body.body.setTranslation({ x, y, z }, true);
       ctx.player.cameraSnapNextFrame = true;
       return { x, y: +y.toFixed(1), z };
-    },
-    gotoAsh: () => {
-      // Ash-barren regions anchor ≥2600m out — search wide + coarse.
-      const c = findBiomeCentroid(ctx.biomes, 'ash_barren', { searchRadius: 6000, gridStep: 150 });
-      if (!c) { ctx.ui.showToast?.('no ash-barren zone within 6km — reload for a fresh seed'); return null; }
-      const y = ctx.terrain.heightAt(c.x, c.z) + 2;
-      ctx.player.body.body.setTranslation({ x: c.x, y, z: c.z }, true);
-      ctx.player.cameraSnapNextFrame = true;
-      ctx.ui.showToast?.('warped to the ash-barren biome');
-      return { x: +c.x.toFixed(0), z: +c.z.toFixed(0) };
     },
     identifyWreck: () => {
       // Raycast from the camera along the look direction; find the first wreck-ish hit
