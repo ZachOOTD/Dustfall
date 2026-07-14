@@ -81,3 +81,33 @@ export function generateCrashLog(seed: number, role: CrashRole): JournalContent 
   ];
   return { title: L.title, subtitle: `${author} — ${ship}`, entries };
 }
+
+// M7-R (2026-07-13, user) — the SKYFALL freighter's captain's log tells a specific
+// story: the captain ordered the crew to EVACUATE IN THE DROP PODS as she went down,
+// then rode her down alone. Same Long-Dark/Dune restraint — NO bodies; the captain's
+// fate is left to the sand (the empty pods fell west; the wreck is what's left). The
+// drop-pod evac echoes the player's own crashed pod — the world telling you what
+// happened by what it left behind. Reuses the freighter flavor (ships/cargo/cause) +
+// bespoke captains + evac beats. Deterministic per seed.
+const SKYFALL_CAPTAINS = ['captain Vharo', 'master Idris', 'old captain Sel', 'the master, Renwick', 'captain Oduya'];
+const SKYFALL_LAST = [
+  'if you found the pods first, tell the crew the old ship set them down gentle — then take what you like from her. she is done carrying.',
+  'there is a canteen in the aft locker and a long walk west, if you have the legs. that is the way the pods fell.',
+  'I brought her down whole and clear of them. that was the last thing I owed this crew. the desert can have the rest.',
+  'six pods, six good hands, all away before she hit. a captain could ask for a worse last count.',
+];
+export function generateSkyfallLog(seed: number): JournalContent {
+  const F = LORE.freighter;
+  const rng = makeRng((seed ^ 0x5c1fa1) >>> 0);
+  const pick = (arr: string[]): string => arr[Math.floor(rng() * arr.length)] ?? arr[0];
+  const ship = pick(F.ships);
+  const captain = pick(SKYFALL_CAPTAINS);
+  const entries: JournalEntry[] = [
+    ['LOG OPEN', `${ship}, heavy on the long crossing. ${pick(F.cargo)} in the holds, all sealed. a dull run — the way I like them.`],
+    ['FAULT', `${pick(F.cause)}. she is losing the sky and will not answer the helm. coming down on the flats, and coming down hard.`],
+    ['EVAC ORDER', 'gave the order every captain dreads: all hands to the drop pods. I counted them off the rack myself — pod by pod, hand by hand — and watched them light and fall away west, small as sparks against the dust.'],
+    ['ALONE AT THE HELM', 'the pods are gone and the cabin has gone quiet. someone rides her down so she lands clean and does not chase the crew across the sand. the chair is mine. it always was.'],
+    ['RECORDER ENDS', pick(SKYFALL_LAST)],
+  ];
+  return { title: 'CARGO RECORDER', subtitle: `${captain} — ${ship}`, entries };
+}

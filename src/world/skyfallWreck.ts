@@ -30,7 +30,7 @@ import { makeStaticBox } from '../physics/bodies.ts';
 import { registerSalvageable, type SalvageableRegistry, type Salvageable } from './salvage.ts';   // S6 — interior salvage loot
 import { addAccessPanel } from './wrecks.ts';                                                      // S6 — the pry-open panel builder
 import { placeJournal, type Journal } from './journal.ts';                                         // S6 — the pilot's crash-log
-import { generateCrashLog } from './crashLog.ts';
+import { generateSkyfallLog } from './crashLog.ts';
 
 // ── Shared materials (module singletons — one shader program set for every
 //    streamed Skyfall; meshes get chunkGeo so geometry unloads, materials stay).
@@ -1213,7 +1213,7 @@ export function placeSkyfallWreck(
     const jWorld = new THREE.Vector3(0.4, DECK_Y + 0.86, 7.05).applyMatrix4(fore.matrixWorld);
     journal = placeJournal(
       scene, jWorld, yaw + Math.PI, 'crashed_hull',
-      generateCrashLog((lootRand() * 0x7fffffff) >>> 0, 'freighter'),
+      generateSkyfallLog((lootRand() * 0x7fffffff) >>> 0),   // M7-R: the drop-pod-evac captain's log
     );
     fore.attach(journal.mesh);   // reparent under the wreck (preserves world pose) → tears down with the chunk
     journal.mesh.traverse((o) => {

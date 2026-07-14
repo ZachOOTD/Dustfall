@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 17 — 2026-07-13 — M7-R part 4 (FINAL): Skyfall captain's-log story — **M7-R COMPLETE** ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + skyfall-walk PASS; tsc clean. The final Skyfall walk-test fix; **all 6 of Zach's fixes are now done.**
+
+- **Captain's-log story** (user: "captains log... crew is ejecting in the drop pods, a little story") — NEW `generateSkyfallLog(seed)` in `crashLog.ts` replaces the generic `generateCrashLog(...,'freighter')` on the wreck's bow-console journal. A bespoke 5-entry log: LOG OPEN → FAULT (she's going down) → EVAC ORDER (the captain orders all hands to the DROP PODS, watches them light + fall away west) → ALONE AT THE HELM (the captain rides her down to land clean, off the crew) → RECORDER ENDS (the captain's final line). Long-Dark/Dune restraint, no bodies — the empty pods fell west, the wreck is what's left; the drop-pod evac echoes the player's own crashed pod ("the world tells you what happened by what's left"). Reuses the freighter ship/cargo/cause flavor + bespoke captains; deterministic per seed. Text-only, no save-schema change.
+
+**🏁 M7-R (Skyfall refinement) COMPLETE** — the 6 walk-test fixes across cycles 14-17: real hull thickness (paper-thin fix) + 100% exterior collision (c14) · interior floating-audit + more detail (c15) · broken cockpit glass + cabin-visibility lift (c16) · captain's-log story (c17). Next: the M8-M12 world-deepening queue (M8 far-field vultures first).
+
 ## Campaign "Sharpen & Deepen" cycle 16 — 2026-07-13 — M7-R part 3: Skyfall broken cockpit glass + cabin-visibility lift ✓ all gates
 
 `verified` — verify tsc clean, skyfall-walk PASS, verify-chunks (det 8/8 both seeds, no-leak, perf untripped); 3-round glass iteration + 2-round cabin + seed-808.

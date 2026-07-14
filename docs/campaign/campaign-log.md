@@ -167,3 +167,12 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~200K (campaign total ~5.45M / 8.75M; cycle 16/50)
 - Commit: see git log
 - Next: cycle 17 = captain's-log story (crew ejected in drop pods) — the LAST M7-R fix; then the M8 world queue.
+
+## Cycle 17 — M7-R part 4 (FINAL): Skyfall captain's-log story (2026-07-13) — SHIPPED · M7-R COMPLETE
+- Planned: the captain's-log story (user: "crew is ejecting in the drop pods, a little story") — the last M7-R fix.
+- Shipped: NEW generateSkyfallLog(seed) in crashLog.ts (drop-pod-evac captain's log — order all hands to the pods → captain rides her down alone; Long-Dark restraint, no bodies, ties to the player's own pod). Wired onto the wreck's bow-console journal (replaces the generic freighter log). Text-only, no save bump, deterministic per seed.
+- Verify: verify:all PASS (placement/colliders/chunks) · skyfall-walk PASS · tsc clean.
+- 🏁 M7-R COMPLETE — all 6 Zach walk-test fixes done (c14 thickness+collision, c15 floating+detail, c16 glass+cabin-light, c17 captain-log).
+- Spend: ~150K (campaign total ~5.6M / 8.75M; cycle 17/50)
+- Commit: see git log
+- Next: cycle 18 = M8 far-field vultures (feature-slice it: solve the D294 chunk-model tension for aerial life).

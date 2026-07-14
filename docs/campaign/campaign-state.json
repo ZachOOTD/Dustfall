@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 16,
-  "current_tier": "M7-R Skyfall refinement \u2014 parts 1-3 done (thickness+collision, floating-audit+detail, glass+cabin-light); part 4 next = captain-log story (LAST M7-R fix)",
+  "cycles_completed": 17,
+  "current_tier": "M7-R Skyfall refinement COMPLETE (all 6 walk-test fixes, cycles 14-17) \u2014 next: M8 far-field vultures",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 5450000
+    "total": 5600000
   },
   "ladder": [
     {
@@ -78,13 +78,13 @@
       "id": "M7-R",
       "name": "Skyfall refinement (real hull thickness / floating-model audit / 100% collision / more interior detail / cockpit glass / captain-log story)",
       "kind": "gate-verified+feel",
-      "status": "IN PROGRESS \u2014 thickness+collision (c14) + floating-audit+detail (c15) + broken glass+cabin-light (c16) SHIPPED; captain-log remains"
+      "status": "COMPLETE (cycles 14-17): thickness+collision, floating-audit+detail, glass+cabin-light, captain-log story"
     },
     {
       "id": "M8",
       "name": "Far-field vultures (aerial life for the infinite world; region-rolled placement rework, D294)",
       "kind": "gate-verified",
-      "status": "queued"
+      "status": "queued (NEXT)"
     },
     {
       "id": "M9",
@@ -250,6 +250,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 200000,
       "verify": "verify tsc - skyfall-walk PASS - verify-chunks (det 8/8, no-leak, perf ok) - 3-round glass + 2-round cabin + seed-808"
+    },
+    {
+      "n": 17,
+      "date": "2026-07-13",
+      "focus": "M7-R part 4 (final): Skyfall captain-log story (crew ejected in drop pods) \u2014 M7-R COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 150000,
+      "verify": "verify:all PASS (placement/colliders/chunks) - skyfall-walk PASS - tsc clean; new generateSkyfallLog wired"
     }
   ]
 }

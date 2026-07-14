@@ -135,10 +135,10 @@ and promotes the second.
 > **⚙ ACTIVE CAMPAIGN — "Sharpen & Deepen" +4M overnight batch (2026-07-13, branch `campaign/2026-07-12-skyfall`).**
 > After Zach's M7 Skyfall walk-test, the campaign extends with a refinement pass + a world-deepening
 > queue (priority order; ~4M cap = ceiling 8.75M; checkpoint none, morning batch review):
-> - **M7-R — Skyfall refinement** (walk-test fixes): real hull thickness (kill the paper-thin
->   double-sided look — NEW standing rule), floating-model audit, 100% collision (dorsal containers
->   had none), more interior detail, broken cockpit glass, captain's-log "crew ejected in drop pods"
->   story. Spec: [feature-skyfall.md](feature-skyfall.md) M7-R section.
+> - **✅ M7-R — Skyfall refinement COMPLETE** (cycles 14-17, all 6 walk-test fixes): real hull thickness
+>   (paper-thin fix → NEW rule 7) + 100% collision (D304, c14) · interior floating-audit + more detail
+>   (c15) · broken cockpit glass + reversible cabin-light `SKYFALL_CABIN_FILL` (c16) · captain's-log
+>   drop-pod-evac story `generateSkyfallLog` (c17). Spec: [feature-skyfall.md](feature-skyfall.md).
 > - **M8 — Far-field vultures** (aerial life for the infinite world; D294 placement-model rework).
 > - **M9 — New POI archetypes** (2-3 new far-field destination types; M6-style gate-verified).
 > - **M10 — More story vignettes** (wordless environmental-storytelling tableaus).
