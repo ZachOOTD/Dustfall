@@ -2402,6 +2402,194 @@ const SCENARIOS = {
     })()`);
   },
 
+  // ── bone-hero — the bone_field HERO "wow" gate. Finds the nearest bone_field
+  //    region, streams to its ANCHOR (the field centre, where the colossal
+  //    half-buried RIBCAGE spawns), and shoots the REAL player-eye reads:
+  //    (1) ENTRY — a player-eye 3/4 approach: does it read as a colossal titan
+  //        ribcage rising from the dunes, dwarfing the player?
+  //    (2) BROADSIDE — full length + the arching ribs + the dorsal sail.
+  //    (3) INTO-CAGE — inside, down the aisle: ribs arcing up + the sail overhead.
+  //    (4) RIDGELINE — the dorsal-spike sail + the skull along the spine.
+  //    (5) SKULL — the head close-up.
+  //    (6) LOWGRAZE — a very low angle across the rib bases (float check).
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-hero --port=5782
+  'bone-hero': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0; g.setTime(0.5);          // noon — pale bone reads true
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    // Find the nearest bone_field zone, then resolve its exact anchor (the field
+    // centre — where the worm skeleton is hosted).
+    const anchor = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let coarse = null, bestD = Infinity;
+      for (let x = -13000; x <= 13000; x += 200) {
+        for (let z = -13000; z <= 13000; z += 200) {
+          if (x * x + z * z < 2600 * 2600) continue;
+          if (ctx.biomes.boneFieldAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; coarse = { x, z }; }
+          }
+        }
+      }
+      if (!coarse) return null;
+      const a = ctx.biomes.boneFieldAnchor(coarse.x, coarse.z);
+      return a ? { x: a.x, z: a.z } : coarse;
+    });
+    if (!anchor) { console.log('[bone-hero] no bone_field zone found in the 13km scan (seed-dependent)'); return; }
+    console.log(`[bone-hero] field anchor at ${anchor.x.toFixed(0)},${anchor.z.toFixed(0)} (dist ${Math.hypot(anchor.x, anchor.z).toFixed(0)}m)`);
+    // Stream the anchor chunk in (teleport onto it, let the ring settle).
+    await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: a.x, y: ctx.terrain.heightAt(a.x, a.z) + 1.6, z: a.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();
+    }, anchor);
+    // Locate the ribcage group + read its world frame (centre, +X spine axis,
+    // skull world point, length, height) from userData — no global THREE needed.
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let rc = null;
+      ctx.three.scene.traverse((o) => { if (o.name === 'giantRibcage') rc = o; });
+      if (!rc) return null;
+      rc.updateMatrixWorld(true);
+      const V = ctx.three.camera.position.constructor;
+      const p0 = rc.localToWorld(new V(0, 0, 0));
+      const p1 = rc.localToWorld(new V(1, 0, 0));
+      const fwd = { x: p1.x - p0.x, y: 0, z: p1.z - p0.z };
+      const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
+      const sk = rc.userData.skullLocal
+        ? rc.localToWorld(rc.userData.skullLocal.clone()) : p0;
+      return {
+        cx: p0.x, cy: p0.y, cz: p0.z, fwd,
+        skull: { x: sk.x, y: sk.y, z: sk.z },
+        length: rc.userData.length || 40,
+        maxH: rc.userData.maxHeight || 15,
+      };
+    });
+    if (!info) { console.log('[bone-hero] ribcage group not found under the anchor (descriptor/placement bug)'); return; }
+    console.log(`[bone-hero] ribcage center ${info.cx.toFixed(0)},${info.cz.toFixed(0)} len ${info.length.toFixed(0)}m height ${info.maxH.toFixed(1)}m`);
+    const shot = async (name, code) => {
+      await page.evaluate(code);
+      await page.waitForTimeout(450);
+      await page.screenshot({ path: join(OUT, `scen-ribcage-${name}.png`), timeout: 60000 });
+      console.log(`[bone-hero] saved scen-ribcage-${name}.png`);
+    };
+    const side = { x: -info.fwd.z, z: info.fwd.x };  // perpendicular to the spine axis
+    const L = info.length, H = info.maxH;
+    const gy = info.cy;
+    // (1) ENTRY — a 3/4 approach at player eye height: the "does it read colossal
+    //     + dwarfing" gate.
+    await shot('entry', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * ${L * 0.72} - ${info.fwd.x} * ${L * 0.42};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.72} - ${info.fwd.z} * ${L * 0.42};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.42}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (2) BROADSIDE — perpendicular, lifted, framing the whole length + the ribs
+    //     + the dorsal sail.
+    await shot('broadside', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * ${L * 0.92};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.92};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.5}, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (3) INTO-CAGE — INSIDE at the tail end, looking down the aisle toward the
+    //     skull: ribs arcing up on both sides + the sail overhead (walk-into read).
+    await shot('intocage', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.44};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.44};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx} + ${info.fwd.x} * ${L * 0.3}, ${gy} + ${H * 0.35}, ${info.cz} + ${info.fwd.z} * ${L * 0.3});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (4) RIDGELINE — elevated at the tail, looking along the spine at the dorsal
+    //     sail + the skull at the far end.
+    await shot('ridgeline', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.62} + ${side.x} * ${L * 0.14};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.62} + ${side.z} * ${L * 0.14};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.7}, fz);
+      cam.lookAt(${info.skull.x}, ${gy} + 2, ${info.skull.z});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (5) SKULL — the head close-up, low + near.
+    await shot('skull', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.skull.x} + ${info.fwd.x} * 9 + ${side.x} * 4;
+      const fz = ${info.skull.z} + ${info.fwd.z} * 9 + ${side.z} * 4;
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 2.2, fz);
+      cam.lookAt(${info.skull.x}, ${gy} + 1.4, ${info.skull.z});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (6) LOWGRAZE — a very low angle skimming across the rib bases: the FLOAT
+    //     check (every rib base must plant in the sand, no gaps under the bones).
+    await shot('lowgraze', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * ${L * 0.55} - ${info.fwd.x} * ${L * 0.3};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.55} - ${info.fwd.z} * ${L * 0.3};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 0.8, fz);
+      cam.lookAt(${info.cx}, ${gy} + 1.2, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (DIAG) Isolate the ribcage — hide every OTHER scene child so only the
+    //   ribcage renders. Any bone still visible in the other shots but GONE here
+    //   is a separate boneScatter decoration, not a ribcage floater.
+    await shot('isolate', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      let rc = null; ctx.three.scene.traverse((o) => { if (o.name === 'giantRibcage') rc = o; });
+      window.__diagHidden = [];
+      ctx.three.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        let w = o, isRc = false;
+        while (w) { if (w === rc) { isRc = true; break; } w = w.parent; }
+        const isTerrain = /terrain|tile|ground|sky/i.test(o.name || '');
+        if (!isRc && !isTerrain && o.visible) { window.__diagHidden.push(o); o.visible = false; }
+      });
+      const fx = ${info.cx} + ${side.x} * ${L * 0.92};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.92};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.5}, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    await page.evaluate(`(() => { (window.__diagHidden||[]).forEach(o => o.visible = true); window.__diagHidden = []; })()`);
+    // ── Rule-9 leak probe: the ribcage's rib + spine + skull colliders must tear
+    //    down on unload and not accumulate across repeated visits. Load→unload→
+    //    reload the anchor chunk; the physics-body count must return to baseline. ──
+    const leak = await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const settle = async (x, z, frames) => {
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        for (let f = 0; f < frames; f++) await raf();
+      };
+      await settle(a.x, a.z, 200);
+      const loaded = ctx.physics.world.bodies.len();
+      await settle(a.x + 3000, a.z + 3000, 220);   // far → worm chunk unloads
+      const away = ctx.physics.world.bodies.len();
+      await settle(a.x, a.z, 220);                  // back → worm chunk reloads
+      const reloaded = ctx.physics.world.bodies.len();
+      return { loaded, away, reloaded };
+    }, anchor);
+    const leakOk = leak.loaded === leak.reloaded;
+    console.log(`[bone-hero] body-leak probe: loaded=${leak.loaded} away=${leak.away} reloaded=${leak.reloaded} ${leakOk ? 'NO LEAK' : 'LEAK!'}`);
+  },
+
   'chunk-vista': async (page) => {
     await page.evaluate(async () => {
       const g = window.__game; const ctx = g.ctx;

@@ -26,6 +26,11 @@ export interface BiomeSampler {
    *  bleached bone-white ground + half-buried bone scatter). Drives the terrain
    *  ground-tint + gentle flatten, and gates the chunk-streamed bone scatter. */
   boneFieldAt: (x: number, z: number) => number;
+  /** The nearest bone_field region ANCHOR (field centre) to (x, z), or null if
+   *  no bone field is within the 3×3 region neighborhood. RNG-FREE (only reads
+   *  the memoized regionalBoneAnchor) → determinism untouched. Used to place the
+   *  colossal worm-skeleton hero at the field centre. */
+  boneFieldAnchor: (x: number, z: number) => { x: number; z: number } | null;
   /** The seed-derived wreck-yard region center (the rare destination). */
   wreckYardAnchor: { x: number; z: number };
   /** Wreck-yard region radius (m). */
@@ -265,6 +270,22 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return best;
   };
 
+  // RNG-FREE — only reads the memoized regionalBoneAnchor (no rand draws), so
+  // determinism is untouched. Returns the nearest bone_field anchor (field
+  // centre) in the 3×3 region neighborhood of (x, z), or null.
+  const boneFieldAnchor = (x: number, z: number): { x: number; z: number } | null => {
+    let best: { x: number; z: number } | null = null, bestD = Infinity;
+    const rx0 = Math.floor(x / REGION_M), rz0 = Math.floor(z / REGION_M);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++)
+      for (let rz = rz0 - 1; rz <= rz0 + 1; rz++) {
+        const a = regionalBoneAnchor(rx, rz);
+        if (!a) continue;
+        const dx = x - a.x, dz = z - a.z, d = dx * dx + dz * dz;
+        if (d < bestD) { bestD = d; best = a; }
+      }
+    return best;
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
     if (wreckYardAtFull(x, z) > 0.5) return 'wreck_yard';
     if (boneFieldAtFull(x, z) > 0.5) return 'bone_field';
@@ -274,7 +295,7 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, boneFieldAt: boneFieldAtFull, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
+  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, boneFieldAt: boneFieldAtFull, boneFieldAnchor, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

@@ -39,6 +39,7 @@ import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { spawnCirclingVultureAt, removeVultureFromWorld, type Vulture } from '../enemies/vulture.ts';   // M8 — streamed far-field aerial life
 import { placeRibcage } from './heroLandmarks.ts';
 import { buildBoneBit, BONE_BIT_KINDS, type BoneBitKind } from './boneScatter.ts';
+import { makeGiantRibcage } from './giantRibcage.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
 import { placeSkyfallWreck } from './skyfallWreck.ts';
 import type { Journal } from './journal.ts';
@@ -168,6 +169,10 @@ export interface ChunkDesc {
   dressing: ChunkDressingDesc;
   /** bone_field titan-graveyard scatter (empty off-biome). */
   bones: ChunkBoneDesc[];
+  /** The colossal sandworm-skeleton HERO — present on exactly ONE chunk per
+   *  bone_field region (the chunk containing the field anchor). null elsewhere.
+   *  Hash-seeded (yaw/seed derived from the anchor coords) → deterministic. */
+  wormSkeleton: { x: number; z: number; yaw: number; seed: number } | null;
 }
 
 interface LoadedChunk {
@@ -531,6 +536,18 @@ export function createChunkManager(
       }
       bones.push({ x: bx, z: bz, scale, kind, seed: bSeed });
     }
+    // ── The colossal worm-skeleton HERO — one per bone_field region, hosted by
+    //    the ONE chunk containing the region's bone anchor (field centre). The
+    //    anchor lookup is RNG-FREE (memoized regionalBoneAnchor); yaw+seed are a
+    //    pure hash of the anchor coords → determinism untouched (no rand draws,
+    //    wreck_yard byte-identical). ──
+    let wormSkeleton: ChunkDesc['wormSkeleton'] = null;
+    const wa = biomes.boneFieldAnchor(centerX, centerZ);
+    if (wa && Math.floor(wa.x / SIZE) === cx && Math.floor(wa.z / SIZE) === cz) {
+      const hseed = chunkSeed((worldSeed ^ 0x1207e5) >>> 0, Math.round(wa.x), Math.round(wa.z));
+      const yaw = (((hseed >>> 8) & 0xffff) / 0x10000) * Math.PI * 2;
+      wormSkeleton = { x: wa.x, z: wa.z, yaw, seed: hseed };
+    }
     return {
       cx, cz, seed,
       markers: markerList,
@@ -541,6 +558,7 @@ export function createChunkManager(
       landmark,
       dressing: { trees, well: { present: wellPresent, x: wlx, z: wlz, seed: wSeed }, cacti },
       bones,
+      wormSkeleton,
     };
   };
 
@@ -964,11 +982,17 @@ export function createChunkManager(
         } else {
           const bit = buildBoneBit(bd.kind, bRand);
           bit.scale.setScalar(bd.scale);
-          // Half-buried: sink a fraction of the bit into the sand so it reads
-          // as emerging from the ground, not resting on it.
-          const bury = (0.25 + bRand() * 0.35) * bd.scale;
-          bit.position.set(bd.x, y - bury, bd.z);
           bit.rotation.y = bRand() * Math.PI * 2;
+          // Seat by the bit's ACTUAL bounding box, not a fixed fraction: every
+          // builder offsets its geometry ABOVE the group origin (skull +r·0.75,
+          // longbone +len·0.18, …), so a fixed bury FLOATS the bone at larger
+          // scales (the graveyard-floater bug). Measure the real extent, then
+          // sink its BOTTOM below the sand so it reads as emerging — no floaters.
+          bit.updateMatrixWorld(true);
+          const bbox = new THREE.Box3().setFromObject(bit);
+          const bitH = bbox.max.y - bbox.min.y;
+          const bury = 0.18 + bRand() * 0.22;              // sink 18-40% of the bit's height
+          bit.position.set(bd.x, y - bury * bitH - bbox.min.y, bd.z);
           bitRoot.add(bit);
           bitCount++;
         }
@@ -978,6 +1002,34 @@ export function createChunkManager(
         mergeStaticByMaterial(bitRoot);   // → one draw call; merged mesh tagged noCollider
         group.add(bitRoot);
       }
+    }
+    // ── The colossal RIBCAGE HERO (one per bone_field region — the biome's
+    //    "wow" centerpiece; the `wormSkeleton` descriptor slot is retained as
+    //    the "bone hero at the anchor" slot, it now builds a half-buried titan
+    //    ribcage instead of a breaching worm). Built + merged inside
+    //    makeGiantRibcage (→ ~2 draw calls, meshes tagged noCollider by
+    //    mergeStaticByMaterial → geometry disposed on unload, the shared bone
+    //    material survives). Placed at the field anchor on the terrain: the
+    //    ribcage's own geometry handles burial via local y (buried keel + rib
+    //    bases + skull extend below local y=0), so NO extra sink. CONFORM samples
+    //    the real ground per element so nothing floats over a dune dip. Colliders
+    //    land on the reachable rib runs + the spine/sail + the skull, tracked in
+    //    bodies[] (rule 9 — removed on unload). ──
+    if (desc.wormSkeleton) {
+      const ws = desc.wormSkeleton;
+      const gy = terrain.heightAt(ws.x, ws.z);
+      const rc = makeGiantRibcage(makeRng(ws.seed), {
+        conform: {
+          groundAt: (x, z) => terrain.heightAt(x, z),
+          originX: ws.x, originZ: ws.z, yaw: ws.yaw, baseY: gy,
+        },
+      });
+      rc.group.position.set(ws.x, gy, ws.z);
+      rc.group.rotation.y = ws.yaw;
+      rc.group.userData.streamWorm = true;
+      group.add(rc.group);
+      const wbodies = rc.applyColliders(world, new THREE.Vector3(ws.x, gy, ws.z), ws.yaw);
+      bodies.push(...wbodies);
     }
     if (markers) {
       for (let m = 0; m < desc.markers.length; m++) {
