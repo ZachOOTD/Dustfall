@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 17,
-  "current_tier": "M7-R Skyfall refinement COMPLETE (all 6 walk-test fixes, cycles 14-17) \u2014 next: M8 far-field vultures",
+  "cycles_completed": 18,
+  "current_tier": "M8 far-field vultures COMPLETE (streamed circling birds, D305) \u2014 next: M9 new POI archetypes",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 5600000
+    "total": 5850000
   },
   "ladder": [
     {
@@ -84,13 +84,13 @@
       "id": "M8",
       "name": "Far-field vultures (aerial life for the infinite world; region-rolled placement rework, D294)",
       "kind": "gate-verified",
-      "status": "queued (NEXT)"
+      "status": "COMPLETE (cycle 18, D305): streamed circling vultures, no body leak, 6 wheeling in the far field"
     },
     {
       "id": "M9",
       "name": "New POI archetypes (2-3 new far-field destination types)",
       "kind": "gate-verified",
-      "status": "queued"
+      "status": "queued (NEXT)"
     },
     {
       "id": "M10",
@@ -258,6 +258,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 150000,
       "verify": "verify:all PASS (placement/colliders/chunks) - skyfall-walk PASS - tsc clean; new generateSkyfallLog wired"
+    },
+    {
+      "n": 18,
+      "date": "2026-07-13",
+      "focus": "M8 far-field vultures (streamed circling birds \u2014 solves D294)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify:all PASS + 5 smokes - verify:chunks no body leak (332->332) - numeric: 6 circling vultures at altitude - D305"
     }
   ]
 }

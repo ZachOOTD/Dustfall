@@ -396,6 +396,9 @@ export const Tuning = {
   CHUNK_CACTUS_PATCH_MAX: 4,
   CHUNK_ROAM_LIZARD_CHANCE: 0.15,
   CHUNK_ROAM_SHREW_CHANCE: 0.15,
+  // M8 — a rare circling vulture per chunk (aerial life for the far field).
+  // Low: a "look up, there's one wheeling" moment, not everywhere. Any biome.
+  CHUNK_VULTURE_CHANCE: 0.06,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)

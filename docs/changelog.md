@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 18 — 2026-07-13 — M8: far-field vultures (aerial life for the infinite world) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + 5 smokes green; verify:chunks streaming NO body leak (332→332); a numeric probe found 6 circling vultures wheeling at altitude in the far field. Solves the D294 deferred problem.
+
+- **Streamed circling vultures** — the infinite world now has aerial life. The vulture FSM's `circling` state is self-contained (a persistent `carcass` point → wheels indefinitely, never touches the boot perch pool), so streamed far-field vultures spawn as PURE CIRCLERS over a chunk point — sidestepping the perch-coupling that deferred D294. NEW `spawnCirclingVultureAt` + `removeVultureFromWorld` (idempotent teardown) in `vulture.ts`; wired into `chunkManager` like the D299 roaming prey (a `roamVultures` roll, `CHUNK_VULTURE_CHANCE = 0.06`, any biome outside origin, streamed load-spawn + unload-teardown, transient). `huntCooldown = Infinity` keeps them pure ambient wheelers (clean teardown). D305.
+
 ## Campaign "Sharpen & Deepen" cycle 17 — 2026-07-13 — M7-R part 4 (FINAL): Skyfall captain's-log story — **M7-R COMPLETE** ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) + skyfall-walk PASS; tsc clean. The final Skyfall walk-test fix; **all 6 of Zach's fixes are now done.**

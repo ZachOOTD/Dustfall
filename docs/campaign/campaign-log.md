@@ -176,3 +176,11 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~150K (campaign total ~5.6M / 8.75M; cycle 17/50)
 - Commit: see git log
 - Next: cycle 18 = M8 far-field vultures (feature-slice it: solve the D294 chunk-model tension for aerial life).
+
+## Cycle 18 — M8 far-field vultures (2026-07-13) — SHIPPED
+- Planned: aerial life for the infinite world (D294 deferred — the vulture system fought the chunk model).
+- Shipped: streamed CIRCLING vultures (the FSM's circling state is self-contained → pure circlers over a chunk point sidestep the perch-coupling). New spawnCirclingVultureAt + removeVultureFromWorld (idempotent) in vulture.ts; roamVultures roll in chunkManager (CHUNK_VULTURE_CHANCE 0.06, streamed load/unload, transient). D305.
+- Verify: verify:all PASS + 5 smokes · verify:chunks NO body leak (332→332) · numeric probe: 6 circling vultures at altitude in the far field.
+- Spend: ~250K (campaign total ~5.85M / 8.75M; cycle 18/50)
+- Commit: see git log
+- Next: cycle 19 = M9 new POI archetypes (feature-slice; M6-style gate-verified, 2-3 new far-field destination types).

@@ -36,6 +36,7 @@ import { makeScatterRock } from './rockScatter.ts';
 import { buildWordlessTableau } from './wordlessScenes.ts';
 import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
+import { spawnCirclingVultureAt, removeVultureFromWorld, type Vulture } from '../enemies/vulture.ts';   // M8 — streamed far-field aerial life
 import { placeRibcage } from './heroLandmarks.ts';
 import { placeSkyfallWreck } from './skyfallWreck.ts';
 import type { Journal } from './journal.ts';
@@ -112,6 +113,8 @@ export interface ChunkFaunaDesc {
   shrews: Array<{ x: number; z: number }>;
   roamLizards: Array<{ x: number; z: number }>;
   roamShrews: Array<{ x: number; z: number }>;
+  /** M8 — rare ambient circling vultures (aerial life; wheel over the point). */
+  roamVultures: Array<{ x: number; z: number }>;
 }
 
 /** D299 — origin-parity dressing: dead trees (salt, flat), a rare well
@@ -163,6 +166,8 @@ interface LoadedChunk {
    *  player already looted them). */
   lizards: Lizard[];
   shrews: Shrew[];
+  /** M8 — streamed circling vultures this chunk owns (despawned on unload). */
+  vultures: Vulture[];
   /** S6 — heavy content pieces (landmark knot wrecks/ribcages) deferred
    *  to ONE piece per frame so a landmark chunk can't blow a single
    *  frame. Executed thunks push into bodies/salvage/etc as usual;
@@ -359,7 +364,7 @@ export function createChunkManager(
     const faunaRand = makeRng((seed ^ 0xfa0a) >>> 0);
     const lizCount = 1 + Math.floor(faunaRand() * Tuning.CHUNK_POI_LIZARDS_MAX);
     const shrewCount = Math.floor(faunaRand() * (Tuning.CHUNK_POI_SHREWS_MAX + 1));
-    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [], roamLizards: [], roamShrews: [] };
+    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [], roamLizards: [], roamShrews: [], roamVultures: [] };
     const faunaOk = present && biome !== 'salt';
     for (let i = 0; i < Tuning.CHUNK_POI_LIZARDS_MAX; i++) {
       const ang = faunaRand() * Math.PI * 2;
@@ -471,6 +476,14 @@ export function createChunkManager(
     if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt') {
       fauna.roamShrews = [{ x: rsx, z: rsz }];
     } else fauna.roamShrews = [];
+    // M8 — a rare CIRCLING vulture wheeling over this chunk (aerial life for the
+    // far field). Fixed draw budget (3 more from roamRand); any biome (it flies).
+    const vRoll = roamRand();
+    const vvx = cx * SIZE + roamRand() * SIZE;
+    const vvz = cz * SIZE + roamRand() * SIZE;
+    if (outsideOrigin && vRoll < Tuning.CHUNK_VULTURE_CHANCE) {
+      fauna.roamVultures = [{ x: vvx, z: vvz }];
+    } else fauna.roamVultures = [];
     return {
       cx, cz, seed,
       markers: markerList,
@@ -571,6 +584,7 @@ export function createChunkManager(
     const salvage: Salvageable[] = [];
     const chunkLizards: Lizard[] = [];
     const chunkShrews: Shrew[] = [];
+    const chunkVultures: Vulture[] = [];
     const deferred: Array<() => void> = [];
     const priorLooted: string[] = [];
     const chunkPickups: Pickup[] = [];
@@ -835,6 +849,13 @@ export function createChunkManager(
         s.chunkContentId = `rs${i}`;
         chunkShrews.push(s);
       });
+      // M8 — ambient circling vultures (transient; despawned on unload). Wheel
+      // over the chunk point at soaring altitude; pure circlers (no swoop) so
+      // teardown is clean. Not save-persisted (aerial ambience regenerates).
+      desc.fauna.roamVultures.forEach((f) => {
+        const v = spawnCirclingVultureAt(scene, world, f.x, f.z, terrain.heightAt(f.x, f.z), makeRng((desc.seed ^ 0x7a1f) >>> 0));
+        chunkVultures.push(v);
+      });
     }
     // ── S3: scatter rocks (no colliders — visual props, the boot rule).
     //    Per-rock geometry is chunk-owned; materials are module singletons. ──
@@ -892,7 +913,7 @@ export function createChunkManager(
     scene.add(group);
     chunks.set(key(cx, cz), {
       cx, cz, group, bodies, salvage,
-      lizards: chunkLizards, shrews: chunkShrews,
+      lizards: chunkLizards, shrews: chunkShrews, vultures: chunkVultures,
       deferred, priorLooted,
       pickups: chunkPickups, wells: chunkWells, cactiRecs: chunkCacti, priorTaken,
       journals: [],
@@ -946,6 +967,9 @@ export function createChunkManager(
     for (const s of c.shrews) {
       if (!s.looted) removeShrew(s, scene, world);
     }
+    // M8 — despawn this chunk's circling vultures (idempotent-safe: a shot+looted
+    // one is already out of the module list, so removeVultureFromWorld skips it).
+    for (const v of c.vultures) removeVultureFromWorld(v, scene, world);
     // D299 dressing teardown: pickups despawn pool-aware (taken ones are
     // already gone from the live list — skip); wells/cacti splice out of
     // their ctx lists (their meshes go with the group; cactus bodies are

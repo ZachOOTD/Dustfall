@@ -139,7 +139,10 @@ and promotes the second.
 >   (paper-thin fix → NEW rule 7) + 100% collision (D304, c14) · interior floating-audit + more detail
 >   (c15) · broken cockpit glass + reversible cabin-light `SKYFALL_CABIN_FILL` (c16) · captain's-log
 >   drop-pod-evac story `generateSkyfallLog` (c17). Spec: [feature-skyfall.md](feature-skyfall.md).
-> - **M8 — Far-field vultures** (aerial life for the infinite world; D294 placement-model rework).
+> - **✅ M8 — Far-field vultures COMPLETE** (cycle 18, D305): streamed circling vultures (pure wheelers
+>   over a chunk point — the FSM's self-contained circling state sidesteps the D294 perch-coupling);
+>   `roamVultures` roll + `spawnCirclingVultureAt`/`removeVultureFromWorld`; no body leak, 6 wheeling
+>   in the far field, transient. The infinite world has aerial life.
 > - **M9 — New POI archetypes** (2-3 new far-field destination types; M6-style gate-verified).
 > - **M10 — More story vignettes** (wordless environmental-storytelling tableaus).
 > - **M11 — Retire legacy tube-wrecks** (ship→socket migration, D227/D249 — no wreck reads as a tube).

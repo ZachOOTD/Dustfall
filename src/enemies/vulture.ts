@@ -508,6 +508,39 @@ export function lootVulture(vulture: Vulture, ctx: GameContext): void {
   if (idx >= 0) _vultures.splice(idx, 1);
 }
 
+/** M8 (Infinite Sands) — streamed teardown: remove a chunk-owned vulture from the
+ *  world + module registry on chunk unload. Idempotent-safe (if the vulture was
+ *  already removed — shot + looted — the guard skips the double free, so a stale
+ *  body/handle is never re-removed). Drops any carried-prey silhouette too. */
+export function removeVultureFromWorld(vulture: Vulture, scene: THREE.Scene, world: RAPIER.World): void {
+  const idx = _vultures.indexOf(vulture);
+  if (idx < 0) return;                         // already gone (death/loot path) — nothing to free
+  if (vulture.prey) { scene.remove(vulture.prey); vulture.prey = null; }
+  scene.remove(vulture.mesh);
+  _colliderToVulture.delete(vulture.collider.handle);
+  world.removeRigidBody(vulture.body);
+  _vultures.splice(idx, 1);
+}
+
+/** M8 — spawn ONE ambient CIRCLING vulture wheeling over a ground point (streamed
+ *  far-field aerial life). Pure circler: `huntCooldown = Infinity` so it never
+ *  enters the swoop/carry/feed states (keeps streamed teardown clean — no carried
+ *  silhouette to orphan). It orbits `(x, groundY, z)` indefinitely = the "something
+ *  died here / life above" read, self-contained (never touches the boot perch pool). */
+export function spawnCirclingVultureAt(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  x: number, z: number, groundY: number,
+  rand: () => number,
+): Vulture {
+  const v = spawnVulture(scene, world, { x, y: groundY, z });
+  v.state = 'circling';
+  v.carcass = new THREE.Vector3(x, groundY, z);
+  v.circlePhase = rand() * Math.PI * 2;
+  v.huntCooldown = Infinity;                   // never swoops (streamed-teardown-safe ambient wheeler)
+  return v;
+}
+
 /** Spawn a single vulture perched at a crown point (world). */
 export function spawnVulture(
   scene: THREE.Scene,
