@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 13,
-  "current_tier": "M7-R Skyfall refinement (walk-test fixes) \u2014 then the M8-M12 world-deepening queue",
+  "cycles_completed": 14,
+  "current_tier": "M7-R Skyfall refinement \u2014 part 1 done (thickness+collision); part 2 next (floating audit + interior detail + glass + captain-log)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 4750000
+    "total": 5050000
   },
   "ladder": [
     {
@@ -78,7 +78,7 @@
       "id": "M7-R",
       "name": "Skyfall refinement (real hull thickness / floating-model audit / 100% collision / more interior detail / cockpit glass / captain-log story)",
       "kind": "gate-verified+feel",
-      "status": "queued (NEXT) \u2014 user walk-test feedback 2026-07-13"
+      "status": "IN PROGRESS \u2014 part 1 (real hull thickness + 100% exterior collision) SHIPPED cycle 14 (D304); floating-audit/interior-detail/glass/captain-log remain"
     },
     {
       "id": "M8",
@@ -226,6 +226,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 300000,
       "verify": "verify:all PASS - smokes PASS - numeric loot probe (2 sky panels, journal 6->7->6 clean teardown, salvage persists) - skyfall-walk PASS - digest unchanged"
+    },
+    {
+      "n": 14,
+      "date": "2026-07-13",
+      "focus": "M7-R part 1: Skyfall real hull thickness (kill paper-thin double-sided) + 100% exterior collision (dorsal containers)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 300000,
+      "verify": "verify tsc clean - verify-chunks (det 8/8, no-leak, perf ok) - skyfall-walk PASS - 3-round thickness iteration + seed-808; D304 + CLAUDE.md rule 7 generalized"
     }
   ]
 }

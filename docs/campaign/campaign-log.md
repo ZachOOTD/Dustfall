@@ -139,3 +139,12 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Chose the world-deepening queue for after Skyfall: M8 far-field vultures, M9 new POI archetypes, M10 more story vignettes, M11 retire legacy tube-wrecks (ship->socket), M12 new far-field biome.
 - Cleared the M7 feel-review pause (walk-test done). Campaign active; budget capped +4M (ceiling 8.75M); checkpoint none (overnight). New locked_constraint: models-need-thickness.
 - Next: cycle 14 = M7-R Skyfall refinement (start with the hull-thickness rebuild + collision sweep).
+
+## Cycle 14 — M7-R part 1: Skyfall real hull thickness + 100% exterior collision (2026-07-13) — SHIPPED
+- Planned: fix the paper-thin double-sided hull (user's #1 walk-test complaint) + the dorsal-container collision gap.
+- Shipped: HULL_THICK 0.35→0.7 + torn fractureRim() → thick solid torn-steel cross-section at both mouths; _voidMat DoubleSide→FrontSide; +6 dorsal-container colliders + bridge extend (rule-9 sweep); generalized to CLAUDE.md rule 7 (no paper-thin double-sided). Bonus: closed a latent invisible-wall gap. D304.
+- Verify: verify tsc · verify-chunks (det 8/8 both seeds, streaming no-leak, perf untripped) · skyfall-walk PASS.
+- Visual iteration: 3 rounds real-view (procedural-modeler) + seed-808; my own read of int-mouth confirms the thick torn cross-section. Container stand-on + i=5 cantilever flagged for the walk-test.
+- Spend: ~300K (campaign total ~5.05M / 8.75M; cycle 14/50)
+- Commit: see git log
+- Next: cycle 15 = M7-R part 2 (interior floating-model audit + more interior detail; then glass, then captain-log).

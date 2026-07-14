@@ -84,8 +84,20 @@ const _cnTan  = createRustedHullMaterial({ baseColor: 0xa89268, ..._cnWeather })
 const _hazardMat = new THREE.MeshLambertMaterial({ color: 0x8f7220, flatShading: true });
 // Near-black interior baffle — sits recessed inside torn/open mouths so a
 // sightline into the fracture hits DARK structure, not a lit pale inner skin
-// (the S1 first-visit nit). DoubleSide so it reads from any grazing angle.
-const _voidMat = new THREE.MeshLambertMaterial({ color: 0x0a0805, side: THREE.DoubleSide, flatShading: true });
+// (the S1 first-visit nit). M7-R: FrontSide (was DoubleSide) — every _voidMat
+// use is a SOLID box with real depth, so a single-sided solid reads correct
+// from outside AND can never present as a see-through paper card (the standing
+// no-paper-thin rule). Solid dark structure, not a hollow shell.
+const _voidMat = new THREE.MeshLambertMaterial({ color: 0x0a0805, flatShading: true });
+
+// ── HULL WALL THICKNESS (M7-R headline). 0.35 read paper-thin at the ~46m
+//    freighter scale — the fracture/breach cross-section was a knife edge. 0.7
+//    reads as a real heavy-freighter hull plate + frame, and it lands the loft's
+//    inner skin EXACTLY on the interior wall plane (HALF_W - 0.7 = WALL_X = 3.1),
+//    which also closes a latent invisible-wall gap: before, the visible inner
+//    skin sat 0.35m outboard of the side-wall collider face, so the player
+//    stopped short of the wall they could see. Now skin == collider face.
+const HULL_THICK = 0.7;
 
 // ══ INTERIOR DRESSING MATERIALS (S4-S5) — module singletons ═══════════════
 // The wrecked-interior palette, mirroring shipScene's vocabulary (worn painted
@@ -170,7 +182,7 @@ export function placeSkyfallWreck(
     { z: FORE_LEN, halfW: HALF_W * 0.97, halfH: HALF_H * 0.97 },                // fracture face (open)
   ];
   const fore = new THREE.Group();
-  fore.add(makeLoftedHull(foreStations, _hullMat, 0.35));
+  fore.add(makeLoftedHull(foreStations, _hullMat, HULL_THICK));
   // Exposed formers at the fracture mouth (the snap shows structure) + a dark
   // baffle recessed behind it so the torn mouth reads DARK, not a lit pale
   // inner skin (the S1 first-visit nit).
@@ -266,6 +278,10 @@ export function placeSkyfallWreck(
   // corrugation/doors/castings inherit each box's crash jitter, and bake into
   // the merge with it). breached: a couple caved-in for crash language.
   const dorsalBoxes: { box: THREE.Mesh; hazard: boolean; breach: boolean }[] = [];
+  // Collider data captured at build (fore.quat/pos aren't known until the pose
+  // is solved below) — each dorsal container gets a matching rotated cuboid
+  // (M7-R collision gap: the player walked THROUGH the row on top of the hull).
+  const dorsalCols: { localPos: THREE.Vector3; localQuat: THREE.Quaternion }[] = [];
   const cnPalette = [_hullDarkMat, _cnBlue, _cnRust, _cnTan, _cnBlue, _frameMat] as const;
   for (let i = 0; i < 6; i++) {
     const j = rand();                                    // fixed per-container jitter draw
@@ -275,6 +291,7 @@ export function placeSkyfallWreck(
     box.rotation.set((j - 0.5) * 0.10, (j - 0.5) * 0.22, (j - 0.5) * 0.14);
     fore.add(box);
     dorsalBoxes.push({ box, hazard: i === 1 || i === 4, breach: j > 0.72 });
+    dorsalCols.push({ localPos: box.position.clone(), localQuat: new THREE.Quaternion().setFromEuler(box.rotation) });
   }
   // A crane GANTRY rail on posts running the cargo length (a strong freighter
   // silhouette cue; also draws the eye down the LENGTH). Breaks before the
@@ -336,7 +353,7 @@ export function placeSkyfallWreck(
     { z: STERN_LEN, halfW: HALF_W * 0.72, halfH: HALF_H * 0.76, cy: HALF_H * 0.05 },  // transom
   ];
   const stern = new THREE.Group();
-  stern.add(makeLoftedHull(sternStations, _hullMat, 0.35));
+  stern.add(makeLoftedHull(sternStations, _hullMat, HULL_THICK));
   const sternRings = makeFormerRings(HALF_H * 0.86, 2, 0.9);
   sternRings.rotation.y = Math.PI / 2;
   sternRings.position.set(0, 0, 1.2);
@@ -530,8 +547,8 @@ export function placeSkyfallWreck(
   // Bow hull-number plate — a faded ochre plate near the bow with dark digit
   //    blocks (abstract ID; reads as painted hull markings at distance).
   for (const s of [-1, 1] as const) {
-    dBox(fore, _hazardMat, 0.06, 0.9, 2.4, HALF_W * 0.99 * s, 1.0, 4.0);        // number plate
-    for (const dz of [-0.75, -0.05, 0.65] as const) dBox(fore, _hullDarkMat, 0.08, 0.5, 0.28, HALF_W * 0.99 * s + 0.02 * s, 1.0, 4.0 + dz);  // digits
+    dBox(fore, _hazardMat, 0.13, 0.9, 2.4, HALF_W * 0.985 * s, 1.0, 4.0);       // number plate (rule-7 depth, was a 0.06 card)
+    for (const dz of [-0.75, -0.05, 0.65] as const) dBox(fore, _hullDarkMat, 0.13, 0.5, 0.28, HALF_W * 0.985 * s + 0.06 * s, 1.0, 4.0 + dz);  // digits (proud of the plate)
   }
   // Deck tie-down cleats — small bollards along both deck-edge coamings.
   for (const s of [-1, 1] as const) for (let i = 0; i < 6; i++) {
@@ -558,6 +575,43 @@ export function placeSkyfallWreck(
     dBox(stern, _frameMat, 0.10, 0.7, 2.4, -2.6 + f * 1.05, HALF_H * 0.95, STERN_LEN - 0.4);
   }
   dBox(stern, _frameMat, HALF_W * 1.7, 0.16, 2.5, 0, HALF_H * 0.55, STERN_LEN - 0.4);  // fin base manifold
+
+  // ── TORN CUT-PLATE RIM at the fracture mouths (M7-R headline). The 0.7m loft
+  //    inner-skin + rim cap gives real thickness, but the weathered hull paint
+  //    lets the cut edge sink into shadow. A bare-metal (_frameMat) torn rim
+  //    framing each opening makes the wall CROSS-SECTION read unmistakably as
+  //    thick torn STEEL — the plate depth (HULL_THICK) is the box's z-extent, so
+  //    you see the inner+outer skin sandwich edge-on. Crash-jagged (a couple
+  //    bent out). Shared material → folds into the merge; NO collider (the hull
+  //    loft/mouth colliders stand; the mouth stays a clear walk-in entry).
+  //    faceSign: +1 = open face points +Z (fore fracture at z=FORE_LEN);
+  //              -1 = open face points -Z (stern fracture at z=0).
+  const fractureRim = (parent: THREE.Object3D, faceZ: number, faceSign: 1 | -1, hw: number, hh: number): void => {
+    const zc = faceZ - faceSign * HULL_THICK * 0.5;         // rim centred on the cut plane
+    const T = HULL_THICK * 1.04;                            // plate depth (slightly proud so it reads)
+    const crownY = hh * 0.95;
+    // Top crown — 3 slightly-jagged plate segments across the deck opening,
+    // hugging the cut plane (small bend so they read as an attached torn rim,
+    // not detached flaps).
+    for (let i = 0; i < 3; i++) {
+      const bend = (i - 1) * 0.06;
+      dBox(parent, _frameMat, hw * 0.46, 0.40, T,
+        (i - 1) * hw * 0.42, crownY + (i % 2 ? 0.05 : -0.03), zc + (i % 2 ? 0.05 : -0.03) * faceSign,
+        bend, 0, bend * 0.5);
+    }
+    // Upper-shoulder plates (both top chines) + upper vertical-side plates.
+    // Pulled in slightly (×0.94) so they visually meet the hull skin.
+    for (const s of [-1, 1] as const) {
+      dBox(parent, _frameMat, 0.46, 0.5, T, s * hw * 0.76, hh * 0.80, zc, 0, 0, s * 0.28);   // top chine
+      dBox(parent, _frameMat, 0.42, 0.95, T, s * hw * 0.94, hh * 0.40, zc, 0, 0, s * 0.08);  // upper side
+    }
+    // Lower-side stub plates (the cut continues down the flanks a little).
+    for (const s of [-1, 1] as const) {
+      dBox(parent, _frameMat, 0.40, 0.7, T, s * hw * 0.94, -hh * 0.20, zc);
+    }
+  };
+  fractureRim(fore, FORE_LEN, 1, HALF_W * 0.97, HALF_H * 0.97);
+  fractureRim(stern, 0, -1, HALF_W * 0.96, HALF_H * 0.96);
 
   // ══ S4-S5 — INTERIOR HERO DETAIL + LIGHTING ═══════════════════════════════
   // The enterable interior taken from S2 greybox to intro-ship density in the
@@ -887,15 +941,31 @@ export function placeSkyfallWreck(
     ceilY: CEIL_Y - DECK_Y,   // clearance above deck (ray-up assert)
     wallX: WALL_X,            // inner wall face distance (ray-side assert)
   };
-  // Bridge castle stands proud of the hull box — its own collider.
+  // Bridge castle stands proud of the hull box — its own collider. Height
+  // extended (2.0 half, was 1.5) so it also caps the bridgeCap block on top
+  // (HALF_H+3.7) — the whole tower is one solid climbable mass (rule 9 sweep).
   const bridgeCol = makeStaticBox(
     world,
-    { x: HALF_W * 0.45, y: 1.5, z: 1.8 },
-    fore.position.clone().add(new THREE.Vector3(BR_X, HALF_H + 1.5, 7.0).applyQuaternion(foreQuat)),
+    { x: HALF_W * 0.45, y: 2.0, z: 1.9 },
+    fore.position.clone().add(new THREE.Vector3(BR_X, HALF_H + 2.0, 6.9).applyQuaternion(foreQuat)),
     foreQuat,
   );
   {
     const b = bridgeCol.parent();
+    if (b) bodies.push(b);
+  }
+  // ── DORSAL CARGO CONTAINERS — a matching rotated cuboid per box (M7-R: the
+  //    row on top of the hull had NO collision — the player walked through it).
+  //    Each collider composes the fore crash pose with the box's own crash
+  //    jitter (foreQuat * boxQuat) so it aligns to the visibly-posed container.
+  for (const dc of dorsalCols) {
+    const c = makeStaticBox(
+      world,
+      { x: CN_W / 2, y: CN_H / 2, z: CN_L / 2 },
+      fore.position.clone().add(dc.localPos.clone().applyQuaternion(foreQuat)),
+      foreQuat.clone().multiply(dc.localQuat),
+    );
+    const b = c.parent();
     if (b) bodies.push(b);
   }
   const sternQuat = new THREE.Quaternion().setFromEuler(stern.rotation);

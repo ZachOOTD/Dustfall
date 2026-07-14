@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 14 — 2026-07-13 — M7-R part 1: Skyfall REAL HULL THICKNESS + 100% exterior collision ✓ all gates
+
+`verified` — verify tsc clean, verify-chunks (determinism 8/8 both seeds, streaming no-leak, perf untripped), skyfall-walk PASS; 3-round real-view thickness iteration + seed-808 check. First fix of the M7-R walk-test batch.
+
+- **Real hull thickness (the headline fix)** — the paper-thin double-sided read is gone: `HULL_THICK` 0.35→0.7 + a torn cut-plate `fractureRim()` so both fracture mouths read as a thick, solid, torn-steel cross-section (inner+outer skin + rim). `_voidMat` DoubleSide→FrontSide. Bonus: the thicker inner skin now meets the wall collider (closed a latent invisible-wall gap). Zero extra verts.
+- **Generalized to a standing rule** (CLAUDE.md rule 7): models get real thickness, no paper-thin zero-thickness double-sided shells; verify from grazing/fracture angles.
+- **100% exterior collision (rule 9)** — 6 NEW dorsal-cargo-container colliders (the confirmed walk-through gap) + bridge collider extended; full exterior sweep. All new bodies tear down cleanly (streaming gate green). D304.
+- Interior untouched (walk gate green). Remaining M7-R (queued, not punted): floating-model audit, more interior detail, broken cockpit glass, captain’s-log story. Flagged for the walk-test: can you stand on the containers; the i=5 container cantilevers past the mouth.
+
 ## Campaign "Sharpen & Deepen" cycle 13 — 2026-07-13 — M7 Skyfall S6: interior loot + crash-log journal — **the M7 LADDER IS COMPLETE** ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) + smokes green; a numeric probe confirms loot registration + clean journal teardown (6→7→6) + salvage persistence (stripped `sky/0` stays stripped across unload→revisit); skyfall-walk PASS (loot off the walk lane); determinism digest unchanged (65f211f8).
