@@ -3,6 +3,13 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 21 — 2026-07-13 — M9 archetype 3/3: `transit_car` — **M9 COMPLETE** ✓ all gates
+
+`verified` — verify tsc clean, verify:placement (0 fails, 5 seeds), verify:colliders (transit_car covered, 0 fails), verify-chunks (det stable, no leak, perf ok); 4-round real-view iteration.
+
+- **NEW POI archetype `transit_car`** — a half-buried derailed rail car / coupled 2-segment train: boxy car bodies on BOGIE trucks (paired flanged wheels, 8/car), knuckle couplers + end sills, a passenger window strip + a sliding cargo door (salvage face), roof ribs/vents + running board, ladder + grab rails; the rear car jackknifed + sunk. Clear RAIL tells, distinct from cargo_crawler (tracked). Solid box-body colliders (crawler precedent); `warm` bucket, `sandMound:false` (steering), real thickness (rule 7). Fully wired + added to the hardcoded collider-audit list.
+- **🏁 M9 COMPLETE** — 3 new far-field POI archetypes across cycles 19-21: `refinery_stack` (industrial cracking-tower ruin), `hab_dome` (collapsed habitat domes), `transit_car` (derailed rail car). The infinite world has three new destination types. Next: M10 story vignettes.
+
 ## Campaign "Sharpen & Deepen" cycle 20 — 2026-07-13 — M9 archetype 2/3: `hab_dome` (new far-field POI) ✓ all gates
 
 `verified` — verify tsc clean, verify:colliders (65 audits, 0 fails), verify:placement (0 fails, 5 seeds), verify-chunks (det stable, streaming no leak 336→336, perf ok); 3-round real-view iteration.

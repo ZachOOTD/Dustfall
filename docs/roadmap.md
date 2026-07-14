@@ -143,7 +143,9 @@ and promotes the second.
 >   over a chunk point — the FSM's self-contained circling state sidesteps the D294 perch-coupling);
 >   `roamVultures` roll + `spawnCirclingVultureAt`/`removeVultureFromWorld`; no body leak, 6 wheeling
 >   in the far field, transient. The infinite world has aerial life.
-> - **M9 — New POI archetypes** (2-3 new far-field destination types; M6-style gate-verified).
+> - **✅ M9 — New POI archetypes COMPLETE** (cycles 19-21): `refinery_stack` (cracking-tower ruin),
+>   `hab_dome` (collapsed habitat domes), `transit_car` (derailed rail car) — 3 new streamed far-field
+>   destinations, each gate-verified (placement/colliders/chunks), real thickness, no sand mounds.
 > - **M10 — More story vignettes** (wordless environmental-storytelling tableaus).
 > - **M11 — Retire legacy tube-wrecks** (ship→socket migration, D227/D249 — no wreck reads as a tube).
 > - **M12 — New far-field biome** (ground/palette/scatter/hazards; descriptor-pure + teardown-safe).

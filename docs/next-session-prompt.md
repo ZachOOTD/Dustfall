@@ -1,33 +1,34 @@
-# Next cycle (21) — M9 archetype 3/3: `transit_car` (half-buried rail car) — LAST M9
+# Next cycle (22) — M10: more story vignettes (wordless environmental storytelling)
 
-**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (20 cycles, ~6.35M/8.75M
-spent; ~2.4M left of the +4M cap). Checkpoint none. **M7-R + M8 done; M9 = 2/3** (refinery_stack, hab_dome).
-Queue: **M9 (1 more) → M10 → M11 → M12.**
+**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (21 cycles, ~6.6M/8.75M
+spent; ~2.15M left of the +4M cap). Checkpoint none. **M7-R + M8 + M9 COMPLETE.** Queue: **M10 → M11 → M12.**
 
-## Cycle 21 = M9 archetype 3/3 — `transit_car` (completes M9)
-A half-buried transit / cargo RAIL car (or a short 2-segment train), tilted on a buried bogie/truck.
-A boxy passenger/freight car — distinct from `cargo_crawler` (a tracked hauler): this reads as RAIL
-(a car body on a bogie/rail truck, coupler ends, window strip / cargo-door side). ≥1 salvage panel on
-the car side. Spec + integration pattern: `docs/feature-poi-archetypes-m9.md`.
+## Cycle 22 = M10 — more story vignettes
+Expand the wordless "what happened here" TABLEAUS scattered in the world — environmental storytelling,
+NO text (the GDD's "the world tells you what happened by what's left"; fits the Skyfall captain's-log
+spirit). Study `src/world/wordlessScenes.ts` (`buildWordlessTableau` / the existing scene compositions)
++ how the chunk manager streams them (the `scene` descriptor roll, `CHUNK_SCENE_CHANCE`; a scene is a
+small deterministic staged clearing). The existing set is sparse + one vignette was removed (the
+two-skeletons-by-a-fire — user); ADD 2-4 NEW distinct tableaus that read a short story from arranged
+props (all existing/simple props; melancholy Long-Dark/Dune tone, NO bodies — the GDD rule; the crew
+is GONE, implied). 
 
-Follow the refinery_stack/hab_dome wiring pattern EXACTLY (freshest templates in `poiComponents.ts` +
-`poiArchetypes.ts`): a `transitCar` `BuiltComponent` (one `seedOf` draw + phash) → `assembleTransitCar`
-+ `ARCHETYPES.transit_car` + `ARCH_WEIGHTS`. Params: `bucket:'warm'`, `sandMound:false` (steering),
-a modest `list` (a tilted car), `seatSink` to bed the bogie, `panelMin/Max:1`. Box-collider precedent
-in `crawlerBody` (a boxy car body is a solid box collider, unlike the dome's hollow shell). Real
-thickness (rule 7). Favor `salt`/`dune` (old rail lines across the flats), a touch on the others.
-**IMPORTANT:** the collider-audit archetype list in `scripts/rig-shot.mjs` is HARDCODED (separate from
-the ARCHETYPES registry) — you MUST add `'transit_car'` to it or `verify:colliders` won't audit it.
+**`/feature-slice` it** if the scene system needs new prop-authoring; otherwise it's a contained
+content cycle (new tableau compositions in wordlessScenes.ts + wire into the scene roll). Candidate
+vignettes (invent better if you can): a stalled campsite with a cold fire + a dropped canteen + tracks
+leading away; a broken-down speeder/cart half-stripped for parts; a cairn / grave-marker rock stack
+with a helmet on top; a scatter of cargo where someone sorted + abandoned it; a lone chair facing the
+horizon. Each: deterministic (D290), streamed-teardown-safe (D292/rule 9), real thickness (rule 7),
+no sand mounds (steering).
 
-Gate: verify:all (placement 5-seed + colliders 0 fails) + verify-chunks (det stable, no leak) + the
-`procgen-wreck` rig visual (distinct rail-car silhouette). GPU probes ~26s.
+Gate: verify:all + verify-chunks (det stable per seed, no leak) + the chunk-vista/scene rig visual
+(the tableau reads its story). GPU probes ~26s.
 
-**When transit_car ships, M9 is COMPLETE** (3 archetypes) → next cycle picks up M10.
-
-## The rest of the queue
-M10 more story vignettes → M11 retire legacy tube-wrecks (ship→socket, D227/D249) → M12 new far-field biome.
-(~2.4M left → M9 finishes + M10 gets a real start; run stops cleanly at the 8.75M cap. M11/M12 likely
-carry to a future session — that's fine, priority order.)
+## The rest of the queue (likely a future session — budget)
+M11 retire legacy tube-wrecks (ship->socket, D227/D249) → M12 new far-field biome.
+(~2.15M left → M10 fits; M11/M12 probably carry to a future /campaign-cycle run past the 8.75M cap.
+When the cap hits, the campaign stops cleanly at `budget`; resume via /campaign-start --resume with a
+raised ceiling.)
 
 ## Standing constraints (steering.md)
 - **models-need-thickness** (rule 7) · **100% collision** (rule 9, swept) · determinism (D290) +

@@ -1543,4 +1543,241 @@ export function habDome(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }
 
+// ════════════════════════════════════════════════════════════════════
+// TRANSIT CAR (M9 archetype 3, campaign Sharpen&Deepen) — a half-buried transit / cargo
+// RAIL car, tilted + settled on a buried BOGIE (rail truck with paired flanged wheels),
+// coupled to a shorter jackknifed second car (a derailed 2-segment train sinking into the
+// sand). The one RAIL/TRANSIT silhouette the POI set lacked — distinct from cargo_crawler
+// (a TRACKED hauler): rail tells are the bogie + paired FLANGED wheels, a knuckle COUPLER at
+// each end, a passenger WINDOW STRIP + a big sliding CARGO DOOR (the salvage face), roof RIBS
+// + vents, and an end LADDER + grab rails. warm bucket (weathered painted rail steel).
+//
+// THICKNESS (rule 7): each car body is a solid thick box; doors/windows/ribs/vents get real
+// depth (≥12cm). COLLISION (rule 9): each car BODY is one solid box collider (a rail car is a
+// mass you walk around/on — the crawler box precedent, NOT a hollow shell) + each bogie is a
+// box collider spanning its wheels; wheels/couplers/ladders/ribs/doors are decoration (surface
+// detail flush on / under the collided masses). Determinism: phash only (one seedOf upstream).
+// ════════════════════════════════════════════════════════════════════
+export function transitCar(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const colliders: ColliderSpec[] = [];
+  const dec = (m: THREE.Mesh) => { m.userData.isWreckDecoration = true; return m; };
+
+  // Push a box collider expressed in a car-subgroup frame (local pos, then the subgroup's
+  // yaw+offset) into the component-root frame — so a jackknifed car's collider stays matched.
+  const pushBox = (half: { x: number; y: number; z: number }, lp: THREE.Vector3, sgPos: THREE.Vector3, sgQuat: THREE.Quaternion) => {
+    const p = lp.clone().applyQuaternion(sgQuat).add(sgPos);
+    colliders.push({ kind: 'box', half, pos: { x: p.x, y: p.y, z: p.z }, quat: { x: sgQuat.x, y: sgQuat.y, z: sgQuat.z, w: sgQuat.w } });
+  };
+
+  // ── Build one rail car into a subgroup (local X = long axis; wheels rest at y=0) ──
+  // Returns the local X of the two end faces so the caller can hang couplers / mate a 2nd car.
+  const buildCar = (
+    sgPos: THREE.Vector3, sgQuat: THREE.Quaternion,
+    o: { len: number; w: number; h: number; sk: number; door: boolean; nBogie: number },
+  ) => {
+    const sg = new THREE.Group();
+    sg.position.copy(sgPos); sg.quaternion.copy(sgQuat); g.add(sg);
+    const { len, w, h, sk } = o;
+    const add = (m: THREE.Mesh) => { sg.add(m); return m; };
+
+    const wheelR = 0.5;
+    const axleY = wheelR;                     // wheel centre (bottom of wheel at y=0)
+    const floorY = 1.5;                       // underside of the car body — RAISED so the truck+wheels show in a clear bogie gap
+    const underH = 0.3;                       // underframe sill beam depth
+    const roofY = floorY + h;
+
+    // ── car BODY (solid, structural — the one big box collider covers body + underframe) ──
+    const body = add(new THREE.Mesh(new THREE.BoxGeometry(len, h, w), _hullMat));
+    body.position.set(0, floorY + h / 2, 0);
+    const colCtrY = ((floorY - underH) + roofY) / 2;
+    pushBox({ x: len / 2, y: (roofY - (floorY - underH)) / 2, z: w / 2 }, new THREE.Vector3(0, colCtrY, 0), sgPos, sgQuat);
+
+    // underframe sill beam (decoration — covered by the body collider's downward extent)
+    const sill = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.98, underH, w * 0.74), _hullDarkMat)));
+    sill.position.set(0, floorY - underH / 2, 0);
+    for (const sz of [-1, 1]) {   // solebar side beams (the classic rail underframe channel)
+      const sole = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.98, underH * 0.7, 0.14), _rustMat)));
+      sole.position.set(0, floorY - underH * 0.45, sz * w * 0.42);
+    }
+
+    // ── BOGIES (rail trucks) — the money rail tell: paired FLANGED wheels on a side-framed truck ─
+    const bogieLen = 1.9;
+    const bogieXs: number[] = [];
+    for (let b = 0; b < o.nBogie; b++) {
+      const bx = o.nBogie === 1 ? 0 : -len * 0.31 + b * (len * 0.62);
+      bogieXs.push(bx);
+      // bogie box collider spanning the wheelbase + track height (wheels/frames sit inside it)
+      pushBox({ x: bogieLen / 2 + 0.2, y: axleY + 0.08, z: w / 2 - 0.06 },
+        new THREE.Vector3(bx, axleY + 0.08, 0), sgPos, sgQuat);
+      // truck side FRAMES (the visible cast-steel bogie side, just inside the body flank) + a
+      // transom + a bolster across — a chunky truck sitting in the exposed bogie gap.
+      for (const sz of [-1, 1]) {
+        const frame = add(dec(new THREE.Mesh(new THREE.BoxGeometry(bogieLen, 0.44, 0.2), _hullDarkMat)));
+        frame.position.set(bx, axleY + 0.14, sz * (w / 2 - 0.14));
+      }
+      const bolster = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, w * 0.78), _hullDarkMat)));
+      bolster.position.set(bx, axleY + 0.34, 0);
+      const centre = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.34, floorY - axleY - 0.2, 0.34), _rustMat)));
+      centre.position.set(bx, (axleY + 0.5 + floorY) / 2, 0);   // king-pin post up to the sill
+      // 2 axles × 2 flanged wheels (pushed OUTBOARD to sit just inside the body flank → visible)
+      for (const ax of [bx - bogieLen * 0.3, bx + bogieLen * 0.3]) {
+        const axle = add(dec(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, w * 0.72, 8), _rustMat)));
+        axle.rotation.x = Math.PI / 2; axle.position.set(ax, axleY, 0);
+        for (const sz of [-1, 1]) {
+          const zc = sz * (w / 2 - 0.11);
+          // a SOLID rust disc (catches the low sun) with a slim dark flange rib at the inner edge
+          // + a dark hub cap — reads as a clean rail wheel, not concentric rings.
+          const wheel = add(dec(new THREE.Mesh(new THREE.CylinderGeometry(wheelR, wheelR, 0.18, 22), _rustMat)));
+          wheel.rotation.x = Math.PI / 2; wheel.position.set(ax, axleY, zc);
+          const flange = add(dec(new THREE.Mesh(new THREE.CylinderGeometry(wheelR + 0.06, wheelR + 0.06, 0.06, 22), _hullDarkMat)));
+          flange.rotation.x = Math.PI / 2; flange.position.set(ax, axleY, zc - sz * 0.09);   // flange on the INNER (rail-guiding) face
+          const hub = add(dec(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.24, 10), _hullDarkMat)));
+          hub.rotation.x = Math.PI / 2; hub.position.set(ax, axleY, zc + sz * 0.06);
+        }
+      }
+    }
+
+    // ── end sills + knuckle COUPLERS + a buffer plate at each end (rail tell) ──
+    for (const sx of [-1, 1]) {
+      const ex = sx * len / 2;
+      const endSill = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.52, w * 0.92), _hullDarkMat)));
+      endSill.position.set(ex + sx * 0.08, floorY - 0.06, 0);
+      const shank = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.24, 0.24), _rustMat)));
+      shank.position.set(ex + sx * 0.45, floorY - 0.12, 0);
+      const knuckle = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.42, 0.34), _hullDarkMat)));
+      knuckle.position.set(ex + sx * 0.82, floorY - 0.12, 0);
+      // end diaphragm / door recess (transit gangway read)
+      const endDoor = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.14, h * 0.66, w * 0.42), _hullDarkMat)));
+      endDoor.position.set(ex + sx * (w > 0 ? 0.01 : 0.01), floorY + h * 0.42, 0);
+    }
+
+    // ── passenger WINDOW STRIP (upper band, both long sides) — recessed dark glazing + mullions ─
+    for (const sz of [-1, 1]) {
+      const bandZ = sz * (w / 2 + 0.02);
+      const winY = floorY + h * 0.64;
+      const winH = h * 0.26;
+      const band = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.72, winH, 0.13), _hullDarkMat)));
+      band.position.set(0, winY, bandZ);
+      // sill + header rails framing the strip (real depth)
+      for (const dy of [-winH / 2 - 0.05, winH / 2 + 0.05]) {
+        const rail = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.74, 0.1, 0.16), _hullMat)));
+        rail.position.set(0, winY + dy, bandZ);
+      }
+      // window mullions (pillars between panes)
+      const nWin = 7;
+      for (let i = 0; i <= nWin; i++) {
+        const mx = -len * 0.36 + (i / nWin) * len * 0.72;
+        const mull = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.12, winH + 0.02, 0.16), _hullMat)));
+        mull.position.set(mx, winY, bandZ);
+      }
+    }
+
+    // ── lower-body corrugation ribs (freight-car flank) + vertical plate seams (both sides) ──
+    for (const sz of [-1, 1]) {
+      const flankZ = sz * (w / 2 + 0.015);
+      const nRib = 10;
+      for (let i = 0; i < nRib; i++) {
+        const rx = -len * 0.44 + (i / (nRib - 1)) * len * 0.88;
+        const rib = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.1, h * 0.34, 0.12), _rustMat)));
+        rib.position.set(rx, floorY + h * 0.24, flankZ);
+      }
+    }
+
+    // ── sliding CARGO DOOR on +Z (the salvage face) — a recessed track + a thick door leaf ──
+    let doorLocal: THREE.Vector3 | null = null;
+    if (o.door) {
+      const doorW = 2.1, doorH = h * 0.66, doorY = floorY + h * 0.4, doorZ = w / 2 + 0.1;
+      const doorX = len * 0.05;
+      // recessed dark door pocket (the opening) → the sliding leaf reads as a real door, not a decal
+      const pocket = add(dec(new THREE.Mesh(new THREE.BoxGeometry(doorW * 1.5, doorH + 0.24, 0.1), _hullDarkMat)));
+      pocket.position.set(doorX, doorY, w / 2 + 0.005);
+      for (const dy of [doorH / 2 + 0.16, -doorH / 2 - 0.14]) {   // upper + lower slide track (bold)
+        const track = add(dec(new THREE.Mesh(new THREE.BoxGeometry(doorW * 1.55, 0.16, 0.2), _hullMat)));
+        track.position.set(doorX, doorY + dy, w / 2 + 0.06);
+      }
+      const leaf = add(dec(new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, 0.2), _rustMat)));
+      leaf.position.set(doorX, doorY, doorZ);
+      // door stiffeners (vertical Z-bars) + a bold latch bar + a grab handle
+      for (const hx of [-doorW * 0.32, -doorW * 0.05, doorW * 0.22]) {
+        const stiff = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.12, doorH * 0.92, 0.12), _hullDarkMat)));
+        stiff.position.set(doorX + hx, doorY, doorZ + 0.07);
+      }
+      const latch = add(dec(new THREE.Mesh(new THREE.BoxGeometry(doorW * 0.9, 0.14, 0.14), _hullDarkMat)));
+      latch.position.set(doorX, doorY - doorH * 0.12, doorZ + 0.08);
+      const handle = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, 0.12), _hullDarkMat)));
+      handle.position.set(doorX + doorW * 0.44, doorY, doorZ + 0.1);
+      doorLocal = new THREE.Vector3(doorX, doorY, doorZ + 0.1);
+    }
+
+    // ── ROOF — a shallow cap + transverse ribs + 2 ventilators + a running board ──
+    const cap = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.99, 0.18, w * 0.96), _hullMat)));
+    cap.position.set(0, roofY + 0.07, 0);
+    const nRoofRib = 7;
+    for (let i = 0; i < nRoofRib; i++) {
+      const rx = -len * 0.43 + (i / (nRoofRib - 1)) * len * 0.86;
+      const rib = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, w * 0.98), _hullDarkMat)));
+      rib.position.set(rx, roofY + 0.16, 0);
+    }
+    for (const vx of [-len * 0.22, len * 0.22]) {   // roof ventilators (torpedo vents)
+      const vent = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.34, 0.7), _rustMat)));
+      vent.position.set(vx, roofY + 0.31, 0);
+      const cowl = add(dec(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.24, 10), _hullDarkMat)));
+      cowl.position.set(vx, roofY + 0.55, 0);
+    }
+    const runBoard = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.9, 0.06, 0.42), _hullDarkMat)));
+    runBoard.position.set(0, roofY + 0.18, 0);
+
+    // ── end LADDER + grab rails (rooftop access — a strong human-scale rail cue) on the +X end ──
+    const ladX = len / 2 + 0.02;
+    for (const sz of [-0.34, 0.34]) {
+      const rail = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.07, h * 0.86, 0.07), _hullDarkMat)));
+      rail.position.set(ladX, floorY + h * 0.42, sz);
+    }
+    for (let y = floorY * 0.4; y < floorY + h * 0.82; y += 0.42) {
+      const rung = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.72), _rustMat)));
+      rung.position.set(ladX, y, 0);
+    }
+    // corner grab handles by the door + the far end
+    for (const [gx, gz] of [[len * 0.06 - 1.2, w / 2 + 0.12], [-len / 2 + 0.3, w / 2 + 0.12]] as const) {
+      const grab = add(dec(new THREE.Mesh(new THREE.BoxGeometry(0.08, h * 0.5, 0.08), _rustMat)));
+      grab.position.set(gx, floorY + h * 0.35, gz);
+    }
+
+    // reporting marks placeholder plate (a dark stencil box, low on the flank) — human read
+    const plate = add(dec(new THREE.Mesh(new THREE.BoxGeometry(len * 0.16, h * 0.14, 0.06), _hullDarkMat)));
+    plate.position.set(-len * 0.28, floorY + h * 0.2, w / 2 + 0.04);
+
+    return { floorY, roofY, doorLocal, sk };
+  };
+
+  // ── MAIN car ──
+  const len = 8.6 + phash(seed, 1) * 3.0;      // 8.6–11.6m
+  const w = 2.5 + phash(seed, 2) * 0.28;
+  const h = 2.4 + phash(seed, 3) * 0.4;
+  const main = buildCar(new THREE.Vector3(0, 0, 0), new THREE.Quaternion(), { len, w, h, sk: seed, door: true, nBogie: 2 });
+
+  // ── coupled SECOND car — shorter, jackknifed off the −X coupler + sunk deeper (derailed) ──
+  const len2 = 4.6 + phash(seed, 10) * 1.6;
+  const w2 = w * 0.96, h2 = h * 0.9;
+  const yawSign = phash(seed, 11) < 0.5 ? 1 : -1;
+  const yaw = yawSign * (0.1 + phash(seed, 12) * 0.1);    // gentle jackknife (a trailing car, not overlapping)
+  const q2 = qY(yaw);
+  const sink2 = 0.55 + phash(seed, 13) * 0.25;           // sinks deeper into the sand (derailed/half-buried)
+  // couple the 2nd car's +X end a clear gap behind the main −X coupler point, then swing about it
+  const pivot = new THREE.Vector3(-len / 2 - 1.1, -sink2, 0);
+  const frontLocal = new THREE.Vector3(len2 / 2, 0, 0).applyQuaternion(q2);
+  const sgPos2 = pivot.clone().sub(frontLocal);
+  buildCar(sgPos2, q2, { len: len2, w: w2, h: h2, sk: seed + 500, door: false, nBogie: 1 });
+
+  const panelMounts: PanelMount[] = main.doorLocal
+    ? [{ pos: main.doorLocal, quat: FACE.posZ(), kind: 'cargo_container' as PanelKind }]
+    : [];
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.posY(), radius: w, tag: 'base' }];
+  g.updateMatrixWorld(true);
+  const bbox = new THREE.Box3().setFromObject(g);
+  bbox.min.y = 0;   // built from the ground plane up → liftToGround stays a no-op
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement

@@ -16,7 +16,7 @@ import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
   noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead, latticeMast,
-  pipeSegment, pipeJunction, crawlerBody, refineryStack, habDome,
+  pipeSegment, pipeJunction, crawlerBody, refineryStack, habDome, transitCar,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -592,6 +592,21 @@ function assembleHabDome(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// TRANSIT CAR (M9 archetype 3, campaign Sharpen&Deepen) — a half-buried transit / cargo RAIL
+// car on a buried BOGIE, coupled to a shorter jackknifed second car (a derailed 2-segment train
+// sinking into the sand). The RAIL/TRANSIT silhouette the POI set lacked — distinct from
+// cargo_crawler (a tracked hauler): bogie + paired FLANGED wheels, knuckle couplers, a window
+// strip + a sliding cargo door (salvage face), roof ribs + an end ladder. ONE seedOf draw; the
+// component phashes the rest.
+// ════════════════════════════════════════════════════════════════════
+function assembleTransitCar(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const car = transitCar(seedOf(rand));
+  a.place(car, liftToGround(car));
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
   refinery_stack: {
@@ -611,6 +626,17 @@ export const ARCHETYPES: Record<string, Archetype> = {
     // mound (user steering). cool bucket → weathered shelter metal; salvage on the airlock module.
     params: { bucket: 'cool', burySink: false, bury: 0, list: 0.06, panelMin: 1, panelMax: 1, sandMound: false, seatSink: 0.15, salvageKind: 'escape_pod' },
     assemble: assembleHabDome,
+  },
+  transit_car: {
+    id: 'transit_car',
+    // M9 archetype 3 — a half-buried RAIL car on a bogie + a jackknifed 2nd car (derailed
+    // train). Stands (burySink false) with a modest bogie bed (seatSink) so the lower wheels/
+    // truck sink into the sand while the body + bogie stay proud (the rail tells must show);
+    // a small crash-list gives the settled/derailed CANT (the 2nd car is baked deeper + yawed).
+    // NO sand mound (user steering). warm bucket → weathered painted rail steel; salvage on the
+    // sliding cargo door.
+    params: { bucket: 'warm', burySink: false, bury: 0, list: 0.09, panelMin: 1, panelMax: 1, sandMound: false, seatSink: 0.16, salvageKind: 'cargo_container' },
+    assemble: assembleTransitCar,
   },
   cargo_crawler: {
     id: 'cargo_crawler',
@@ -729,10 +755,13 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // M9 archetype 2 — hab_dome added ~0.04-0.06 (favor rocky/dune: habitats sited in the highlands;
   // lower on salt + the wreck_yard graveyard); shaved from the legacy `ship` tube where it's healthy
   // and from the overweight `satellite` where `ship` is already thin, so each row still sums ≈1.0.
-  salt:       [['ship', 0.13], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04], ['hab_dome', 0.04]],
-  rocky:      [['ship', 0.07], ['derelict', 0.09], ['satellite', 0.09], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06]],
-  dune:       [['ship', 0.09], ['derelict', 0.09], ['satellite', 0.10], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06]],
-  wreck_yard: [['ship', 0.04], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04]],
+  // M9 archetype 3 — transit_car added ~0.04-0.06 (favor salt/dune: old rail lines across the flats;
+  // a touch on rocky/wreck_yard); shaved from the consistently-overweight `satellite` tube by the
+  // same amount in every row, so each table's sum is unchanged (the tail `ship` fallback stays live).
+  salt:       [['ship', 0.13], ['derelict', 0.10], ['satellite', 0.08], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04], ['hab_dome', 0.04], ['transit_car', 0.06]],
+  rocky:      [['ship', 0.07], ['derelict', 0.09], ['satellite', 0.05], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06], ['transit_car', 0.04]],
+  dune:       [['ship', 0.09], ['derelict', 0.09], ['satellite', 0.04], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06], ['transit_car', 0.06]],
+  wreck_yard: [['ship', 0.04], ['derelict', 0.08], ['satellite', 0.07], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04], ['transit_car', 0.04]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

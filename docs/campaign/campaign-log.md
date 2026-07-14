@@ -201,3 +201,12 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~250K (campaign total ~6.35M / 8.75M; cycle 20/50)
 - Commit: see git log
 - Next: cycle 21 = M9 archetype 3/3 = transit_car (half-buried rail car; warm bucket; box-collider precedent in crawlerBody).
+
+## Cycle 21 — M9 archetype 3/3: transit_car (2026-07-13) — SHIPPED · M9 COMPLETE
+- Planned: new POI archetype #3 (half-buried rail car) — completes M9.
+- Shipped: transit_car — boxy car bodies on bogie trucks (paired flanged wheels, couplers, window strip + cargo door w/ salvage panel, roof vents, ladder), rear car jackknifed + sunk. Solid box colliders; warm bucket, sandMound:false, real thickness. Fully wired + added to the hardcoded collider-audit list.
+- Verify: verify tsc · verify:placement 0 fails (5 seeds) · verify:colliders covered · verify-chunks no body leak · 4-round real-view.
+- 🏁 M9 COMPLETE — 3 new far-field POI archetypes (refinery_stack, hab_dome, transit_car).
+- Spend: ~250K (campaign total ~6.6M / 8.75M; cycle 21/50)
+- Commit: see git log
+- Next: cycle 22 = M10 story vignettes (expand the wordless tableaus).

@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-09",
   "branch": "campaign/2026-07-12-skyfall",
-  "cycles_completed": 20,
-  "current_tier": "M9 new POI archetypes \u2014 2/3 done (refinery_stack, hab_dome); next: transit_car (last M9)",
+  "cycles_completed": 21,
+  "current_tier": "M9 new POI archetypes COMPLETE (refinery_stack, hab_dome, transit_car) \u2014 next: M10 story vignettes",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -28,7 +28,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 6350000
+    "total": 6600000
   },
   "ladder": [
     {
@@ -90,13 +90,13 @@
       "id": "M9",
       "name": "New POI archetypes (2-3 new far-field destination types)",
       "kind": "gate-verified",
-      "status": "IN PROGRESS \u2014 refinery_stack (c19) + hab_dome (c20) SHIPPED; transit_car remains"
+      "status": "COMPLETE (cycles 19-21): refinery_stack + hab_dome + transit_car"
     },
     {
       "id": "M10",
       "name": "More story vignettes (wordless environmental storytelling tableaus)",
       "kind": "gate-verified",
-      "status": "queued"
+      "status": "queued (NEXT)"
     },
     {
       "id": "M11",
@@ -282,6 +282,14 @@
       "outcome": "SHIPPED",
       "spend_estimate": 250000,
       "verify": "verify tsc - verify:colliders 0 fails (65 audits) - verify:placement 0 fails (5 seeds) - verify-chunks no leak (336->336) - 3-round"
+    },
+    {
+      "n": 21,
+      "date": "2026-07-13",
+      "focus": "M9 archetype 3/3: transit_car (half-buried rail car) \u2014 M9 COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc - verify:placement 0 fails - verify:colliders covered - verify-chunks no leak - 4-round"
     }
   ]
 }
