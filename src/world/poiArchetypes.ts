@@ -758,10 +758,15 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // M9 archetype 3 — transit_car added ~0.04-0.06 (favor salt/dune: old rail lines across the flats;
   // a touch on rocky/wreck_yard); shaved from the consistently-overweight `satellite` tube by the
   // same amount in every row, so each table's sum is unchanged (the tail `ship` fallback stays live).
-  salt:       [['ship', 0.13], ['derelict', 0.10], ['satellite', 0.08], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04], ['hab_dome', 0.04], ['transit_car', 0.06]],
-  rocky:      [['ship', 0.07], ['derelict', 0.09], ['satellite', 0.05], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06], ['transit_car', 0.04]],
-  dune:       [['ship', 0.09], ['derelict', 0.09], ['satellite', 0.04], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06], ['transit_car', 0.06]],
-  wreck_yard: [['ship', 0.04], ['derelict', 0.08], ['satellite', 0.07], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04], ['transit_car', 0.04]],
+  // M11 (2026-07-13) — the legacy linear `ship` tube RETIRED from the world-gen roulette
+  // (D306): its weight folded into the socket-grammar `derelict` (guaranteed non-linear per
+  // D249), so NO streamed far-field wreck reads as a plain tube. `ship` stays a valid id for
+  // the hand-placed flagship (placeProcgenCompositeForFlagship) only. The pickArchetype
+  // fallback below is retargeted to 'derelict' so a weight-gap can't reintroduce a tube.
+  salt:       [['derelict', 0.23], ['satellite', 0.08], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04], ['hab_dome', 0.04], ['transit_car', 0.06]],
+  rocky:      [['derelict', 0.16], ['satellite', 0.05], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06], ['transit_car', 0.04]],
+  dune:       [['derelict', 0.18], ['satellite', 0.04], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06], ['transit_car', 0.06]],
+  wreck_yard: [['derelict', 0.12], ['satellite', 0.07], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04], ['transit_car', 0.04]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {
@@ -769,5 +774,5 @@ export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {
   const r = rand();
   let acc = 0;
   for (const [id, w] of table) { acc += w; if (r < acc) return id; }
-  return 'ship';
+  return 'derelict';   // M11/D306 — was 'ship' (legacy tube); retired so a weight-gap can't reintroduce a tube
 }

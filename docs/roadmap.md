@@ -148,7 +148,9 @@ and promotes the second.
 >   destinations, each gate-verified (placement/colliders/chunks), real thickness, no sand mounds.
 > - **✅ M10 — More story vignettes COMPLETE** (cycle 22): 3 new no-body wordless tableaus (cold camp,
 >   stripped vehicle, the abandoned cache) + 4 props — the mid-field storytelling tripled (2→5 scenes).
-> - **M11 — Retire legacy tube-wrecks** (ship→socket migration, D227/D249 — no wreck reads as a tube).
+> - **✅ M11 — Retire legacy tube-wrecks COMPLETE** (cycle 23, D306): `ship` removed from the world-gen
+>   roulette (weight → the socket `derelict`; fallback retargeted) — 0/278 far-field POIs are tubes, by
+>   construction. The low-risk endpoint of the D227/D249 strategy (not the rewrite they rejected).
 > - **M12 — New far-field biome** (ground/palette/scatter/hazards; descriptor-pure + teardown-safe).
 >
 > Standing constraints: **models-need-thickness** (no paper-thin double-sided), **100% collision**

@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 23 — 2026-07-13 — M11: retire the legacy tube-wreck (no far-field wreck is a tube) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) green; a numeric far-field histogram (278 POIs) confirms `ship` = 0 + a varied spread.
+
+- **Legacy tube-wreck RETIRED from the world-gen roulette (D306)** — the D227/D249 strategy's endpoint (they twice rejected the risky ship→socket rewrite; this finishes it the low-risk way). `ship` removed from all `ARCH_WEIGHTS` rows (its weight folded into the socket `derelict`, guaranteed non-linear), and `pickArchetype`'s end-fallback retargeted `ship`→`derelict`. So `pickArchetype` can NEVER return the tube — no streamed far-field wreck reads as a plain tube, by construction. Confirmed numerically: 0/278 far-field POIs are `ship`; derelict (~20%) is the common non-tube wreck, 13 other archetypes fill the variety. `ship` stays valid only for the hand-placed flagship (a curated detailed hero). Config-only, gate-safe. M11 COMPLETE.
+
 ## Campaign "Sharpen & Deepen" cycle 22 — 2026-07-13 — M10: more story vignettes (wordless environmental storytelling) ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) green; 2 of the 3 new vignettes confirmed reading their story in-world (cold-camp, stripped).

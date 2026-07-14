@@ -218,3 +218,11 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~150K (campaign total ~6.75M / 8.75M; cycle 22/50)
 - Commit: see git log
 - Next: cycle 23 = M11 retire legacy tube-wrecks (ship->socket, D227/D249) — a systems refactor; ~2M budget left (may hit the cap mid-M11 → stops cleanly at 'budget').
+
+## Cycle 23 — M11 retire legacy tube-wrecks (2026-07-13) — SHIPPED
+- Planned: retire the legacy linear tube-wreck (D227/D249 owed) — INVESTIGATED first (they twice rejected the risky ship->socket rewrite; the strategy was to shift load to the socket derelict + shave ship).
+- Shipped: finished that strategy the low-risk way — `ship` removed from ARCH_WEIGHTS (weight → derelict), pickArchetype fallback retargeted ship->derelict. pickArchetype can NEVER return the tube now. Config-only. D306.
+- Verify: verify:all PASS · numeric far-field histogram: 0/278 POIs are ship, varied spread (derelict ~20% + 13 others).
+- Spend: ~150K (campaign total ~6.9M / 8.75M; cycle 23/50)
+- Commit: see git log
+- Next: cycle 24 = M12 new far-field biome (~1.85M left — likely hits the 8.75M cap during/after; stops cleanly at 'budget').
