@@ -1350,4 +1350,197 @@ export function refineryStack(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }
 
+// ════════════════════════════════════════════════════════════════════
+// HAB DOME (M9 archetype 2, campaign Sharpen&Deepen) — a COLLAPSED HABITAT-DOME cluster:
+// 1 big + 1 smaller ribbed geodesic-shell DOME, each caved-in with a big torn breach wedge,
+// linked by a low arched CORRIDOR (quonset) walk-through + an external AIRLOCK/utility module
+// carrying the salvage panel. The ONE ROUNDED silhouette the POI set lacked (everything else is
+// hard-industrial: ships/tanks/masts/refinery). A human-habitation ruin — someone lived out here,
+// then it failed — melancholy, no bodies (D252 solitude). cool bucket (weathered shelter metal).
+//
+// THICKNESS: each dome is an outer shell (DoubleSide via the cool bucket → the torn breach reads
+// its INNER surface for free) + a darker inner LINER shell (a real insulated double-wall read at
+// the tear) + thick meridian RIBS straddling the cut edges (the torn frame reads structural, not
+// paper). COLLISION: the domes + corridor are HOLLOW enterable shells — their shell meshes are
+// auditExempt and their walls are a RING of arc-segment box colliders over the STANDING arc only
+// (the breach wedge is a real, walkable gap); the airlock module is a solid collided box. Ribs /
+// hoops / base rings / portholes / collapse plates are decoration. Determinism: phash only.
+export function habDome(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const colliders: ColliderSpec[] = [];
+  const dec = (m: THREE.Mesh) => { m.userData.isWreckDecoration = true; return m; };
+
+  // ── one dome: outer shell + inner liner + ribs + hoops + base ring + portholes + collapse ──
+  // Built into a local subgroup `dg` at (cx,0,cz), Y-rotated by `aim` so the torn wedge faces a
+  // chosen direction, Y-squashed by `sag` (a settled dome sags). The shell uses the sphere
+  // convention P(φ,θ)=(-R·cosφ·sinθ, R·cosθ, R·sinφ·sinθ); the tear is the wedge φ∈[phiLen,2π]
+  // (phiStart=0), so ribs/portholes/wall-colliders live over the SOLID arc φ∈[0,phiLen].
+  const buildDome = (cx: number, cz: number, R: number, aim: number, sag: number, tearArc: number, sk: number, collapsed: boolean) => {
+    const dg = new THREE.Group();
+    const phiLen = Math.PI * 2 - tearArc;
+    const thetaLen = Math.PI * (collapsed ? 0.47 : 0.54);   // just past the equator so it meets the base ring
+    // outer shell (cool-bucket hull → DoubleSide, so the breach shows the interior)
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 24, 15, 0, phiLen, 0, thetaLen), _hullMat);
+    shell.userData.auditExempt = true; dg.add(shell);
+    // inner liner (darker, smaller) → a visible insulated wall thickness through the tear
+    const liner = new THREE.Mesh(new THREE.SphereGeometry(R * 0.9, 20, 13, 0.05, phiLen - 0.1, 0, thetaLen * 0.99), _hullDarkMat);
+    liner.userData.auditExempt = true; liner.userData.isWreckDecoration = true; dg.add(liner);
+    // meridian ribs — a torus arc rotated into the sphere's meridian plane (Rz(π/2) → canonical
+    // −X meridian, then Ry(φ) → azimuth φ). Placed across the solid arc INCLUDING both cut edges
+    // so a thick structural rib frames the torn lip (kills the paper-thin cut).
+    const nRib = 7;
+    for (let i = 0; i <= nRib; i++) {
+      const phi = (i / nRib) * phiLen;
+      const rib = dec(new THREE.Mesh(new THREE.TorusGeometry(R + 0.03, 0.085, 6, 16, thetaLen), _hullDarkMat));
+      rib.quaternion.copy(qY(phi)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2));
+      dg.add(rib);
+    }
+    // latitude hoops (horizontal rings at a few heights) → the geodesic PANEL grid with the ribs
+    for (const tf of [0.32, 0.6, 0.86]) {
+      const th = thetaLen * tf;
+      const ry = R * Math.cos(th), rr = R * Math.sin(th) + 0.02;
+      const hoop = dec(new THREE.Mesh(new THREE.TorusGeometry(rr, 0.06, 6, 22, phiLen), _hullDarkMat));
+      hoop.rotation.x = Math.PI / 2; hoop.rotation.z = 0; hoop.position.y = ry;   // torus in XY→ rotate flat; arc opens at the tear
+      // TorusGeometry arc opens from +X; the shell tear opens at −X (φ≈0). Spin the hoop so its
+      // gap aligns to the tear: rotate about Y so the arc's open wedge sits over φ∈[phiLen,2π].
+      hoop.rotation.y = 0;
+      dg.add(hoop);
+    }
+    // base foundation ring (an anchored habitat footing) — thin tube → audit-exempt trim
+    const baseRing = dec(new THREE.Mesh(new THREE.TorusGeometry(R * Math.sin(thetaLen) + 0.06, 0.16, 8, 26), _hullMat));
+    baseRing.rotation.x = Math.PI / 2; baseRing.position.y = R * Math.cos(thetaLen) + 0.04; dg.add(baseRing);
+    // portholes — round windows (dark void + a rib frame) on the standing panels: a human read
+    for (let i = 0; i < 3; i++) {
+      const phi = 0.2 * phiLen + (i / 3) * phiLen * 0.6;
+      const th = thetaLen * (0.45 + phash(sk, 40 + i) * 0.2);
+      const n = new THREE.Vector3(-Math.cos(phi) * Math.sin(th), Math.cos(th), Math.sin(phi) * Math.sin(th));
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+      const frame = dec(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.07, 6, 14), _rustMat));
+      frame.position.copy(n.clone().multiplyScalar(R + 0.02)); frame.quaternion.copy(q); dg.add(frame);
+      const glass = dec(new THREE.Mesh(new THREE.CircleGeometry(0.27, 14), _shaftVoidMat));
+      glass.position.copy(n.clone().multiplyScalar(R + 0.03)); glass.quaternion.copy(q); dg.add(glass);
+    }
+    // collapse: dark roof panels FALLEN to the interior floor under the breach (settled, not
+    // floating) + a couple hanging off the torn lip — the caved-in read without floaty slabs
+    for (let i = 0; i < (collapsed ? 4 : 2); i++) {
+      const phi = phiLen + (0.2 + i * 0.18) * tearArc;   // along/under the tear edge
+      const hang = i < 2;                                 // first couple cling to the lip; rest on the floor
+      const rad = hang ? R * 0.86 : R * (0.3 + phash(sk, 65 + i) * 0.3);
+      const th = hang ? thetaLen * (0.7 + phash(sk, 60 + i) * 0.25) : thetaLen;   // floor pieces at the base
+      const p = new THREE.Vector3(-Math.cos(phi) * Math.sin(th), hang ? Math.cos(th) : 0, Math.sin(phi) * Math.sin(th)).multiplyScalar(1);
+      p.x *= rad; p.z *= rad; if (hang) p.y *= R; else p.y = 0.09;
+      const plate = dec(new THREE.Mesh(new THREE.BoxGeometry(R * 0.32, 0.13, R * 0.26), _hullDarkMat));
+      plate.position.copy(p);
+      plate.rotation.set(hang ? (phash(sk, 70 + i) - 0.5) * 1.0 : (phash(sk, 70 + i) - 0.5) * 0.3, phi + phash(sk, 82 + i), hang ? (phash(sk, 80 + i) - 0.5) * 1.0 : (phash(sk, 80 + i) - 0.5) * 0.3);
+      dg.add(plate);
+    }
+    if (collapsed) {   // a caved-in crown: a dark dented disc pushed below the apex
+      const crown = dec(new THREE.Mesh(new THREE.SphereGeometry(R * 0.5, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.4), _hullDarkMat));
+      crown.scale.set(1, -0.5, 1); crown.position.y = R * 0.72; dg.add(crown);
+    }
+    dg.rotation.y = aim; dg.scale.y = sag; dg.position.set(cx, 0, cz);
+    g.add(dg);
+
+    // ── wall colliders: arc-segment boxes over the STANDING arc only (breach = real gap) ──
+    const wallH = Math.min(2.1, R * sag * 0.9);
+    const cr = R * 0.95;                                   // slightly inset so the collider hides under the shell
+    const segW = 1.15;                                     // target chord per segment
+    const nSeg = Math.max(4, Math.ceil((phiLen * cr) / segW));
+    const _xA = new THREE.Vector3(1, 0, 0), _tan = new THREE.Vector3();
+    for (let i = 0; i < nSeg; i++) {
+      const phi = ((i + 0.5) / nSeg) * phiLen;
+      // base point + tangent in the dg-local frame, then apply Ry(aim) + translate to root frame
+      let bx = -Math.cos(phi) * cr, bz = Math.sin(phi) * cr;
+      let tx = Math.sin(phi), tz = Math.cos(phi);         // d/dφ of (−cosφ, sinφ)
+      const ca = Math.cos(aim), sa = Math.sin(aim);
+      const rx = bx * ca + bz * sa, rz = -bx * sa + bz * ca;
+      const rtx = tx * ca + tz * sa, rtz = -tx * sa + tz * ca;
+      _tan.set(rtx, 0, rtz).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(_xA, _tan);
+      const chord = 2 * cr * Math.sin((phiLen / nSeg) / 2) * 1.06;
+      colliders.push({ kind: 'box', half: { x: chord / 2, y: wallH / 2, z: 0.22 },
+        pos: { x: cx + rx, y: wallH / 2, z: cz + rz }, quat: { x: q.x, y: q.y, z: q.z, w: q.w } });
+    }
+    return { R, cx, cz, aim, wallH };
+  };
+
+  // ── layout: a big dome (−X) + a smaller, more-collapsed dome (+X), on the Z=0 axis ──
+  const RA = 3.9 + phash(seed, 1) * 0.7;      // 3.9–4.6m
+  const RB = 2.7 + phash(seed, 2) * 0.5;      // 2.7–3.2m (the failed annex)
+  const gap = 2.2 + phash(seed, 3) * 1.0;     // corridor run between the dome walls
+  const xA = -(RA + gap * 0.5);
+  const xB = (RB + gap * 0.5);
+  // tears face roughly toward each other's OUTER flanks / the camera-side so the breach reads
+  const aimA = Math.PI * (0.5 + phash(seed, 4) * 0.3);   // tear toward +Z-ish
+  const aimB = Math.PI * (1.5 + phash(seed, 5) * 0.3);
+  buildDome(xA, 0, RA, aimA, 0.9 + phash(seed, 6) * 0.05, 1.5 + phash(seed, 7) * 0.5, seed + 11, false);
+  buildDome(xB, 0, RB, aimB, 0.82 + phash(seed, 8) * 0.06, 2.1 + phash(seed, 9) * 0.6, seed + 22, true);
+
+  // ── connecting CORRIDOR (quonset arch) — a low walk-through tube along X linking the domes ──
+  const corrR = 1.25 + phash(seed, 10) * 0.2;
+  const corrX0 = xA + RA * 0.72, corrX1 = xB - RB * 0.72;
+  const corrLen = corrX1 - corrX0, corrCx = (corrX0 + corrX1) / 2;
+  // half-cylinder arch: Cylinder(open, arc=π) built around Y, rolled so the arch stands over the
+  // floor (open bottom + open ends → walk through). Axis laid along X (Rz(−π/2)); the arc's open
+  // side is spun down (Rx) so the semicircle roofs the corridor.
+  // Rz(+π/2) lays the cylinder axis (local Y) along −X (arch runs along X), maps the material
+  // +X half to WORLD +Y (arch roofs up) + the flat opening to −Y (open bottom sits on the floor);
+  // long edges land at ±Z, ends open at ±X → a walk-through tunnel between the domes.
+  const corr = new THREE.Mesh(new THREE.CylinderGeometry(corrR, corrR, corrLen, 16, 1, true, 0, Math.PI), _hullMat);
+  corr.rotation.z = Math.PI / 2; corr.position.set(corrCx, 0, 0);
+  corr.userData.auditExempt = true; g.add(corr);
+  // corridor ribs (arch hoops) + a floor-seam + airlock collars at each dome junction
+  for (let i = 0; i <= 5; i++) {
+    const rx = corrX0 + (i / 5) * corrLen;
+    const arch = dec(new THREE.Mesh(new THREE.TorusGeometry(corrR + 0.02, 0.07, 6, 14, Math.PI), _hullDarkMat));
+    arch.rotation.y = Math.PI / 2; arch.position.set(rx, 0, 0); g.add(arch);
+  }
+  for (const jx of [corrX0, corrX1]) {
+    const collar = dec(new THREE.Mesh(new THREE.TorusGeometry(corrR + 0.04, 0.12, 8, 16, Math.PI), _rustMat));
+    collar.rotation.y = Math.PI / 2; collar.position.set(jx, 0, 0); g.add(collar);
+  }
+  // corridor side-wall colliders (hollow walk-through, like the husk)
+  for (const sz of [-1, 1]) {
+    colliders.push({ kind: 'box', half: { x: corrLen / 2, y: corrR * 0.85, z: 0.2 },
+      pos: { x: corrCx, y: corrR * 0.7, z: sz * corrR * 0.82 } });
+  }
+
+  // ── external AIRLOCK / utility module (solid, collided) on the +Z flank — carries the panel ──
+  const alW = 1.5, alH = 1.7, alD = 1.1;
+  const alX = corrCx + (phash(seed, 12) - 0.5) * corrLen * 0.4;
+  const alZ = corrR + alD / 2 + 0.35;
+  const al = new THREE.Mesh(new THREE.BoxGeometry(alW, alH, alD), _hullMat);
+  al.position.set(alX, alH / 2, alZ); g.add(al);
+  colliders.push({ kind: 'box', half: { x: alW / 2, y: alH / 2, z: alD / 2 }, pos: { x: alX, y: alH / 2, z: alZ } });
+  // a round pressure-hatch on the airlock face + a bolt ring (the human airlock read)
+  const hatch = dec(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.14, 16), _hullDarkMat));
+  hatch.rotation.x = Math.PI / 2; hatch.position.set(alX, alH * 0.5, alZ + alD / 2 + 0.02); g.add(hatch);
+  const hatchRing = dec(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 6, 18), _rustMat));
+  hatchRing.position.set(alX, alH * 0.5, alZ + alD / 2 + 0.06); g.add(hatchRing);
+  const alRoof = dec(new THREE.Mesh(new THREE.BoxGeometry(alW + 0.1, 0.14, alD + 0.1), _hullDarkMat));
+  alRoof.position.set(alX, alH + 0.06, alZ); g.add(alRoof);
+  // a short connector duct from the airlock back to the corridor wall
+  const duct = dec(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, alZ - corrR * 0.8, 10, 1, true), _rustMat));
+  duct.rotation.x = Math.PI / 2; duct.position.set(alX, alH * 0.5, (corrR * 0.8 + alZ) / 2); g.add(duct);
+
+  // a bent dead comms antenna on the big dome's crown (a silent-outpost read; thin → trim-exempt):
+  // a short leaning mast + a small cross-yagi + a tip nub, so it reads as an antenna not a flagpole
+  const antBase = new THREE.Vector3(xA + 0.2, RA * 0.9 * (0.9 + phash(seed, 13) * 0.1), 0.15);
+  const ant = dec(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.7, 6), _hullDarkMat));
+  ant.position.copy(antBase).add(new THREE.Vector3(0.1, 0.85, 0)); ant.rotation.z = 0.22; g.add(ant);
+  const antTip = new THREE.Vector3(antBase.x + 0.1 + Math.sin(0.22) * 0.85, antBase.y + 0.85 + Math.cos(0.22) * 0.85, antBase.z);
+  const yagi = dec(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 5), _rustMat));
+  yagi.rotation.x = Math.PI / 2; yagi.position.copy(antTip).add(new THREE.Vector3(0, -0.2, 0)); g.add(yagi);
+  const nub = dec(new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), _rustMat)); nub.position.copy(antTip); g.add(nub);
+
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(alX, alH * 0.5, alZ + alD / 2), quat: FACE.posZ(), kind: 'escape_pod' as PanelKind },
+  ];
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.posY(), radius: RA, tag: 'base' }];
+  g.updateMatrixWorld(true);
+  const bbox = new THREE.Box3().setFromObject(g);
+  bbox.min.y = 0;   // built from the ground plane up → liftToGround stays a no-op
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement

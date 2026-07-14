@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 20 — 2026-07-13 — M9 archetype 2/3: `hab_dome` (new far-field POI) ✓ all gates
+
+`verified` — verify tsc clean, verify:colliders (65 audits, 0 fails), verify:placement (0 fails, 5 seeds), verify-chunks (det stable, streaming no leak 336→336, perf ok); 3-round real-view iteration.
+
+- **NEW POI archetype `hab_dome`** — a collapsed habitat-dome cluster: two ribbed geodesic dome shells (torn breach showing the interior, meridian ribs + latitude hoops + a darker inner liner for wall thickness), a connecting corridor tube + an external airlock module (salvage panel), portholes, a leaning dead-comms mast. A distinct ROUNDED silhouette (the only domed one) + a melancholy human-habitation read. Hollow shells `auditExempt` with real arc-segment wall colliders (breach = a real gap); `bucket:cool`, `sandMound:false` (steering), real thickness (rule 7). Fully wired (poiComponents/poiArchetypes/ARCH_WEIGHTS); streams via the POI roll. M9 is 2/3.
+
 ## Campaign "Sharpen & Deepen" cycle 19 — 2026-07-13 — M9 archetype 1/3: `refinery_stack` (new far-field POI) ✓ all gates
 
 `verified` — verify tsc clean, verify:colliders (60 audits, 0 fails; refinery_stack 7/7 covered/seed), verify:placement (0 bury fails, 5 seeds), verify-chunks (det stable, streaming no leak 335→335, perf ok); 3-round real-view iteration across seeds 1/42/1337/7.

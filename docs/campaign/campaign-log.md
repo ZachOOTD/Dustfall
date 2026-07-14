@@ -192,3 +192,12 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~250K (campaign total ~6.1M / 8.75M; cycle 19/50)
 - Commit: see git log
 - Next: cycle 20 = M9 archetype 2/3 = hab_dome (collapsed habitat-dome cluster; note the modeler's tip — getBucketMats forces DoubleSide so a torn dome shows interior; collision = side-wall boxes + auditExempt like huskShell).
+
+## Cycle 20 — M9 archetype 2/3: hab_dome (2026-07-13) — SHIPPED
+- Planned: new POI archetype #2 (collapsed habitat-dome cluster — the rounded silhouette).
+- Shipped: hab_dome — 2 ribbed geodesic dome shells (torn breach, inner liner for thickness), connecting corridor + airlock (salvage panel), portholes, dead-comms mast. Hollow shells auditExempt + arc-segment wall colliders; cool bucket, sandMound:false. Fully wired, streams via the POI roll.
+- Verify: verify tsc · verify:colliders 0 fails (65 audits) · verify:placement 0 fails (5 seeds) · verify-chunks no body leak (336→336) · 3-round real-view.
+- Note: the collider-audit archetype list in scripts/rig-shot.mjs is HARDCODED (separate from ARCHETYPES) — extend it for transit_car.
+- Spend: ~250K (campaign total ~6.35M / 8.75M; cycle 20/50)
+- Commit: see git log
+- Next: cycle 21 = M9 archetype 3/3 = transit_car (half-buried rail car; warm bucket; box-collider precedent in crawlerBody).

@@ -1,32 +1,33 @@
-# Next cycle (20) — M9 archetype 2/3: `hab_dome` (collapsed habitat-dome cluster)
+# Next cycle (21) — M9 archetype 3/3: `transit_car` (half-buried rail car) — LAST M9
 
-**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (19 cycles, ~6.1M/8.75M
-spent; ~2.65M left of the +4M cap). Checkpoint none. **M7-R + M8 done; M9 = 1/3** (refinery_stack shipped).
-Queue: **M9 (2 more archetypes) → M10 → M11 → M12.**
+**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (20 cycles, ~6.35M/8.75M
+spent; ~2.4M left of the +4M cap). Checkpoint none. **M7-R + M8 done; M9 = 2/3** (refinery_stack, hab_dome).
+Queue: **M9 (1 more) → M10 → M11 → M12.**
 
-## Cycle 20 = M9 archetype 2/3 — `hab_dome`
-A collapsed HABITAT-DOME cluster: 1-2 torn geodesic/ribbed dome shells (partial, caved-in) + a
-connecting corridor module. A ROUNDED silhouette (unique — nothing else in the set is domed) + a
-human-habitation story. ≥1 salvage panel. Spec + integration pattern: `docs/feature-poi-archetypes-m9.md`.
+## Cycle 21 = M9 archetype 3/3 — `transit_car` (completes M9)
+A half-buried transit / cargo RAIL car (or a short 2-segment train), tilted on a buried bogie/truck.
+A boxy passenger/freight car — distinct from `cargo_crawler` (a tracked hauler): this reads as RAIL
+(a car body on a bogie/rail truck, coupler ends, window strip / cargo-door side). ≥1 salvage panel on
+the car side. Spec + integration pattern: `docs/feature-poi-archetypes-m9.md`.
 
-**Modeler tip (from the cycle-19 refinery build):** `getBucketMats` forces `DoubleSide`, so a torn/partial
-dome shell (`cool` bucket) shows its interior correctly WITHOUT extra work — but the collision must be
-side-wall boxes + `auditExempt` on the hollow shell (mirror `huskShell`), NOT a solid volume, or the
-collider audit flags the empty AABB. Follow the `refinery_stack`/`relay_mast` wiring pattern (one `seedOf`
-draw → a `BuiltComponent` builder in poiComponents.ts → `assembleHabDome` + `ARCHETYPES.hab_dome` +
-`ARCH_WEIGHTS`). `sandMound: false` (steering); real thickness (rule 7 — dome ribs/panels get depth);
-descriptor-pure + streamed-teardown-safe. Favor `rocky`/`dune` biomes (habitats in the highlands).
+Follow the refinery_stack/hab_dome wiring pattern EXACTLY (freshest templates in `poiComponents.ts` +
+`poiArchetypes.ts`): a `transitCar` `BuiltComponent` (one `seedOf` draw + phash) → `assembleTransitCar`
++ `ARCHETYPES.transit_car` + `ARCH_WEIGHTS`. Params: `bucket:'warm'`, `sandMound:false` (steering),
+a modest `list` (a tilted car), `seatSink` to bed the bogie, `panelMin/Max:1`. Box-collider precedent
+in `crawlerBody` (a boxy car body is a solid box collider, unlike the dome's hollow shell). Real
+thickness (rule 7). Favor `salt`/`dune` (old rail lines across the flats), a touch on the others.
+**IMPORTANT:** the collider-audit archetype list in `scripts/rig-shot.mjs` is HARDCODED (separate from
+the ARCHETYPES registry) — you MUST add `'transit_car'` to it or `verify:colliders` won't audit it.
 
 Gate: verify:all (placement 5-seed + colliders 0 fails) + verify-chunks (det stable, no leak) + the
-`procgen-wreck` rig visual (distinct domed silhouette). GPU probes ~26s.
+`procgen-wreck` rig visual (distinct rail-car silhouette). GPU probes ~26s.
 
-## Then M9 archetype 3/3 = `transit_car` (cycle 21)
-A half-buried transit/cargo RAIL car (or short 2-segment train), tilted on a buried bogie. Distinct from
-cargo_crawler (a tracked hauler). `warm` bucket; box-collider precedent in `crawlerBody`.
+**When transit_car ships, M9 is COMPLETE** (3 archetypes) → next cycle picks up M10.
 
 ## The rest of the queue
 M10 more story vignettes → M11 retire legacy tube-wrecks (ship→socket, D227/D249) → M12 new far-field biome.
-(~2.65M left → M9 finishes (2 more archetypes ~1M) + M10 gets a start; run stops cleanly at the 8.75M cap.)
+(~2.4M left → M9 finishes + M10 gets a real start; run stops cleanly at the 8.75M cap. M11/M12 likely
+carry to a future session — that's fine, priority order.)
 
 ## Standing constraints (steering.md)
 - **models-need-thickness** (rule 7) · **100% collision** (rule 9, swept) · determinism (D290) +

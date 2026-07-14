@@ -16,7 +16,7 @@ import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
   noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead, latticeMast,
-  pipeSegment, pipeJunction, crawlerBody, refineryStack,
+  pipeSegment, pipeJunction, crawlerBody, refineryStack, habDome,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -579,6 +579,19 @@ function assembleRefineryStack(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// HAB DOME (M9 archetype 2, campaign Sharpen&Deepen) — a COLLAPSED HABITAT-DOME cluster: two
+// ribbed geodesic-shell domes (torn/caved) linked by a low arched corridor + an airlock module.
+// The one ROUNDED silhouette the POI set lacked (everything else is hard-industrial) — a
+// melancholy human-shelter ruin. ONE seedOf draw; the component phashes the rest.
+// ════════════════════════════════════════════════════════════════════
+function assembleHabDome(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const dome = habDome(seedOf(rand));
+  a.place(dome, liftToGround(dome));
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
   refinery_stack: {
@@ -589,6 +602,15 @@ export const ARCHETYPES: Record<string, Archetype> = {
     // dark bucket → heavy rust-industrial steel. A salvage panel on the valve/control skid.
     params: { bucket: 'dark', burySink: false, bury: 0, list: 0.14, panelMin: 1, panelMax: 1, sandMound: false, seatSink: 0.16, salvageKind: 'cargo_container' },
     assemble: assembleRefineryStack,
+  },
+  hab_dome: {
+    id: 'hab_dome',
+    // M9 archetype 2 — a collapsed habitat-dome cluster (the rounded silhouette). Stands
+    // (burySink false) with only a shallow SETTLE (a dome sags into its footing, doesn't topple)
+    // + a small crash-list. A modest base bed (seatSink) plants the wide foundation ring. NO sand
+    // mound (user steering). cool bucket → weathered shelter metal; salvage on the airlock module.
+    params: { bucket: 'cool', burySink: false, bury: 0, list: 0.06, panelMin: 1, panelMax: 1, sandMound: false, seatSink: 0.15, salvageKind: 'escape_pod' },
+    assemble: assembleHabDome,
   },
   cargo_crawler: {
     id: 'cargo_crawler',
@@ -704,10 +726,13 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // M9 (campaign Sharpen&Deepen) — refinery_stack added ~0.04-0.06 (favor wreck_yard/rocky/dune:
   // old heavy industry crashed in the highlands + the graveyard; lower on salt); the legacy `ship`
   // tube shaved by the same so each table still sums ≈1.0 (the tail 'ship' fallback stays reachable).
-  salt:       [['ship', 0.17], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04]],
-  rocky:      [['ship', 0.10], ['derelict', 0.09], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06]],
-  dune:       [['ship', 0.09], ['derelict', 0.09], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05]],
-  wreck_yard: [['ship', 0.06], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06]],
+  // M9 archetype 2 — hab_dome added ~0.04-0.06 (favor rocky/dune: habitats sited in the highlands;
+  // lower on salt + the wreck_yard graveyard); shaved from the legacy `ship` tube where it's healthy
+  // and from the overweight `satellite` where `ship` is already thin, so each row still sums ≈1.0.
+  salt:       [['ship', 0.13], ['derelict', 0.10], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.04], ['refinery_stack', 0.04], ['hab_dome', 0.04]],
+  rocky:      [['ship', 0.07], ['derelict', 0.09], ['satellite', 0.09], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04], ['relay_mast', 0.07], ['buried_pipeline', 0.04], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.06]],
+  dune:       [['ship', 0.09], ['derelict', 0.09], ['satellite', 0.10], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03], ['relay_mast', 0.07], ['buried_pipeline', 0.06], ['cargo_crawler', 0.06], ['refinery_stack', 0.05], ['hab_dome', 0.06]],
+  wreck_yard: [['ship', 0.04], ['derelict', 0.08], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.11], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07], ['relay_mast', 0.06], ['buried_pipeline', 0.05], ['cargo_crawler', 0.06], ['refinery_stack', 0.06], ['hab_dome', 0.04]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {
