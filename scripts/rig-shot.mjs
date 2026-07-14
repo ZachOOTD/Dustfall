@@ -2654,6 +2654,35 @@ const SCENARIOS = {
     await shot('broadside', broad, 22, 2.6, 2.5, 20); // close broadside — bridge + containers + snap
     await shot('close', bowDir, 12, 1.9, 2.4, 5);     // bow close-quarter — burial + blunt bow read
     await shot('snap', threeQ, 18, 2.6, 1.5, 36);     // the SNAP: fracture mouths + stern engine block + gap
+    // ── M7-R BUGHUNT — grazing-flank / underside / along-hull reads that
+    //    REPRODUCE the user's close-range viewpoint (the curated angles above
+    //    hide the hull-skin culling bug). The camera stands RIGHT BESIDE the
+    //    hull flank at eye height and looks ALONG the length, so a culled outer
+    //    skin reads as "see through the hull to the inner wall / to the sky."
+    const flankShot = async (name, side, camAlong, camOut, camLift, aimAlong, aimOut, aimY) => {
+      await page.evaluate(({ side, camAlong, camOut, camLift, aimAlong, aimOut, aimY, fwd, broad, bcx, bcz }) => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = bcx + fwd[0] * camAlong + broad[0] * camOut * side;
+        const pz = bcz + fwd[1] * camAlong + broad[1] * camOut * side;
+        const gy = ctx.terrain.heightAt(px, pz);
+        cam.position.set(px, gy + camLift, pz);
+        const ax = bcx + fwd[0] * aimAlong + broad[0] * aimOut * side;
+        const az = bcz + fwd[1] * aimAlong + broad[1] * aimOut * side;
+        cam.lookAt(ax, ctx.terrain.heightAt(ax, az) + aimY, az);
+        cam.updateMatrixWorld(true);
+      }, { side, camAlong, camOut, camLift, aimAlong, aimOut, aimY, fwd, broad, bcx, bcz });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-skyfall-${name}.png`), timeout: 60000 });
+      console.log(`[skyfall-shot] saved scen-skyfall-${name}.png`);
+    };
+    // Stand beside the fore flank near the mouth, look ALONG the plating toward
+    // the bow (the user's "standing next to the hull looking along it" view).
+    await flankShot('flank-graze', 1, 26, 7, 1.7, 4, 4.5, 1.4);
+    // Tight face-on-ish flank, grazing down the mid plating (see any skin cull).
+    await flankShot('flank-close', -1, 16, 6.5, 1.6, 20, 4.8, 1.2);
+    // Low near the belly/keel looking up + along the flank (underside read).
+    await flankShot('flank-low', 1, 20, 9, 0.35, 8, 5.5, 2.6);
     // M7-S2 — interior reads (player-eye, from the builder's probe waypoints).
     const probe = await page.evaluate(() => {
       let p = null;

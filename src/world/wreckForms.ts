@@ -126,8 +126,18 @@ export function makeLoftedHull(stations: LoftStation[], material: THREE.Material
       const A = rings[i], B = rings[i + 1];
       for (let k = 0; k < N; k++) {
         const k2 = (k + 1) % N;
-        // Quad wound for OUTWARD normals (CCW section + +Z loft); reversed for the inner skin.
-        if (!inward) { push(A[k]); push(B[k]); push(B[k2]); push(A[k]); push(B[k2]); push(A[k2]); }
+        // Quad wound for OUTWARD normals on the OUTER skin (CCW section + +Z loft);
+        // reversed (inward-facing) for the INNER skin. M7-R BUGFIX: the two
+        // branches were SWAPPED — the outer skin was wound inward-facing and the
+        // inner skin outward-facing, so under a FrontSide material the outer skin
+        // culled from outside and the inner skin culled from inside (the Skyfall
+        // "wall visible from the wrong side / see-through hull" report). The
+        // legacy callers (megaWreck/procgen/leviathan) hid this by forcing the
+        // hull material DoubleSide; Skyfall's hull is FrontSide, so it showed.
+        // Cross-check: on the +x flank, the OUTER branch's face normal is +x
+        // (outward) with this winding. Positions are unchanged → DoubleSide
+        // callers + hullCollide trimeshes are byte-identical.
+        if (inward) { push(A[k]); push(B[k]); push(B[k2]); push(A[k]); push(B[k2]); push(A[k2]); }
         else { push(A[k]); push(B[k2]); push(B[k]); push(A[k]); push(A[k2]); push(B[k2]); }
       }
     }
