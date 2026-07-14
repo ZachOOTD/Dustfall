@@ -121,6 +121,8 @@ const _stripCoolMat = new THREE.MeshLambertMaterial({ color: 0x1a2228, emissive:
 const _scorchMat = new THREE.MeshLambertMaterial({ color: 0x0d0a08, flatShading: true });      // burnt scorch scar (matte warm-black)
 const _sandDriftMat = new THREE.MeshLambertMaterial({ color: 0x9e885d, flatShading: true });  // interior sand drift (warm ochre)
 const _mugMat = new THREE.MeshLambertMaterial({ color: 0xa85f3e, flatShading: true });        // a crew mug (faded terracotta)
+const _paperMat = new THREE.MeshLambertMaterial({ color: 0x9a917c, flatShading: true });      // grimy pinned manifest / label / clipboard sheet (dull bone)
+const _rubberMat = new THREE.MeshLambertMaterial({ color: 0x201d1a, flatShading: true });     // dark rubber — coiled hose / gasket / boot (near-black warm)
 
 export interface SkyfallResult {
   group: THREE.Group;
@@ -650,10 +652,11 @@ export function placeSkyfallWreck(
       const fz = 8.0 + i * 2.9;
       dBox(fore, _frameMat, 0.11, ROOF_Y - FLOOR_Y - 0.1, 0.16, wx - 0.05 * s, (ROOF_Y + FLOOR_Y) / 2, fz);  // vertical frame strap
     }
-    dCyl(fore, _conduitMat, 0.06, 0.06, 20.0, wx - 0.10 * s, FLOOR_Y + 1.95, 17.5, Math.PI / 2, 0, 0, 6);    // high conduit run
+    dCyl(fore, _conduitMat, 0.06, 0.06, 20.0, wx - 0.06 * s, FLOOR_Y + 1.95, 17.5, Math.PI / 2, 0, 0, 6);    // high conduit run (flush: r0.06 lands the crown on the wall)
+    for (let k = 0; k < 4; k++) dBox(fore, _frameMat, 0.10, 0.14, 0.10, wx - 0.03 * s, FLOOR_Y + 1.95, 9.5 + k * 5.3);  // conduit standoff clamps (bridge the pipe to the wall)
   }
   // Wall props — a hazard placard + a fire-bottle bracket + a wall junction box.
-  dBox(fore, _hazardMat, 0.05, 0.5, 0.7, IWALL - 0.03, FLOOR_Y + 1.7, 21.6);          // hazard placard (starboard hold)
+  dBox(fore, _hazardMat, 0.10, 0.5, 0.7, IWALL - 0.05, FLOOR_Y + 1.7, 21.6);          // hazard placard (starboard hold — rule-7 depth, flush back on the wall)
   dBox(fore, _frameMat, 0.18, 0.55, 0.22, -IWALL + 0.10, FLOOR_Y + 1.05, 18.6);       // fire-bottle bracket body (port mid)
   dCyl(fore, _wireRedMat, 0.11, 0.11, 0.6, -IWALL + 0.16, FLOOR_Y + 1.05, 18.6, 0, 0, 0, 8);  // the red fire bottle in it
   dBox(fore, _intPanelDkMat, 0.14, 0.5, 0.6, IWALL - 0.08, FLOOR_Y + 1.1, 24.6);      // wall junction box (starboard hold)
@@ -685,8 +688,8 @@ export function placeSkyfallWreck(
       dBox(b, mat, 0.06, h - 0.24, 0.10, s * (hw + 0.02), 0, 0);
   };
   // Starboard stack (2 stacked + 1 leaning), port scatter (2 toppled).
-  intCrate(_cnRust, IWALL - 0.62, FLOOR_Y + 0.60, 22.4, 0, 0.12, 0);
-  intCrate(_cnBlue, IWALL - 0.66, FLOOR_Y + 1.72, 22.6, 0.05, 0.05, 0.04);
+  intCrate(_cnRust, IWALL - 0.62, FLOOR_Y + 0.575, 22.4, 0, 0.12, 0);        // base crate — sits flush on the deck
+  intCrate(_cnBlue, IWALL - 0.66, FLOOR_Y + 1.70, 22.6, 0.05, 0.05, 0.04);   // stacked on the rust crate's top
   intCrate(_cnTan, IWALL - 0.70, FLOOR_Y + 0.58, 25.2, 0, -0.22, 0.10);
   intCrate(_hullDarkMat, -IWALL + 0.66, FLOOR_Y + 0.55, 21.9, 0.06, 0.3, -0.14);
   intCrate(_cnRust, -IWALL + 1.35, FLOOR_Y + 0.50, 24.7, 0.5, 1.1, 0.35, CR * 0.9, CR * 0.9, CR * 0.9);  // spilled, tipped onto its side
@@ -715,16 +718,38 @@ export function placeSkyfallWreck(
   dBox(fore, _cnTan, 0.9, 0.10, 0.7, 1.9, FLOOR_Y + 0.06, 26.4, 0.03, -0.6, 0.06);          // spilled crate lid (starboard)
   dBox(fore, _frameMat, 0.35, 0.30, 0.5, 1.7, FLOOR_Y + 0.15, 21.6, 0.2, 0.5, 0.1);         // a knocked-loose fitting
   dBox(fore, _hullDarkMat, 0.6, 0.14, 0.45, -1.8, FLOOR_Y + 0.07, 22.8, 0.04, 0.9, 0.08);   // torn plate chunk
+  // ── HOLD extra dressing (M7-R density pass) — all wall-hugging, off-lane, no
+  //    collider, shared materials (folds into the merge). Deepens the "working
+  //    cargo bay, then it crashed" read without touching the walk lane.
+  {
+    // Starboard-wall electrical breaker cabinet + conduit drop (flush on x=+IWALL).
+    dBox(fore, _intPanelDkMat, 0.16, 0.8, 0.55, IWALL - 0.08, FLOOR_Y + 1.15, 27.4);        // breaker cabinet body (flush)
+    dBox(fore, _frameMat, 0.20, 0.62, 0.40, IWALL - 0.10, FLOOR_Y + 1.15, 27.4);            // door frame proud of it
+    dBox(fore, _stripDeadMat, 0.22, 0.5, 0.30, IWALL - 0.22, FLOOR_Y + 1.15, 27.4);         // dark inset (door ajar → guts)
+    dCyl(fore, _conduitMat, 0.05, 0.05, 1.5, IWALL - 0.12, FLOOR_Y + 0.55, 27.4, 0, 0, 0, 6); // conduit dropping to the deck
+    // Coiled hose hung on the port wall (stacked flat rings, dark rubber).
+    for (let r = 0; r < 3; r++)
+      dCyl(fore, _rubberMat, 0.30, 0.30, 0.09, -IWALL + 0.16, FLOOR_Y + 1.55 - r * 0.10, 26.6, 0, 0, Math.PI / 2, 12); // hose coil rings (flush on wall)
+    dBox(fore, _frameMat, 0.14, 0.10, 0.10, -IWALL + 0.10, FLOOR_Y + 1.85, 26.6);           // the coil's wall hook
+    // A jerry-can + a small drum knocked over by the starboard wall (deck clutter).
+    dBox(fore, _frameMat, 0.32, 0.44, 0.22, 2.05, FLOOR_Y + 0.22, 28.3, 0.05, 0.4, 0.02);   // jerry-can body
+    dBox(fore, _frameMat, 0.10, 0.10, 0.08, 2.05, FLOOR_Y + 0.47, 28.3, 0.05, 0.4, 0.02);   // jerry-can cap/handle
+    dCyl(fore, _hazardMat, 0.24, 0.24, 0.5, 1.75, FLOOR_Y + 0.24, 27.6, Math.PI / 2, 0.3, 0, 10); // toppled hazard drum on its side
+    // A fallen conduit run + rivet-plate debris on the port deck (off-lane).
+    dCyl(fore, _conduitMat, 0.07, 0.07, 2.2, -1.85, FLOOR_Y + 0.08, 28.4, 0, 0.5, Math.PI / 2, 6); // bent pipe on the deck
+    dBox(fore, _paperMat, 0.4, 0.02, 0.5, -1.6, FLOOR_Y + 0.03, 23.6, 0, 0.3, 0.02);          // a fallen manifest sheet on the deck
+  }
 
   // ── MID BAY (z 12-20) — the systems / machine room ────────────────────────
   // Wall-mounted DEAD CONSOLE BANK on the starboard wall: a cabinet with a row
   // of dead screens + a switch strip + a canted (crash-sprung) panel.
   {
-    const cw = 3.4, cx = IWALL - 0.35;
-    dBox(fore, _intPanelMat, 0.5, 1.5, cw, cx, FLOOR_Y + 1.15, 16.0);          // console cabinet body
+    const cw = 3.4, cx = IWALL - 0.25;   // half-x 0.25 → back face lands ON the wall (was 0.35 = floated 0.10 off)
+    dBox(fore, _intPanelMat, 0.5, 1.9, cw, cx, FLOOR_Y + 0.95, 16.0);          // console cabinet body — FLOOR-STANDING (base on the deck; was floating 0.4m)
     dBox(fore, _intPanelDkMat, 0.30, 0.9, cw - 0.3, cx - 0.30, FLOOR_Y + 1.45, 16.0); // recessed instrument face
     for (let i = 0; i < 4; i++) deadScreen(fore, 0.56, 0.44, cx - 0.47, FLOOR_Y + 1.55, 14.7 + i * 0.85, 0, -Math.PI / 2, 0);  // dead MFD screens (bezelled, facing −x)
     for (let i = 0; i < 3; i++) dBox(fore, _frameMat, 0.10, 0.10, 0.9, cx - 0.42, FLOOR_Y + 0.95, 15.0 + i * 0.9);          // switch/breaker strips
+    dBox(fore, _frameMat, 0.44, 0.10, cw, cx, FLOOR_Y + 0.06, 16.0);            // cabinet kick-plinth (foots the cabinet on the deck)
     // a sprung panel hanging off the cabinet top, exposing dark guts
     dBox(fore, _intPanelMat, 0.06, 0.7, 1.0, cx - 0.52, FLOOR_Y + 2.05, 15.0, 0, 0, -0.5);
     dBox(fore, _voidMat, 0.10, 0.6, 1.0, cx - 0.30, FLOOR_Y + 2.0, 15.0);      // dark cavity behind it
@@ -771,6 +796,27 @@ export function placeSkyfallWreck(
   // Low pipe run along the port wall base + a valve wheel.
   dCyl(fore, _conduitMat, 0.09, 0.09, 7.5, -IWALL + 0.14, FLOOR_Y + 0.30, 16.0, Math.PI / 2, 0, 0, 8);
   dCyl(fore, _frameMat, 0.22, 0.22, 0.06, -IWALL + 0.30, FLOOR_Y + 0.55, 13.4, 0, 0, Math.PI / 2, 10);   // valve handwheel
+  // ── MID BAY extra dressing (M7-R density pass) — machine-room greebles; all
+  //    wall-hugging/ceiling, off-lane, no collider, shared materials.
+  {
+    // Floor-standing equipment rack against the PORT wall aft (flush + on deck).
+    dBox(fore, _intPanelDkMat, 0.44, 1.9, 1.3, -IWALL + 0.22, FLOOR_Y + 0.95, 18.4);        // generator/equipment cabinet
+    for (let i = 0; i < 3; i++) dBox(fore, _frameMat, 0.10, 0.10, 1.1, -IWALL + 0.42, FLOOR_Y + 0.5 + i * 0.55, 18.4); // cooling-fin bars on its face
+    dBox(fore, _frameMat, 0.50, 0.10, 1.34, -IWALL + 0.22, FLOOR_Y + 0.06, 18.4);           // rack kick-plinth (foots on deck)
+    dCyl(fore, _cableMat, 0.05, 0.05, 0.8, -IWALL + 0.44, FLOOR_Y + 1.7, 18.7, 0.4, 0, 0.3, 6); // a cable trailing off its top
+    // A gauge cluster + valve manifold on the STARBOARD wall flanking the console.
+    dBox(fore, _intPanelDkMat, 0.14, 0.6, 0.7, IWALL - 0.08, FLOOR_Y + 1.35, 18.6);          // gauge backplate (flush)
+    for (const gz of [-0.18, 0.18] as const) dCyl(fore, _frameMat, 0.11, 0.11, 0.12, IWALL - 0.22, FLOOR_Y + 1.45, 18.6 + gz, 0, 0, Math.PI / 2, 10); // round gauge faces
+    dCyl(fore, _frameMat, 0.05, 0.05, 0.9, IWALL - 0.20, FLOOR_Y + 0.9, 18.6, 0, 0, 0, 6);   // gauge feed pipe down to the deck
+    // Ceiling DUCT run in the port-ceiling corner (square duct, off-lane high up).
+    dBox(fore, _conduitMat, 0.34, 0.30, 7.0, -IWALL + 0.42, ROOF_Y - 0.22, 16.0);            // rectangular duct
+    for (let i = 0; i < 4; i++) dBox(fore, _frameMat, 0.42, 0.06, 0.10, -IWALL + 0.42, ROOF_Y - 0.06, 13.2 + i * 1.9); // duct hanger straps to the ceiling
+    // A dark spilled-fluid pool on the deck under the torn port wall (flat, no lip).
+    dBox(fore, _rubberMat, 1.0, 0.03, 1.4, -1.75, FLOOR_Y + 0.015, 14.6, 0, 0.2, 0);         // oil/coolant puddle (flat sheen)
+    // A dropped wrench + a coiled cable on the deck by the starboard wall.
+    dBox(fore, _frameMat, 0.07, 0.04, 0.42, 1.8, FLOOR_Y + 0.04, 15.4, 0, 0.7, 0.02);        // dropped wrench
+    for (let r = 0; r < 2; r++) dCyl(fore, _cableMat, 0.20, 0.20, 0.06, 1.9, FLOOR_Y + 0.04 + r * 0.06, 17.2, Math.PI / 2, 0, 0, 10); // coiled cable on the deck
+  }
 
   // ── CABIN (z 6.2-12) — the crew / story room ──────────────────────────────
   // 1-2 STRIPPED CREW SEATS facing the bow console. One upright-ish, one
@@ -780,7 +826,7 @@ export function placeSkyfallWreck(
     g.position.set(px, FLOOR_Y, pz);
     g.rotation.set(tip * 0.5, faceYaw, tip, 'YXZ');
     fore.add(g);
-    dBox(g, _frameMat, 0.5, 0.42, 0.5, 0, 0.25, 0);            // pedestal
+    dBox(g, _frameMat, 0.5, 0.42, 0.5, 0, 0.21, 0);            // pedestal (base flush on the deck)
     dBox(g, _seatMat, 0.56, 0.16, 0.54, 0, 0.52, 0);           // seat pan (worn vinyl)
     dBox(g, _seatMat, 0.56, 0.72, 0.16, 0, 0.90, -0.30);       // seat back
     for (const s of [-1, 1] as const) dBox(g, _frameMat, 0.08, 0.20, 0.48, s * 0.30, 0.66, 0.02); // armrest frames
@@ -799,13 +845,13 @@ export function placeSkyfallWreck(
   // salvage. Flanked by dark instrument stacks.
   {
     const bz = 6.9, deskW = 4.2;
-    dBox(fore, _intPanelMat, deskW, 0.9, 0.7, 0, FLOOR_Y + 0.55, bz);            // console desk body
+    dBox(fore, _intPanelMat, deskW, 1.0, 0.7, 0, FLOOR_Y + 0.50, bz);            // console desk body — base ON the deck (was floating 0.10m; top held at +0.60)
     dBox(fore, _intPanelDkMat, deskW, 0.5, 0.5, 0, FLOOR_Y + 1.05, bz + 0.18, -0.5, 0, 0); // raked instrument face (tilted up toward crew)
     for (const dx of [-1.5, -0.75, 0.75, 1.5] as const) deadScreen(fore, 0.62, 0.40, dx, FLOOR_Y + 1.12, bz + 0.42, -0.5, 0, 0); // dead readout screens (bezelled; skip centre → S6)
     for (let i = 0; i < 7; i++) dBox(fore, _frameMat, 0.08, 0.08, 0.08, -1.5 + i * 0.5, FLOOR_Y + 1.02, bz + 0.02);  // switch/dial row
-    // bow-wall instrument stacks flanking the desk (dark, dead)
+    // bow-wall instrument stacks flanking the desk (dark, dead) — FLOOR-STANDING
     for (const s of [-1, 1] as const) {
-      dBox(fore, _intPanelDkMat, 0.9, 2.0, 0.4, s * 1.75, FLOOR_Y + 1.4, bz - 0.35);
+      dBox(fore, _intPanelDkMat, 0.9, 2.4, 0.4, s * 1.75, FLOOR_Y + 1.2, bz - 0.35);   // base on the deck (was floating 0.4m; top held at +2.0)
       deadScreen(fore, 0.6, 0.5, s * 1.75, FLOOR_Y + 1.9, bz + 0.06);
       dBox(fore, _scorchMat, 0.5, 0.7, 0.04, s * 1.75, FLOOR_Y + 1.0, bz - 0.14);   // scorch below a blown panel
     }
@@ -825,7 +871,30 @@ export function placeSkyfallWreck(
   dBox(fore, _frameMat, 0.28, 0.24, 0.30, 2.0, FLOOR_Y + 0.12, 8.4, 0.2, 0.6, 0.1);        // a discarded helmet (blocky)
   dBox(fore, _intPanelDkMat, 0.24, 0.24, 0.02, 2.0, FLOOR_Y + 0.13, 8.4, 0.2, 0.6, 0.1);   // helmet visor
   dBox(fore, _deadScreenMat, 0.16, 0.02, 0.24, -1.7, FLOOR_Y + 0.04, 9.2, 0, 0.4, 0.03);   // datapad on the deck
-  dBox(fore, _deadScreenMat, 0.15, 0.02, 0.22, 1.4, FLOOR_Y + 0.62, 6.95, -0.4, 0, 0);      // datapad on the console desk
+  dBox(fore, _deadScreenMat, 0.15, 0.02, 0.22, 1.4, FLOOR_Y + 1.02, 6.75, -0.05, 0, 0);      // datapad lying ON the console desk top (was buried inside the desk body)
+  // ── CABIN extra dressing (M7-R density pass) — the crew's daily-life tells;
+  //    wall-hugging/on-deck, off-lane, no collider, shared materials.
+  {
+    // Starboard wall shelf + a couple items (flush bracket, off-lane).
+    dBox(fore, _frameMat, 0.28, 0.06, 1.2, IWALL - 0.16, FLOOR_Y + 1.5, 7.4);                // wall shelf plate (flush)
+    for (const s of [-1, 1] as const) dBox(fore, _frameMat, 0.24, 0.20, 0.05, IWALL - 0.16, FLOOR_Y + 1.4, 7.4 + s * 0.5); // shelf brackets
+    dCyl(fore, _mugMat, 0.05, 0.045, 0.10, IWALL - 0.18, FLOOR_Y + 1.58, 7.2, 0, 0, 0, 8);   // a mug left on the shelf
+    dBox(fore, _paperMat, 0.10, 0.16, 0.24, IWALL - 0.20, FLOOR_Y + 1.61, 7.7);              // a stack of manuals on the shelf
+    // A pinned manifest / crew roster on the PORT wall by the locker (flush plate).
+    dBox(fore, _paperMat, 0.04, 0.42, 0.32, -IWALL + 0.06, FLOOR_Y + 1.55, 11.4);            // pinned sheet (proud of wall)
+    dBox(fore, _paperMat, 0.04, 0.30, 0.26, -IWALL + 0.06, FLOOR_Y + 1.15, 11.7, 0, 0, 0.08); // a second sheet, askew
+    // A wall MED / first-aid box on the starboard wall (hazard-marked, flush).
+    dBox(fore, _intPanelMat, 0.18, 0.4, 0.34, IWALL - 0.09, FLOOR_Y + 1.15, 9.6);            // med-box body (flush on wall)
+    dBox(fore, _hazardMat, 0.10, 0.18, 0.16, IWALL - 0.14, FLOOR_Y + 1.15, 9.6);             // its hazard/cross plate (proud)
+    // A coat hook with a hanging rag/jacket on the port wall (worn cloth).
+    dBox(fore, _frameMat, 0.10, 0.06, 0.20, -IWALL + 0.08, FLOOR_Y + 1.75, 8.6);             // hook rail (flush)
+    dBox(fore, _seatMat, 0.10, 0.55, 0.26, -IWALL + 0.16, FLOOR_Y + 1.35, 8.6, 0.05, 0, 0.04); // hanging jacket
+    // On-deck crew effects near the seats (off-lane): a boot + a ration tin.
+    dBox(fore, _rubberMat, 0.14, 0.16, 0.30, 2.15, FLOOR_Y + 0.08, 9.4, 0.1, 0.5, 0.05);      // a discarded boot
+    dCyl(fore, _frameMat, 0.08, 0.08, 0.10, -2.1, FLOOR_Y + 0.05, 10.6, 0, 0, Math.PI / 2, 10); // a ration tin on its side
+    // A small storage bin shoved under the starboard seat corner (off-lane).
+    dBox(fore, _intPanelDkMat, 0.46, 0.28, 0.4, 2.2, FLOOR_Y + 0.14, 7.5, 0, 0.2, 0);        // stowage bin
+  }
 
   // ── EMERGENCY STRIP-LIGHTS on the ceiling — a couple failing, a couple dead
   //    (emissive → self-glow with ~no light cost; merge folds them per material).
@@ -911,8 +980,8 @@ export function placeSkyfallWreck(
   //    cables, effects, sand) is decoration — no collider.
   localCol(0.36, 0.58, 0.40, 1.68, DECK_Y + 0.55, 8.2);    // starboard crew seat
   localCol(0.36, 0.58, 0.40, -1.72, DECK_Y + 0.55, 8.0);   // port crew seat
-  localCol(2.10, 0.50, 0.42, 0, DECK_Y + 0.55, 6.9);       // bow crew console desk (forward of the cabin waypoint)
-  localCol(0.28, 0.78, 1.75, IWALL - 0.35, DECK_Y + 1.15, 16.0);   // mid console bank (starboard wall)
+  localCol(2.10, 0.50, 0.42, 0, DECK_Y + 0.50, 6.9);       // bow crew console desk (base on deck; forward of the cabin waypoint)
+  localCol(0.25, 0.95, 1.70, IWALL - 0.25, DECK_Y + 0.95, 16.0);   // mid console bank (starboard wall — flush + floor-standing)
   localCol(0.22, 0.95, 0.62, IWALL - 0.20, DECK_Y + 0.95, 10.8);   // starboard cabin locker
   localCol(0.22, 0.95, 0.62, -(IWALL - 0.20), DECK_Y + 0.95, 10.8); // port cabin locker
   localCol(0.60, 1.15, 0.65, IWALL - 0.62, DECK_Y + 1.10, 22.5);   // starboard hold crate stack

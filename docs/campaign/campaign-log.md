@@ -148,3 +148,13 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~300K (campaign total ~5.05M / 8.75M; cycle 14/50)
 - Commit: see git log
 - Next: cycle 15 = M7-R part 2 (interior floating-model audit + more interior detail; then glass, then captain-log).
+
+## Cycle 15 — M7-R part 2: Skyfall interior floating-audit + detail (2026-07-13) — SHIPPED
+- Planned: fix floating interior models (user: "panels neatly placed on the wall exactly, not floating") + more interior detail.
+- Shipped: 8 floaters grounded flush (mid/bow consoles were 0.1-0.4m off deck/wall → floor-standing w/ matched colliders; conduits/placard/crates/pedestals re-seated); a lived-in detail pass across HOLD/MID/CABIN (wall-hugging, off-lane, shared materials, deterministic).
+- Verify: verify tsc · skyfall-walk PASS · verify-chunks (det 8/8 both seeds, no-leak, perf untripped).
+- Visual iteration: 2 rounds real-view + seed-808; my read confirms the mid console grounded on the deck. Float fixes are exact-geometry (not eyeball).
+- Flag (3rd time): CABIN too dark → new detail + loot + journal barely visible. Cycle 16 folds a small reversible visibility lift with the glass. Moody-vs-lit stays the user's call.
+- Spend: ~200K (campaign total ~5.25M / 8.75M; cycle 15/50)
+- Commit: see git log
+- Next: cycle 16 = broken cockpit glass + small cabin-visibility lift; then cycle 17 = captain's-log story.

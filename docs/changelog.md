@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 15 — 2026-07-13 — M7-R part 2: Skyfall interior floating-model audit + more detail ✓ all gates
+
+`verified` — verify tsc clean, skyfall-walk PASS (detail off the lane), verify-chunks (det 8/8 both seeds, no-leak, perf untripped); 2-round real-view iteration + seed-808.
+
+- **Floating-model audit (the specific complaint)** — 8 floaters found + grounded FLUSH: mid-bay console bank (was 0.4m off the deck + 0.1m off the wall → floor-standing w/ kick-plinth, collider matched), bow console desk (0.1m float → on deck), bow instrument stacks ×2 (0.4m float → on deck), a datapad buried in the desk → on top, high conduit runs (4cm off wall → flush + standoff clamps), hazard placard (5cm→10cm, flush), cargo crates + seat pedestals (2.5-4cm floats → deck contact). Exact-geometry grounding, not eyeball tuning.
+- **More interior detail** — a lived-in wrecked-freighter density pass, all wall-hugging/ceiling + off-lane + no colliders + shared materials (2 new: `_paperMat`/`_rubberMat`): HOLD (breaker cabinet, coiled hose, jerry-can + drum, manifest sheet), MID BAY (equipment/generator rack, gauge cluster, ceiling duct, coolant puddle, dropped wrench), CABIN (wall shelf w/ mug+manuals, med-box, pinned manifests, hanging jacket, boot + ration tin, stowage bin). Deterministic (zero `rand()` consumed).
+- Exterior (cycle 14 thickness) + interior colliders + skyfallProbe untouched (walk gate green). **Flagged (3rd time): the CABIN reads very dark → the new cabin detail + loot + journal are flush but barely visible.** Next cycle folds in a small reversible visibility lift alongside the broken cockpit glass. Remaining M7-R: glass, captain's-log.
+
 ## Campaign "Sharpen & Deepen" cycle 14 — 2026-07-13 — M7-R part 1: Skyfall REAL HULL THICKNESS + 100% exterior collision ✓ all gates
 
 `verified` — verify tsc clean, verify-chunks (determinism 8/8 both seeds, streaming no-leak, perf untripped), skyfall-walk PASS; 3-round real-view thickness iteration + seed-808 check. First fix of the M7-R walk-test batch.
