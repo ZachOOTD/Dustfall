@@ -226,3 +226,12 @@ Human `/campaign-approve` at the cycle-8 plan-review pause. Answers: **placement
 - Spend: ~150K (campaign total ~6.9M / 8.75M; cycle 23/50)
 - Commit: see git log
 - Next: cycle 24 = M12 new far-field biome (~1.85M left — likely hits the 8.75M cap during/after; stops cleanly at 'budget').
+
+## Cycle 24 — M12 the ash_barren biome (2026-07-13) — SHIPPED — 🏁 QUEUE COMPLETE
+- Planned: a new far-field biome (the 5th and last queued overnight item).
+- Shipped: `ash_barren` — a rare regional-anchored scorched-flats zone (dark charred ground + cinder mottle + low flatten + a burned-industrial POI mix), mirroring the wreck-yard regional anchor with its own appended seed (yard byte-identical) and NO origin anchor (far-field only, ≥2600m). Distinct from the light salt/dune/rocky desert.
+- Verify: verify:all PASS (placement 5-seed / colliders / chunks); a numeric probe found an ash_barren zone (biomeAt confirmed); a shot showed the dark ground reading distinct.
+- Visual iteration: 1 shot confirmed distinct; the core biome shipped. Residual flagged: the dark read could be pushed more dramatic (a polish pass — routed to the human review, NOT punted, since the coherent biome DoD is met).
+- Spend: ~350K (campaign total ~7.25M / 8.75M cap; cycle 24/40).
+- Commit: 7378b92
+- Next: **NONE — the queue is empty.** Campaign `completed` (until-met). Awaiting Zach's morning walk-test + merge review.
