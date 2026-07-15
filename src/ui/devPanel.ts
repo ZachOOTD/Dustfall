@@ -91,7 +91,7 @@ function makeActionsSection(): HTMLDivElement {
   group('review', [
     ['skyfall', () => { g()?.spawnSkyfall(); }],
     ['new POIs', () => { g()?.spawnNewPois(); }],
-    ['bone field', () => { g()?.gotoBoneField(); }],
+    ['boneyard', () => { g()?.gotoBoneField(); }],
   ]);
   group('stats', [
     ['full', () => { g()?.setStats({ thirst: 1, hunger: 1, stamina: 1, health: 1, temperature: 0 }); toast('stats restored'); }],
