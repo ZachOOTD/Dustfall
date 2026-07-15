@@ -350,8 +350,8 @@ export const Tuning = {
   // that ground (streamed POIs begin where S1 left bare dunes). The edge
   // margin keeps a chunk's POI off its border so two neighbors can't
   // place wrecks a few meters apart across a seam.
-  CHUNK_POI_CHANCE: 0.07,
-  CHUNK_POI_ORIGIN_EXCLUSION_M: 1250,
+  CHUNK_POI_CHANCE: 0.048,          // review 2026-07-15 — space wrecks/POIs out more (was 0.07); uniform start+far
+  CHUNK_POI_ORIGIN_EXCLUSION_M: 1600,   // review — a larger sparse starting zone (was 1250)
   CHUNK_POI_EDGE_MARGIN_M: 25,
   // Infinite Sands S3 — streamed scatter + ambient life (all beyond the
   // same origin exclusion; the boot field is untouched).
