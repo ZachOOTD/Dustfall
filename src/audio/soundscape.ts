@@ -29,8 +29,12 @@ interface StemNodes {
 interface ProceduralWind {
   body: BiquadFilterNode;       // lowpass — the wind's tone (cutoff = mood)
   bodyGain: GainNode;           // level (windLvl × gusts)
-  whistle: BiquadFilterNode;    // bandpass — the lonely moan
+  whistle: BiquadFilterNode;    // bandpass — the lonely moan / driven-sand shriek
   whistleGain: GainNode;
+  // review 2026-07-14 — a deep low HOWL layer, only audible during a storm (the mass
+  // of moving air under the body hiss). Fed by the same noise, its own low lowpass.
+  howl: BiquadFilterNode;
+  howlGain: GainNode;
 }
 
 interface SoundscapeState {
@@ -93,6 +97,7 @@ export function setSoundscapeSuppressed(suppressed: boolean): void {
     if (s.pwind) {
       s.pwind.bodyGain.gain.setTargetAtTime(0, t0, 0.2);
       s.pwind.whistleGain.gain.setTargetAtTime(0, t0, 0.2);
+      s.pwind.howlGain.gain.setTargetAtTime(0, t0, 0.2);
     }
     rampParam(s.musicBus.gain, 0, s.ctx);
   } else {
@@ -193,10 +198,18 @@ export function startSoundscape(): void {
   whistle.Q.value = 4.5;
   const whistleGain = a.ctx.createGain();
   whistleGain.gain.value = 0;
+  // review 2026-07-14 — deep storm HOWL: a low lowpass off the same noise.
+  const howl = a.ctx.createBiquadFilter();
+  howl.type = 'lowpass';
+  howl.frequency.value = Tuning.STORM_WIND_HOWL_CUTOFF;
+  howl.Q.value = 1.1;
+  const howlGain = a.ctx.createGain();
+  howlGain.gain.value = 0;
   noise.connect(body).connect(bodyGain).connect(a.ambient);
   noise.connect(whistle).connect(whistleGain).connect(a.ambient);
+  noise.connect(howl).connect(howlGain).connect(a.ambient);
   noise.start(0);
-  const pwind: ProceduralWind = { body, bodyGain, whistle, whistleGain };
+  const pwind: ProceduralWind = { body, bodyGain, whistle, whistleGain, howl, howlGain };
 
   // Build placeholder state first (silent stems) — buffers attach once decode
   // resolves below. This keeps updateSoundscape simple: it never touches null.
@@ -251,6 +264,7 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
       const t0 = s.ctx.currentTime;
       s.pwind.bodyGain.gain.setTargetAtTime(0, t0, 0.2);
       s.pwind.whistleGain.gain.setTargetAtTime(0, t0, 0.2);
+      s.pwind.howlGain.gain.setTargetAtTime(0, t0, 0.2);
     }
     return;
   }
@@ -292,15 +306,29 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
     const dayness = clamp01(sy * 0.5 + 0.5);            // 0 deep night → 1 noon
     let cutoff = Tuning.WIND_CUTOFF_NIGHT + dayness * (Tuning.WIND_CUTOFF_DAY - Tuning.WIND_CUTOFF_NIGHT);
     cutoff += storm * (Tuning.WIND_CUTOFF_STORM - cutoff);            // storm opens the wind up
-    const gust = 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(s.driftPhase * 0.7));
-    const bodyLvl = Tuning.WIND_BODY_MASTER * windLvl * gust;
-    const whistleLvl = Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness));
-    const whistleFreq = 760 + windLvl * 220;
+    // review 2026-07-14 — GUSTING: two incommensurable LFOs surge the level; the gusts
+    // dig deeper during a storm (STORM_WIND_GUST_DEPTH) so the wind heaves + snaps.
+    const g1 = Math.sin(s.driftPhase * 0.7);
+    const g2 = Math.sin(s.driftPhase * 1.7 + 1.1);
+    const gustWave = clamp01(0.5 + 0.5 * (0.6 * g1 + 0.4 * g2));      // 0..1
+    const gustDepth = 0.18 + Tuning.STORM_WIND_GUST_DEPTH * storm;
+    const gust = 1 - gustDepth * (1 - gustWave);                     // dips at the troughs
+    // Calm wind stays muted (WIND_BODY_MASTER=0); the STORM masters bring the roar in,
+    // wired to perceivedIntensity (`storm`) so it SWELLS as the wall approaches + peaks
+    // as it engulfs, then fades as it passes. This is the "hear it coming" wind.
+    const bodyLvl = (Tuning.WIND_BODY_MASTER * windLvl + Tuning.STORM_WIND_BODY_MASTER * storm) * gust;
+    const stormRamp = smoothstep(0.12, 0.9, storm);
+    const howlLvl = Tuning.STORM_WIND_HOWL_MASTER * stormRamp * gust;
+    const whistleLvl =
+      Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness))
+      + Tuning.STORM_WIND_WHISTLE_MASTER * Math.pow(storm, 1.3) * gust;
+    const whistleFreq = 760 + windLvl * 220 + storm * 340;
     const t0 = s.ctx.currentTime, tc = 0.3;
     s.pwind.body.frequency.setTargetAtTime(cutoff, t0, tc);
     s.pwind.bodyGain.gain.setTargetAtTime(bodyLvl, t0, tc);
     s.pwind.whistle.frequency.setTargetAtTime(whistleFreq, t0, tc);
     s.pwind.whistleGain.gain.setTargetAtTime(whistleLvl, t0, tc);
+    s.pwind.howlGain.gain.setTargetAtTime(howlLvl, t0, tc);
   }
 
   // Ambient life — suppressed under sandstorm
@@ -337,7 +365,7 @@ export interface AudioStateSnapshot {
     musicBus: number;
   };
   // C33 — procedural wind (the audible bed; the sample stems above are silent).
-  pwind: { bodyCutoff: number; bodyGain: number; whistleFreq: number; whistleGain: number } | null;
+  pwind: { bodyCutoff: number; bodyGain: number; whistleFreq: number; whistleGain: number; howlGain: number } | null;
   loaded: Record<SampleId, boolean>;
 }
 
@@ -372,6 +400,7 @@ export function getAudioStateSnapshot(ctx: GameContext): AudioStateSnapshot | nu
       bodyGain: s.pwind.bodyGain.gain.value,
       whistleFreq: s.pwind.whistle.frequency.value,
       whistleGain: s.pwind.whistleGain.gain.value,
+      howlGain: s.pwind.howlGain.gain.value,
     } : null,
     loaded: {
       'wind-calm':   getSample('wind-calm')   !== null,

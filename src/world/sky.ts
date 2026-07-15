@@ -1100,8 +1100,12 @@ export function updateSky(ctx: GameContext, dt: number): void {
   // rather than a clear sky behind a wall of fog.
   const storm = ctx.weather.intensity;
   if (storm > 0.001) {
-    _horizonColor.lerp(new THREE.Color(0x6e3a22), storm * 0.95);
-    _topColor.lerp(new THREE.Color(0x4a2614), storm * 0.95);
+    // review 2026-07-14 — a LUMINOUS daytime brownout, not a near-black murk. The
+    // horizon glows dust-ochre and the zenith stays a lit mid dust-brown (was
+    // 0x6e3a22 / 0x4a2614 — those read as an oppressive night dome). The whole sky
+    // reads as thick, sun-through sand.
+    _horizonColor.lerp(new THREE.Color(Tuning.STORM_FOG_DUST_HEX), storm * 0.95);
+    _topColor.lerp(new THREE.Color(Tuning.STORM_SKY_DUST_HEX), storm * 0.95);
   }
 
   // Push uniforms.

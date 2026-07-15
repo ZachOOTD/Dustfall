@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { getPlayerWorldPos } from '../player/effectivePos.ts';   // ACBD — effective player pos (speeder seat while mounted)
 import { Tuning } from '../config/tuning.ts';
+import { createDustWall, updateDustWall, type DustWall } from './dustWall.ts';   // review 2026-07-14 — the visible approaching dust front
 
 export type WeatherState = 'clear' | 'building' | 'storm' | 'settling';
 
@@ -84,7 +85,11 @@ export interface Weather {
   perceivedIntensity: number;
   stateTimer: number;
   nextStormAt: number;   // ctx.time.elapsed when next storm should start
-  layers: { near: DustLayer; mid: DustLayer; far: DustLayer };
+  // review 2026-07-14 — `streak` is a fast, elongated near-field layer (sand DRIVEN
+  // past you); ramps in above STORM_STREAK_RAMP_LO so it only reads in a real blow.
+  layers: { near: DustLayer; mid: DustLayer; far: DustLayer; streak: DustLayer };
+  /** review 2026-07-14 — the visible approaching dust WALL (Dune/Mad-Max front). */
+  dustWall: DustWall;
   cameraRef: THREE.PerspectiveCamera;
   /** AAF — current storm's duration in seconds. Set when entering the
    *  'building' state from `stormCurveAt(daysSurvived).duration`.
@@ -149,12 +154,45 @@ function makeDustTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-// One shared texture across all 3 layers.
+// One shared texture across the round-mote layers.
 const _sharedDustTex = (() => {
   // Defer creation to runtime (document available).
   let cached: THREE.CanvasTexture | null = null;
   return () => {
     if (!cached) cached = makeDustTexture();
+    return cached;
+  };
+})();
+
+// review 2026-07-14 — an elongated, horizontally-smeared streak sprite for the driven-
+// sand layer. Drawn as a wide, thin soft ellipse so each mote reads as a wind streak
+// (a motion-blur smudge) rather than a round dot.
+function makeStreakTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('canvas 2d unavailable');
+  g.clearRect(0, 0, 32, 32);
+  g.save();
+  g.translate(16, 16);
+  g.scale(1.0, 0.24);          // squash vertically → a horizontal streak
+  const grad = g.createRadialGradient(0, 0, 0, 0, 0, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,0.72)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.30)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(0, 0, 16, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const _sharedStreakTex = (() => {
+  let cached: THREE.CanvasTexture | null = null;
+  return () => {
+    if (!cached) cached = makeStreakTexture();
     return cached;
   };
 })();
@@ -239,6 +277,7 @@ interface LayerConfig {
   color: number;
   velMean: [number, number, number];
   velSpread: [number, number, number];
+  tex?: THREE.CanvasTexture;  // review 2026-07-14 — per-layer sprite (default = round mote)
 }
 
 function buildLayer(
@@ -259,7 +298,7 @@ function buildLayer(
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const mat = new THREE.PointsMaterial({
     color: cfg.color,
-    map: _sharedDustTex(),
+    map: cfg.tex ?? _sharedDustTex(),
     size: cfg.size,
     transparent: true,
     opacity: 0,
@@ -311,6 +350,19 @@ export function createWeather(
     velMean: [2.5, 0, -1.2],
     velSpread: [0.8, 0.3, 0.7],
   });
+  // STREAK layer (review 2026-07-14): fast, elongated near-field motes — the air
+  // reads as thick with sand DRIVEN past you. High horizontal velocity + the
+  // horizontal streak sprite; ramps in only once the storm is a real blow.
+  const streak = buildLayer(scene, {
+    count: Tuning.STORM_DUST_STREAK_COUNT,
+    spread: Tuning.STORM_DUST_STREAK_SPREAD,
+    yWrapHalf: 8,
+    size: 0.55,
+    color: 0xa07a52,
+    velMean: [16.0, 0, -5.0],
+    velSpread: [4.0, 0.8, 3.0],
+    tex: _sharedStreakTex(),
+  });
 
   // Initial nextStormAt uses day-0 curve (the player just started).
   const initCurve = stormCurveAt(0);
@@ -323,7 +375,8 @@ export function createWeather(
     stateTimer: 0,
     nextStormAt:
       initCurve.intervalMin + Math.random() * (initCurve.intervalMax - initCurve.intervalMin),
-    layers: { near, mid, far },
+    layers: { near, mid, far, streak },
+    dustWall: createDustWall(scene),
     cameraRef: camera,
     currentStormDuration: initCurve.duration,
     longStormAnnounced: false,
@@ -515,13 +568,19 @@ export function updateWeather(ctx: GameContext, dt: number): void {
   _camPos.copy(w.cameraRef.position);
   const pi = w.perceivedIntensity;
 
+  // Far dust fades back down at PEAK (review 2026-07-14) — once the whiteout fog
+  // fills the distance, distant specks would pop against the luminous brownout, so
+  // recede the far layer as the near air thickens.
   const farOp =
     ramp(pi, Tuning.STORM_FAR_RAMP_LO, Tuning.STORM_FAR_RAMP_HI) *
-    Tuning.STORM_DUST_FAR_OPACITY;
+    Tuning.STORM_DUST_FAR_OPACITY * (1 - 0.6 * ramp(pi, 0.6, 1.0));
   const midOp = pi * Tuning.STORM_DUST_MID_OPACITY;
   const nearOp =
     ramp(pi, Tuning.STORM_NEAR_RAMP_LO, Tuning.STORM_NEAR_RAMP_HI) *
     Tuning.STORM_DUST_NEAR_OPACITY;
+  const streakOp =
+    ramp(pi, Tuning.STORM_STREAK_RAMP_LO, Tuning.STORM_STREAK_RAMP_HI) *
+    Tuning.STORM_DUST_STREAK_OPACITY;
 
   // ACL SKY+WEATHER — anisotropic wind: while the wall is active, bias the
   // dust drift along the wall's travel direction (scaled by perceived
@@ -545,10 +604,50 @@ export function updateWeather(ctx: GameContext, dt: number): void {
   w.layers.far.mat.color.copy(w.layers.far.baseColor).multiplyScalar(dustDim);
   w.layers.mid.mat.color.copy(w.layers.mid.baseColor).multiplyScalar(dustDim);
   w.layers.near.mat.color.copy(w.layers.near.baseColor).multiplyScalar(dustDim);
+  w.layers.streak.mat.color.copy(w.layers.streak.baseColor).multiplyScalar(dustDim);
 
   stepLayer(w.layers.far, farOp, farOp > 0.001, dt, windX * 1.4, windZ * 1.4);
   stepLayer(w.layers.mid, midOp, midOp > 0.001, dt, windX, windZ);
   stepLayer(w.layers.near, nearOp, nearOp > 0.001, dt, windX * 0.6, windZ * 0.6);
+  // Streaks get the STRONGEST wind bias so they rip past along the wall's travel dir.
+  stepLayer(w.layers.streak, streakOp, streakOp > 0.001, dt, windX * 1.7, windZ * 1.7);
+
+  // ── The approaching DUSTWALL (review 2026-07-14). Seat it at the storm wall's
+  //    leading edge, facing the player, opacity ramped by how far ahead of the player
+  //    that edge is — fades IN on the far horizon, looms at full, then dissolves into
+  //    the whiteout fog as it engulfs. Uses WORLD intensity (the front is a world
+  //    object, visible regardless of the player's shelter). ──
+  {
+    const dw = w.dustWall;
+    // Signed distance of the player from the wall core along travel dir. The leading
+    // (player-facing) edge is at signed = +width from the core; approachDist = how far
+    // ahead of the player that edge still is (only meaningful while approaching).
+    const signed = wallSignedDistance(wall, px, pz);
+    const approachDist = signed - wall.width;   // >0 while the front hasn't reached the player
+    // World leading-edge XZ = wall center + dir * width.
+    const edgeX = wall.posX + wall.dirX * wall.width;
+    const edgeZ = wall.posZ + wall.dirZ * wall.width;
+    // Distance-driven opacity: fade in FAR→FULL, hold, fade out NEAR→GONE.
+    let op = 0;
+    if (wall.active && approachDist > Tuning.STORM_DUSTWALL_FADE_GONE) {
+      // inT: rises 0→1 as the edge closes FADE_FAR→FADE_FULL. outT: falls 1→0 as the
+      // edge passes FADE_NEAR→FADE_GONE (engulfing — the whiteout fog takes over).
+      const inT = 1 - ramp(approachDist, Tuning.STORM_DUSTWALL_FADE_FULL, Tuning.STORM_DUSTWALL_FADE_FAR);
+      const outT = ramp(approachDist, Tuning.STORM_DUSTWALL_FADE_GONE, Tuning.STORM_DUSTWALL_FADE_NEAR);
+      op = inT * outT;
+    }
+    // Ground the base a touch below terrain so there's no floating gap at its foot.
+    const edgeGroundY = ctx.terrain.heightAt(edgeX, edgeZ);
+    const baseY = Math.min(edgeGroundY, ctx.terrain.heightAt(px, pz)) - Tuning.STORM_DUSTWALL_LIFT - 25;
+    updateDustWall(dw, {
+      visible: wall.active && op > 0.002,
+      edgeX, edgeZ, baseY,
+      playerX: px, playerZ: pz,
+      opacity: op,
+      elapsed: ctx.time.elapsed,
+      wind: Math.min(1.5, w.intensity * 1.2),
+    });
+  }
 }
 
 /** Convenience: trigger a storm immediately. Used by debug panel. */

@@ -103,6 +103,16 @@ export const Tuning = {
   WIND_CUTOFF_STORM: 5200,           // Hz — a storm opens the wind to full-spectrum roar
   WIND_BODY_MASTER: 0.0,             // MUTED for now (user 2026-07-07: desert wind too loud/distracting). Was 0.5 — restore to bring the wind bed back.
   WIND_WHISTLE_MASTER: 0.0,          // MUTED for now (was 0.16) — the lonely band-pass moan; part of the desert-wind mute
+  // Sandstorm WIND ROAR (review 2026-07-14 — "hear it coming"). The calm-weather
+  // wind stays muted (above), but a storm brings a rising, gusting wind that swells
+  // as the dust wall approaches (gain ∝ perceivedIntensity) and peaks as it engulfs
+  // you. Three layers over the shared noise: a deep moving-air HOWL, the body ROAR,
+  // and a high driven-sand WHISTLE. Levels are FEEL — the attended walk-test balances.
+  STORM_WIND_BODY_MASTER: 0.34,      // body roar level at peak storm (lowpass, mood-cutoff)
+  STORM_WIND_HOWL_MASTER: 0.30,      // deep low howl level at peak (a separate low lowpass — the mass of moving air)
+  STORM_WIND_HOWL_CUTOFF: 230,       // Hz — howl lowpass cutoff (sub-low roar under the body hiss)
+  STORM_WIND_WHISTLE_MASTER: 0.15,   // high driven-sand whistle level at peak (bandpass moan)
+  STORM_WIND_GUST_DEPTH: 0.45,       // 0..1 — how deep the gusts dip the wind gain (LFO-driven surging)
   DEHYDRATION_DAMAGE: 1 / 120,       // ~2 min health drain once thirst hits 0 (was 1/30 = 30s) — a recoverable spiral, not a cliff
   HEATSTROKE_DAMAGE: 1 / 150,        // ~2.5 min once temp ≥ 1 (was 1/25 = 25s)
   // M6 ② (C38) — health REGEN when fully provisioned: the forgiving keystone. A player
@@ -298,7 +308,14 @@ export const Tuning = {
   // density), storm peak chokes visibility to ~30m. Density follows
   // an eased curve from CLEAR→STORM as weather.intensity ramps.
   FOG_DENSITY_CLEAR: 0.0018,  // EE — tightened so 1km+ remains visible in the larger world
-  FOG_DENSITY_STORM: 0.055,
+  FOG_DENSITY_STORM: 0.16,    // review 2026-07-14/15 — a real BROWNOUT WHITEOUT at peak. Was 0.055 (~50m vis: distant wrecks/terrain still ghosted). 0.16 collapses useful visibility to ~8m so even the far TERRAIN horizon fogs out; FogExp2 = exp(-(density·dist)²), so ~28m+ is gone.
+  // review 2026-07-14 — storm fog/sky tinting. At peak the fog pulls almost fully
+  // to a luminous dust-brown so the whole distance reads as churning sand, not a
+  // grey haze. Sky background goes further (near-solid dust dome behind the murk).
+  STORM_FOG_DUST_HEX: 0xa5743f,   // luminous mid dust-brown the fog collapses toward at peak (daytime brownout glow)
+  STORM_SKY_DUST_HEX: 0xa5743f,   // dust the sky pulls toward — MATCHES the FOG dust hex so the ground-fog and sky are the same brown at the horizon → the far terrain outline fully dissolves (near-zero visibility, no visible far edge)
+  STORM_FOG_LERP: 0.92,           // fraction toward STORM_FOG_DUST_HEX at peak intensity (was 0.70 — too grey/bichromatic)
+  STORM_BG_LERP: 0.9,             // fraction toward STORM_SKY_DUST_HEX at peak
   WORLD_RADIUS: 900,  // EE — soft visibility cap; was 280 for the 800m world
 
   // World chunks (Session EE — world rework #1). The terrain is a
@@ -517,12 +534,22 @@ export const Tuning = {
   // Storm visuals (Session BB-4)
   // Near/mid/far dust layer particle counts. Mid keeps the old 2500;
   // near + far stack to give parallax depth.
-  STORM_DUST_NEAR_COUNT: 800,
-  STORM_DUST_MID_COUNT: 2500,
-  STORM_DUST_FAR_COUNT: 600,
+  // review 2026-07-14 — DENSER dust (thick driven air, not sparse dots). Counts
+  // bumped; Points are one draw call each, so this stays cheap + fog-aware.
+  STORM_DUST_NEAR_COUNT: 1500,   // was 800
+  STORM_DUST_MID_COUNT: 3600,    // was 2500
+  STORM_DUST_FAR_COUNT: 900,     // was 600
   STORM_DUST_NEAR_SPREAD: 30,
   STORM_DUST_MID_SPREAD: 90,
   STORM_DUST_FAR_SPREAD: 200,
+  // review 2026-07-14 — STREAK layer: fast, elongated (wind-aligned) motes that
+  // read as sand DRIVEN past you. A separate near-field layer with a horizontally
+  // stretched sprite + high wind bias.
+  STORM_DUST_STREAK_COUNT: 1600,
+  STORM_DUST_STREAK_SPREAD: 42,
+  STORM_DUST_STREAK_OPACITY: 0.5,
+  STORM_STREAK_RAMP_LO: 0.25,    // storm intensity at which streaks start
+  STORM_STREAK_RAMP_HI: 0.7,     // full streaks
   // Layer-staggered opacity ramps so dust appears far-first then closes
   // in. Each pair = [intensity at which layer starts, intensity at full].
   STORM_NEAR_RAMP_LO: 0.15,
@@ -530,8 +557,8 @@ export const Tuning = {
   STORM_FAR_RAMP_LO: 0.0,
   STORM_FAR_RAMP_HI: 0.35,
   // Peak opacity per layer.
-  STORM_DUST_NEAR_OPACITY: 0.55,
-  STORM_DUST_MID_OPACITY: 0.55,
+  STORM_DUST_NEAR_OPACITY: 0.62,   // review 2026-07-14 — thicker near air (was 0.55)
+  STORM_DUST_MID_OPACITY: 0.62,    // review 2026-07-14 — (was 0.55)
   STORM_DUST_FAR_OPACITY: 0.30,    // C20 — thinned so the far/sky layer dissolves into the fog haze instead of dotting the dark sky with specks
   // Terrain darkening at peak storm. Sun intensity × (1 - STORM_SUN_DIM),
   // ambient × (1 - STORM_AMBIENT_DIM). Sun loses more than ambient (sun
@@ -1827,6 +1854,24 @@ export const Tuning = {
   STORM_WALL_DEPART_FALLOFF: 300,  // ramp distance (u) over which intensity falls as the wall departs
   STORM_WALL_RETIRE_DIST: 260,     // signed distance past the player at which the wall is spent (ends storm early)
   STORM_WALL_WIND_BIAS: 5.5,       // extra wind (u/s) along wall dir at full intensity for mid dust layer (far x1.4, near x0.6)
+  // review 2026-07-14 — the visible approaching DUSTWALL (Dune/Mad-Max front). A tall
+  // curved wall of billowing dust rendered at the storm wall's leading edge, facing the
+  // player, that advances as the storm ramps and then hands off to the whiteout fog as
+  // it engulfs. Opacity ramps by the leading edge's distance ahead of the player.
+  STORM_DUSTWALL_RADIUS: 230,      // curve radius (world u) — the wall bows toward the player
+  STORM_DUSTWALL_HEIGHT: 300,      // ground-to-high-sky height (world u) — towering, but leaves a strip of storm sky above the boiling crest at approach distance
+  STORM_DUSTWALL_ARC: 2.1,         // arc angle (rad, ~120°) so it spans the horizon
+  STORM_DUSTWALL_SEG_W: 48,        // horizontal segments (billow detail across)
+  STORM_DUSTWALL_SEG_H: 20,        // vertical segments
+  STORM_DUSTWALL_FADE_FAR: 700,    // leading-edge dist (m) at which the wall starts fading IN on the horizon
+  STORM_DUSTWALL_FADE_FULL: 420,   // dist (m) at which the wall is at full opacity (looming)
+  STORM_DUSTWALL_FADE_NEAR: 120,   // dist (m) below which it starts fading OUT (the whiteout fog takes over)
+  STORM_DUSTWALL_FADE_GONE: 30,    // dist (m) at which it's fully hidden (engulfed)
+  STORM_DUSTWALL_MAX_OPACITY: 0.97,
+  STORM_DUSTWALL_COLOR_LO: 0x6b4526,  // shadowed billow undersides (brightened from 0x4d3120 so the wall doesn't read as dark sky)
+  STORM_DUSTWALL_COLOR_HI: 0xe0b483,  // sun-lit billow crests — bright ochre so the front POPS against the darkened storm sky (haboob read)
+  STORM_DUSTWALL_SCROLL: 0.04,        // vertical churn scroll speed (uv/sec)
+  STORM_DUSTWALL_LIFT: 0.02,          // Y drop of the wall base below ground so it seats without a floating gap
   // ACW E (#146/#134) — storm wind pushes loose bodies + in-storm sensory.
   STORM_WIND_PUSH_ACCEL: 4.5,      // u/s² wind accel on loose bodies (dropped pickups, parked speeder, slack sled) at full world intensity
   STORM_CAM_SWAY_AMP: 0.022,       // rad — peak camera sway (pitch/roll) buffeting at full perceivedIntensity

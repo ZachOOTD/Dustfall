@@ -8610,56 +8610,129 @@ const SCENARIOS = {
   // storm LOOK (the signature atmosphere moment — 3 dust layers + fog + sun/ambient
   // dimming + the storm vignette). No storm-render scenario existed; this is the
   // reusable enabler for atmosphere iteration. Eye-level horizontal view into the wall.
+  // Sandstorm overhaul (review 2026-07-14). Three shots that judge the storm from the
+  // real player view against a spawned wreck (the occlusion test object):
+  //   approach — the dust WALL on the horizon with the wreck clearly visible (light haze)
+  //   mid      — the wall advancing, thick driven dust, wreck fogging out
+  //   peak     — the whiteout: player inside the wall core; NO distant outline may survive
+  // `--shot=approach|mid|peak|all` (default all). The wall travels +Z; the player stands
+  // north of the wreck looking -Z toward the incoming front. Intensity is WALL-DERIVED
+  // (updateWeather recomputes it each tick from the wall geometry), so we place the wall,
+  // let the sim tick, then pause + frame.
   'storm': async (page) => {
-    await page.evaluate(() => {
+    const shot = String(argv.shot || 'all');
+    const shots = shot === 'all' ? ['approach', 'mid', 'peak'] : [shot];
+    // Spawn ONE procgen wreck as the occlusion target; find its world center.
+    const wreck = await page.evaluate(() => {
       const ctx = window.__game.ctx;
-      window.__game.setTime(0.42);                 // mid-morning: lit but warm
+      window.__game.setTime(0.34);                 // bright midday for a legible daytime brownout
+      ctx.three.renderer.toneMappingExposure = 1.35;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
-      ctx.player.inShelter = false;                // ensure perceivedIntensity isn't dampened
-      ctx.three.renderer.setSize(900, 600, false);
-      const cam = ctx.three.camera;
-      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 600; cam.updateProjectionMatrix(); }
-      // Force a peak storm centered on the player (player inside the wall core → intensity 1).
-      const w = ctx.weather;
-      const tr = ctx.player.body.body.translation();
-      w.state = 'storm';
-      w.intensity = 1.0;
-      w.perceivedIntensity = 1.0;
-      w.currentStormDuration = 1e6;                // don't let it settle during the shot
-      w.stateTimer = 0;
-      w.wall.active = true;
-      w.wall.posX = tr.x; w.wall.posZ = tr.z;
-      w.wall.dirX = 1; w.wall.dirZ = 0;
-      w.wall.width = 400; w.wall.age = 0; w.wall.approaching = false;
+      ctx.player.inShelter = false;
+      window.__game.spawnProcgenWreckRig('freighter', 4242);
+      let mw = null;
+      ctx.three.scene.traverse((o) => { if (!mw && o.name === 'procgenWreckRig') mw = o; });
+      if (!mw) return null;
+      mw.updateMatrixWorld(true);
+      const box = new (ctx.three.camera.position.constructor)(); void box;
+      let minX = 1e9, minZ = 1e9, maxX = -1e9, maxZ = -1e9, maxY = -1e9;
+      mw.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox;
+        const V = ctx.three.camera.position.constructor;
+        for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) {
+          const p = new V(cx, cy, cz); o.localToWorld(p);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+          maxY = Math.max(maxY, p.y);
+        }
+      });
+      ctx.flags.paused = false;
+      return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, topY: maxY };
     });
-    // Run the LIVE loop ~2.4s so the 3 dust layers populate, drift, + ramp to full
-    // opacity (opacity keys off perceivedIntensity, recomputed by the shelter pass).
-    await page.waitForTimeout(2400);
-    const r = await page.evaluate(() => {
-      const ctx = window.__game.ctx;
-      const w = ctx.weather;
-      w.intensity = 1.0; w.perceivedIntensity = 1.0;   // re-pin peak
-      const tr = ctx.player.body.body.translation();
-      const cam = ctx.three.camera;
-      ctx.flags.paused = true;
-      // Eye-level horizontal view into the storm.
-      cam.position.set(tr.x, tr.y + 1.6, tr.z);
-      cam.lookAt(tr.x + 30, tr.y + 1.6, tr.z + 4);
-      cam.updateMatrixWorld(true);
-      ctx.three.renderer.render(ctx.three.scene, cam);   // guarantee the repositioned view paints
-      const fog = ctx.three.scene.fog;
-      return {
-        intensity: +w.intensity.toFixed(2), pi: +w.perceivedIntensity.toFixed(2),
-        fogDensity: fog ? +fog.density.toFixed(4) : null,
-        vis: [w.layers.near.particles.visible, w.layers.mid.particles.visible, w.layers.far.particles.visible],
-        op: [+w.layers.near.mat.opacity.toFixed(2), +w.layers.mid.mat.opacity.toFixed(2), +w.layers.far.mat.opacity.toFixed(2)],
-      };
-    });
-    await page.waitForTimeout(120);
-    await page.screenshot({ path: join(OUT, 'scen-storm.png'), fullPage: false });
-    console.log(`[storm] ${JSON.stringify(r)}`);
+    if (!wreck) { console.log('[storm] FAILED to spawn wreck'); return; }
+    console.log(`[storm] wreck @ (${wreck.cx.toFixed(0)}, ${wreck.cz.toFixed(0)})`);
+
+    const CFG = {
+      // leadingEdgeDist = how far ahead of the player the wall's front sits (m).
+      approach: { edge: 340, wreckDist: 46 },
+      mid:      { edge: 165, wreckDist: 46 },
+      peak:     { edge: 0,   wreckDist: 46 },
+    };
+
+    for (const sh of shots) {
+      const cfg = CFG[sh];
+      if (!cfg) { console.log(`[storm] unknown shot ${sh}`); continue; }
+      await page.evaluate(({ sh, cfg, wreck }) => {
+        const ctx = window.__game.ctx;
+        ctx.flags.paused = false;
+        const w = ctx.weather;
+        const cam = ctx.three.camera;
+        ctx.three.renderer.setSize(1200, 680, false);
+        if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 680; cam.updateProjectionMatrix(); }
+        // Player stands `wreckDist` north (+Z) of the wreck, looking -Z toward the front.
+        const px = wreck.cx, pz = wreck.cz + cfg.wreckDist;
+        const gy = ctx.terrain.heightAt(px, pz);
+        ctx.player.body.body.setTranslation({ x: px, y: gy + 1.6, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.inShelter = false;
+        // Configure the wall: travels +Z; front at player - dir*edge (i.e. -Z of player).
+        w.state = 'storm';
+        w.currentStormDuration = 1e6;
+        w.stateTimer = 0;
+        w.wall.active = true;
+        w.wall.dirX = 0; w.wall.dirZ = 1; w.wall.age = 0; w.wall.approaching = true;
+        if (sh === 'peak') {
+          // Player inside a wide core → intensity 1 (whiteout).
+          w.wall.width = 400;
+          w.wall.posX = px; w.wall.posZ = pz;
+        } else {
+          w.wall.width = 140;
+          // leading edge at pz - edge ; center = edge - dir*width along +Z ⇒ posZ = (pz - edge) - width.
+          w.wall.posX = px;
+          w.wall.posZ = (pz - cfg.edge) - w.wall.width;
+        }
+      }, { sh, cfg, wreck });
+      // Tick live so fog + intensity + dust layers + the dust wall all settle.
+      await page.waitForTimeout(2200);
+      const r = await page.evaluate(({ sh, wreck, cfg }) => {
+        const ctx = window.__game.ctx;
+        const w = ctx.weather;
+        const cam = ctx.three.camera;
+        const px = wreck.cx, pz = wreck.cz + cfg.wreckDist;
+        const gy = ctx.terrain.heightAt(px, pz);
+        ctx.flags.paused = true;
+        // Eye at 1.7m, looking -Z toward the wreck top / incoming wall, slightly up so the
+        // towering front reads.
+        cam.position.set(px, gy + 1.7, pz);
+        const aimY = gy + Math.max(4, Math.min(16, (wreck.topY - gy) * 0.5));
+        cam.lookAt(wreck.cx, aimY, wreck.cz);
+        cam.updateMatrixWorld(true);
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        const fog = ctx.three.scene.fog;
+        const dw = w.dustWall;
+        return {
+          shot: sh,
+          intensity: +w.intensity.toFixed(3),
+          pi: +w.perceivedIntensity.toFixed(3),
+          fogDensity: fog ? +fog.density.toFixed(4) : null,
+          fogColor: fog ? '#' + fog.color.getHexString() : null,
+          dustWallVisible: dw ? dw.group.visible : null,
+          dustWallOp: dw && dw.shells[0] ? +dw.shells[0].mat.uniforms.uOpacity.value.toFixed(3) : null,
+          layerOp: [
+            +w.layers.near.mat.opacity.toFixed(2),
+            +w.layers.mid.mat.opacity.toFixed(2),
+            +w.layers.far.mat.opacity.toFixed(2),
+            +w.layers.streak.mat.opacity.toFixed(2),
+          ],
+        };
+      }, { sh, wreck, cfg });
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-storm-${sh}.png`), fullPage: false });
+      console.log(`[storm] ${JSON.stringify(r)}`);
+    }
   },
 
   // Smoke-plume (C21): deploy a lit fire + let its smoke-signal column build, then

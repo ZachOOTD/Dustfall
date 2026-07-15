@@ -157,9 +157,13 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   // the way (BB-4 — bumped from 0.45 since FogExp2's denser falloff makes
   // every surface read the fog color near the visibility limit, so the
   // fog needs to match the sky tint or the world reads bichromatic).
-  const dust = new THREE.Color(0x6e3a22);
-  const bgTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.95) : target;
-  const fogTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.70) : target;
+  // review 2026-07-14 — a real BROWNOUT: pull the fog almost fully to a luminous
+  // dust-brown (was 0.70 → grey/bichromatic) so the collapsed distance reads as
+  // churning sand, and the sky background toward a deeper dust dome behind it.
+  const fogDust = new THREE.Color(Tuning.STORM_FOG_DUST_HEX);
+  const skyDust = new THREE.Color(Tuning.STORM_SKY_DUST_HEX);
+  const bgTarget = storm > 0.001 ? target.clone().lerp(skyDust, storm * Tuning.STORM_BG_LERP) : target;
+  const fogTarget = storm > 0.001 ? target.clone().lerp(fogDust, storm * Tuning.STORM_FOG_LERP) : target;
   (scene.background as THREE.Color).copy(bgTarget);
   // scene.fog is FogExp2 (BB-4); FogBase has .color, same API as THREE.Fog.
   (scene.fog as THREE.FogExp2).color.copy(fogTarget);
