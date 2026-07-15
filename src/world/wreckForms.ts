@@ -96,7 +96,7 @@ export function fuselageProfile(
  *  flat keel/bottom, hard bottom chines, vertical sides, a flat dorsal DECK,
  *  top chines. Points go CCW. Lofting this reads as a real hull (flat deck for
  *  the bridge, flat sides for panel lines, hard chine line) — not a dome. */
-const SHIP_SECTION: ReadonlyArray<readonly [number, number]> = [
+export const SHIP_SECTION: ReadonlyArray<readonly [number, number]> = [
   [-0.60, -1.00], [0.60, -1.00],   // flat keel
   [0.90, -0.78],                    // bottom chine
   [1.00, -0.30], [1.00, 0.45],      // vertical side

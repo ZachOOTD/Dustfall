@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
 import { type Rng, makeRng } from '../core/rng.ts';
-import { makeLoftedHull, makeFormerRings, mergeStaticByMaterial, type LoftStation } from './wreckForms.ts';
+import { makeLoftedHull, makeFormerRings, mergeStaticByMaterial, SHIP_SECTION, type LoftStation } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
@@ -688,42 +688,67 @@ export function placeSkyfallWreck(
   }
   dBox(stern, _frameMat, HALF_W * 1.7, 0.16, 2.5, 0, HALF_H * 0.55, STERN_LEN - 0.4);  // fin base manifold
 
-  // ── TORN CUT-PLATE RIM at the fracture mouths (M7-R headline). The 0.7m loft
-  //    inner-skin + rim cap gives real thickness, but the weathered hull paint
-  //    lets the cut edge sink into shadow. A bare-metal (_frameMat) torn rim
-  //    framing each opening makes the wall CROSS-SECTION read unmistakably as
-  //    thick torn STEEL — the plate depth (HULL_THICK) is the box's z-extent, so
-  //    you see the inner+outer skin sandwich edge-on. Crash-jagged (a couple
-  //    bent out). Shared material → folds into the merge; NO collider (the hull
-  //    loft/mouth colliders stand; the mouth stays a clear walk-in entry).
-  //    faceSign: +1 = open face points +Z (fore fracture at z=FORE_LEN);
-  //              -1 = open face points -Z (stern fracture at z=0).
-  const fractureRim = (parent: THREE.Object3D, faceZ: number, faceSign: 1 | -1, hw: number, hh: number): void => {
-    const zc = faceZ - faceSign * HULL_THICK * 0.5;         // rim centred on the cut plane
-    const T = HULL_THICK * 1.04;                            // plate depth (slightly proud so it reads)
-    const crownY = hh * 0.95;
-    // Top crown — 3 slightly-jagged plate segments across the deck opening,
-    // hugging the cut plane (small bend so they read as an attached torn rim,
-    // not detached flaps).
-    for (let i = 0; i < 3; i++) {
-      const bend = (i - 1) * 0.06;
-      dBox(parent, _frameMat, hw * 0.46, 0.40, T,
-        (i - 1) * hw * 0.42, crownY + (i % 2 ? 0.05 : -0.03), zc + (i % 2 ? 0.05 : -0.03) * faceSign,
-        bend, 0, bend * 0.5);
+  // ── SOLID MOUTH JAMB at the fore fracture (entrance) — the walk-in cross-
+  //    section (review 2026-07-15). The prior TORN CUT-PLATE RIM (scattered
+  //    _frameMat plates radiating around each mouth) read as ugly grey blocks
+  //    with see-through gaps between them + paper-thin edges (the reviewer's
+  //    entrance shot). Replaced by a SOLID capped return that follows the hull
+  //    section: a thick collar of hull-dark plate that seals the outer skin ↔
+  //    inner skin ↔ deck/ceiling into one continuous thick wall, so a sightline
+  //    into the mouth hits a solid cut cross-section — never daylight through a
+  //    slot or a knife edge. Built as a SECTION-SHAPED ring (matches the arched
+  //    hull, unlike a boxy frame) extruded in z; shared material folds into the
+  //    merge; NO collider (the hull-loft/deck/wall colliders stand; the mouth
+  //    aperture stays the clear walk-in entry).
+  {
+    // Section-scaled ring: OUTER edge at the mouth's outer skin, INNER edge a
+    // clean walk aperture just inside the interior wall/deck/ceiling so the
+    // collar overlaps (seals) every interior surface at the mouth.
+    const outHW = HALF_W * 0.97, outHH = HALF_H * 0.97;   // mouth outer scale (matches the loft end station)
+    // Aperture pulled clearly INBOARD of the loft's own inner skin (≈WALL_X) so
+    // the collar is a distinct solid, not a ~6mm-coplanar sheet that z-fights the
+    // inner skin along the side walls. Rim reads ~0.9m thick (a real cut plate).
+    const apW = WALL_X - 0.35, apH = (CEIL_Y - DECK_Y) / 2;  // aperture half-extents (inside the interior)
+    const apCY = (CEIL_Y + DECK_Y) / 2;                   // aperture vertical centre (deck→ceiling)
+    const zFront = FORE_LEN + 0.08;                       // just proud of the outer skin (occludes the loft rim cap)
+    const zBack = FORE_LEN - HULL_THICK - 0.35;           // recessed into the interior (real plate depth)
+    // Build the collar from SHIP_SECTION: an OUTER loop (hull-section scaled) and
+    // an INNER loop (aperture rectangle-ish, but section-shaped at the top so the
+    // arch reads). We loft front-cap + inner skin + back-cap as one solid ring.
+    const N = SHIP_SECTION.length;
+    const outer = SHIP_SECTION.map(([sx, sy]) => new THREE.Vector2(sx * outHW, sy * outHH));
+    // INNER loop: clamp the section to the aperture box so the hole is a clean
+    // walk-in opening (flat deck floor + flat ceiling + near-vertical sides),
+    // while the OUTER loop keeps the true arched hull silhouette.
+    const inner = SHIP_SECTION.map(([sx, sy]) => new THREE.Vector2(
+      Math.sign(sx) * Math.min(Math.abs(sx * outHW), apW),
+      Math.max(Math.min(sy * outHH, apCY + apH), apCY - apH),
+    ));
+    const pos: number[] = [];
+    const oF = outer.map((p) => new THREE.Vector3(p.x, p.y, zFront));
+    const iF = inner.map((p) => new THREE.Vector3(p.x, p.y, zFront));
+    const iB = inner.map((p) => new THREE.Vector3(p.x, p.y, zBack));
+    const oB = outer.map((p) => new THREE.Vector3(p.x, p.y, zBack));
+    const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
+    // Windings mirror makeLoftedHull EXACTLY (FrontSide culls by winding, not
+    // normal): outer/inner skins face out/in, front cap faces +z, back cap -z.
+    for (let k = 0; k < N; k++) {
+      const k2 = (k + 1) % N;
+      // Outer skin (zBack→zFront), faces outward (hidden against the hull skin).
+      push(oB[k]); push(oF[k2]); push(oF[k]); push(oB[k]); push(oB[k2]); push(oF[k2]);
+      // Inner skin (the aperture jamb wall), faces inward toward the walk lane.
+      push(iB[k]); push(iF[k]); push(iF[k2]); push(iB[k]); push(iF[k2]); push(iB[k2]);
+      // Front cap annulus (faces +z — the cut cross-section seen from outside).
+      push(oF[k]); push(iF[k]); push(iF[k2]); push(oF[k]); push(iF[k2]); push(oF[k2]);
+      // Back cap annulus (faces -z, seals against the interior surfaces).
+      push(oB[k]); push(iB[k2]); push(iB[k]); push(oB[k]); push(oB[k2]); push(iB[k2]);
     }
-    // Upper-shoulder plates (both top chines) + upper vertical-side plates.
-    // Pulled in slightly (×0.94) so they visually meet the hull skin.
-    for (const s of [-1, 1] as const) {
-      dBox(parent, _frameMat, 0.46, 0.5, T, s * hw * 0.76, hh * 0.80, zc, 0, 0, s * 0.28);   // top chine
-      dBox(parent, _frameMat, 0.42, 0.95, T, s * hw * 0.94, hh * 0.40, zc, 0, 0, s * 0.08);  // upper side
-    }
-    // Lower-side stub plates (the cut continues down the flanks a little).
-    for (const s of [-1, 1] as const) {
-      dBox(parent, _frameMat, 0.40, 0.7, T, s * hw * 0.94, -hh * 0.20, zc);
-    }
-  };
-  fractureRim(fore, FORE_LEN, 1, HALF_W * 0.97, HALF_H * 0.97);
-  fractureRim(stern, 0, -1, HALF_W * 0.96, HALF_H * 0.96);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    const jamb = new THREE.Mesh(geo, _hullDarkMat);
+    fore.add(jamb);
+  }
 
   // ══ S4-S5 — INTERIOR HERO DETAIL + LIGHTING ═══════════════════════════════
   // The enterable interior taken from S2 greybox to intro-ship density in the

@@ -3018,6 +3018,12 @@ const SCENARIOS = {
     await flankShot('flank-close', -1, 16, 6.5, 1.6, 20, 4.8, 1.2);
     // Low near the belly/keel looking up + along the flank (underside read).
     await flankShot('flank-low', 1, 20, 9, 0.35, 8, 5.5, 2.6);
+    // MOUTH GRAZE — stand just outboard of the fracture mouth (along≈mouth) at
+    // deck-lip height and look ACROSS the opening plane at the wall sandwich, so a
+    // see-through slot between the hull skins + interior wall, or a paper-thin
+    // exposed edge, is unmissable (the entrance-gap diagnostic).
+    await flankShot('mouth-graze', 1, 31.5, 5.5, 0.9, 29.5, 2.6, 0.9);
+    await flankShot('mouth-graze2', -1, 31.5, 5.5, 0.9, 29.5, 2.6, 0.9);
     // M7-S2 — interior reads (player-eye, from the builder's probe waypoints).
     const probe = await page.evaluate(() => {
       let p = null;
