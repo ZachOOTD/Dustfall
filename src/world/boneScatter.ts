@@ -22,19 +22,19 @@ import { createBoneMaterial } from './boneMaterial.ts';
 // after merge). Warm-but-bleached bone; strong age-bleach so the tops read
 // sun-whitened. NEVER disposed on chunk unload (the _treeMat shared-material
 // rule — merged bit geometry is disposed via the noCollider tag).
-const _boneMat = createBoneMaterial(0xf2f4f6, {
+const _boneMat = createBoneMaterial(0xdcd8cf, {
   crackDensity: 1.15,
-  marrowHint: 0.28,   // less yellow-brown mineral stain (it warmed the bone toward sand)
-  ageBleach: 0.82,    // strongly sun-whitened tops
+  marrowHint: 0.3,    // faint yellow-brown mineral stain
+  ageBleach: 0.7,     // sun-weathered tops (dialled back from stark-white)
 });
 // The graveyard's POP: under Dustfall's permanently WARM "long-storm" sun a plain
 // ivory material collapses to tan (color × warm light) and blends into the sand.
-// A subtle COOL emissive self-illuminates the bone toward a pale blue-white that
-// reads as BONE regardless of the light — this is what makes the field pop and
-// separates the bones from the warm dunes. Modest intensity so it never glows at
-// night (adds ~0.14 brightness, a fill, not a lamp).
-_boneMat.emissive = new THREE.Color(0x4a5766);
-_boneMat.emissiveIntensity = 0.85;
+// A subtle COOL emissive self-illuminates the bone so it reads as BONE regardless
+// of the light — what makes the field pop + separates the bones from the warm
+// dunes. Tuned GREYER + less-cool + less-intense than before (reviewer: "bones
+// too white") — a near-neutral grey fill, not a blue-white lamp.
+_boneMat.emissive = new THREE.Color(0x545a60);
+_boneMat.emissiveIntensity = 0.55;
 const _socketMat = new THREE.MeshLambertMaterial({ color: 0x140f09, flatShading: true });
 
 export type BoneBitKind = 'skull' | 'ribarch' | 'spine' | 'longbone';

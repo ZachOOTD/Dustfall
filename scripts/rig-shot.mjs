@@ -2405,13 +2405,14 @@ const SCENARIOS = {
   // ── bone-hero — the bone_field HERO "wow" gate. Finds the nearest bone_field
   //    region, streams to its ANCHOR (the field centre, where the colossal
   //    half-buried RIBCAGE spawns), and shoots the REAL player-eye reads:
-  //    (1) ENTRY — a player-eye 3/4 approach: does it read as a colossal titan
-  //        ribcage rising from the dunes, dwarfing the player?
-  //    (2) BROADSIDE — full length + the arching ribs + the dorsal sail.
-  //    (3) INTO-CAGE — inside, down the aisle: ribs arcing up + the sail overhead.
-  //    (4) RIDGELINE — the dorsal-spike sail + the skull along the spine.
-  //    (5) SKULL — the head close-up.
-  //    (6) LOWGRAZE — a very low angle across the rib bases (float check).
+  //    (1) ENTRY — a player-eye 3/4 approach: does it read as a colossal walk-under
+  //        ribcage tunnel — spine ridge overhead, ribs to the ground, dwarfing us?
+  //    (2) BROADSIDE — full length + the arched backbone ridge + the hanging ribs.
+  //    (3) UNDER-TUNNEL — player-eye INSIDE, level down the centre aisle: arches
+  //        must pass OVER the head, backbone running overhead.
+  //    (4) UNDER-LOOKUP — player-eye pitched UP: the spine + ribs arch overhead.
+  //    (5) END-ON — from the tunnel mouth looking in: the arch colonnade read.
+  //    (6) LOWGRAZE — a very low angle across the rib bases (float / paper check).
   //    Run: node scripts/rig-shot.mjs --scenario=bone-hero --port=5782
   'bone-hero': async (page) => {
     await page.evaluate(async () => {
@@ -2506,33 +2507,36 @@ const SCENARIOS = {
       cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
       cam.updateMatrixWorld(true);
     })()`);
-    // (3) INTO-CAGE — INSIDE at the tail end, looking down the aisle toward the
-    //     skull: ribs arcing up on both sides + the sail overhead (walk-into read).
-    await shot('intocage', `(() => {
+    // (3) UNDER-TUNNEL — the KEY walk-under read: player-eye, standing INSIDE on
+    //     the centre aisle (Z≈0) in the tall mid-section, looking level down the
+    //     tunnel. The rib arches must clearly pass OVER the player's head + the
+    //     backbone run overhead down the length.
+    await shot('undertunnel', `(() => {
       const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
-      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.44};
-      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.44};
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.3};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.3};
       cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
-      cam.lookAt(${info.cx} + ${info.fwd.x} * ${L * 0.3}, ${gy} + ${H * 0.35}, ${info.cz} + ${info.fwd.z} * ${L * 0.3});
+      cam.lookAt(${info.cx} + ${info.fwd.x} * ${L * 0.32}, ${gy} + 3.0, ${info.cz} + ${info.fwd.z} * ${L * 0.32});
       cam.updateMatrixWorld(true);
     })()`);
-    // (4) RIDGELINE — elevated at the tail, looking along the spine at the dorsal
-    //     sail + the skull at the far end.
-    await shot('ridgeline', `(() => {
+    // (4) UNDER-LOOKUP — player-eye at the tunnel centre, pitched UP: confirms the
+    //     spine ridge + ribs arch OVERHEAD (the "walk beneath the backbone" read).
+    await shot('underlookup', `(() => {
       const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
-      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.62} + ${side.x} * ${L * 0.14};
-      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.62} + ${side.z} * ${L * 0.14};
-      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.7}, fz);
-      cam.lookAt(${info.skull.x}, ${gy} + 2, ${info.skull.z});
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.12};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.12};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx} + ${info.fwd.x} * ${L * 0.14}, ${gy} + ${H * 0.85}, ${info.cz} + ${info.fwd.z} * ${L * 0.14});
       cam.updateMatrixWorld(true);
     })()`);
-    // (5) SKULL — the head close-up, low + near.
-    await shot('skull', `(() => {
+    // (5) END-ON — from just outside the tunnel MOUTH at eye height, looking in
+    //     along the spine axis: the arch cross-section / colonnade read.
+    await shot('endon', `(() => {
       const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
-      const fx = ${info.skull.x} + ${info.fwd.x} * 9 + ${side.x} * 4;
-      const fz = ${info.skull.z} + ${info.fwd.z} * 9 + ${side.z} * 4;
-      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 2.2, fz);
-      cam.lookAt(${info.skull.x}, ${gy} + 1.4, ${info.skull.z});
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.62};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.62};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 2.0, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.5}, ${info.cz});
       cam.updateMatrixWorld(true);
     })()`);
     // (6) LOWGRAZE — a very low angle skimming across the rib bases: the FLOAT

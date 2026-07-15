@@ -964,16 +964,17 @@ export function createChunkManager(
             if (m.isMesh) {
               m.userData.chunkGeo = true; m.userData.chunkMat = true;
               // placeRibcage's default bone tone (HSL L≈0.55) reads as dark tan.
-              // In the sun-bleached graveyard, brighten it to a cool pale bone +
-              // a matching cool emissive so it POPS against the warm sand under
-              // the game's warm sun (a plain-ivory hero ribcage collapses to tan
-              // and vanishes — same failure as the scatter bits). Per-call
+              // In the sun-bleached graveyard, shift it to a weathered GREYER bone
+              // + a matching modest cool emissive so it POPS against the warm sand
+              // under the game's warm sun (a plain-ivory ribcage collapses to tan
+              // and vanishes) WITHOUT reading stark-white (reviewer: "bones too
+              // white"). Kept in sync with _ribBone / boneScatter._boneMat. Per-call
               // material → only THIS field's ribcages, not the landmark ones.
               const mat = m.material as THREE.MeshLambertMaterial;
               if (mat && mat.color) {
-                mat.color.setHSL(0.58, 0.05, 0.88);
-                mat.emissive = new THREE.Color(0x4a5766);
-                mat.emissiveIntensity = 0.85;
+                mat.color.set(0xdcd8cf);
+                mat.emissive = new THREE.Color(0x545a60);
+                mat.emissiveIntensity = 0.55;
               }
             }
           });
