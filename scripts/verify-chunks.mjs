@@ -113,6 +113,21 @@ if (!wm) {
   rows.push(`skyfall-walk: ${wm[2]} waypoints walked (enter/exit/re-enter + both doorways), ${wm[3]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
+// ── 5. The LEVIATHAN interior walk (rule 9 real-motion: the fixed colossal
+//      monument's enterable hold — enter through the fracture, walk all 3
+//      compartments + both doorways, exit, re-enter; castDown collider-identity
+//      proves no fall-through / no invisible wall). Not chunk-streamed, but the
+//      same real-motion collision proof the skyfall walk provides. ──
+const lm = runParsed('leviathan-walk', 1337, 5497, /LEVIATHAN-WALK pass=(\d) waypoints=(\d+) fails=(\d+)/, 900000);
+if (!lm) {
+  allPass = false;
+  rows.push('leviathan-walk: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
+} else {
+  const ok = lm[1] === '1';
+  if (!ok) allPass = false;
+  rows.push(`leviathan-walk: ${lm[2]} waypoints walked (enter/exit/re-enter + both doorways), ${lm[3]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass

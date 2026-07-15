@@ -6325,6 +6325,182 @@ const SCENARIOS = {
     console.log(`[leviathan-reveal] ${JSON.stringify(r)}`);
   },
 
+  // LEVIATHAN INTERIOR (2026-07-15) — exterior + breach-MOUTH (head-on + grazing) +
+  // interior player-eye reads for the now-enterable colossal wreck. The leviathan is
+  // a FIXED hand-placed monument at getLeviathanLandmarkPos() (built at boot when the
+  // intro feature is on — the default), so NO descriptor scan / stream: enterLive has
+  // already built it. Find it by name, read its world pose + bbox + the builder's
+  // leviathanProbe waypoints, and shoot. Prints a DIAGNOSTIC (terrain profile down the
+  // hull axis + world Y of the deck) so the interior fit can be tuned.
+  //   Run: node scripts/rig-shot.mjs --scenario=leviathan-shot --port=57xx
+  'leviathan-shot': async (page) => {
+    const info = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      g.setTime(0.40);                                 // mid-morning raking front light
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1280, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1280 / 720; cam.updateProjectionMatrix(); }
+      const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+      if (!lev) return { found: false };
+      lev.updateMatrixWorld(true);
+      const V = cam.position.constructor;
+      const cx = lev.position.x, cz = lev.position.z, yaw = lev.rotation.y;
+      // World-space bbox from the meshes (localToWorld each geo box corner).
+      let minY = 1e9, maxY = -1e9;
+      lev.traverse((o) => {
+        if (o.isMesh && o.geometry) {
+          o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox;
+          for (const yy of [b.min.y, b.max.y]) { const w = new V(0, yy, 0); o.localToWorld(w); minY = Math.min(minY, w.y); maxY = Math.max(maxY, w.y); }
+        }
+      });
+      // Terrain profile down the hull axis (fwd = local +Z under the yaw).
+      const fwd = [Math.sin(yaw), Math.cos(yaw)];
+      const prof = [];
+      for (let z = 12; z >= -48; z -= 6) prof.push([z, +ctx.terrain.heightAt(cx + fwd[0] * z, cz + fwd[1] * z).toFixed(2)]);
+      let probe = null;
+      lev.traverse((o) => { if (o.userData?.leviathanProbe) probe = o.userData.leviathanProbe; });
+      return { found: true, cx: +cx.toFixed(1), cz: +cz.toFixed(1), yaw: +yaw.toFixed(3), gy: +ctx.terrain.heightAt(cx, cz).toFixed(2), minY: +minY.toFixed(2), maxY: +maxY.toFixed(2), prof, probe: probe ? { waypoints: probe.waypoints, ceilY: probe.ceilY, wallX: probe.wallX } : null };
+    });
+    if (!info.found) { console.log('[leviathan-shot] leviathanLandmark not in scene (intro feature off?)'); return; }
+    console.log(`[leviathan-shot] DIAG ${JSON.stringify({ cx: info.cx, cz: info.cz, yaw: info.yaw, gy: info.gy, minY: info.minY, maxY: info.maxY, prof: info.prof })}`);
+    // The interior lights are proximity-gated on the PLAYER body (a fixed monument
+    // can't hold always-on lights). Teleport the player INTO the wreck + tick a few
+    // frames UNPAUSED so updateLeviathanLandmark claims the pool lights before we
+    // pause + shoot (else the interior renders dark).
+    await page.evaluate(async ({ cx, cz }) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+      ctx.player.body.body.setTranslation({ x: cx, y: ctx.terrain.heightAt(cx, cz) + 2, z: cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let i = 0; i < 24; i++) await raf();
+    }, { cx: info.cx, cz: info.cz });
+    const yaw = info.yaw;
+    const fwd = [Math.sin(yaw), Math.cos(yaw)];
+    const broad = [Math.cos(yaw), -Math.sin(yaw)];
+    const shot = async (name, camDir, along, dist, lift, aimAlong, aimY, side = 1) => {
+      await page.evaluate(({ camDir, along, dist, lift, aimAlong, aimY, side, fwd, broad, cx: bcx, cz: bcz }) => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const ax = bcx + fwd[0] * aimAlong, az = bcz + fwd[1] * aimAlong;
+        const px = ax + (broad[0] * camDir[0] + fwd[0] * camDir[1]) * dist * side;
+        const pz = az + (broad[1] * camDir[0] + fwd[1] * camDir[1]) * dist * side;
+        const gy = ctx.terrain.heightAt(px, pz);
+        cam.position.set(px, gy + lift, pz);
+        cam.lookAt(ax, ctx.terrain.heightAt(ax, az) + aimY, az);
+        cam.updateMatrixWorld(true);
+      }, { camDir, along, dist, lift, aimAlong, aimY, side, fwd, broad, cx: info.cx, cz: info.cz });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+      console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+    };
+    // Exterior: full broadside length (aim mid aft-mass), a 3/4 approach.
+    await shot('long', [1, 0], -20, 96, 10, -20, 8);
+    await shot('approach', [0.8, 0.7], 4, 60, 6, -14, 6);
+    // The breach MOUTH (fracture ~local z+8): head-on-ish from outside + a bit to
+    // the side + LOW so the reared prow doesn't occlude the lit breach (frame the
+    // deck-level aperture + the thick cut jamb), and a GRAZING side angle across the
+    // mouth plane (prove the thick cut cross-section, no paper edge / see-through slot).
+    await shot('mouth-head', [0.35, 1], 8, 15, 1.4, 3, 2.2, 1);
+    await shot('mouth-graze', [0.9, 0.5], 8, 11, 1.3, 5, 2.4, 1);
+    await shot('mouth-graze2', [0.9, 0.5], 8, 11, 1.3, 5, 2.4, -1);
+    // Interior player-eye reads from the builder's probe waypoints.
+    if (info.probe) {
+      const wps = Object.fromEntries(info.probe.waypoints.map((w) => [w.name, w]));
+      const interiorShot = async (name, f, t) => {
+        await page.evaluate(({ f, t }) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+          cam.position.set(f.x, f.y + 1.6, f.z);
+          cam.lookAt(t.x, t.y + 1.3, t.z);
+          cam.updateMatrixWorld(true);
+        }, { f, t });
+        await page.waitForTimeout(350);
+        await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+        console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+      };
+      const order = info.probe.waypoints.map((w) => w.name);
+      for (let i = 0; i < order.length - 1; i++) await interiorShot(`int-${order[i]}`, wps[order[i]], wps[order[i + 1]]);
+      // A look back toward the mouth from the deepest interior waypoint (the daylight read).
+      const last = wps[order[order.length - 1]];
+      await interiorShot('int-back', last, wps[order[0]]);
+      // The AFT crew station / story focal — from the aft waypoint look at the
+      // console + end wall (−fwd), where the salvage panels + flight-recorder sit.
+      const aftW = wps.aft;
+      await interiorShot('int-console', aftW, { x: aftW.x - fwd[0] * 6, y: aftW.y, z: aftW.z - fwd[1] * 6 });
+    } else {
+      console.log('[leviathan-shot] no leviathanProbe userData yet (interior not built) — exterior shots only');
+    }
+  },
+
+  // LEVIATHAN WALK PROBE (rule 9, real motion) — mirrors skyfall-walk for the fixed
+  // leviathan monument. Walk outside → mouth → each interior waypoint → back out →
+  // re-enter, asserting at every waypoint that a castDown hits a FLOOR collider (or
+  // shin-deep sand ingress), the capsule wasn't ejected (doorway/sill fit), and the
+  // roof caps a drop from above. No stream (the monument is always in the scene).
+  'leviathan-walk': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.40);
+      ctx.three.renderer.setSize(64, 64, false);   // physics probe: no pixels needed
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      const body = ctx.player.body.body;
+      let probe = null;
+      ctx.three.scene.traverse((o) => { if (o.userData?.leviathanProbe) probe = o.userData.leviathanProbe; });
+      if (!probe) return { fails: ['no leviathanProbe userData (interior not built?)'] };
+      const wps = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+      const order = probe.waypoints.map((w) => w.name);
+      const fails = [];
+      const CAP = 1.05;
+      const placeAt = async (w) => { body.setTranslation({ x: w.x, y: w.y + CAP + 0.25, z: w.z }, true); body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(45); };
+      const walkTo = async (w) => {
+        for (let i = 0; i < 240; i++) {
+          const p = body.translation(); const dx = w.x - p.x, dz = w.z - p.z; const d = Math.hypot(dx, dz);
+          if (d < 0.35) break; const s = Math.min(0.5, d);
+          body.setTranslation({ x: p.x + (dx / d) * s, y: p.y + 0.12, z: p.z + (dz / d) * s }, true);
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(6);
+        }
+        await frames(30);
+      };
+      const arrived = (w, name) => { const p = body.translation(); const d = Math.hypot(w.x - p.x, w.z - p.z); if (d > 0.9) fails.push(`${name}: did not arrive (blocked ${d.toFixed(2)}m short)`); return d <= 0.9; };
+      const floorSet = new Set(probe.floorHandles ?? [probe.deckHandle]);
+      const onDeck = (name, w) => {
+        const p = body.translation(); const hit = g.castDown(p.x, p.z, p.y, true);
+        if (!hit) { fails.push(`${name}: castDown hit NOTHING`); return; }
+        if (floorSet.has(hit.colliderHandle)) return;
+        if (hit.hitY >= w.y - 0.05 && hit.hitY <= w.y + 0.5) return;
+        fails.push(`${name}: on collider ${hit.colliderHandle} (deck=${probe.deckHandle}) hitY=${hit.hitY.toFixed(2)} deckY=${w.y.toFixed(2)} (FALL-THROUGH or deep ingress)`);
+      };
+      // Walk the full ordered path in + back out + re-enter.
+      await placeAt(wps[order[0]]);
+      for (let i = 1; i < order.length; i++) { await walkTo(wps[order[i]]); if (arrived(wps[order[i]], order[i])) onDeck(order[i], wps[order[i]]); }
+      // Back out to the first waypoint (exit), then re-enter to the 3rd (a hold-ish).
+      for (let i = order.length - 2; i >= 0; i--) { await walkTo(wps[order[i]]); }
+      { const p = body.translation(); if (Math.hypot(wps[order[0]].x - p.x, wps[order[0]].z - p.z) > 1.0) fails.push('exit: did not get back OUT of the mouth'); }
+      const reI = Math.min(2, order.length - 1);
+      await walkTo(wps[order[reI]]); if (arrived(wps[order[reI]], `re-enter ${order[reI]}`)) onDeck(`re-enter ${order[reI]}`, wps[order[reI]]);
+      // Roof check: a capsule dropped from +6 above a mid waypoint must NOT land on the deck.
+      const midW = wps[order[Math.floor(order.length / 2)]];
+      body.setTranslation({ x: midW.x, y: midW.y + 6.0, z: midW.z }, true); body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(50);
+      { const p = body.translation(); const hit = g.castDown(p.x, p.z, p.y, true); if (hit && hit.colliderHandle === probe.deckHandle) fails.push('roof: a capsule dropped from ABOVE landed on the interior deck (hole in the roof colliders)'); }
+      return { fails, wps: probe.waypoints.length };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`LEVIATHAN-WALK pass=${pass ? 1 : 0} waypoints=${r.wps ?? 0} fails=${r.fails.length}`);
+    console.log(`[leviathan-walk] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('leviathan-walk GATE FAILED');
+  },
+
   // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
   // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
   // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt

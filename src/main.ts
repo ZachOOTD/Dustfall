@@ -20,7 +20,7 @@ import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
-import { placeLeviathanLandmark } from './world/leviathanLandmark.ts';   // horizon-hook: the beached-leviathan wreck ~360m out on the intro reveal gaze
+import { placeLeviathanLandmark, updateLeviathanLandmark } from './world/leviathanLandmark.ts';   // horizon-hook: the beached-leviathan wreck ~360m out on the intro reveal gaze (+ its proximity-gated interior lights)
 import { placeWordlessScenes } from './world/wordlessScenes.ts';   // M5b (C32) — environmental-storytelling tableaux
 import { addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — registers tall wrecks as sun occluders (billboards removed ACBD)
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
@@ -236,7 +236,7 @@ addHorizonSilhouettesByName(three.scene, ['megaShip', 'megaWreck', 'satelliteDis
 // NOT silently alter the live master desert world. It reads great as a permanent
 // normal-play nav monument too — if the user wants that, promote it to always-on by
 // dropping this guard (a one-line change).
-if (FEATURES.escapePodIntro) placeLeviathanLandmark(three.scene, physics.world, terrain);
+if (FEATURES.escapePodIntro) placeLeviathanLandmark(three.scene, physics.world, terrain, { salvage: salvageables, journals: { list: journalsList } });
 // ACAQ (Cycle 8) — the wreck-yard's ribcages join the ecology: vultures wheel over
 // the graveyard ("something died here" approach telegraph) + prey gathers at them.
 carcasses.push(...getWreckYardCarcasses());
@@ -1048,6 +1048,7 @@ startLoop(ctx, (c, dt) => {
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep
   updateFires(c, dt);            // flicker + fuel decrement + burnout
+  if (FEATURES.escapePodIntro) { const _lp = c.player.body.body.translation(); updateLeviathanLandmark(c.lightPool, _lp.x, _lp.z); }  // proximity-gate the enterable leviathan's interior lights (claim/free pool lights near/far)
   updateSignalFlares(c, dt);     // C37 — advance any in-flight signal-flare arcs
   updateLanterns(c);             // AAC — sin-driven flicker on placed lanterns
   updateLargeTents(c, dt);       // AAZ — doorway open/close lerp on placed shelter tents
