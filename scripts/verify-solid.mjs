@@ -72,8 +72,9 @@ const ASSET_DEFS = {
   skyfall: { enclosure: true },
   leviathan: { enclosure: true },
   ribcage: { enclosure: false },
+  hab_dome: { enclosure: true },
 };
-const RUN_LIST = ASSET === 'all' ? ['skyfall', 'leviathan', 'ribcage'] : [ASSET];
+const RUN_LIST = ASSET === 'all' ? ['skyfall', 'leviathan', 'ribcage', 'hab_dome'] : [ASSET];
 
 // Detector thresholds — documented + tunable in docs/verify-solid.md.
 const PARAMS = {
@@ -167,6 +168,36 @@ async function installSolidLib() {
       if (!root) return { skip: 'leviathanLandmark not in scene (FEATURES.escapePodIntro off?)' };
       return { rootName: 'leviathanLandmark', center: lib.centerOf(root) };
     }
+    if (name === 'hab_dome') {
+      // Build through the REAL POI pipeline (placeProcgenPOI → assembleHabDome →
+      // burial / terrain-align / declared colliders / bucket re-skin / static merge),
+      // placed on real terrain ~70m off the player so it never overlaps boot content.
+      const poi = await lib.dynImport(viteUrls.poiAssembler);
+      const rng = await lib.dynImport(viteUrls.rng);
+      const bp = ctx.player.body.body.translation();
+      const x = bp.x + 70, z = bp.z + 8;
+      const gy = ctx.terrain.heightAt(x, z);
+      const pos = new THREE.Vector3(x, gy, z);
+      const group = poi.placeProcgenPOI(ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rng.makeRng(0x4ab2c9), undefined, { archetype: 'hab_dome' });
+      group.name = 'habDome';
+      group.updateMatrixWorld(true);
+      // Build the world-space walk-probe from the component-local waypoints the
+      // builder stashed (habDomeProbeLocal): the POI got a random yaw + terrain
+      // tilt + bury, so the interior path must be transformed through the placed
+      // group's matrix. floorHandles empty = the interior floor IS the sand (no
+      // raised deck), so the floor check falls back to hitY-near-waypoint.
+      let holder = null;
+      group.traverse((o) => { if (o.userData && o.userData.habDomeProbeLocal) holder = o; });
+      if (holder) {
+        const L = holder.userData.habDomeProbeLocal;
+        group.userData.habDomeProbe = {
+          deckHandle: -1,
+          floorHandles: L.floorHandles || [],
+          waypoints: L.waypoints.map((w) => { const v = holder.localToWorld(new THREE.Vector3(w.x, w.y, w.z)); return { name: w.name, x: v.x, y: v.y, z: v.z }; }),
+        };
+      }
+      return { rootName: 'habDome', center: lib.centerOf(group) };
+    }
     if (name === 'ribcage') {
       // Build through the REAL code path (makeGiantRibcage + conform + applyColliders),
       // placed on real terrain ~70m off the player so it never overlaps boot content.
@@ -197,7 +228,7 @@ async function installSolidLib() {
     return { x: c.x, y: c.y, z: c.z, radius: Math.max(s.radius, 0.5), min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] };
   };
 
-  lib.probeOf = (root) => root.userData.skyfallProbe || root.userData.leviathanProbe || null;
+  lib.probeOf = (root) => root.userData.skyfallProbe || root.userData.leviathanProbe || root.userData.habDomeProbe || null;
 
   /** An INTERACTIVE / non-static-hull subtree (a live salvage access panel, a
    *  journal, a loot trigger) — the SAME subtrees mergeStaticByMaterial skips
@@ -825,7 +856,7 @@ function reportAsset(a) {
 }
 
 async function main() {
-  const viteUrls = { ribcage: '/src/world/giantRibcage.ts', rng: '/src/core/rng.ts' };
+  const viteUrls = { ribcage: '/src/world/giantRibcage.ts', rng: '/src/core/rng.ts', poiAssembler: '/src/world/poiAssembler.ts' };
 
   if (ASSET !== 'selftest' && !ASSET_DEFS[RUN_LIST[0]] && ASSET !== 'all') {
     console.error(`[verify:solid] unknown --asset "${ASSET}" (skyfall|leviathan|ribcage|all|selftest)`);
