@@ -6709,14 +6709,37 @@ const SCENARIOS = {
       await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
       console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
     };
-    // Head-on into the tear from the sand, at eye height — the REAL approach read.
-    await localShot('breach-head', [24, -0.2, -0.5], [9, 5.4, -0.5]);
-    // Standing OUTSIDE at the ramp lip, looking straight INTO the hold.
-    await localShot('breach-into-hold', [12.6, 4.4, -0.5], [-2, 5.0, -3]);
+    // A camera STOOD ON THE REAL SAND at a local (x,z) — eye height above whatever the
+    // dune actually does there, not a hand-guessed local y. The breach shots below were
+    // written for the z=-0.5 breach and kept their old aim after it moved to z=-3.6, so
+    // they were framing 3m of blank plating beside the door; and their hand-set local y
+    // put the camera under the dune once the drift was rebuilt from the real terrain.
+    // Both are the same D165 failure — a harness that shoots a viewpoint the player
+    // can't occupy is testing a different scene than the one that ships.
+    const BZ = -3.6;                                   // I_BREACH_Z (leviathanLandmark.ts)
+    const groundShot = async (name, camXZ, aim, eye = 1.6) => {
+      await page.evaluate(({ camXZ, aim, eye }) => {
+        const ctx = window.__game.ctx; const c = ctx.three.camera; ctx.flags.paused = true;
+        const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+        const V = c.position.constructor;
+        const cw = lev.localToWorld(new V(camXZ[0], 0, camXZ[1]));
+        const aw = lev.localToWorld(new V(aim[0], aim[1], aim[2]));
+        c.position.set(cw.x, ctx.terrain.heightAt(cw.x, cw.z) + eye, cw.z);
+        c.lookAt(aw); c.updateMatrixWorld(true);
+      }, { camXZ, aim, eye });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+      console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+    };
+    // Head-on into the tear from the open sand, at eye height — the REAL approach read.
+    await groundShot('breach-head', [26, BZ], [9, 5.4, BZ]);
+    // Standing OUTSIDE on the drift crest at the sill, looking straight INTO the hold.
+    // Local y = the drift's own crest here (I_DECK_Y + 0.08 − 1.5·RAMP_TAN) + eye.
+    await localShot('breach-into-hold', [12.6, 3.21 + 1.6, BZ], [-2, 5.0, BZ]);
     // GRAZING both ways across the opening — proves the 0.9m cut cross-section reads
     // as a thick welded rim with NO bright gap/slot between the skins.
-    await localShot('breach-graze-fwd', [13.5, 4.6, 7.5], [10.4, 5.2, -1.5]);
-    await localShot('breach-graze-aft', [13.5, 4.6, -8.5], [10.4, 5.2, 0.5]);
+    await groundShot('breach-graze-fwd', [13.5, BZ + 9.5], [10.4, 5.2, BZ + 1.5], 4.6);
+    await groundShot('breach-graze-aft', [13.5, BZ - 9.5], [10.4, 5.2, BZ - 0.5], 4.6);
     // The DECOY: the reared bow's root, which used to read as an arched way in.
     await localShot('bow-root-decoy', [16, 1.5, 16], [4, 8, 7]);
     // Interior player-eye reads from the builder's probe waypoints.

@@ -26,7 +26,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { makeRng } from '../core/rng.ts';
-import { makeLoftedHull, makeFormerRings, makeSandMound, mergeStaticByMaterial, SHIP_SECTION, type LoftStation } from './wreckForms.ts';   // PERF (2026-07-05 profile #2) — static-merge the landmark into per-material draws
+import { makeLoftedHull, makeFormerRings, makeSandMound, mergeStaticByMaterial, SHIP_SECTION, type LoftStation, type HullCut } from './wreckForms.ts';   // PERF (2026-07-05 profile #2) — static-merge the landmark into per-material draws
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { makeStaticBox, makeStaticTrimesh } from '../physics/bodies.ts';
@@ -125,7 +125,108 @@ const _paperMat = new THREE.MeshLambertMaterial({ color: 0x8f8672, flatShading: 
 const I_DECK_Y = 4.0;
 const I_CEIL_Y = 9.2;
 const I_WALL_X = 8.0;             // inner wall face ±8 (16m beam)
-const I_MOUTH_Z = 7.5;           // fracture mouth (deck front lip)
+const I_MOUTH_Z = 7.5;           // fracture face (the hold's forward end — now a SEALED torn bulkhead, see below)
+
+// ══ THE BREACH — the ONE walk-in entrance (review 2026-07-16) ═══════════════
+// The hold used to be entered through the amidships FRACTURE FACE at +Z. It could
+// not be: the reared bow is a ~21m-diameter hollow tube hinged AT the fracture and
+// pitched up 64°, so its root plane + bore geometrically ENGULF the fracture face.
+// Measured on the shipped build — a raycast at eye height from 30m out toward the
+// fracture mouth, from 8 compass directions, hit the bow's skin every time
+// (3.2/4.7/13.3/16.2/17.7/18.9/19.2/24.8m; 0/8 reached). No pivot height, root
+// taper or bore plug fixes that: any 21m tube reared off the fracture covers the
+// fracture. Only two things can move — the tuned fin, or the door. The fin is the
+// monument (kept byte-identical), so the door moved.
+//
+// It moved to the STARBOARD flank at the forward hold: the side the step-out gaze
+// approaches from, and the one band a reachability sweep proved is genuinely open.
+// The sweep matters — it was run at the APERTURE's own height (y≈5.4), not at
+// ground+1.6, because whether the bow's skin crosses this flank depends steeply on
+// y. Result, "compass directions from 30m out that see this patch of skin first":
+//   fracture face (any x)  0/8      z=+4..+8 starboard  2-3/8  (bow skin grazes it)
+//   z=-2..-14 starboard    4/8      ← the clean band; z≈-0.5 is its forward end
+// So the breach sits at the forward end of the clean band: as close to the break as
+// the bow allows, still unmistakably "the tear where the bow snapped away", just
+// opening to the side rather than dead ahead. The hull skin is CUT here for real
+// (makeLoftedHull's HullCut → a hole with the outer and inner skins welded into one
+// 0.9m-thick rim), the interior's starboard wall is cut to match, and a drifted sand
+// ramp carries the player from grade up to the deck lip.
+// AFT of z≈-1.5 as well as clear of the bow's SKIN: the reared bow's tube does not
+// only occlude the fracture from outside, its root also INTRUDES into the hold's
+// forward-starboard corner (measured: the hull trimesh sits at local ≈(6.5, 6.6, -1),
+// i.e. head height on the walk line). That intrusion predates this change, but a
+// breach at z=-0.5 walked the player straight under it. Sitting the tear aft of it
+// keeps the whole entrance path in clear air.
+const I_BREACH_Z = -3.6;                      // breach centre, local z (forward hold, clear of the bow root)
+// SIZE (round 2): 3.4 × 2.8m read as a garage door on a 22m-beam titan — a mouse hole
+// you'd never cross a desert for. A tear where a bow the size of a building sheared off
+// has to be architectural. 6 × 3.9m fills the flank between the chine and the deck line
+// without punching through either.
+const I_BREACH_HZ = 2.4;                      // half-length in z → 4.8m clear (fits between the bow root and the z=-7 bulkhead)
+const I_BREACH_Y0 = I_DECK_Y;                 // sill = the deck; you walk straight in, no step
+const I_BREACH_Y1 = I_DECK_Y + 3.9;           // header → 3.9m clear, stopping under the chine
+// The interior wall is cut WIDER than the hull is, in both axes, so the hull's own
+// intact skin always overlaps the wall's opening. That is what kills the "thin bright
+// gap/slot at the rim" the review saw: there is no sightline that can find the void
+// between the hull's inner skin and the interior lining, from any grazing angle.
+const I_BREACH_WALL_MARGIN = 0.85;
+const LEV_HULL_CUT: HullCut = {
+  xSign: 1, yMin: I_BREACH_Y0, yMax: I_BREACH_Y1,
+  zMin: I_BREACH_Z - I_BREACH_HZ, zMax: I_BREACH_Z + I_BREACH_HZ,
+  // A RAGGED outline — the plain box cut read as a garage door stamped into the
+  // plating, not a place a titan tore open. Deterministic (fixed trig, no rng draw,
+  // so the monument stays identical every seed). The SILL stays dead flat: it is the
+  // floor you walk in over, and a jagged threshold is a trip hazard, not character.
+  // The header + both ends jag. Amplitudes stay under I_BREACH_WALL_MARGIN so the
+  // interior lining's opening still overlaps the hull's cut everywhere.
+  contains: (_x, y, z) => {
+    const t = (z - (I_BREACH_Z - I_BREACH_HZ)) / (2 * I_BREACH_HZ);          // 0..1 along the tear
+    const top = I_BREACH_Y1 - 0.40 + 0.40 * Math.sin(t * 8.1 + 0.7) + 0.20 * Math.sin(t * 17.3 + 2.1);
+    const u = (y - I_BREACH_Y0) / (I_BREACH_Y1 - I_BREACH_Y0);               // 0..1 up the tear
+    const halfZ = I_BREACH_HZ - 0.30 + 0.26 * Math.sin(u * 9.4 + 1.3) + 0.12 * Math.sin(u * 21.0);
+    return y < top && Math.abs(z - I_BREACH_Z) < halfZ;
+  },
+};
+// ── THE SAND DRIFT / RAMP. The hull lies canted, so this flank stands ~3.8m proud of
+//    grade at the breach (the port side is buried instead). The drift banked up into
+//    the tear is what makes the door usable — and it is the flight recorder's own
+//    image: "it came up through the breach like water and would not stop."
+//
+// DERIVED FROM THE REAL DUNE (review 2026-07-16). Round 1 hand-fitted this to a
+// LINEAR approximation of the terrain ("the dune falls away ≈0.24m per metre
+// outboard") and built it as a rigid tilted BOX plus a lofted tongue. Both halves of
+// that were wrong, and a terrain sample proved it: the dune here does not fall at all
+// — it is flat to ≈0.01 m/m out to lx≈18.5 and then RISES. So the slab's buried tail
+// stood proud of the sand as a low ridge, and a player-radius sphere walking in off
+// the dune clipped the slab's FLANK (measured: blocked at local [18,-0.1,-7.1] on the
+// ramp box) instead of ever reaching the door. Hand-fitting a rigid box to a dune is
+// the bug; the geometry has to be SAMPLED from terrain.heightAt (the same source
+// makeSandMound already uses) so the drift is proud where the dune is low and vanishes
+// where the dune rises. See buildLeviathanInterior's drift block + LevSite below.
+//
+// THRESH_OUT_X is the load-bearing number: the threshold PLATE's outboard face. The
+// drift's crest must start EXACTLY there, because a crest that starts inboard of the
+// plate is already below the plate's top by the time it clears it, which drops the
+// walking sphere low enough to clip the plate's outboard corner — the measured
+// az337 failure (blocked at local [11.2,4.3,-3.5]; sphere-to-corner 0.316 < r 0.35).
+// It must also clear the hull's OUTER skin (halfW ≈ 10.65-10.86 across the breach
+// z-band; the cut only removes skin from y=I_BREACH_Y0 up, so the plating BELOW the
+// sill is intact) — 11.1 lands 0.24-0.45m proud of it.
+const THRESH_OUT_X = 11.1;        // the breach threshold plate's outboard face
+const RAMP_TOP_X = THRESH_OUT_X;  // …and the drift crest's break point — FLUSH, by construction
+const RAMP_TAN = 0.58;            // ≈30° crest descent per metre outboard (inside the controller's 50° climb limit)
+const RAMP_HALF_Z = I_BREACH_HZ + I_BREACH_WALL_MARGIN;   // 3.25 → the full-height WALK band, matching the wall's cut
+// The drift's inboard edge is buried INSIDE the hull's 0.9m wall (outer skin ≈10.9,
+// inner ≈10.0), so the sand emerges from the plating instead of leaving a slot
+// between the drift and the skin. Only the part framed by the cut is ever seen.
+const DRIFT_IN_X = 10.2;
+// The crest rides 8cm PROUD of the threshold plate: sand spilled over the torn deck
+// (the same "came up through the breach" read as the interior deck tongue). It is not
+// decoration — it is what holds the walking sphere clear of the plate's corner, and it
+// keeps the two surfaces off a shared plane so they cannot z-fight.
+const DRIFT_CREST_LIFT = 0.08;
+const DRIFT_REPOSE_TAN = 0.72;    // ≈36° flank — sand's angle of repose, so the drift falls to grade instead of ending in a wall
+const DRIFT_HALF_Z = 9.5;         // sampling half-width; the flanks self-terminate where they meet the dune
 const I_END_Z = -34;             // aft end wall
 const I_DOOR_HW = 0.95;          // doorway half-width (1.9m clear)
 const I_DOOR_TOP = I_DECK_Y + 2.5;   // doorway clear height 2.5m
@@ -134,6 +235,51 @@ const I_BULK_B = -21;            // MID↔AFT bulkhead
 const I_DOORX_A = 1.6;           // door offsets (fixed — deterministic monument)
 const I_DOORX_B = -1.5;
 const I_WALL_T = 0.5;            // interior wall/deck/ceiling plate thickness (rule 7)
+
+// ── THE MONUMENT'S POSE. Hoisted to module scope (was inline in place()) because the
+//    DRIFT is now sampled from the real dune at BUILD time, which means the builder
+//    has to know where its local frame lands in the world before the group is posed.
+//    One definition, used by buildLeviathanMesh (sampling), place() (posing) and the
+//    collider composition — they cannot drift apart.
+const GROUP_PITCH = 0.08;                  // a crashed-and-settled list
+const GROUP_ROLL = 0.05;
+const BURY = HULL_HALF_H * 0.22;           // sink only the keel — the long body stays proud of the horizon
+
+/** The monument's world pose + a terrain sampler expressed in the group's LOCAL frame.
+ *  The drift geometry is derived from the REAL dune, and `makeSandMound` shows the
+ *  shape of the idea (sample terrain.heightAt, place to it) — but a mound sits on a
+ *  world-axis column, whereas this hull is YAWED, PITCHED and ROLLED, so a local
+ *  column is not a world column and "the terrain height at this local (x,z)" needs
+ *  solving, not looking up. */
+interface LevSite {
+  matrix: THREE.Matrix4;
+  /** The local y at which the local column (lx, ·, lz) meets the dune surface. */
+  terrainLocalY(lx: number, lz: number): number;
+}
+function makeLevSite(terrain: Terrain): LevSite {
+  const gy = terrain.heightAt(LANDMARK_X, LANDMARK_Z);
+  const matrix = new THREE.Matrix4().compose(
+    new THREE.Vector3(LANDMARK_X, gy - BURY, LANDMARK_Z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(GROUP_PITCH, HULL_YAW, GROUP_ROLL, 'XYZ')),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const v = new THREE.Vector3();
+  return {
+    matrix,
+    terrainLocalY(lx, lz) {
+      // Fixed-point solve: raising local y by d raises world y by ≈cos(list)·d, and
+      // this monument's list is ~5°, so the iteration contracts hard (converges to
+      // <1mm in ~3 passes). It also re-samples heightAt each pass because tilting the
+      // column moves it across the dune in x/z too, which a one-shot lookup misses.
+      let ly = 0;
+      for (let i = 0; i < 5; i++) {
+        v.set(lx, ly, lz).applyMatrix4(matrix);
+        ly += terrain.heightAt(v.x, v.z) - v.y;
+      }
+      return ly;
+    },
+  };
+}
 
 let _group: THREE.Group | null = null;
 let _drift: THREE.Mesh | null = null;
@@ -199,28 +345,99 @@ function borePlug(stations: LoftStation[], zMid: number, mat: THREE.Material): T
   return new THREE.Mesh(geo, mat);
 }
 
+// ── AFT MASS stations (module scope: the bow's collider trim needs to know where the
+//    aft hull's skin is — see insideAftHull below).
+const AFT_STATIONS: LoftStation[] = [
+  { z: -64, halfW: HULL_HALF_W * 0.30, halfH: HULL_HALF_H * 0.42, cy: 1.6 },  // stern transom
+  { z: -50, halfW: HULL_HALF_W * 0.66, halfH: HULL_HALF_H * 0.66, cy: 0.9 },
+  { z: -34, halfW: HULL_HALF_W * 0.92, halfH: HULL_HALF_H * 0.86, cy: 0.4 },
+  { z: -16, halfW: HULL_HALF_W * 1.0,  halfH: HULL_HALF_H * 1.0,  cy: 0.1 },   // fat midships
+  { z: 0,   halfW: HULL_HALF_W * 0.98, halfH: HULL_HALF_H * 1.0,  cy: 0.0 },
+  { z: 8,   halfW: HULL_HALF_W * 0.9,  halfH: HULL_HALF_H * 0.96, cy: 0.1 },   // fracture face
+];
+
+/** Is a GROUP-LOCAL point inside the aft hull's outer skin?
+ *
+ *  This is the trim region for the reared bow's collider, and it is chosen because it
+ *  is the region that is PROVABLY invisible: anything inside the aft mass's skin
+ *  cannot render, and the aft hull's own trimesh already carries every visible surface
+ *  there — so dropping the bow's triangles inside it cannot open a collision gap the
+ *  player could ever reach. Two hand-fitted boxes were tried first and both leaked
+ *  (the second excluded y < deck-0.2, but the bow's root passes DOWN THROUGH the deck,
+ *  so those triangles' centroids fell under the box and their tops kept intruding at
+ *  0.44m headroom). Testing against the real hull section instead of a guessed box
+ *  removes the guess. */
+function insideAftHull(lx: number, ly: number, lz: number): boolean {
+  if (lz < AFT_STATIONS[0].z || lz > AFT_STATIONS[AFT_STATIONS.length - 1].z) return false;
+  let a = AFT_STATIONS[0], b = AFT_STATIONS[AFT_STATIONS.length - 1];
+  for (let i = 0; i < AFT_STATIONS.length - 1; i++) if (lz >= AFT_STATIONS[i].z && lz <= AFT_STATIONS[i + 1].z) { a = AFT_STATIONS[i]; b = AFT_STATIONS[i + 1]; }
+  const t = b.z === a.z ? 0 : (lz - a.z) / (b.z - a.z);
+  const halfW = a.halfW + (b.halfW - a.halfW) * t;
+  const halfH = a.halfH + (b.halfH - a.halfH) * t;
+  const cy = (a.cy ?? 0) + ((b.cy ?? 0) - (a.cy ?? 0)) * t;
+  // Point-in-polygon against the hull's real SHIP_SECTION profile (ray crossing).
+  const px = lx / halfW, py = (ly - cy) / halfH;
+  let inside = false;
+  for (let i = 0, j = SHIP_SECTION.length - 1; i < SHIP_SECTION.length; j = i++) {
+    const [xi, yi] = SHIP_SECTION[i], [xj, yj] = SHIP_SECTION[j];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Subdivide a station list so no gap below `zMax` exceeds `maxStep`, interpolating
+ *  LINEARLY through the ORIGINAL knots — so the lofted surface is bit-for-bit the same
+ *  shape and only its TESSELLATION changes (the same trick makeLoftedHull already uses
+ *  to resample around a cut). The silhouette is untouched by construction.
+ *
+ *  WHY (review 2026-07-16): the bow's collider trim drops triangles whose centroid
+ *  lands inside the hold, but the bow's native stations are 18m apart — 384 triangles
+ *  for a 62m loft — so a single triangle runs from the buried root ring right up the
+ *  reared tube. Its centroid sits far outside the hold while the triangle itself
+ *  slices through it, which is why trimming 31/384 tris left the invisible wall
+ *  standing. Refining the ROOT (and only the root — the prow stays cheap) makes the
+ *  triangles there small enough for the centroid to mean what the trim assumes. */
+function refineStations(stations: LoftStation[], maxStep: number, zMax: number): LoftStation[] {
+  const at = (z: number): LoftStation => {
+    let a = stations[0], b = stations[stations.length - 1];
+    for (let i = 0; i < stations.length - 1; i++) if (z >= stations[i].z && z <= stations[i + 1].z) { a = stations[i]; b = stations[i + 1]; }
+    const t = b.z === a.z ? 0 : (z - a.z) / (b.z - a.z);
+    return {
+      z,
+      halfW: a.halfW + (b.halfW - a.halfW) * t,
+      halfH: a.halfH + (b.halfH - a.halfH) * t,
+      cy: (a.cy ?? 0) + ((b.cy ?? 0) - (a.cy ?? 0)) * t,
+    };
+  };
+  const zs = new Set<number>(stations.map((s) => s.z));
+  for (let z = stations[0].z; z < zMax; z += maxStep) zs.add(z);
+  return [...zs].sort((p, q) => p - q).map(at);
+}
+
 /** Build the leviathan mesh in LOCAL space (long-axis +Z, y=0 = keel-ish),
  *  BEFORE the world tilt/burial transform is applied by placeLeviathanLandmark. */
-function buildLeviathanMesh(rand: () => number): THREE.Group {
+function buildLeviathanMesh(rand: () => number, site: LevSite): THREE.Group {
   const g = new THREE.Group();
 
   // ── AFT MASS — the bulk of the hull: a LONG low body lying broadside (the "beached
   //    leviathan" belly). Lofted from the stern transom to the amidships FRACTURE face
   //    at z~+8. Kept proud of the sand so the whole length reads on the horizon.
-  const aftStations: LoftStation[] = [
-    { z: -64, halfW: HULL_HALF_W * 0.30, halfH: HULL_HALF_H * 0.42, cy: 1.6 },  // stern transom
-    { z: -50, halfW: HULL_HALF_W * 0.66, halfH: HULL_HALF_H * 0.66, cy: 0.9 },
-    { z: -34, halfW: HULL_HALF_W * 0.92, halfH: HULL_HALF_H * 0.86, cy: 0.4 },
-    { z: -16, halfW: HULL_HALF_W * 1.0,  halfH: HULL_HALF_H * 1.0,  cy: 0.1 },   // fat midships
-    { z: 0,   halfW: HULL_HALF_W * 0.98, halfH: HULL_HALF_H * 1.0,  cy: 0.0 },
-    { z: 8,   halfW: HULL_HALF_W * 0.9,  halfH: HULL_HALF_H * 0.96, cy: 0.1 },   // fracture face
-  ];
+  const aftStations = AFT_STATIONS;
   // SOLID re-loft: thick outer+inner skin, solidInner rim lips close the stern
   // transom + the fracture cut edge. hullCollide → the exterior-hull trimesh
   // collider (megaWreck/Skyfall D189 pattern) is baked from this real surface.
-  const aft = makeLoftedHull(aftStations, _hullMat, HULL_THICK, true);
+  // LEV_HULL_CUT punches the real walk-in breach through the starboard flank; the
+  // trimesh is baked from THIS surface, so the hole is a hole to collision too —
+  // the visual and the collider cannot disagree about the doorway (rule 9).
+  const aft = makeLoftedHull(aftStations, _hullMat, HULL_THICK, true, LEV_HULL_CUT);
   aft.userData.hullCollide = true;
   g.add(aft);
+  // Hoist the cut's DECLARED opening onto the group: mergeStaticByMaterial builds
+  // fresh meshes and does not carry source userData across, so the declaration would
+  // die in the merge. The loft sits at identity inside the group, so the group's
+  // matrixWorld is the correct transform for it. verify:solid reads this to (a) excuse
+  // the entrance from the open-end detector and (b) aim its walk-in probe.
+  g.userData.intendedOpening = aft.userData.intendedOpening;
 
   // ── FORWARD MASS — the SNAPPED-OFF bow section, REARED UP so the prow spears the
   //    sky (the dramatic silhouette peak). Built level, then pitched up about the
@@ -236,16 +453,28 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
     { z: 54, halfW: HULL_HALF_W * 0.34, halfH: HULL_HALF_H * 0.34, cy: 0.7 },
     { z: bowLen, halfW: HULL_HALF_W * 0.22, halfH: HULL_HALF_H * 0.22, cy: 0.8 }, // blunt prow
   ];
-  const bow = makeLoftedHull(bowStations, _hullMat, HULL_THICK, true);
+  // Refine the ROOT stations (shape identical — see refineStations) so the collider
+  // trim below can resolve the hold's boundary; the prow keeps its cheap 16m stations.
+  const bow = makeLoftedHull(refineStations(bowStations, 1.5, 26), _hullMat, HULL_THICK, true);
   bow.userData.hullCollide = true;
+  // The reared bow's ROOT swings back down INSIDE the aft hull (a 64° pitch about a
+  // hinge at z=+8 throws the top of the ~21m root ring to local ≈(6.5,6.6,-1) — head
+  // height, on the walk line through the hold). The skin there is buried inside the
+  // aft mass and never renders, but its TRIMESH was a solid invisible wall in the
+  // middle of the walkable hold. Trim those triangles at bake time (see place()).
+  bow.userData.trimInsideHold = true;
   const bowPivot = new THREE.Group();
   bowPivot.add(bow);
-  // The reared bow is a decorative thick TUBE whose open bore showed its hollow
-  // interior from below (review 2026-07-16 backface). It can't be capped at the ROOT
-  // (that plane sits right over the walk-in mouth → blocks it). Instead seat a solid
-  // CLOSED section-plug UP the bore (bow-local z well above the mouth) + a small one
-  // near the prow tip, so a sightline up the bore hits solid, not daylight/back-faces.
-  bowPivot.add(borePlug(bowStations, 8.0, _hullDarkMat));    // lower plug (world ~10m up — clear of the mouth)
+  // SEAL THE DECOY (review 2026-07-16). The reared bow is a decorative thick TUBE.
+  // Its ROOT BORE emerges from the sand right where the hull breaks, so it read as a
+  // big arched opening — the "entrance" the reviewer could see and walk toward — but
+  // it leads nowhere: 8m up a slanted 21m pipe to a plug. The earlier pass could not
+  // cap it at the root because the root plane sat over the (then) walk-in mouth. Now
+  // the entrance is the starboard breach, so the bore can be plugged at the ROOT: the
+  // fin becomes a closed solid and there is exactly ONE opening on this wreck that
+  // looks like a way in, which is also the one that is. The root plug sits inside the
+  // aft hull's forward mass (invisible), so the fin's silhouette is untouched.
+  bowPivot.add(borePlug(bowStations, 0.6, _hullDarkMat));    // ROOT plug — kills the decoy arch
   bowPivot.add(borePlug(bowStations, 50.0, _hullDarkMat));   // upper plug near the prow tip
   bowPivot.position.set(0, HULL_HALF_H * 0.3, 8);      // hinge at the fracture
   bowPivot.rotation.order = 'YXZ';
@@ -314,7 +543,7 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
   //    the decoration-tag + merge so every interior surface folds into the shared
   //    per-material draws. Colliders + salvage/journal are added post-transform in
   //    placeLeviathanLandmark (they need the world pose). ─────────────────────
-  buildLeviathanInterior(g);
+  buildLeviathanInterior(g, site);
 
   // Mark ALL of it as decoration / noCollider (structural collision is the
   // exterior-hull trimesh + the interior box set, both added in place()). The
@@ -339,7 +568,7 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
  *  group). NO colliders here — they need the world pose (added in place()).
  *  Deterministic layout (a fixed monument). Rule 7: every surface is a solid box
  *  with real thickness; no single-sided flats. */
-function buildLeviathanInterior(g: THREE.Group): void {
+function buildLeviathanInterior(g: THREE.Group, site: LevSite): void {
   _lightConfigs = [];   // (re)collect the interior light configs for this build
   const dBox = (
     mat: THREE.Material, w: number, h: number, d: number,
@@ -372,55 +601,203 @@ function buildLeviathanInterior(g: THREE.Group): void {
   // Deck plate seams (break the wide floor into plated bays).
   for (const sx of [-1, 1] as const) dBox(_frameMat, 0.16, 0.07, spanZ, sx * (I_WALL_X * 0.5), I_DECK_Y + 0.02, midZ);
   for (let i = 0; i < 9; i++) dBox(_frameMat, (I_WALL_X + 0.4) * 2, 0.07, 0.16, 0, I_DECK_Y + 0.02, I_MOUTH_Z - 3 - i * 4.6);
-  // Side walls (full length, deck→above ceiling, real thickness).
-  for (const s of [-1, 1] as const) dBox(_intWallMat, I_WALL_T, wallH, spanZ + 1.0, s * (I_WALL_X + I_WALL_T / 2), wallCY, midZ + 0.3);
+  // Side walls (full length, deck→above ceiling, real thickness). PORT is one plate;
+  // STARBOARD is cut for the breach into four plates (aft / fore / header / sill
+  // strip). Its opening is deliberately LARGER than the hull's hole by
+  // I_BREACH_WALL_MARGIN on every side, so the hull's intact skin overlaps the wall's
+  // cut all the way round and no sightline can find the void between them.
+  dBox(_intWallMat, I_WALL_T, wallH, spanZ + 1.0, -(I_WALL_X + I_WALL_T / 2), wallCY, midZ + 0.3);
+  {
+    const wx = I_WALL_X + I_WALL_T / 2;
+    const bz0 = I_BREACH_Z - I_BREACH_HZ - I_BREACH_WALL_MARGIN;   // wall opening, z
+    const bz1 = I_BREACH_Z + I_BREACH_HZ + I_BREACH_WALL_MARGIN;
+    const by0 = I_BREACH_Y0 - I_BREACH_WALL_MARGIN;                // wall opening, y
+    const by1 = I_BREACH_Y1 + I_BREACH_WALL_MARGIN;
+    const wTop = wallCY + wallH / 2, wBot = wallCY - wallH / 2;
+    const zFwd = midZ + 0.3 + (spanZ + 1.0) / 2, zAft = midZ + 0.3 - (spanZ + 1.0) / 2;
+    // Skip any segment that computes to a non-positive extent. The sill strip does:
+    // the wall's bottom edge (3.3) sits ABOVE the breach's cut-margin bottom (3.15),
+    // so there is no strip to build — the deck and the threshold plate already seal
+    // below the sill. Building it anyway yields a NEGATIVE-height BoxGeometry and, in
+    // place(), a negative-half-extent Rapier box: an inverted, degenerate collider
+    // that flung the walk probe's capsule out through the deck and onto the hull's
+    // roof. Guard both segments rather than hand-tune the numbers so it stays correct
+    // if the breach is ever resized.
+    const seg = (h: number, d: number, py: number, pz: number): void => {
+      if (h > 0.01 && d > 0.01) dBox(_intWallMat, I_WALL_T, h, d, wx, py, pz);
+    };
+    seg(wallH, bz0 - zAft, wallCY, (zAft + bz0) / 2);              // aft of the breach (full height)
+    seg(wallH, zFwd - bz1, wallCY, (bz1 + zFwd) / 2);              // fore of the breach (full height)
+    seg(wTop - by1, bz1 - bz0, (by1 + wTop) / 2, (bz0 + bz1) / 2); // header above the opening
+    seg(by0 - wBot, bz1 - bz0, (wBot + by0) / 2, (bz0 + bz1) / 2); // sill strip (usually degenerate → skipped)
+  }
   // Ceiling / overhead deckhead — solid, caps the upward view.
   dBox(_intWallDkMat, (I_WALL_X + 0.6) * 2, I_WALL_T, spanZ + 1.0, 0, I_CEIL_Y + I_WALL_T / 2, midZ + 0.3);
   // Aft end wall (closes the hold; hides the sealed stern mass).
   dBox(_intWallMat, (I_WALL_X + 0.6) * 2, wallH, I_WALL_T, 0, wallCY, I_END_Z - I_WALL_T / 2);
-  // Under-deck skirt at the mouth (seals the buried void below the deck lip).
+  // Under-deck skirt at the fracture (seals the buried void below the deck lip).
   dBox(_voidMat, (I_WALL_X + 0.6) * 2, 3.2, 0.4, 0, I_DECK_Y - 1.7, I_MOUTH_Z + 0.7);
 
-  // ── SOLID MOUTH JAMB — the thick cut collar at the fracture (rule 7). A
-  //    section-shaped ring: OUTER loop = the true arched hull section; INNER loop
-  //    = the walk aperture (flat deck floor + flat header + near-vertical sides)
-  //    clamped into the UPPER hull. A sightline into the mouth hits a solid cut
-  //    cross-section (never a knife edge or a see-through slot); below the deck
-  //    the collar is a solid plate sealing the buried lower hull. Shared material
-  //    → folds into the merge. (Winding mirrors makeLoftedHull exactly.)
+  // ── FRACTURE BULKHEAD — the hold's forward end, now SEALED (review 2026-07-16).
+  //    This was the walk-in mouth: a section-shaped collar with a walk aperture in
+  //    it. It could never be walked into — the reared bow's 21m bore encloses this
+  //    whole face (see the I_BREACH block above) — so the aperture only served as a
+  //    lit arch glimpsed from inside the bow's bore: an entrance that wasn't one.
+  //    It is now a SOLID full-section plate: the torn bulkhead where the bow sheared
+  //    away, backing the exposed former rings. From the hold you read a thick dark
+  //    cut face at the break, not a false way out. (Winding mirrors makeLoftedHull.)
   {
     const outHW = HULL_HALF_W * 0.9, outHH = HULL_HALF_H * 0.96, ocy = 0.1;   // aft loft z≈+8 station
-    const apLoY = I_DECK_Y, apHiY = I_CEIL_Y - 0.15, apX = I_WALL_X - 0.3;    // aperture extents
-    const zFront = I_MOUTH_Z + 1.1;    // proud of the outer skin (occludes the loft knife edge)
-    const zBack = I_MOUTH_Z - 0.6;     // recessed → a real plate depth
+    const zFront = I_MOUTH_Z + 1.1;    // proud of the outer skin (occludes the loft's cut edge)
+    const zBack = I_MOUTH_Z - 0.1;     // 1.2m of real plate depth; clear of the breach at z≤6.7
     const N = SHIP_SECTION.length;
-    const outer = SHIP_SECTION.map(([sx, sy]) => new THREE.Vector2(sx * outHW, ocy + sy * outHH));
-    const inner = SHIP_SECTION.map(([sx, sy]) => new THREE.Vector2(
-      Math.sign(sx) * Math.min(Math.abs(sx * outHW), apX),
-      Math.max(Math.min(ocy + sy * outHH, apHiY), apLoY),
-    ));
+    const ring = (z: number): THREE.Vector3[] => SHIP_SECTION.map(([sx, sy]) => new THREE.Vector3(sx * outHW, ocy + sy * outHH, z));
+    const oF = ring(zFront), oB = ring(zBack);
+    const cF = new THREE.Vector3(0, ocy, zFront), cB = new THREE.Vector3(0, ocy, zBack);
     const pos: number[] = [];
-    const oF = outer.map((p) => new THREE.Vector3(p.x, p.y, zFront));
-    const iF = inner.map((p) => new THREE.Vector3(p.x, p.y, zFront));
-    const iB = inner.map((p) => new THREE.Vector3(p.x, p.y, zBack));
-    const oB = outer.map((p) => new THREE.Vector3(p.x, p.y, zBack));
-    const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
+    const push = (v: THREE.Vector3): void => { pos.push(v.x, v.y, v.z); };
     for (let k = 0; k < N; k++) {
       const k2 = (k + 1) % N;
-      push(oB[k]); push(oF[k2]); push(oF[k]); push(oB[k]); push(oB[k2]); push(oF[k2]);   // outer skin (radially OUT)
-      push(iB[k]); push(iF[k]); push(iF[k2]); push(iB[k]); push(iF[k2]); push(iB[k2]);   // inner jamb wall (into the aperture)
-      // Front cut cross-section — wound to face +Z (OUT, toward the approaching
-      // player). NOTE: the makeLoftedHull rim-cap winding faces -Z here (it's meant
-      // to be occluded by the solidInner proud lip); the jamb has NO such lip, so the
-      // caps are wound OUTWARD directly, else the whole cut face reads as a back-face
-      // through the mouth (review 2026-07-16 backface — the big magenta blob).
-      push(oF[k]); push(iF[k2]); push(iF[k]); push(oF[k]); push(oF[k2]); push(iF[k2]);   // front cap (+Z OUT)
-      push(oB[k]); push(iB[k]); push(iB[k2]); push(oB[k]); push(iB[k2]); push(oB[k2]);   // back cap (-Z, toward the hold)
+      push(oB[k]); push(oF[k2]); push(oF[k]); push(oB[k]); push(oB[k2]); push(oF[k2]);   // rim band (radially OUT)
+      push(cF); push(oF[k]); push(oF[k2]);                                               // front face (+Z, toward the bow)
+      push(cB); push(oB[k2]); push(oB[k]);                                               // back face (-Z, into the hold)
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.computeVertexNormals();
     g.add(new THREE.Mesh(geo, _hullDarkMat));
+  }
+
+  // ── BREACH THRESHOLD — the walk-in floor. The deck plate stops at x=±8.6 but the
+  //    hull skin is out at x≈10.2, so without this the sill would be a hole into the
+  //    under-deck void. One solid plate carries the deck out THROUGH the cut to the
+  //    skin, its top flush with the deck (no lip to trip on), and it seals the void
+  //    under the opening. Reaching past the skin is deliberate: the small proud stub
+  //    reads as the torn deck plate bent out of the tear, and the sand ramp buries it.
+  {
+    const tz0 = I_BREACH_Z - I_BREACH_HZ - I_BREACH_WALL_MARGIN;
+    const tz1 = I_BREACH_Z + I_BREACH_HZ + I_BREACH_WALL_MARGIN;
+    dBox(_intFloorMat, THRESH_OUT_X - (I_WALL_X - 0.4), 0.7, tz1 - tz0,
+      ((I_WALL_X - 0.4) + THRESH_OUT_X) / 2, I_DECK_Y - 0.35, (tz0 + tz1) / 2);
+    // Torn plate lips fore + aft of the opening, biting into the sand ramp.
+    for (const s of [-1, 1] as const) dBox(_frameMat, 2.0, 0.16, 0.5, 9.5, I_DECK_Y + 0.06, I_BREACH_Z + s * (I_BREACH_HZ + 0.2), 0, 0, s * 0.05);
+    // ── THE SAND DRIFT (visible AND walkable) — a HEIGHTFIELD SAMPLED FROM THE REAL
+    //    DUNE. Rounds 1-2 built this as a lofted tongue over a tilted box collider,
+    //    both hand-fitted to a straight-line guess at the terrain. That is what made
+    //    the two gates trade off: the guess is wrong (the dune here is flat, then
+    //    rises), so the tongue's buried tail stood proud as a ridge you clipped, and
+    //    the crest started inboard of the threshold plate so you clipped that too.
+    //
+    //    The shape is now DERIVED, not fitted:
+    //      surf  = the crest line (flat over the plate, then falling at RAMP_TAN),
+    //              minus a repose-angle flank falloff outside the walk band
+    //      top   = smax(terrainLocalY, surf)  ← the drift only exists where it is
+    //              PROUD of the dune; everywhere else it collapses onto the sand
+    //      bottom= terrainLocalY - 0.9        ← a real buried skirt (rule 7 thickness)
+    //
+    //    The max is the whole trick, and it is what a hand-fit cannot do: the drift
+    //    self-terminates at the toe and at both flanks, with zero thickness exactly
+    //    where it meets grade — so there is no edge, ledge or ridge to clip ANYWHERE,
+    //    at any dune shape. The collider is a trimesh baked from this same surface
+    //    (see place()), so what you climb is literally what you see (rule 9).
+    //
+    //    It is a SMOOTH max, though: a hard max() leaves a concave CREASE where the
+    //    flank meets the dune, and a player-radius sphere walking the sand next to the
+    //    drift catches on it (measured — az23/az45 blocked exactly on that crease, at
+    //    the one point where surf ≈ terrain). smax rounds the junction over ~0.55m and
+    //    is exact beyond it, so the drift still vanishes into the dune rather than
+    //    riding 0.25m proud of the whole desert. Sand feathering into sand does not
+    //    have a crease anyway — this reads better AND walks better.
+    /** max(a,b), but rounded over a band of `k` — exact once they differ by ≥ k. */
+    const smax = (a: number, b: number, k: number): number => {
+      const h = Math.min(1, Math.max(0, 0.5 + (0.5 * (a - b)) / k));
+      return b + (a - b) * h + k * h * (1 - h);
+    };
+    const surfY = (lx: number, lz: number): number => {
+      const crest = I_DECK_Y + DRIFT_CREST_LIFT - Math.max(0, lx - RAMP_TOP_X) * RAMP_TAN;
+      // SOFT SHOULDER (round 2): a hard max(0, |dz|-band) gave the drift a dead-flat
+      // 6.5m plateau that broke to a straight repose plane at a knife edge — it read as
+      // a poured-concrete pyramid, not sand. Rounding the shoulder over ~1.4m costs
+      // nothing at the doorway (at the cut's own ±2.4m the drop is under 4cm, so the
+      // threshold stays flush) and everything outside it crowns like a real bank.
+      const flank = smax(Math.abs(lz - I_BREACH_Z) - RAMP_HALF_Z, 0, 1.4) * DRIFT_REPOSE_TAN;
+      return crest - flank;
+    };
+    /** Deterministic dune wobble (no rng draw — the monument stays seed-identical).
+     *  Amplitude/frequency are deliberately small + low: the crest is a WALKING
+     *  surface, and the probe sphere can only stand on ≲42°, of which the crest's own
+     *  30° descent already spends most. 0.14m at ~0.9 rad/m adds ≈0.13 of gradient →
+     *  ~35° worst case, which keeps the climb honest while killing the flat-facet read.
+     *  Faded to zero at the sill (the threshold must stay flush) and wherever the drift
+     *  meets grade (so it cannot lift a lip out of the open sand). */
+    const wobble = (lx: number, lz: number, proud: number): number => {
+      const a = Math.sin(lx * 0.45 + lz * 0.38) * 0.55
+        + Math.sin(lx * 0.9 - lz * 0.72 + 2.1) * 0.3
+        + Math.sin(lz * 0.85 + 1.3) * 0.25;
+      const offSill = Math.min(1, Math.max(0, (lx - RAMP_TOP_X - 0.7) / 2.2));
+      const offGrade = Math.min(1, Math.max(0, proud / 0.7));
+      return a * 0.14 * offSill * offGrade;
+    };
+    // THE TOE — sampled, not assumed. March the crest line outboard until it finally
+    // sinks under the real dune; that point (plus a margin so the last stations are
+    // buried) is where the drift ends. Round 1 hard-coded RAMP_RUN=11.1 from the
+    // linear guess; the real answer here is ≈7 shorter, and it changes if the breach
+    // ever moves — which is exactly the coupling that kept breaking these gates.
+    let toeX = RAMP_TOP_X + 3;
+    for (let lx = RAMP_TOP_X; lx <= RAMP_TOP_X + 26; lx += 0.25) {
+      if (surfY(lx, I_BREACH_Z) > site.terrainLocalY(lx, I_BREACH_Z)) toeX = lx + 1.2;
+    }
+    {
+      const NX = 22, NZ = 36;
+      const gx = (i: number): number => DRIFT_IN_X + (toeX - DRIFT_IN_X) * (i / (NX - 1));
+      const gz = (k: number): number => I_BREACH_Z - DRIFT_HALF_Z + 2 * DRIFT_HALF_Z * (k / (NZ - 1));
+      const terr: number[][] = [], top: number[][] = [];
+      for (let i = 0; i < NX; i++) {
+        terr[i] = []; top[i] = [];
+        for (let k = 0; k < NZ; k++) {
+          const t = site.terrainLocalY(gx(i), gz(k));
+          terr[i][k] = t;
+          const s = smax(surfY(gx(i), gz(k)), t, 0.55);
+          top[i][k] = s + wobble(gx(i), gz(k), s - t);
+        }
+      }
+      const pos: number[] = [];
+      const push = (x: number, y: number, z: number): void => { pos.push(x, y, z); };
+      const T = (i: number, k: number): [number, number, number] => [gx(i), top[i][k], gz(k)];
+      const B = (i: number, k: number): [number, number, number] => [gx(i), terr[i][k] - 0.9, gz(k)];
+      const quad = (a: number[], b: number[], c: number[], d: number[]): void => {
+        push(a[0], a[1], a[2]); push(b[0], b[1], b[2]); push(c[0], c[1], c[2]);
+        push(a[0], a[1], a[2]); push(c[0], c[1], c[2]); push(d[0], d[1], d[2]);
+      };
+      for (let i = 0; i < NX - 1; i++) for (let k = 0; k < NZ - 1; k++) {
+        quad(T(i, k), T(i, k + 1), T(i + 1, k + 1), T(i + 1, k));       // top surface (up)
+        quad(B(i, k), B(i + 1, k), B(i + 1, k + 1), B(i, k + 1));       // buried underside (down)
+      }
+      for (let i = 0; i < NX - 1; i++) {                                 // z-end skirts (buried)
+        quad(T(i, 0), T(i + 1, 0), B(i + 1, 0), B(i, 0));
+        quad(T(i, NZ - 1), B(i, NZ - 1), B(i + 1, NZ - 1), T(i + 1, NZ - 1));
+      }
+      for (let k = 0; k < NZ - 1; k++) {                                 // x-end skirts (buried / inside the hull wall)
+        quad(T(0, k), B(0, k), B(0, k + 1), T(0, k + 1));
+        quad(T(NX - 1, k), T(NX - 1, k + 1), B(NX - 1, k + 1), B(NX - 1, k));
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.computeVertexNormals();
+      const driftMesh = new THREE.Mesh(geo, _sandDriftMat);
+      driftMesh.userData.driftCollide = true;   // → trimesh collider baked in place() (rule 9)
+      g.add(driftMesh);
+    }
+    // Hand the probe its waypoints in the drift's own terms. They MUST come from the
+    // sampled surface: the old ones were computed from RAMP_RUN/RAMP_TAN and so sat in
+    // mid-air (or under the dune) as soon as the fit was off — which is how the walk
+    // gate came to be "passing" on a drift you could not actually climb.
+    g.userData.leviathanDrift = {
+      // On the crest, just outboard of the plate — level with the sill.
+      outside: [RAMP_TOP_X + 1.2, surfY(RAMP_TOP_X + 1.2, I_BREACH_Z), I_BREACH_Z],
+      // Out on the open sand at the foot of the drift, where it meets grade.
+      outsideFoot: [toeX - 0.8, site.terrainLocalY(toeX - 0.8, I_BREACH_Z) + 0.3, I_BREACH_Z],
+    };
   }
 
   // ── SHIP FRAME — transverse deckhead beams + vertical wall ribs + corner
@@ -459,22 +836,38 @@ function buildLeviathanInterior(g: THREE.Group): void {
   dBox(_frameMat, 0.5, 0.5, 3.5, 5.6, I_DECK_Y + 0.9, -12.0, 0.3, -0.2, -0.5);
 
   // ── HORIZONTAL WALL PANELLING — break the tall flat inner skin into a plated,
-  //    framed, cabled compartment (both walls, full length). Seam rails +
-  //    skirting + a high conduit run. Proud ≥0.1m.
+  //    framed, cabled compartment. Seam rails + skirting + a high conduit run.
+  //    Proud ≥0.1m. The STARBOARD runs stop at the breach: a rail sailing across a
+  //    6m tear and ending in mid-air announces "the hole was cut afterwards". They
+  //    are severed at the tear's edge instead, which is what a tear does to them.
+  const BZ0 = I_BREACH_Z - I_BREACH_HZ - I_BREACH_WALL_MARGIN;
+  const BZ1 = I_BREACH_Z + I_BREACH_HZ + I_BREACH_WALL_MARGIN;
+  const zFwdEnd = midZ + 0.3 + (spanZ - 1) / 2, zAftEnd = midZ + 0.3 - (spanZ - 1) / 2;
+  /** Run a wall-line feature down a flank, severed at the breach on starboard. */
+  const wallRun = (s: -1 | 1, make: (len: number, cz: number) => void, y: number): void => {
+    if (s < 0 || y > I_BREACH_Y1 + 0.3 || y < I_BREACH_Y0 - 0.3) { make(spanZ - 1, midZ + 0.3); return; }
+    make(BZ0 - zAftEnd, (zAftEnd + BZ0) / 2);
+    make(zFwdEnd - BZ1, (BZ1 + zFwdEnd) / 2);
+  };
   for (const s of [-1, 1] as const) {
     const wx = (I_WALL_X - 0.05) * s;
-    dBox(_frameMat, 0.14, 0.16, spanZ - 1, wx, I_DECK_Y + 2.3, midZ + 0.3);                 // upper seam rail
-    dBox(_frameMat, 0.16, 0.16, spanZ - 1, wx, I_DECK_Y + 0.15, midZ + 0.3);               // skirting rail
-    dCyl(_conduitMat, 0.09, 0.09, spanZ - 2, wx - 0.06 * s, I_CEIL_Y - 0.55, midZ + 0.3, Math.PI / 2, 0, 0, 7); // high conduit run
+    wallRun(s, (len, cz) => dBox(_frameMat, 0.14, 0.16, len, wx, I_DECK_Y + 2.3, cz), I_DECK_Y + 2.3);   // upper seam rail
+    wallRun(s, (len, cz) => dBox(_frameMat, 0.16, 0.16, len, wx, I_DECK_Y + 0.15, cz), I_DECK_Y + 0.15); // skirting rail
+    // The high conduit run sits above the tear's header, so it crosses uncut.
+    dCyl(_conduitMat, 0.09, 0.09, spanZ - 2, wx - 0.06 * s, I_CEIL_Y - 0.55, midZ + 0.3, Math.PI / 2, 0, 0, 7);
   }
 
   // ── HOLD (z +7 → -7) — cargo cathedral at the breach ──────────────────────
-  // Lashing rails + D-ring cleats down both walls (freighter cargo grammar).
+  // Lashing rails + D-ring cleats down both walls (freighter cargo grammar). On
+  // starboard both stop clear of the tear (see wallRun above) — the cleats simply
+  // aren't placed where there is no wall left to bolt them to.
   for (const s of [-1, 1] as const) {
     const wx = (I_WALL_X - 0.08) * s;
-    dBox(_frameMat, 0.12, 0.16, 12.5, wx, I_DECK_Y + 1.5, 0.0);
+    if (s < 0) dBox(_frameMat, 0.12, 0.16, 12.5, wx, I_DECK_Y + 1.5, 0.0);
+    else { dBox(_frameMat, 0.12, 0.16, 5.0, wx, I_DECK_Y + 1.5, BZ1 + 2.5); dBox(_frameMat, 0.12, 0.16, 5.0, wx, I_DECK_Y + 1.5, BZ0 - 2.5); }
     for (let i = 0; i < 6; i++) {
       const cz = 5.5 - i * 2.1;
+      if (s > 0 && cz > BZ0 && cz < BZ1) continue;                                           // torn away with the plating
       dBox(_frameMat, 0.20, 0.26, 0.16, wx - 0.10 * s, I_DECK_Y + 0.95, cz);                // D-ring cleat
       dBox(_cableMat, 0.05, 0.34, 0.05, wx - 0.16 * s, I_DECK_Y + 0.95, cz, 0.5 * s, 0, 0.3 * s); // dangling lash strap
     }
@@ -500,18 +893,26 @@ function buildLeviathanInterior(g: THREE.Group): void {
     for (const s of [-1, 1] as const) for (let r = 0; r < 4; r++)
       child(mat, 0.08, h - 0.4, 0.14, s * (hw + 0.03), 0, -hl + 0.6 + r * ((d - 1.2) / 3));        // corrugation straps
   };
-  intCrate(_cnRust, I_WALL_X - 1.5, I_DECK_Y + CN_H / 2, 3.5, 0, 0.06, 0);
-  intCrate(_cnBlue, I_WALL_X - 1.6, I_DECK_Y + CN_H * 1.5 + 0.1, 3.7, 0.04, 0.03, 0.03);   // stacked
-  intCrate(_cnTan, I_WALL_X - 1.7, I_DECK_Y + CN_H / 2, -2.0, 0, -0.14, 0.06);
+  // NOTE (review 2026-07-16): the starboard cargo moved off z≈-0.5±2.5 — that is the
+  // BREACH bay now, and cargo parked in the doorway would block the one way in. The
+  // mass split fore (z≈4.6, against the fracture bulkhead) and aft (z≈-4.6), which
+  // also frames the tear with cargo instead of burying it.
+  intCrate(_cnRust, I_WALL_X - 1.5, I_DECK_Y + CN_H / 2, -6.0, 0, 0.06, 0);
+  intCrate(_cnBlue, I_WALL_X - 1.6, I_DECK_Y + CN_H * 1.5 + 0.1, -5.8, 0.04, 0.03, 0.03);   // stacked
+  intCrate(_cnTan, I_WALL_X - 1.7, I_DECK_Y + CN_H / 2, 5.4, 0, -0.14, 0.06);
   intCrate(_hullDarkMat, -I_WALL_X + 1.6, I_DECK_Y + CN_H / 2, 4.2, 0.05, 0.2, -0.1);
   intCrate(_cnRust, -I_WALL_X + 2.4, I_DECK_Y + CN_H * 0.45, -1.5, 0.5, 0.9, 0.35, 0.85);   // spilled, tipped
   intCrate(_cnBlue, -I_WALL_X + 1.5, I_DECK_Y + CN_H / 2, -4.8, 0, 0.1, 0.05);
-  // Sand drifted in through the breach — a wedge on the deck at the mouth,
-  // thickest at the lip, feathering aft (FLAT, no collider; the deck stands).
-  for (let i = 0; i < 6; i++) {
-    const sz = I_MOUTH_Z - 0.5 - i * 1.7;
-    const hgt = 0.34 - i * 0.05;
-    dBox(_sandDriftMat, (I_WALL_X + 0.4) * 2 - i * 1.0, Math.max(0.05, hgt), 1.8, (i % 2 ? 0.6 : -0.6), I_DECK_Y + Math.max(0.05, hgt) / 2, sz);
+  // Sand drifted in THROUGH THE BREACH — a tongue that starts on the threshold and
+  // fans across the deck away from the tear, thickest at the sill (FLAT, no collider;
+  // the deck stands). This is the payoff of the flight-recorder line: "it came up
+  // through the breach like water and would not stop." It now points at the real
+  // opening (starboard, at the break) instead of the sealed fracture face.
+  for (let i = 0; i < 7; i++) {
+    const sx = (I_WALL_X + 0.4) - i * 1.9;
+    const hgt = 0.36 - i * 0.045;
+    dBox(_sandDriftMat, 2.0, Math.max(0.05, hgt), (I_BREACH_HZ * 2 + 1.6) - i * 0.35,
+      sx, I_DECK_Y + Math.max(0.05, hgt) / 2, I_BREACH_Z + (i % 2 ? 0.5 : -0.5) - i * 0.35);
   }
   // Hanging chains from the deckhead (a cargo hoist, snapped) — off-lane.
   for (const [cx, cz] of [[3.0, 1.5], [-3.4, -3.0], [4.2, -4.5]] as const) {
@@ -626,8 +1027,10 @@ function buildLeviathanInterior(g: THREE.Group): void {
   const addLight = (color: number, intensity: number, range: number, lx: number, ly: number, lz: number): void => {
     _lightConfigs.push({ c: color, i: intensity * LEVIATHAN_LIGHT_LIFT, r: range, x: lx, y: ly, z: lz });
   };
-  addLight(0xffc38c, 4.2, 34, 0, I_DECK_Y + 3.4, I_MOUTH_Z - 1.0);   // MOUTH daylight shaft (floods the hold)
-  addLight(0xffb578, 2.7, 26, 0, I_DECK_Y + 3.3, 1.5);              // hold near fill (daylight on the cargo)
+  // The daylight now enters at the STARBOARD BREACH, not the (sealed) fracture face —
+  // the shaft has to sit where the actual hole is, or the hold is lit from a wall.
+  addLight(0xffc38c, 4.2, 34, I_WALL_X - 1.6, I_DECK_Y + 2.2, I_BREACH_Z);   // BREACH daylight shaft (floods the hold)
+  addLight(0xffb578, 2.7, 26, 1.5, I_DECK_Y + 3.3, 3.0);            // hold near fill (daylight on the cargo)
   addLight(0xffa25c, 1.8, 24, 0, I_DECK_Y + 3.2, -4.5);            // hold deep fill (bleed toward door A)
   addLight(0x8a7458, 1.4, 22, 0, I_DECK_Y + 3.3, -14.0);          // MID neutral fill (machine bay legible)
   addLight(0xb0361f, 1.1, 15, 0.5, I_DECK_Y + 2.7, -12.0);        // MID failing red lamp (with the red strip)
@@ -652,18 +1055,23 @@ export function placeLeviathanLandmark(
 ): void {
   removeLeviathanLandmark(scene, world);
   const rand = makeRng(0x1e71a7);              // fixed seed — deterministic, own stream
-  const group = buildLeviathanMesh(rand);
+  // The site resolves the monument's world pose + a dune sampler in its local frame.
+  // It is built FIRST because the drift geometry is derived from the real terrain at
+  // build time (see the DRIFT block), so the builder needs the pose up front.
+  const site = makeLevSite(terrain);
+  const group = buildLeviathanMesh(rand, site);
   group.name = 'leviathanLandmark';            // findable by the rig-shot framer + occluder-by-name
 
   // ── Tilt (a crashed-and-settled list) + burial. The hull long-axis is local +Z;
   //    yaw it BROADSIDE to the spawn gaze so the whole length reads, pitch a settled
   //    list, and sink only the keel so the long body rises clear of the horizon line.
+  // Pose from the SITE's matrix — the same transform the drift was sampled against,
+  // so the sand cannot land at a different height than the dune it was fitted to.
   const gy = terrain.heightAt(LANDMARK_X, LANDMARK_Z);
-  group.rotation.set(0.08, HULL_YAW, 0.05);    // pitch (settle) + yaw (broadside) + roll (list)
+  group.rotation.set(GROUP_PITCH, HULL_YAW, GROUP_ROLL);   // pitch (settle) + yaw (broadside) + roll (list)
   // Sink only the keel so the whole LONG hull body rises clear of the horizon line
   // (R2: over-burial made it read as a lone fin — keep the belly proud so the ship
   // silhouette lies broadside above the dune).
-  const BURY = HULL_HALF_H * 0.22;
   group.position.set(LANDMARK_X, gy - BURY, LANDMARK_Z);
   group.updateMatrixWorld(true);
   scene.add(group);
@@ -687,11 +1095,38 @@ export function placeLeviathanLandmark(
   const IDENT = new THREE.Matrix4();
   const ZEROP = { x: 0, y: 0, z: 0 };
   const IDENTQ = { x: 0, y: 0, z: 0, w: 1 };
+  // The BOW's trimesh is trimmed where it passes through the walkable hold (rule 9 /
+  // review 2026-07-16). Reared 64° about the fracture hinge, the top of its ~21m root
+  // ring swings back down to local ≈(6.5,6.6,-1) — head height, mid-hold, right on the
+  // walk line — and the player hit it as an invisible wall. That skin is buried inside
+  // the aft mass and never renders, so dropping those triangles cannot open an
+  // exterior gap: the aft hull's own trimesh already covers every visible surface
+  // there, and the hold's forward end gets a REAL bulkhead collider below (it had been
+  // relying on this same stray bow skin to stop the player, by accident).
+  const groupInv = group.matrixWorld.clone().invert();
+  const _lp = new THREE.Vector3();
+  const buriedInAft = (wx: number, wy: number, wz: number): boolean => {
+    _lp.set(wx, wy, wz).applyMatrix4(groupInv);
+    return insideAftHull(_lp.x, _lp.y, _lp.z);
+  };
   const hullMeshes: THREE.Mesh[] = [];
   group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && o.userData.hullCollide) hullMeshes.push(m); });
   for (const hm of hullMeshes) {
-    const tri = makeStaticTrimesh(world, [hm], ZEROP, IDENTQ, IDENT);
+    const tri = makeStaticTrimesh(world, [hm], ZEROP, IDENTQ, IDENT,
+      hm.userData.trimInsideHold ? { skipTri: buriedInAft } : undefined);
     if (tri) _bodies.push(tri);
+  }
+  // ── THE SAND DRIFT collider — a trimesh baked from the drift's OWN sampled surface.
+  //    Round 1 used a tilted box hand-derived from RAMP_* constants; that box could
+  //    only ever approximate a surface fitted to the real dune, and its buried flank
+  //    was the thing blocking the walk-in. Baking the collider from the geometry makes
+  //    "what you climb is what you see" true by construction rather than by arithmetic.
+  const driftMeshes: THREE.Mesh[] = [];
+  group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && o.userData.driftCollide) driftMeshes.push(m); });
+  const driftHandles: number[] = [];
+  for (const dm of driftMeshes) {
+    const tri = makeStaticTrimesh(world, [dm], ZEROP, IDENTQ, IDENT);
+    if (tri) { _bodies.push(tri); for (let i = 0; i < tri.numColliders(); i++) driftHandles.push(tri.collider(i).handle); }
   }
   // ── PERF static-merge into one draw per (material, attribute-signature) bucket —
   //    moved here (was in buildLeviathanMesh) so it runs AFTER the hull trimesh bake.
@@ -711,11 +1146,16 @@ export function placeLeviathanLandmark(
   const midZ = (I_MOUTH_Z + I_END_Z) / 2, spanZ = I_MOUTH_Z - I_END_Z;
   const wallH = I_CEIL_Y - I_DECK_Y + 1.4, wallCY = (I_CEIL_Y + I_DECK_Y) / 2;
   const cols: RAPIER.Collider[] = [];
-  const localCol = (hx: number, hy: number, hz: number, lx: number, ly: number, lz: number): RAPIER.Collider => {
+  const localCol = (hx: number, hy: number, hz: number, lx: number, ly: number, lz: number, localEuler?: THREE.Euler): RAPIER.Collider => {
+    // localEuler tilts the box WITHIN the group's frame (the sand ramp) — composed as
+    // group ∘ local so a tilted collider still rides the monument's pose exactly.
+    const q = localEuler
+      ? groupQuat.clone().multiply(new THREE.Quaternion().setFromEuler(localEuler))
+      : groupQuat;
     const c = makeStaticBox(
       world, { x: hx, y: hy, z: hz },
       groupPos.clone().add(new THREE.Vector3(lx, ly, lz).applyQuaternion(groupQuat)),
-      groupQuat,
+      q,
     );
     cols.push(c);
     const b = c.parent(); if (b) _bodies.push(b);
@@ -723,15 +1163,47 @@ export function placeLeviathanLandmark(
   };
   // Deck (the walkable floor — handle exported for the walk probe).
   const deckCol = localCol(I_WALL_X + 0.6, 0.25, (spanZ + 1) / 2, 0, I_DECK_Y - 0.25, midZ + 0.3);
-  // Side walls (inner face lands on the visible ±I_WALL_X plane).
-  localCol(I_WALL_T / 2, wallH / 2, (spanZ + 1) / 2, I_WALL_X + I_WALL_T / 2, wallCY, midZ + 0.3);
+  // Side walls (inner face lands on the visible ±I_WALL_X plane). PORT is one box;
+  // STARBOARD is split around the BREACH so the doorway carries no collider — the
+  // collider set mirrors the four visible wall plates exactly (rule 9). The floor
+  // through the opening is the threshold collider below.
   localCol(I_WALL_T / 2, wallH / 2, (spanZ + 1) / 2, -(I_WALL_X + I_WALL_T / 2), wallCY, midZ + 0.3);
+  const breachFloorHandles: number[] = [];
+  {
+    const wx = I_WALL_X + I_WALL_T / 2;
+    const bz0 = I_BREACH_Z - I_BREACH_HZ - I_BREACH_WALL_MARGIN;
+    const bz1 = I_BREACH_Z + I_BREACH_HZ + I_BREACH_WALL_MARGIN;
+    const by0 = I_BREACH_Y0 - I_BREACH_WALL_MARGIN, by1 = I_BREACH_Y1 + I_BREACH_WALL_MARGIN;
+    const wTop = wallCY + wallH / 2, wBot = wallCY - wallH / 2;
+    const zFwd = midZ + 0.3 + (spanZ + 1) / 2, zAft = midZ + 0.3 - (spanZ + 1) / 2;
+    // Mirrors the visible wall plates exactly, INCLUDING the degenerate-segment skip
+    // (see buildLeviathanInterior): a negative half-extent is not a small collider,
+    // it is an invalid one, and Rapier will happily eject a capsule through the deck.
+    const segCol = (hy: number, hz: number, py: number, pz: number): void => {
+      if (hy > 0.005 && hz > 0.005) localCol(I_WALL_T / 2, hy, hz, wx, py, pz);
+    };
+    segCol(wallH / 2, (bz0 - zAft) / 2, wallCY, (zAft + bz0) / 2);              // aft of the breach
+    segCol(wallH / 2, (zFwd - bz1) / 2, wallCY, (bz1 + zFwd) / 2);              // fore of the breach
+    segCol((wTop - by1) / 2, (bz1 - bz0) / 2, (by1 + wTop) / 2, (bz0 + bz1) / 2); // header
+    segCol((by0 - wBot) / 2, (bz1 - bz0) / 2, (wBot + by0) / 2, (bz0 + bz1) / 2); // sill strip (usually skipped)
+    // Breach threshold — the walk-in floor from the deck edge out through the cut.
+    // Its outboard face at THRESH_OUT_X is exactly where the drift's crest begins.
+    breachFloorHandles.push(localCol((THRESH_OUT_X - (I_WALL_X - 0.4)) / 2, 0.35, (bz1 - bz0) / 2, ((I_WALL_X - 0.4) + THRESH_OUT_X) / 2, I_DECK_Y - 0.35, (bz0 + bz1) / 2).handle);
+    // (The sand ramp's collider is the drift TRIMESH baked above — no box here.)
+    breachFloorHandles.push(...driftHandles);
+  }
   // Roof (underside = the interior ceiling at I_CEIL_Y).
   localCol(I_WALL_X + 0.6, 0.25, (spanZ + 1) / 2, 0, I_CEIL_Y + 0.25, midZ + 0.3);
   // Aft end wall.
   localCol(I_WALL_X + 0.6, wallH / 2, I_WALL_T / 2, 0, wallCY, I_END_Z - I_WALL_T / 2);
   // Under-deck skirt at the mouth (blocks stepping off the front lip into the void).
   localCol(I_WALL_X + 0.6, 1.6, 0.2, 0, I_DECK_Y - 1.7, I_MOUTH_Z + 0.7);
+  // FRACTURE BULKHEAD — the hold's sealed forward end (rule 9). The visible torn
+  // section plate at the break had NO collider of its own: what actually stopped the
+  // player walking through it was the reared bow's stray trimesh, which is precisely
+  // the geometry being trimmed out of the hold above. So the wall it was standing in
+  // for has to become real, or trimming the bow would open the hold's forward end.
+  localCol(I_WALL_X + 0.6, wallH / 2, 0.6, 0, wallCY, I_MOUTH_Z + 0.5);
   // Bulkhead colliders (mirror the visuals: panels + lintel + sill; the doorway is open).
   const sillHandles: number[] = [];
   const bulkheadCols = (bz: number, doorX: number): void => {
@@ -749,8 +1221,8 @@ export function placeLeviathanLandmark(
   //    ±1.4m centre walk lane + the doorways (the walk gate stays clean).
   // HOLD cargo crates (half ≈ container/2).
   const CH = 2.6 / 2, CHW = 2.8 / 2, CHL = 4.2 / 2;
-  localCol(CHW, 2.6 * 1.0, CHL, I_WALL_X - 1.5, I_DECK_Y + 2.0, 3.5);    // starboard stack (2 high)
-  localCol(CHW, CH, CHL, I_WALL_X - 1.7, I_DECK_Y + CH, -2.0);           // starboard fwd crate
+  localCol(CHW, 2.6 * 1.0, CHL, I_WALL_X - 1.5, I_DECK_Y + 2.0, -6.0);   // starboard stack (2 high) — aft of the breach
+  localCol(CHW, CH, CHL, I_WALL_X - 1.7, I_DECK_Y + CH, 5.4);            // starboard fwd crate — fore of the breach
   localCol(CHW, CH, CHL, -I_WALL_X + 1.6, I_DECK_Y + CH, 4.2);          // port crate
   localCol(CHW * 0.85, CH * 0.85, CHL * 0.85, -I_WALL_X + 2.4, I_DECK_Y + CH * 0.9, -1.5);   // spilled crate
   localCol(CHW, CH, CHL, -I_WALL_X + 1.5, I_DECK_Y + CH, -4.8);         // port aft crate
@@ -772,12 +1244,32 @@ export function placeLeviathanLandmark(
     const v = group.localToWorld(new THREE.Vector3(lx, ly, lz));
     return { name, x: v.x, y: v.y, z: v.z };
   };
+  // The `outside` waypoint MUST be genuinely outdoors (review 2026-07-16). The old
+  // one — (0, I_DECK_Y, I_MOUTH_Z+4) at the fracture — sat INSIDE the reared bow's
+  // enclosed bore, so `leviathan-walk` teleported the player into a sealed pocket and
+  // then "walked in" from there: the gate passed on a wreck no player could enter.
+  //
+  // Two outdoor waypoints now. `outsideFoot` is out on the open sand at the bottom of
+  // the ramp — the walk gate STARTS there, so it has to climb the drift to get in,
+  // which is the part that was never tested. `outside` is the ramp lip just outboard
+  // of the skin: still open sky overhead, but level with the sill, which is what the
+  // straight-line sightline checks (seam A/B, the backface into-opening shot) need —
+  // they'd otherwise be aiming through the ramp itself. Both names match /outside/ so
+  // seam's interior daylight-fan correctly excludes them from its centroid.
+  // verify:solid's walk-in check derives its own outside and trusts neither of these.
+  const dw = group.userData.leviathanDrift as { outside: number[]; outsideFoot: number[] };
   group.userData.leviathanProbe = {
     deckHandle: deckCol.handle,
-    floorHandles: [deckCol.handle, ...sillHandles],
+    floorHandles: [deckCol.handle, ...sillHandles, ...breachFloorHandles],
     waypoints: [
-      wp('outside', 0, I_DECK_Y, I_MOUTH_Z + 4.0),
-      wp('mouth', 0, I_DECK_Y, I_MOUTH_Z - 1.0),
+      // Both outdoor waypoints come from the SAMPLED drift (buildLeviathanInterior),
+      // not from ramp arithmetic: `outsideFoot` sits on the open sand where the drift
+      // actually meets grade, and `outside` on the crest just outboard of the plate.
+      // Derived the old way they drifted into mid-air / under the dune whenever the
+      // linear fit was off, which made the walk gate green on an unclimbable ramp.
+      wp('outsideFoot', dw.outsideFoot[0], dw.outsideFoot[1], dw.outsideFoot[2]),
+      wp('outside', dw.outside[0], dw.outside[1], dw.outside[2]),
+      wp('mouth', THRESH_OUT_X - 2.2, I_DECK_Y, I_BREACH_Z),
       wp('hold', 0, I_DECK_Y, -1.0),
       wp('doorA', I_DOORX_A, I_DECK_Y, I_BULK_A),
       wp('mid', 0, I_DECK_Y, -14.0),

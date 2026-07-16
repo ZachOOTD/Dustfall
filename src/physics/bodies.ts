@@ -29,6 +29,14 @@ export function makeStaticBox(
  * `bakeInv` is the inverse world matrix of the transform frame the collider
  * body sits at (so each mesh's world verts land in body-local space). Returns
  * the body (push it onto the chunk teardown list) or null if no geometry.
+ *
+ * `opts.skipTri` (2026-07-16) drops individual triangles by their BODY-LOCAL
+ * centroid. It exists for the one case a whole-mesh bake gets wrong: a decorative
+ * mass that is posed so it passes THROUGH a walkable interior it never renders
+ * into (the leviathan's reared bow root swings back down inside the hold — buried
+ * and invisible, but its trimesh was an invisible wall at head height on the walk
+ * line). Trimming only triangles that are provably inside another solid's interior
+ * cannot open an exterior collision gap; use it for nothing else.
  */
 export function makeStaticTrimesh(
   world: RAPIER.World,
@@ -36,16 +44,26 @@ export function makeStaticTrimesh(
   pos: Vec3Like,
   quat: QuatLike,
   bakeInv: THREE.Matrix4,
+  opts?: { skipTri?: (cx: number, cy: number, cz: number) => boolean },
 ): RAPIER.RigidBody | null {
   const verts: number[] = [];
   const tmp = new THREE.Matrix4();
+  const skip = opts?.skipTri;
   for (const m of meshes) {
     if (!m.geometry) continue;
     const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
     m.updateWorldMatrix(true, false);
     g.applyMatrix4(tmp.copy(bakeInv).multiply(m.matrixWorld));   // world → body-local
     const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) verts.push(p.getX(i), p.getY(i), p.getZ(i));
+    for (let i = 0; i + 2 < p.count; i += 3) {
+      if (skip) {
+        const cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3;
+        const cy = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3;
+        const cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3;
+        if (skip(cx, cy, cz)) continue;
+      }
+      for (let k = 0; k < 3; k++) verts.push(p.getX(i + k), p.getY(i + k), p.getZ(i + k));
+    }
     g.dispose();
   }
   if (!verts.length) return null;

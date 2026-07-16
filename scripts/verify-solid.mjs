@@ -35,6 +35,7 @@
 //                   pixels visible from OUTSIDE (a front face missing → see-through).
 //   3. openend    — topological: cluster boundary edges (used by exactly ONE tri)
 //                   into loops; a LARGE open loop = an uncapped torn hull end / hole.
+//                   EXCLUDES an asset's DECLARED entrance (see "intended openings").
 //   4. floating   — connected-component analysis: a component whose lowest point
 //                   floats above terrain.heightAt under its own footprint.
 //   5. collision  — NEGATIVE walk-probe (enclosure assets only): compare the first
@@ -44,11 +45,32 @@
 //   6. seam       — entrance/opening rays (enclosure+probe assets): exterior opening
 //                   must lead to the interior (not a wall); the interior mouth must
 //                   see daylight (not hull); an interior fan finds EXTRA daylight
-//                   arcs = open ends / shell gaps beyond the intended mouth.
+//                   arcs = open ends / shell gaps beyond the intended mouth. PLUS the
+//                   walk-in proof below, which is the gating half.
+//   7. walkin     — POSITIVE proof you can get IN from genuinely OUTSIDE (2026-07-16).
+//                   Pick start points that are VERIFIABLY outside (a ray straight up
+//                   hits neither asset geometry nor a collider — so a point inside the
+//                   hull, or inside a decorative bore, is rejected as a start), then
+//                   MARCH a player-radius sphere from there through the entrance into
+//                   the interior at real floor height, requiring zero collider overlap.
 //
-// Checks 5 & 6 are scoped to ENCLOSURE assets (hulls you enter). An open colonnade
+// Checks 5 & 6/7 are scoped to ENCLOSURE assets (hulls you enter). An open colonnade
 // like the ribcage is walk-THROUGH by design, so firing the exterior-wall probe on
 // it would be a false positive — those checks report N/A for it. See docs/verify-solid.md.
+//
+// ── INTENDED OPENINGS (2026-07-16 — why this file grew a check and lost a footgun) ──
+// The leviathan shipped SEALED: the `openend` detector flagged the hull's walk-in
+// bores as "uncapped cross-sections", the fix capped every one of them — including
+// the player's way in — and `seam` still passed, because its "outside" waypoint was
+// a builder-declared point that was itself INSIDE a decorative bore. A gate caused
+// the bug and another gate missed it. Two structural fixes:
+//   (a) an asset DECLARES its entrance (`userData.intendedOpening = {center,radius}`
+//       in mesh-LOCAL space, or `entrance` here in ASSET_DEFS) and `openend` excludes
+//       boundary loops there — a detector must never call the front door a defect.
+//   (b) `walkin` derives its own OUTSIDE, never trusting a builder waypoint, and
+//       proves passage with a swept player-radius sphere against REAL colliders.
+//       It FAILS on the sealed build and PASSES on the fixed one — the gate is only
+//       worth having if it can do both.
 
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
@@ -67,7 +89,10 @@ const PORT = Number(argv.port || 5205);
 const DUMP_JSON = !!argv.json;
 const ASSET = String(argv.asset || 'all');
 
-// Which assets to run + their nature (enclosure ⇒ the collision/seam probes apply).
+// Which assets to run + their nature (enclosure ⇒ the collision/seam/walkin probes
+// apply). `entrance` (optional) is a per-asset OVERRIDE of the declared intended
+// opening, in WORLD space, for assets whose builder does not stash a
+// `userData.intendedOpening` — normally the builder declares it and this stays empty.
 const ASSET_DEFS = {
   skyfall: { enclosure: true },
   leviathan: { enclosure: true },
@@ -99,6 +124,14 @@ const PARAMS = {
   collFlagMin: 4,        // … or an absolute ≥ 4 flagged rays
   // 6. seam
   fanRays: 48,           // interior-fan ray count for the daylight-arc test
+  // 7. walkin
+  playerRadius: 0.35,    // Tuning.PLAYER_CAPSULE_RADIUS — the sphere we march
+  walkStartRing: 26,     // candidate OUTSIDE starts on a ring this far from the entrance
+  walkStarts: 16,        // … this many, evenly spaced in azimuth
+  walkStep: 0.45,        // march step along the path (< playerRadius ⇒ no tunnelling)
+  walkClearUp: 60,       // "verifiably outside" = this many metres of clear sky overhead
+  walkFloorLift: 0.12,   // sphere sits this far above the floor it is standing on
+  walkProbeUp: 0.9,      // floor search reaches this far above the PREVIOUS step (a step-up limit)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,6 +262,34 @@ async function installSolidLib() {
   };
 
   lib.probeOf = (root) => root.userData.skyfallProbe || root.userData.leviathanProbe || root.userData.habDomeProbe || null;
+
+  /** The asset's DECLARED intended openings, in WORLD space.
+   *  A builder that cuts a genuine walk-in hole through its hull stashes
+   *  `userData.intendedOpening = { center: {x,y,z}, radius }` (mesh-LOCAL) on the
+   *  mesh it cut; a static merge preserves userData on the surviving bucket, and the
+   *  world transform is applied here. `cfg.entrance` (ASSET_DEFS) is a world-space
+   *  escape hatch for assets whose builder cannot declare it.
+   *
+   *  WHY this exists: `openend` is a topology detector — it cannot tell a torn,
+   *  unclosed hull end (a defect) from the front door (the whole point of the
+   *  asset). Told to "fix every open loop", the previous pass capped the entrance
+   *  and sealed the interior. A declared opening is excluded from `openend` and is
+   *  what `walkin` aims at, so the two checks can never fight each other again. */
+  lib.openingsOf = (root, cfg) => {
+    const THREE = window.__game.THREE;
+    const out = [];
+    root.updateMatrixWorld(true);
+    root.traverse((o) => {
+      const io = o.userData && o.userData.intendedOpening;
+      if (!io) return;
+      const c = new THREE.Vector3(io.center.x, io.center.y, io.center.z).applyMatrix4(o.matrixWorld);
+      // world radius: the local radius scaled by the node's largest world scale
+      const s = new THREE.Vector3().setFromMatrixScale(o.matrixWorld);
+      out.push({ center: c, radius: io.radius * Math.max(s.x, s.y, s.z), declaredBy: o.name || o.type });
+    });
+    if (cfg && cfg.entrance) out.push({ center: new THREE.Vector3(cfg.entrance.x, cfg.entrance.y, cfg.entrance.z), radius: cfg.entrance.radius, declaredBy: 'ASSET_DEFS.entrance' });
+    return out;
+  };
 
   /** An INTERACTIVE / non-static-hull subtree (a live salvage access panel, a
    *  journal, a loot trigger) — the SAME subtrees mergeStaticByMaterial skips
@@ -373,21 +434,33 @@ async function installSolidLib() {
     return comps;
   };
 
-  // ── CHECK 3 — OPEN END / UNCLOSED SOLID (large boundary loop). ──
-  lib.checkOpenEnd = (comps, P) => {
+  // ── CHECK 3 — OPEN END / UNCLOSED SOLID (large boundary loop), MINUS the asset's
+  //    DECLARED intended openings (see lib.openingsOf — a detector must not call the
+  //    front door a defect; that mistake is what sealed the leviathan). ──
+  lib.checkOpenEnd = (comps, P, openings) => {
     const flags = [];
+    const excused = [];
     let totalLoops = 0, maxDiag = 0;
+    const atOpening = (centerArr) => {
+      for (const op of openings || []) {
+        const dx = centerArr[0] - op.center.x, dy = centerArr[1] - op.center.y, dz = centerArr[2] - op.center.z;
+        if (Math.hypot(dx, dy, dz) <= op.radius) return op;
+      }
+      return null;
+    };
     for (const c of comps) {
       for (const lp of c.loops) {
         totalLoops++;
         maxDiag = Math.max(maxDiag, lp.diag);
         if (lp.diag >= P.loopDiag && lp.edges >= P.loopEdges) {
+          const op = atOpening(lp.center);
+          if (op) { excused.push({ mesh: c.meshLabel, openLoopDiag: +lp.diag.toFixed(2), center: lp.center, declaredBy: op.declaredBy }); continue; }
           flags.push({ mesh: c.meshLabel, openLoopDiag: +lp.diag.toFixed(2), edges: lp.edges, center: lp.center });
         }
       }
     }
     flags.sort((a, b) => b.openLoopDiag - a.openLoopDiag);
-    return { pass: flags.length === 0, flags: flags.slice(0, 12), totalOpenLoops: flags.length, maxBoundaryLoopDiag: +maxDiag.toFixed(2) };
+    return { pass: flags.length === 0, flags: flags.slice(0, 12), totalOpenLoops: flags.length, maxBoundaryLoopDiag: +maxDiag.toFixed(2), intendedOpeningsExcused: excused };
   };
 
   // ── CHECK 4 — FLOATING. Merge the per-mesh connected components into SUPER-
@@ -693,6 +766,119 @@ async function installSolidLib() {
     return { pass: flags.length === 0, flags, daylightArcs: escArcs, escapeRays: escRays };
   };
 
+  // ── CHECK 7 — WALK-IN PROOF (can a player actually GET IN from outside?). ──
+  //
+  //  This is the check that should have caught the sealed leviathan. It differs from
+  //  `seam` in the two ways that matter:
+  //
+  //   1. It DERIVES its own "outside" instead of trusting the builder's `outside`
+  //      waypoint. The leviathan's declared `outside` sat inside the reared bow's
+  //      decorative bore — a pocket of air fully enclosed by hull — so every probe
+  //      that started there was already indoors and every gate passed on a hermetic
+  //      wreck. A start point qualifies only if a ray STRAIGHT UP from it escapes
+  //      both the asset's geometry AND the collider world: you cannot be under a
+  //      roof, in a bore, or inside the hull and still see 60m of open sky.
+  //   2. It proves passage with a swept PLAYER-RADIUS SPHERE against the real
+  //      colliders at real floor height (castDown per step), not a zero-radius ray.
+  //      A ray threads a 10cm slot; a player does not.
+  //
+  //  Target = the declared intended opening if the builder stashed one, else the
+  //  probe's `mouth`. Passing requires ≥1 verifiably-outside start to reach the
+  //  interior with the sphere never overlapping a collider.
+  lib.checkWalkIn = (root, center, probe, P, openings) => {
+    const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const RAPIER = g.RAPIER;
+    if (!probe) return { pass: true, na: 'no probe waypoints (builder declares no interior)' };
+    const wps = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+    const target = openings && openings.length
+      ? { x: openings[0].center.x, y: openings[0].center.y, z: openings[0].center.z }
+      : (wps.mouth || wps.entry);
+    const inner = wps.hold || wps.interior || probe.waypoints[Math.min(2, probe.waypoints.length - 1)];
+    if (!target || !inner) return { pass: false, flags: [{ test: 'no-entrance-declared', note: 'asset declares neither userData.intendedOpening nor a `mouth` waypoint — cannot prove walk-in' }] };
+
+    const excludeBody = ctx.player.body.body;
+    const restore = lib.forceDoubleSide(root);
+    const rc = new THREE.Raycaster();
+    const UP = new THREE.Vector3(0, 1, 0);
+    const R = P.playerRadius;
+    const ball = new RAPIER.Ball(R);
+    const IDQ = { x: 0, y: 0, z: 0, w: 1 };
+
+    /** Verifiably OUTSIDE: 60m of clear sky straight up — no asset geometry, no
+     *  collider. Rejects "inside the hull", "inside a bore", "under the prow". */
+    const isOutside = (p) => {
+      rc.set(p, UP); rc.far = P.walkClearUp;
+      if (rc.intersectObject(root, true).length) return false;
+      const ray = new RAPIER.Ray({ x: p.x, y: p.y, z: p.z }, { x: 0, y: 1, z: 0 });
+      return !ctx.physics.world.castRay(ray, P.walkClearUp, true, undefined, undefined, undefined, excludeBody);
+    };
+
+    // Candidate starts: a ring around the entrance, at chest height over the sand.
+    const starts = [];
+    for (let i = 0; i < P.walkStarts; i++) {
+      const a = (i / P.walkStarts) * Math.PI * 2;
+      const x = target.x + Math.cos(a) * P.walkStartRing, z = target.z + Math.sin(a) * P.walkStartRing;
+      const p = new THREE.Vector3(x, ctx.terrain.heightAt(x, z) + R + 1.0, z);
+      starts.push({ deg: Math.round((a * 180) / Math.PI), p, outside: isOutside(p) });
+    }
+    const outsideStarts = starts.filter((s) => s.outside);
+
+    /** March the sphere along a polyline in PLAN, riding whatever floor is under each
+     *  step. Returns null on success, else the first blocked sample.
+     *
+     *  The floor search deliberately starts only `walkProbeUp` above the PREVIOUS
+     *  step's centre rather than from a fixed height above a straight chord. Two
+     *  reasons, both learned the hard way here: a chord between an outside point and a
+     *  doorway dives under a sand ramp (so a cast from the chord starts below the ramp,
+     *  misses it, finds terrain, and reports the sphere buried in a ramp it should be
+     *  standing on); and a cast from generously high inside a hull finds the ROOF and
+     *  walks the sphere along the ceiling. Tracking the previous foot position does
+     *  what a walking capsule does — and a floor more than `walkProbeUp` above the last
+     *  one is a ledge no player could climb anyway, so failing there is correct. */
+    const march = (pts) => {
+      let y = pts[0].y;
+      for (let seg = 0; seg < pts.length - 1; seg++) {
+        const a = pts[seg], b = pts[seg + 1];
+        const len = Math.hypot(b.x - a.x, b.z - a.z);
+        const n = Math.max(1, Math.ceil(len / P.walkStep));
+        for (let s = 1; s <= n; s++) {
+          const t = s / n;
+          const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t;
+          const hit = g.castDown(x, z, y + P.walkProbeUp, true);
+          const floor = Math.max(hit ? hit.hitY : -Infinity, ctx.terrain.heightAt(x, z));
+          y = floor + R + P.walkFloorLift;
+          const c = ctx.physics.world.intersectionWithShape(
+            { x, y, z }, IDQ, ball, undefined, undefined, undefined, excludeBody);
+          if (c !== null && c !== undefined) return { at: [+x.toFixed(1), +y.toFixed(1), +z.toFixed(1)], seg };
+        }
+      }
+      return null;
+    };
+
+    const tries = [];
+    let reached = null;
+    for (const s of outsideStarts) {
+      const path = [s.p, new THREE.Vector3(target.x, target.y + 1.0, target.z), new THREE.Vector3(inner.x, inner.y + 1.0, inner.z)];
+      const blocked = march(path);
+      tries.push({ fromDeg: s.deg, ok: !blocked, blockedAt: blocked ? blocked.at : null, leg: blocked ? (blocked.seg === 0 ? 'outside→entrance' : 'entrance→interior') : null });
+      if (!blocked && !reached) reached = s.deg;
+    }
+    restore();
+
+    const flags = [];
+    if (!outsideStarts.length) flags.push({ test: 'no-verifiably-outside-start', note: `all ${P.walkStarts} ring candidates at ${P.walkStartRing}m had asset geometry or a collider overhead — the asset engulfs its own surroundings` });
+    else if (reached === null) flags.push({ test: 'no-walk-in-path', note: `a ${(R * 2).toFixed(2)}m player sphere could not reach the interior from ANY of the ${outsideStarts.length} verifiably-outside starts — the interior is SEALED`, blocked: tries.filter((t) => !t.ok).slice(0, 6) });
+    return {
+      pass: flags.length === 0,
+      flags,
+      entranceTarget: [+target.x.toFixed(1), +target.y.toFixed(1), +target.z.toFixed(1)],
+      entranceSource: openings && openings.length ? `declared (${openings[0].declaredBy})` : 'probe mouth waypoint',
+      verifiablyOutsideStarts: `${outsideStarts.length}/${P.walkStarts}`,
+      walkInsReached: `${tries.filter((t) => t.ok).length}/${outsideStarts.length}`,
+      reachedFromAzimuthDeg: reached,
+      tries: tries.slice(0, 16),
+    };
+  };
+
   // ── SELF-TEST: synthetic defect + control rig; asserts each geometry detector. ──
   lib.selftest = (P) => {
     const THREE = window.__game.THREE;
@@ -778,17 +964,20 @@ async function installSolidLib() {
     const probe = lib.probeOf(root);
     const P = cfg.params;
     const comps = lib.connectivity(root);
-    const out = { name, rootName: spawn.rootName, enclosure: cfg.enclosure, center: { x: +center.x.toFixed(1), y: +center.y.toFixed(1), z: +center.z.toFixed(1), radius: +center.radius.toFixed(1) }, hasProbe: !!probe, checks: {} };
+    const openings = lib.openingsOf(root, cfg);
+    const out = { name, rootName: spawn.rootName, enclosure: cfg.enclosure, center: { x: +center.x.toFixed(1), y: +center.y.toFixed(1), z: +center.z.toFixed(1), radius: +center.radius.toFixed(1) }, hasProbe: !!probe, declaredOpenings: openings.map((o) => ({ at: [+o.center.x.toFixed(1), +o.center.y.toFixed(1), +o.center.z.toFixed(1)], radius: +o.radius.toFixed(1), by: o.declaredBy })), checks: {} };
     out.checks.thin = lib.checkThin(root, P);
     out.checks.backface = lib.checkBackface(root, center, P, probe);
-    out.checks.openend = lib.checkOpenEnd(comps, P);
+    out.checks.openend = lib.checkOpenEnd(comps, P, openings);
     out.checks.floating = lib.checkFloating(comps, P);
     if (cfg.enclosure) {
       out.checks.collision = lib.checkCollision(root, center, probe, P);
       out.checks.seam = probe ? lib.checkSeam(root, center, probe, P) : { pass: true, na: 'no probe waypoints' };
+      out.checks.walkin = lib.checkWalkIn(root, center, probe, P, openings);
     } else {
       out.checks.collision = { na: 'open structure (walk-through by design) — exterior-wall probe not applicable' };
       out.checks.seam = { na: 'open structure — no enclosed entrance to seam-check' };
+      out.checks.walkin = { na: 'open structure — walk-THROUGH by design, no entrance to prove' };
     }
     return out;
   };
@@ -820,16 +1009,19 @@ function startDev(port) {
   });
 }
 
-const CHECK_ORDER = ['thin', 'backface', 'openend', 'floating', 'collision', 'seam'];
+const CHECK_ORDER = ['thin', 'backface', 'openend', 'floating', 'collision', 'seam', 'walkin'];
 const CHECK_LABEL = {
   thin: '1 thin-shell', backface: '2 backface/see-through', openend: '3 open-end',
   floating: '4 floating', collision: '5 collision-vs-visual', seam: '6 seam/entrance',
+  walkin: '7 walk-in from outside',
 };
 
 function reportAsset(a) {
   const lines = [];
   if (a.skip) { lines.push(`\n── ${a.name}: SKIPPED — ${a.skip}`); return { lines, failed: 0, flagged: 0 }; }
   lines.push(`\n── ${a.name} (${a.rootName}) — center [${a.center.x}, ${a.center.y}, ${a.center.z}] r${a.center.radius}m · ${a.enclosure ? 'enclosure' : 'open structure'} · probe=${a.hasProbe}`);
+  if (a.declaredOpenings && a.declaredOpenings.length) for (const o of a.declaredOpenings) lines.push(`   declared entrance @ [${o.at}] r${o.radius}m (by ${o.by})`);
+  else if (a.enclosure) lines.push('   declared entrance: NONE (walk-in aims at the probe `mouth` waypoint)');
   let failed = 0, flagged = 0;
   for (const key of CHECK_ORDER) {
     const c = a.checks[key];
@@ -851,6 +1043,12 @@ function reportAsset(a) {
       if (c.openingPassable_warn === false) lines.push('          · opening WARN: intended opening reads collider-BLOCKED (cross-check walk-gate)');
     }
     if (key === 'seam') for (const f of c.flags) lines.push(`          · ${f.test}: ${JSON.stringify(f)}`);
+    if (key === 'walkin') {
+      lines.push(`          · entrance target [${c.entranceTarget}] — ${c.entranceSource}`);
+      lines.push(`          · verifiably-outside starts: ${c.verifiablyOutsideStarts} · walk-ins reached: ${c.walkInsReached}`);
+      for (const f of c.flags) lines.push(`          · ${f.test}: ${f.note}`);
+      if (c.flags.some((f) => f.blocked)) for (const b of (c.flags.find((f) => f.blocked).blocked || [])) lines.push(`              - from az${b.fromDeg}°: blocked on ${b.leg} at ${JSON.stringify(b.blockedAt)}`);
+    }
   }
   return { lines, failed, flagged };
 }
