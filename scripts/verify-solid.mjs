@@ -199,11 +199,26 @@ async function installSolidLib() {
 
   lib.probeOf = (root) => root.userData.skyfallProbe || root.userData.leviathanProbe || null;
 
+  /** An INTERACTIVE / non-static-hull subtree (a live salvage access panel, a
+   *  journal, a loot trigger) — the SAME subtrees mergeStaticByMaterial skips
+   *  (they are props, not the static hull). Fine hardware on a fuse-box door (a
+   *  4cm frame bar, a dead-screen pane, a printed label decal) is NOT a hull
+   *  wall "faking solidity", so the thin WALL-check must skip it, exactly as the
+   *  merge does — otherwise a shared, well-tested prop false-flags on every
+   *  wreck that mounts one. Real static paper (the cockpit panes) is NOT under
+   *  such a node and still flags; the selftest's thin plane still flags. */
+  lib.isInteractive = (mesh, root) => {
+    let n = mesh;
+    while (n && n !== root) { const u = n.userData; if (u && (u.accessPanel || u.noMerge || u.interactType)) return true; n = n.parent; }
+    return false;
+  };
+
   // ── CHECK 1 — PAPER-THIN / ZERO-THICKNESS. ──
   lib.checkThin = (root, P) => {
     const meshes = lib.meshesOf(root);
     const flags = [];
     meshes.forEach((m, i) => {
+      if (lib.isInteractive(m, root)) return;   // live prop, not static hull (see isInteractive)
       const geo = m.geometry;
       if (!geo.boundingBox) geo.computeBoundingBox();
       const b = geo.boundingBox;
@@ -717,6 +732,16 @@ async function installSolidLib() {
     const spawn = await lib.spawnAsset(name, cfg.viteUrls);
     if (spawn.skip) return { name, skip: spawn.skip };
     const g = window.__game;
+    // Refresh the QueryPipeline: Rapier `castRay`/`castDown` read the QueryPipeline,
+    // which only rebuilds on `world.step()`. The asset is spawned while PAUSED (so
+    // the sim can't perturb it), so its freshly-created colliders are NOT yet in the
+    // query pipeline — without this step castRay would MISS every collider added at
+    // spawn-time and the collision/floor checks would FALSE-FLAG a perfectly-collided
+    // asset as walk-through (a stale-pipeline detector bug, not a geometry defect).
+    // One step with the player idle doesn't move the static wreck. (leviathan is
+    // boot-placed + already stepped, so it was unaffected; skyfall/ribcage build at
+    // spawn-time and need this.)
+    try { g.ctx.physics.world.step(); } catch { /* best effort */ }
     const root = g.ctx.three.scene.getObjectByName(spawn.rootName);
     const center = spawn.center;
     const probe = lib.probeOf(root);
