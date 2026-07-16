@@ -38,7 +38,7 @@ import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
 import { spawnCirclingVultureAt, removeVultureFromWorld, type Vulture } from '../enemies/vulture.ts';   // M8 — streamed far-field aerial life
 import { placeRibcage } from './heroLandmarks.ts';
-import { buildBoneBit, BONE_BIT_KINDS, type BoneBitKind } from './boneScatter.ts';
+import { buildBoneBit, BONE_BIT_KINDS, boneScatterMaterial, type BoneBitKind } from './boneScatter.ts';
 import { makeGiantRibcage } from './giantRibcage.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
 import { placeSkyfallWreck } from './skyfallWreck.ts';
@@ -959,25 +959,31 @@ export function createChunkManager(
         if (bd.kind === 'ribcage') {
           const rc = placeRibcage(scene, world, new THREE.Vector3(bd.x, y, bd.z), bRand, group, bd.scale);
           rc.group.userData.streamBone = true;
+          // placeRibcage's default bone tone (HSL L≈0.55) reads as dark tan, so in
+          // the sun-bleached graveyard these ribcages ADOPT the SHARED bone-scatter
+          // material — the same weathered grey bone (+ the same registered, sun-driven
+          // cool emissive) as the bits they stand among. This replaces the old per-call
+          // recolour/emissive override, which (a) was already forcing the same look by
+          // hand and (b) created a NEW material per chunk — one the daylight registry
+          // would have had to track and prune. Adopting the singleton keeps the
+          // registry fixed-size and the graveyard visually consistent.
+          // Geometry stays per-call (chunkGeo → disposed on unload); chunkMat is NOT
+          // set — the shared material must survive unload (the _treeMat rule).
+          // The LANDMARK colossal_ribcage branch is untouched (it keeps placeRibcage's
+          // default material and has no emissive).
+          let orphanMat: THREE.Material | null = null;
           rc.group.traverse((o) => {
             const m = o as THREE.Mesh;
             if (m.isMesh) {
-              m.userData.chunkGeo = true; m.userData.chunkMat = true;
-              // placeRibcage's default bone tone (HSL L≈0.55) reads as dark tan.
-              // In the sun-bleached graveyard, shift it to a weathered GREYER bone
-              // + a matching modest cool emissive so it POPS against the warm sand
-              // under the game's warm sun (a plain-ivory ribcage collapses to tan
-              // and vanishes) WITHOUT reading stark-white (reviewer: "bones too
-              // white"). Kept in sync with _ribBone / boneScatter._boneMat. Per-call
-              // material → only THIS field's ribcages, not the landmark ones.
-              const mat = m.material as THREE.MeshLambertMaterial;
-              if (mat && mat.color) {
-                mat.color.set(0xdcd8cf);
-                mat.emissive = new THREE.Color(0x545a60);
-                mat.emissiveIntensity = 0.55;
+              m.userData.chunkGeo = true;
+              if (!orphanMat && m.material !== boneScatterMaterial) {
+                orphanMat = m.material as THREE.Material;   // placeRibcage's per-call Lambert
               }
+              m.material = boneScatterMaterial;
             }
           });
+          // Dispose the now-orphaned per-call material ONCE (every mesh shared it).
+          if (orphanMat) (orphanMat as THREE.Material).dispose();
           const body = rc.collider.parent();
           if (body) bodies.push(body);
         } else {

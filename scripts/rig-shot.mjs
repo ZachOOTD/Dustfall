@@ -2414,6 +2414,186 @@ const SCENARIOS = {
   //    (5) END-ON — from the tunnel mouth looking in: the arch colonnade read.
   //    (6) LOWGRAZE — a very low angle across the rib bases (float / paper check).
   //    Run: node scripts/rig-shot.mjs --scenario=bone-hero --port=5782
+  // ── bone-daynight — the NIGHT-GLOW gate. Same real bone_field player-eye reads
+  //    as bone-hero, but shot at NIGHT (setTime 0.0) and DAY (setTime 0.5) from the
+  //    IDENTICAL cameras, so the pair can be compared directly:
+  //      NIGHT: the bones must sit DARK with the terrain/rocks — the sun-cancelling
+  //             bone emissive must be off (it is self-illumination; a constant one
+  //             made the graveyard glow in the dark).
+  //      DAY:   unchanged — pale weathered bone popping against the warm sand.
+  //    Also prints each registered bone material's live emissiveIntensity at both
+  //    times (the mechanism check behind the pixels).
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-daynight --port=5793
+  'bone-daynight': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const anchor = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let coarse = null, bestD = Infinity;
+      for (let x = -13000; x <= 13000; x += 200) {
+        for (let z = -13000; z <= 13000; z += 200) {
+          if (x * x + z * z < 2600 * 2600) continue;
+          if (ctx.biomes.boneFieldAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; coarse = { x, z }; }
+          }
+        }
+      }
+      if (!coarse) return null;
+      const a = ctx.biomes.boneFieldAnchor(coarse.x, coarse.z);
+      return a ? { x: a.x, z: a.z } : coarse;
+    });
+    if (!anchor) { console.log('[bone-daynight] no bone_field zone found'); return; }
+    console.log(`[bone-daynight] field anchor at ${anchor.x.toFixed(0)},${anchor.z.toFixed(0)}`);
+    await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: a.x, y: ctx.terrain.heightAt(a.x, a.z) + 1.6, z: a.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();
+    }, anchor);
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let rc = null;
+      ctx.three.scene.traverse((o) => { if (o.name === 'giantRibcage') rc = o; });
+      if (!rc) return null;
+      rc.updateMatrixWorld(true);
+      const V = ctx.three.camera.position.constructor;
+      const p0 = rc.localToWorld(new V(0, 0, 0));
+      const p1 = rc.localToWorld(new V(1, 0, 0));
+      const fwd = { x: p1.x - p0.x, y: 0, z: p1.z - p0.z };
+      const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
+      return { cx: p0.x, cy: p0.y, cz: p0.z, fwd, length: rc.userData.length || 40, maxH: rc.userData.maxHeight || 15 };
+    });
+    if (!info) { console.log('[bone-daynight] ribcage group not found under the anchor'); return; }
+    const side = { x: -info.fwd.z, z: info.fwd.x };
+    const L = info.length, H = info.maxH, gy = info.cy;
+    // The SAME cameras at both times — a night/day pair is only readable if nothing
+    // else moved between the two frames.
+    const CAMS = {
+      // ENTRY — player-eye 3/4 approach across the open field (bones + dunes + rocks
+      // all in frame: the "are the bones darker than their surroundings" comparison).
+      entry: `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const fx = ${info.cx} + ${side.x} * ${L * 0.72} - ${info.fwd.x} * ${L * 0.42};
+        const fz = ${info.cz} + ${side.z} * ${L * 0.72} - ${info.fwd.z} * ${L * 0.42};
+        cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+        cam.lookAt(${info.cx}, ${gy} + ${H * 0.42}, ${info.cz});
+        cam.updateMatrixWorld(true);
+      })()`,
+      // BROADSIDE — the whole carcass + the surrounding field of scatter bits.
+      broadside: `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const fx = ${info.cx} + ${side.x} * ${L * 0.92};
+        const fz = ${info.cz} + ${side.z} * ${L * 0.92};
+        cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.5}, fz);
+        cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
+        cam.updateMatrixWorld(true);
+      })()`,
+      // FLANKCLOSE — 16m player-eye off the flank: the close bone-surface read.
+      flankclose: `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const fx = ${info.cx} + ${side.x} * 16 - ${info.fwd.x} * ${L * 0.16};
+        const fz = ${info.cz} + ${side.z} * 16 - ${info.fwd.z} * ${L * 0.16};
+        cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+        cam.lookAt(${info.cx}, ${gy} + 3.2, ${info.cz});
+        cam.updateMatrixWorld(true);
+      })()`,
+    };
+    for (const [when, t] of [['night', 0.0], ['day', 0.5]]) {
+      // Unpause + tick so updateLighting actually runs at the new time (it is inside
+      // the pause gate — a paused setTime would leave the emissive on its old value).
+      const probe = await page.evaluate(async (tt) => {
+        const g = window.__game; const ctx = g.ctx;
+        ctx.flags.paused = false;
+        g.setTime(tt);
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        for (let f = 0; f < 12; f++) await raf();
+        const mats = new Set();
+        ctx.three.scene.traverse((o) => {
+          const m = o.material;
+          if (m && m.userData && m.userData.boneEmissiveBase !== undefined) mats.add(m);
+        });
+        return {
+          sunHeight: ctx.time.sunHeight,
+          bones: [...mats].map((m) => ({
+            base: m.userData.boneEmissiveBase,
+            live: m.emissiveIntensity,
+            hex: m.emissive.getHexString(),
+          })),
+        };
+      }, t);
+      console.log(`[bone-daynight] ${when}: sunHeight=${probe.sunHeight.toFixed(3)} ` +
+        probe.bones.map((b) => `#${b.hex} base=${b.base} live=${b.live.toFixed(3)}`).join(' | '));
+      for (const [name, code] of Object.entries(CAMS)) {
+        await page.evaluate(code);
+        await page.waitForTimeout(450);
+        await page.screenshot({ path: join(OUT, `scen-bone-${when}-${name}.png`), timeout: 60000 });
+        console.log(`[bone-daynight] saved scen-bone-${when}-${name}.png`);
+      }
+    }
+    // ── ADOPTION + SHARED-MATERIAL-SURVIVAL probe. Two failure modes this catches:
+    //    (a) the scatter ribcages keep a per-call material → it is NOT registered,
+    //        so it glows at night (the bug, in a branch the shots may under-sample);
+    //    (b) an adopted SHARED material gets disposed on chunk unload (the _treeMat
+    //        rule) → the bones render black/broken after a revisit. Load→unload→
+    //        reload the field and assert the shared material is still alive + still
+    //        the one on the meshes. ──
+    const adopt = await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const scan = () => {
+        let rcMeshes = 0, adopted = 0, unregistered = 0;
+        const mats = new Set();
+        ctx.three.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          let w = o, streamed = false;
+          while (w) { if (w.userData && w.userData.streamBone) { streamed = true; break; } w = w.parent; }
+          if (!streamed) return;
+          rcMeshes++;
+          const m = o.material;
+          if (m && m.userData && m.userData.boneEmissiveBase !== undefined) { adopted++; mats.add(m); }
+          else unregistered++;
+        });
+        return { rcMeshes, adopted, unregistered, mats: [...mats] };
+      };
+      const before = scan();
+      const matRefs = before.mats;
+      // Walk far away → the field unloads; come back → it re-streams.
+      ctx.player.body.body.setTranslation({ x: a.x + 4000, y: 200, z: a.z + 4000 }, true);
+      for (let f = 0; f < 120; f++) await raf();
+      ctx.player.body.body.setTranslation({ x: a.x, y: ctx.terrain.heightAt(a.x, a.z) + 1.6, z: a.z }, true);
+      for (let f = 0; f < 200; f++) await raf();
+      const after = scan();
+      // A disposed material has had its program/uniform state torn down; three sets
+      // `version`-tracked internals, but the robust signal is identity + still usable:
+      // the re-streamed meshes must point at the SAME material objects.
+      const sameRefs = after.mats.every((m) => matRefs.includes(m));
+      return {
+        before: { meshes: before.rcMeshes, adopted: before.adopted, unregistered: before.unregistered, mats: before.mats.length },
+        after: { meshes: after.rcMeshes, adopted: after.adopted, unregistered: after.unregistered, mats: after.mats.length },
+        sameRefs,
+      };
+    }, anchor);
+    console.log(`[bone-daynight] adoption: before ${adopt.before.adopted}/${adopt.before.meshes} streamed bone meshes on registered materials ` +
+      `(${adopt.before.mats} distinct, ${adopt.before.unregistered} unregistered)`);
+    console.log(`[bone-daynight] after unload+reload: ${adopt.after.adopted}/${adopt.after.meshes} on registered materials ` +
+      `(${adopt.after.mats} distinct, ${adopt.after.unregistered} unregistered) — shared refs reused: ${adopt.sameRefs}`);
+    const ok = adopt.before.unregistered === 0 && adopt.after.unregistered === 0 && adopt.sameRefs
+      && adopt.after.mats <= adopt.before.mats;
+    console.log(`[bone-daynight] ${ok ? '[OK]' : '[FAIL]'} every streamed bone mesh is on a registered, sun-driven, reused shared material`);
+  },
+
   'bone-hero': async (page) => {
     await page.evaluate(async () => {
       const g = window.__game; const ctx = g.ctx;

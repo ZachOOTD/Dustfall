@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { SkyColors, Tuning } from '../config/tuning.ts';
+import { updateBoneEmissiveDaylight } from '../world/boneMaterial.ts';
 
 export interface LightsBundle {
   sun: THREE.DirectionalLight;
@@ -106,6 +107,11 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   _sunDir.set(sx, sy, sz).normalize();
   ctx.time.sunDir.copy(_sunDir);
   ctx.time.sunHeight = sy;
+
+  // The bone materials' cool emissive exists only to cancel the WARM sun's tint, so
+  // it must scale with the sun — otherwise it self-illuminates through the night and
+  // the bone_field glows (it is not lit by the scene). Registry-driven; one call site.
+  updateBoneEmissiveDaylight(sy);
 
   // Player (or speeder, when mounted) position drives the shadow camera so
   // shadows follow you. Reuses _shTr/_followBody from the shadow-move check above.

@@ -187,3 +187,66 @@ export function createBoneMaterial(
 
   return mat;
 }
+
+// ── DAYLIGHT-DRIVEN BONE EMISSIVE ────────────────────────────────────────────
+// The bone materials carry a subtle COOL emissive whose ONLY job is to cancel the
+// warm sun's tint so bone reads as BONE against the tan dunes instead of collapsing
+// to sand-colour. But `emissive` is SELF-illumination: it is not lit by the scene,
+// so at night — when the sun is gone and everything else falls dark — a constant
+// emissive kept burning and the bones GLOWED (the bone_field night bug).
+//
+// Fix: the emissive scales with the SUN. It exists to counteract the sun, so it has
+// no business existing when the sun doesn't. Below the horizon the intensity is 0
+// (bones sit dark like the terrain around them); it fades up through dawn and is at
+// its full authored value once the sun is properly up — so the DAY look is untouched.
+//
+// Registration (rather than a per-material tick) keeps this LEAK-FREE: only the two
+// module-singleton bone materials ever register, the list is fixed-size for the life
+// of the process, and nothing per-chunk/per-call is ever pushed. Chunk streaming
+// therefore cannot grow it.
+
+interface BoneEmissiveEntry {
+  mat: THREE.MeshLambertMaterial;
+  base: number;
+}
+
+const _boneEmissives: BoneEmissiveEntry[] = [];
+
+/** Register a bone material's cool sun-cancelling emissive. Sets `mat.emissive` and
+ *  records `baseIntensity` as the FULL-DAYLIGHT value; the live
+ *  `mat.emissiveIntensity` is then driven every frame by
+ *  `updateBoneEmissiveDaylight`. Only module-singleton materials may register (the
+ *  list is never pruned — see the leak note above). */
+export function registerBoneEmissive(
+  mat: THREE.MeshLambertMaterial,
+  emissiveHex: number,
+  baseIntensity: number,
+): void {
+  mat.emissive = new THREE.Color(emissiveHex);
+  mat.emissiveIntensity = baseIntensity;
+  mat.userData.boneEmissiveBase = baseIntensity;
+  if (!_boneEmissives.some((e) => e.mat === mat)) {
+    _boneEmissives.push({ mat, base: baseIntensity });
+  }
+}
+
+/** Sun-height window over which the bone emissive fades in. Starts just BELOW the
+ *  horizon (so the last of it is gone before true night) and is full once the sun is
+ *  meaningfully up (~14.5°). Matches the feel of the sun-intensity ramp in
+ *  lighting.ts without coupling to it. */
+const BONE_EMISSIVE_SUN_LO = -0.05;
+const BONE_EMISSIVE_SUN_HI = 0.25;
+
+/** Drive every registered bone material's emissive from the sun height (-1..1).
+ *  Called once per frame from `updateLighting` (core/lighting.ts) right after
+ *  `ctx.time.sunHeight` is refreshed — one call site, inside the pause gate.
+ *  `emissiveIntensity` is folded into the emissive uniform by three's per-render
+ *  uniform refresh, so no `needsUpdate` / recompile is needed. */
+export function updateBoneEmissiveDaylight(sunHeight: number): void {
+  const t = THREE.MathUtils.clamp(
+    (sunHeight - BONE_EMISSIVE_SUN_LO) / (BONE_EMISSIVE_SUN_HI - BONE_EMISSIVE_SUN_LO),
+    0, 1,
+  );
+  const daylight = t * t * (3 - 2 * t);   // smoothstep — no hard pop at dusk/dawn
+  for (const e of _boneEmissives) e.mat.emissiveIntensity = e.base * daylight;
+}

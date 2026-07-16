@@ -16,7 +16,7 @@
 
 import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
-import { createBoneMaterial } from './boneMaterial.ts';
+import { createBoneMaterial, registerBoneEmissive } from './boneMaterial.ts';
 
 // Shared across ALL bone-scatter bits (one program, one draw group per chunk
 // after merge). Warm-but-bleached bone; strong age-bleach so the tops read
@@ -33,8 +33,16 @@ const _boneMat = createBoneMaterial(0xdcd8cf, {
 // of the light — what makes the field pop + separates the bones from the warm
 // dunes. Tuned GREYER + less-cool + less-intense than before (reviewer: "bones
 // too white") — a near-neutral grey fill, not a blue-white lamp.
-_boneMat.emissive = new THREE.Color(0x545a60);
-_boneMat.emissiveIntensity = 0.55;
+// Registered (not set directly) so the emissive SCALES WITH THE SUN: it exists to
+// cancel the sun's warmth, so it fades to 0 below the horizon instead of glowing
+// through the night. Day look unchanged — 0.55 is the full-daylight value.
+registerBoneEmissive(_boneMat, 0x545a60, 0.55);
+
+/** The shared bone-scatter material. Exported for the chunk manager's scatter
+ *  ribcages, which adopt it so the whole graveyard (bits + ribcages) shares ONE
+ *  look and ONE registered, sun-driven emissive. NEVER dispose it (the _treeMat
+ *  shared-material rule) — tag adopting meshes `chunkGeo` but NOT `chunkMat`. */
+export const boneScatterMaterial = _boneMat;
 
 export type BoneBitKind = 'ribarch' | 'spine' | 'longbone';
 

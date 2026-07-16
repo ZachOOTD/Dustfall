@@ -54,7 +54,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
-import { createBoneMaterial } from './boneMaterial.ts';
+import { createBoneMaterial, registerBoneEmissive } from './boneMaterial.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
 
@@ -75,8 +75,11 @@ const _ribBone = createBoneMaterial(0xc9c5bc, {
 // 0x545a60@0.55 self-illuminated the bone toward flat blue-white (reviewer: "too
 // white + flat"). This keeps just enough cool fill to POP against the warm sand
 // without washing the weathering out.
-_ribBone.emissive = new THREE.Color(0x494d52);
-_ribBone.emissiveIntensity = 0.36;
+// Registered (not set directly) so it SCALES WITH THE SUN — the emissive's whole
+// job is cancelling the warm sun, so it fades to 0 below the horizon rather than
+// self-illuminating the cage through the night (the bone_field glow bug). 0.36 is
+// the full-daylight value → the day read is unchanged.
+registerBoneEmissive(_ribBone, 0x494d52, 0.36);
 
 const UP = new THREE.Vector3(0, 1, 0);
 
