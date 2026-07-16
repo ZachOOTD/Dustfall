@@ -114,7 +114,15 @@ export interface LoftStation { z: number; halfW: number; halfH: number; cy?: num
  *  with a flat dorsal deck, hard chines, and flat sides. Open ends (for fracture
  *  faces / transom). Outward normals → FrontSide shows the outside, the interior
  *  shows through from inside the bay. */
-export function makeLoftedHull(stations: LoftStation[], material: THREE.Material, thickness = 0): THREE.Mesh {
+/** `solidInner`: close each torn END with a CLOSED 3cm-proud rim LIP whose front
+ *  face is wound OUTWARD, so a sightline into the breach mouth hits a solid front
+ *  cut plate (not the culled BACK of the single inner skin — the legacy rim cap
+ *  faced inward, a see-through the DoubleSide legacy callers masked). The lip is
+ *  welded to the outer/inner rings by bridge bands (no open boundary loop), reads
+ *  as the thick cut cross-section of a snapped hull plate, and doesn't z-fight
+ *  (it's a genuinely proud surface, not a coincident copy). Used by the FrontSide
+ *  Skyfall hull; DoubleSide legacy callers leave it off. Requires `thickness > 0`. */
+export function makeLoftedHull(stations: LoftStation[], material: THREE.Material, thickness = 0, solidInner = false): THREE.Mesh {
   const N = SHIP_SECTION.length;
   const ringOf = (s: LoftStation, inset: number): THREE.Vector3[] =>
     SHIP_SECTION.map(([x, y]) => new THREE.Vector3(
@@ -156,6 +164,28 @@ export function makeLoftedHull(stations: LoftStation[], material: THREE.Material
         const k2 = (k + 1) % N;
         if (endFlip) { push(O[k]); push(I[k2]); push(I[k]); push(O[k]); push(O[k2]); push(I[k2]); }
         else { push(O[k]); push(I[k]); push(I[k2]); push(O[k]); push(I[k2]); push(O[k2]); }
+      }
+      // solidInner: a CLOSED 3cm proud LIP on the torn end — a real thick cut-edge
+      // cross-section (what a snapped heavy-hull plate looks like) whose FRONT face
+      // is wound OUTWARD (+z at the mouth / -z at the bow), so from OUTSIDE it reads
+      // a solid front plate and OCCLUDES the single-skin interior behind the mouth
+      // (the see-through back-face at the breach — review-2026-07-16). Welded to the
+      // O/I rings via outer+inner bridge bands → NO open boundary loop. The legacy
+      // DoubleSide callers omit it (solidInner off).
+      if (solidInner) {
+        const dz = endFlip ? -0.03 : 0.03;
+        const Op = O.map((v) => new THREE.Vector3(v.x, v.y, v.z + dz));
+        const Ip = I.map((v) => new THREE.Vector3(v.x, v.y, v.z + dz));
+        for (let k = 0; k < N; k++) {
+          const k2 = (k + 1) % N;
+          // proud front annulus — faces the end's outward-z (the visible cut face)
+          if (endFlip) { push(Op[k]); push(Ip[k]); push(Ip[k2]); push(Op[k]); push(Ip[k2]); push(Op[k2]); }
+          else { push(Op[k]); push(Ip[k2]); push(Ip[k]); push(Op[k]); push(Op[k2]); push(Ip[k2]); }
+          // outer bridge band O→Op (radially outward face)
+          push(O[k]); push(Op[k2]); push(Op[k]); push(O[k]); push(O[k2]); push(Op[k2]);
+          // inner bridge band I→Ip (radially inward face)
+          push(I[k]); push(Ip[k]); push(Ip[k2]); push(I[k]); push(Ip[k2]); push(I[k2]);
+        }
       }
     }
   }

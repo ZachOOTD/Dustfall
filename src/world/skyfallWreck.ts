@@ -23,10 +23,10 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
 import { type Rng, makeRng } from '../core/rng.ts';
-import { makeLoftedHull, makeFormerRings, mergeStaticByMaterial, SHIP_SECTION, type LoftStation } from './wreckForms.ts';
+import { makeLoftedHull, makeFormerRings, mergeStaticByMaterial, type LoftStation } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
-import { makeStaticBox } from '../physics/bodies.ts';
+import { makeStaticBox, makeStaticTrimesh } from '../physics/bodies.ts';
 import { registerSalvageable, type SalvageableRegistry, type Salvageable } from './salvage.ts';   // S6 — interior salvage loot
 import { addAccessPanel } from './wrecks.ts';                                                      // S6 — the pry-open panel builder
 import { placeJournal, type Journal } from './journal.ts';                                         // S6 — the pilot's crash-log
@@ -133,9 +133,15 @@ const _rubberMat = new THREE.MeshLambertMaterial({ color: 0x201d1a, flatShading:
 //    frame/backing correctly occlude them (no z-fight, no wrong occlusion). Low
 //    opacity + a whisper of cool emissive so the dark bridge reads THROUGH as a
 //    real tinted pane, not a lit slab.
+// M7-review (2026-07-16): the intact panes were 0.6×0.8×0.04 DoubleSide boxes —
+// the verify:solid `thin` gate reads a DoubleSide shell <12cm as "faking
+// solidity" (rule 7). The windscreen is only ever viewed from OUTSIDE (the
+// bridge castle is a solid collider block — no interior cockpit access), so the
+// panes are now FrontSide with a real ≥5cm cross-section (pane depth 0.07): a
+// genuinely solid tinted glass slab, no paper-thin DoubleSide card.
 const _cockpitGlass = new THREE.MeshLambertMaterial({
   color: 0x445e66, emissive: 0x0b141a, emissiveIntensity: 0.4,
-  transparent: true, opacity: 0.4, side: THREE.DoubleSide,
+  transparent: true, opacity: 0.4, side: THREE.FrontSide,
   depthWrite: false, flatShading: true,
 });
 // Frosted crack lattice — the pale stress-lines on an intact-but-shattered pane +
@@ -206,7 +212,14 @@ export function placeSkyfallWreck(
     { z: FORE_LEN, halfW: HALF_W * 0.97, halfH: HALF_H * 0.97 },                // fracture face (open)
   ];
   const fore = new THREE.Group();
-  fore.add(makeLoftedHull(foreStations, _hullMat, HULL_THICK));
+  fore.name = 'foreHull';
+  // solidInner: the hull reads solid from BOTH sides — no see-through back-faces
+  // through the breach mouth (review-2026-07-16 backface fix, 2cm outboard liner).
+  // hullCollide: this loft's real surface goes into the exterior-hull trimesh
+  // collider (megaWreck D189 pattern) so you can't walk through the visible skin.
+  const foreLoft = makeLoftedHull(foreStations, _hullMat, HULL_THICK, true);
+  foreLoft.userData.hullCollide = true;
+  fore.add(foreLoft);
   // Exposed formers at the fracture mouth (the snap shows structure) + a dark
   // baffle recessed behind it so the torn mouth reads DARK, not a lit pale
   // inner skin (the S1 first-visit nit).
@@ -242,9 +255,13 @@ export function placeSkyfallWreck(
   const closure = new THREE.Mesh(new THREE.BoxGeometry((WALL_X + 0.6) * 2, 5.4, 0.35), _hullDarkMat);
   closure.position.set(0, -0.2, 6.2);
   fore.add(closure);
-  // Under-deck skirt at the mouth (closes the void below the deck lip).
+  // Under-deck skirt at the mouth (closes the void below the deck lip). Its TOP
+  // sits INSIDE the deck slab (y -0.5, between the deck's -0.7 bottom and -0.4
+  // top) and its front is tucked 0.1m BEHIND the deck lip — so no face is
+  // coplanar with the deck (the earlier deck-top-vs-skirt-top coplanar pair z-fought
+  // as a dark flickering strip at the entrance lip, review-2026-07-16 shot 5).
   const skirt = new THREE.Mesh(new THREE.BoxGeometry((WALL_X + 0.6) * 2, 2.5, 0.3), _voidMat);
-  skirt.position.set(0, -1.65, 30.45);
+  skirt.position.set(0, -1.75, 30.35);
   fore.add(skirt);
   // Bulkheads (visuals; colliders below mirror these exactly): two jamb
   // panels + a lintel + a 10cm sill per doorway.
@@ -374,7 +391,10 @@ export function placeSkyfallWreck(
     { z: STERN_LEN, halfW: HALF_W * 0.72, halfH: HALF_H * 0.76, cy: HALF_H * 0.05 },  // transom
   ];
   const stern = new THREE.Group();
-  stern.add(makeLoftedHull(sternStations, _hullMat, HULL_THICK));
+  stern.name = 'sternPiece';
+  const sternLoft = makeLoftedHull(sternStations, _hullMat, HULL_THICK, true);
+  sternLoft.userData.hullCollide = true;
+  stern.add(sternLoft);
   const sternRings = makeFormerRings(HALF_H * 0.86, 2, 0.9);
   sternRings.rotation.y = Math.PI / 2;
   sternRings.position.set(0, 0, 1.2);
@@ -469,8 +489,10 @@ export function placeSkyfallWreck(
   //    mid-height, protruding ~0.15m (rule 7).
   for (const s of [-1, 1] as const) {
     const fx = HALF_W * s;
-    dBox(fore, _frameMat, 0.18, 0.36, 25, fx + 0.06 * s, 0.62, 16.5);    // rubbing strake (belt)
-    dBox(fore, _hullDarkMat, 0.16, 0.24, 24, fx + 0.05 * s, -0.35, 16.5); // lower chine strake
+    // Strakes span only the CONSTANT full-width hull (z 6..26); they used to run
+    // z 4..29 and floated off the narrowing bow taper (review-2026-07-16 seat-flush).
+    dBox(fore, _frameMat, 0.18, 0.36, 20, fx + 0.06 * s, 0.62, 16.0);    // rubbing strake (belt)
+    dBox(fore, _hullDarkMat, 0.16, 0.24, 20, fx + 0.05 * s, -0.35, 16.0); // lower chine strake
     for (let i = 0; i < 8; i++) {                                         // vertical frame straps
       const fz = 6.5 + i * 3.05;
       dBox(fore, _frameMat, 0.14, 1.75, 0.30, fx + 0.04 * s, 0.30, fz);
@@ -548,7 +570,10 @@ export function placeSkyfallWreck(
   dBox(fore, _frameMat, 0.09, 0.09, 1.1, BR_X + 1.0, HALF_H + 6.4, 6.4);        // crossyard fore/aft arm
   dCyl(fore, _frameMat, 0.04, 0.05, 2.6, BR_X - 0.7, HALF_H + 4.9, 7.2);        // whip antenna
   dCyl(fore, _frameMat, 0.5, 0.5, 0.16, BR_X + 0.5, HALF_H + 4.5, 7.7, Math.PI * 0.35, 0, 0, 10); // comms dish face
-  dCyl(fore, _frameMat, 0.9, 1.05, 1.4, BR_X - 0.4, HALF_H + 4.0, 4.6, 0, 0, 0, 10);              // exhaust funnel
+  // exhaust funnel — a full STACK rising from the deck to the cap (was a 1.4m
+  // barrel floating ~3.3m above the deck with nothing under it — review-2026-07-16
+  // shot 3 "floating fixture on top by the mast"; now its base embeds in the deck).
+  dCyl(fore, _frameMat, 0.9, 1.05, 5.0, BR_X - 0.4, HALF_H + 2.2, 4.6, 0, 0, 0, 10);              // exhaust stack (deck → cap)
   dBox(fore, _hullDarkMat, 1.7, 0.2, 1.7, BR_X - 0.4, HALF_H + 4.75, 4.6);      // funnel cap rim
   // Boarding ladder — rails + rungs up the bridge front face (deck → bridge).
   for (const s of [-1, 1] as const) dBox(fore, _frameMat, 0.06, 3.0, 0.06, BR_X + 0.35 * s, HALF_H + 1.5, 8.75);
@@ -565,11 +590,14 @@ export function placeSkyfallWreck(
     dBox(fore, _frameMat, 0.07, 1.05, 0.1, -(HALF_W + 0.02), 0.55, vz - 0.6);   // vent frame edge
     dBox(fore, _frameMat, 0.07, 1.05, 0.1, -(HALF_W + 0.02), 0.55, vz + 0.6);   // vent frame edge
   }
-  // Bow hull-number plate — a faded ochre plate near the bow with dark digit
-  //    blocks (abstract ID; reads as painted hull markings at distance).
+  // Forward hull-number plate — a faded ochre plate with dark digit blocks
+  //    (abstract ID; reads as painted hull markings at distance). At z=8 (the
+  //    CONSTANT full-width hull), so the flat plate seats FLUSH on the flank —
+  //    at the old z=4 the bow taper had pulled the skin inboard to ~3.4 and the
+  //    plate floated ~0.27m off it (review-2026-07-16 shot 2 floating panels).
   for (const s of [-1, 1] as const) {
-    dBox(fore, _hazardMat, 0.13, 0.9, 2.4, HALF_W * 0.985 * s, 1.0, 4.0);       // number plate (rule-7 depth, was a 0.06 card)
-    for (const dz of [-0.75, -0.05, 0.65] as const) dBox(fore, _hullDarkMat, 0.13, 0.5, 0.28, HALF_W * 0.985 * s + 0.06 * s, 1.0, 4.0 + dz);  // digits (proud of the plate)
+    dBox(fore, _hazardMat, 0.13, 0.9, 2.4, HALF_W * 0.985 * s, 1.0, 8.0);       // number plate (rule-7 depth, was a 0.06 card)
+    for (const dz of [-0.75, -0.05, 0.65] as const) dBox(fore, _hullDarkMat, 0.13, 0.5, 0.28, HALF_W * 0.985 * s + 0.06 * s, 1.0, 8.0 + dz);  // digits (proud of the plate)
   }
   // Deck tie-down cleats — small bollards along both deck-edge coamings.
   for (const s of [-1, 1] as const) for (let i = 0; i < 6; i++) {
@@ -616,8 +644,9 @@ export function placeSkyfallWreck(
       const cx = cellCols[ci], cy = cellRows[ri];
       const r = rand();                                         // the ONE per-cell draw
       if (r < 0.46) {
-        // INTACT-but-CRACKED pane — a tinted transparent box, framed flush.
-        const pane = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.04), _cockpitGlass);
+        // INTACT-but-CRACKED pane — a tinted transparent box, framed flush. Real
+        // ≥5cm cross-section (0.07) so it's not a paper-thin shell (rule 7 / verify:solid).
+        const pane = new THREE.Mesh(new THREE.BoxGeometry(CW, CH, 0.07), _cockpitGlass);
         pane.position.set(cx, cy, GZ);
         canopy.add(pane);
         // Crack lattice — radiating slivers from a seeded impact point (derived
@@ -688,67 +717,16 @@ export function placeSkyfallWreck(
   }
   dBox(stern, _frameMat, HALF_W * 1.7, 0.16, 2.5, 0, HALF_H * 0.55, STERN_LEN - 0.4);  // fin base manifold
 
-  // ── SOLID MOUTH JAMB at the fore fracture (entrance) — the walk-in cross-
-  //    section (review 2026-07-15). The prior TORN CUT-PLATE RIM (scattered
-  //    _frameMat plates radiating around each mouth) read as ugly grey blocks
-  //    with see-through gaps between them + paper-thin edges (the reviewer's
-  //    entrance shot). Replaced by a SOLID capped return that follows the hull
-  //    section: a thick collar of hull-dark plate that seals the outer skin ↔
-  //    inner skin ↔ deck/ceiling into one continuous thick wall, so a sightline
-  //    into the mouth hits a solid cut cross-section — never daylight through a
-  //    slot or a knife edge. Built as a SECTION-SHAPED ring (matches the arched
-  //    hull, unlike a boxy frame) extruded in z; shared material folds into the
-  //    merge; NO collider (the hull-loft/deck/wall colliders stand; the mouth
-  //    aperture stays the clear walk-in entry).
-  {
-    // Section-scaled ring: OUTER edge at the mouth's outer skin, INNER edge a
-    // clean walk aperture just inside the interior wall/deck/ceiling so the
-    // collar overlaps (seals) every interior surface at the mouth.
-    const outHW = HALF_W * 0.97, outHH = HALF_H * 0.97;   // mouth outer scale (matches the loft end station)
-    // Aperture pulled clearly INBOARD of the loft's own inner skin (≈WALL_X) so
-    // the collar is a distinct solid, not a ~6mm-coplanar sheet that z-fights the
-    // inner skin along the side walls. Rim reads ~0.9m thick (a real cut plate).
-    const apW = WALL_X - 0.35, apH = (CEIL_Y - DECK_Y) / 2;  // aperture half-extents (inside the interior)
-    const apCY = (CEIL_Y + DECK_Y) / 2;                   // aperture vertical centre (deck→ceiling)
-    const zFront = FORE_LEN + 0.08;                       // just proud of the outer skin (occludes the loft rim cap)
-    const zBack = FORE_LEN - HULL_THICK - 0.35;           // recessed into the interior (real plate depth)
-    // Build the collar from SHIP_SECTION: an OUTER loop (hull-section scaled) and
-    // an INNER loop (aperture rectangle-ish, but section-shaped at the top so the
-    // arch reads). We loft front-cap + inner skin + back-cap as one solid ring.
-    const N = SHIP_SECTION.length;
-    const outer = SHIP_SECTION.map(([sx, sy]) => new THREE.Vector2(sx * outHW, sy * outHH));
-    // INNER loop: clamp the section to the aperture box so the hole is a clean
-    // walk-in opening (flat deck floor + flat ceiling + near-vertical sides),
-    // while the OUTER loop keeps the true arched hull silhouette.
-    const inner = SHIP_SECTION.map(([sx, sy]) => new THREE.Vector2(
-      Math.sign(sx) * Math.min(Math.abs(sx * outHW), apW),
-      Math.max(Math.min(sy * outHH, apCY + apH), apCY - apH),
-    ));
-    const pos: number[] = [];
-    const oF = outer.map((p) => new THREE.Vector3(p.x, p.y, zFront));
-    const iF = inner.map((p) => new THREE.Vector3(p.x, p.y, zFront));
-    const iB = inner.map((p) => new THREE.Vector3(p.x, p.y, zBack));
-    const oB = outer.map((p) => new THREE.Vector3(p.x, p.y, zBack));
-    const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
-    // Windings mirror makeLoftedHull EXACTLY (FrontSide culls by winding, not
-    // normal): outer/inner skins face out/in, front cap faces +z, back cap -z.
-    for (let k = 0; k < N; k++) {
-      const k2 = (k + 1) % N;
-      // Outer skin (zBack→zFront), faces outward (hidden against the hull skin).
-      push(oB[k]); push(oF[k2]); push(oF[k]); push(oB[k]); push(oB[k2]); push(oF[k2]);
-      // Inner skin (the aperture jamb wall), faces inward toward the walk lane.
-      push(iB[k]); push(iF[k]); push(iF[k2]); push(iB[k]); push(iF[k2]); push(iB[k2]);
-      // Front cap annulus (faces +z — the cut cross-section seen from outside).
-      push(oF[k]); push(iF[k]); push(iF[k2]); push(oF[k]); push(iF[k2]); push(oF[k2]);
-      // Back cap annulus (faces -z, seals against the interior surfaces).
-      push(oB[k]); push(iB[k2]); push(iB[k]); push(oB[k]); push(oB[k2]); push(iB[k2]);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.computeVertexNormals();
-    const jamb = new THREE.Mesh(geo, _hullDarkMat);
-    fore.add(jamb);
-  }
+  // ── The fore fracture MOUTH cut cross-section is now the loft's own SOLID
+  //    THICK EDGE: makeLoftedHull(..., HULL_THICK=0.7, solidInner=true) gives a
+  //    0.7m outer↔inner wall closed by an OUTWARD-facing proud rim lip, so a
+  //    sightline into the mouth from any angle hits a solid front cut plate — no
+  //    knife edge, no see-through, no exterior/interior skin gap (review
+  //    2026-07-16). The earlier separate hull-dark JAMB COLLAR is RETIRED: it was
+  //    a single-sided section ring, so from the gap/stern side it presented its
+  //    back faces (a 3-4% see-through the loft lip now subsumes), and it's
+  //    redundant with the thick lofted wall + lip. (Both fracture faces — the
+  //    fore mouth AND the stern snap — get the same solidInner lip.)
 
   // ══ S4-S5 — INTERIOR HERO DETAIL + LIGHTING ═══════════════════════════════
   // The enterable interior taken from S2 greybox to intro-ship density in the
@@ -1071,6 +1049,28 @@ export function placeSkyfallWreck(
   const SKYFALL_CABIN_FILL = 1.05;
   addLight(0xc2a074, SKYFALL_CABIN_FILL, 8.5, 0.2, 1.45, 8.0);   // warm cabin fill (scoped: crew station + console + journal + salvage panels)
 
+  // ── EXTERIOR HULL trimesh colliders (review 2026-07-16). The visible hull
+  //    skin was walk-through from OUTSIDE (verify:solid: 83% of exterior rays hit
+  //    a visible wall with NO collider in front). Build an EXACT trimesh from
+  //    each posed loft's real surface (megaWreck D189) — collision matches the
+  //    rendered skin triangle-for-triangle. MUST run BEFORE the merge disposes
+  //    the loft geometry. The interior walkable box set (deck/walls/roof/
+  //    bulkheads) stays; this only seals the exterior envelope. The open mouth
+  //    aperture is a genuine HOLE in the loft (inside the end rim cap) → the
+  //    trimesh has no triangles across it → the walk-in entry stays clear.
+  fore.updateMatrixWorld(true);
+  stern.updateMatrixWorld(true);
+  // Bake the hull skins into WORLD space on an identity body (megaWreck simplicity;
+  // the wreck is world-anchored like every other collider here). Zero body-frame
+  // composition → the collider verts land EXACTLY on the rendered skin.
+  const IDENT = new THREE.Matrix4();
+  const ZEROP = { x: 0, y: 0, z: 0 };
+  const IDENTQ = { x: 0, y: 0, z: 0, w: 1 };
+  const foreTri = makeStaticTrimesh(world, [foreLoft], ZEROP, IDENTQ, IDENT);
+  if (foreTri) bodies.push(foreTri);
+  const sternTri = makeStaticTrimesh(world, [sternLoft], ZEROP, IDENTQ, IDENT);
+  if (sternTri) bodies.push(sternTri);
+
   // PERF — one draw per material.
   mergeStaticByMaterial(root);
 
@@ -1115,8 +1115,8 @@ export function placeSkyfallWreck(
   };
   bulkheadCols(12, doorX1);
   bulkheadCols(20, doorX2);
-  // Under-deck skirt at the mouth (matches the visual plate).
-  localCol(WALL_X + 0.6, 1.25, 0.15, 0, -1.65, 30.45);
+  // Under-deck skirt at the mouth (matches the visual plate, review-2026-07-16).
+  localCol(WALL_X + 0.6, 1.25, 0.15, 0, -1.75, 30.35);
   // ── Interior FURNITURE colliders (S4 — rule 9). Only the large wall-hugging
   //    masses the player shouldn't walk through; every one sits well off the
   //    1.4m centre walk lane + forward of / beside the waypoints, so the

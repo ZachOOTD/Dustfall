@@ -21,6 +21,44 @@ export function makeStaticBox(
   );
 }
 
+/**
+ * Build a single fixed body carrying a TRIMESH collider from the given meshes'
+ * exact surface geometry, baked into the body frame at (pos, quat) — the
+ * megaWreck D189 "collider matches the render triangle-for-triangle" pattern,
+ * for streamed wrecks whose visible hull skin must not be walk-through-able.
+ * `bakeInv` is the inverse world matrix of the transform frame the collider
+ * body sits at (so each mesh's world verts land in body-local space). Returns
+ * the body (push it onto the chunk teardown list) or null if no geometry.
+ */
+export function makeStaticTrimesh(
+  world: RAPIER.World,
+  meshes: THREE.Mesh[],
+  pos: Vec3Like,
+  quat: QuatLike,
+  bakeInv: THREE.Matrix4,
+): RAPIER.RigidBody | null {
+  const verts: number[] = [];
+  const tmp = new THREE.Matrix4();
+  for (const m of meshes) {
+    if (!m.geometry) continue;
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    m.updateWorldMatrix(true, false);
+    g.applyMatrix4(tmp.copy(bakeInv).multiply(m.matrixWorld));   // world → body-local
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) verts.push(p.getX(i), p.getY(i), p.getZ(i));
+    g.dispose();
+  }
+  if (!verts.length) return null;
+  const body = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(pos.x, pos.y, pos.z).setRotation(quat),
+  );
+  const v = new Float32Array(verts);
+  const idx = new Uint32Array(v.length / 3);
+  for (let i = 0; i < idx.length; i++) idx[i] = i;      // non-indexed → sequential tris
+  world.createCollider(RAPIER.ColliderDesc.trimesh(v, idx), body);
+  return body;
+}
+
 const _aabb = new THREE.Box3();
 const _aabbCenter = new THREE.Vector3();
 const _aabbSize = new THREE.Vector3();
