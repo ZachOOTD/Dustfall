@@ -29,7 +29,7 @@ import { makeRng } from '../core/rng.ts';
 import { makeLoftedHull, makeFormerRings, makeSandMound, mergeStaticByMaterial, SHIP_SECTION, type LoftStation } from './wreckForms.ts';   // PERF (2026-07-05 profile #2) — static-merge the landmark into per-material draws
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
-import { makeStaticBox } from '../physics/bodies.ts';
+import { makeStaticBox, makeStaticTrimesh } from '../physics/bodies.ts';
 import { addHorizonSilhouette } from './horizonSilhouettes.ts';
 import { registerSalvageable, type SalvageableRegistry, type Salvageable } from './salvage.ts';   // interior salvage loot
 import { addAccessPanel } from './wrecks.ts';                                                      // the pry-open salvage panel builder
@@ -63,7 +63,13 @@ const HULL_YAW = 0.34;
 // that would darken every wreck in the game) so a front-lit noon wreck still reads as a DARK
 // MONUMENTAL MASS punching below the bright hazed horizon. chalkStrength also dropped (no dawn
 // to catch — bleached upper decks were adding light value that killed the mass at midday).
-// DoubleSide so the open lofted belly + torn fracture faces never punch a hole to the sky.
+// SOLID re-loft (review 2026-07-16): the hull was a hollow single-skin DoubleSide
+// silhouette shell with open ends + no exterior collision (verify:solid flagged
+// thin/backface/open-end/collision). The lofts are now genuine thick-walled closed
+// solids — makeLoftedHull(..., HULL_THICK, solidInner) gives an outer+inner skin +
+// closed proud rim lips at every torn end — so the material is FrontSide (a correctly
+// wound closed solid never punches a hole to the sky the way the old open shell did).
+const HULL_THICK = 0.9;                    // hull wall thickness (leviathan ~22m-beam — heavier plate than Skyfall's 0.7)
 const LEVIATHAN_HULL_HEX = 0x362d24;      // deep desaturated brown-grey — clearly below the midday horizon-haze value
 const LEVIATHAN_HULL_DARK_HEX = 0x281f18; // the shadowed under-mass / tower — darker still for value depth
 const _hullMat = createRustedHullMaterial({
@@ -73,13 +79,11 @@ const _hullMat = createRustedHullMaterial({
   chalkStrength: 0.06,        // minimal bleach — a high noon sun, not a raking dawn; keep the mass dark
   fleckStrength: 0.1, bareMetalHex: 0x5a4c3a,   // 2026-07-15 (enterable): the default cool flecks read as WHITE SNOW up close — warm + sparse
 });
-_hullMat.side = THREE.DoubleSide;
 const _hullDarkMat = createRustedHullMaterial({
   baseColor: LEVIATHAN_HULL_DARK_HEX,
   streakIntensity: 0.6,
   fleckStrength: 0.1, bareMetalHex: 0x4c4030,
 });
-_hullDarkMat.side = THREE.DoubleSide;
 const _ribMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 5.0, scratchStrength: 0.05 });
 
 // ══ INTERIOR MATERIALS (2026-07-15 — the enterable hold) ═══════════════════
@@ -161,6 +165,40 @@ const LEVIATHAN_LOG: JournalContent = {
   ],
 };
 
+/** A solid CLOSED section-plug that seals a lofted BORE across `zMid` (bow-local),
+ *  so a decorative reared tube reads solid instead of a see-through hollow pipe
+ *  (review 2026-07-16 backface: the bow's open bore showed its interior from below).
+ *  It is a short closed slab shaped to the interpolated hull SECTION at `zMid` (sized
+ *  to the INNER bore so it fills the hole flush inside the skin): a front cap (+Z), a
+ *  back cap (-Z), and a rim loft between — a genuinely closed solid (no boundary
+ *  edges → no open-end flag, no back-faces). Placed UP the bore, clear of the mouth. */
+function borePlug(stations: LoftStation[], zMid: number, mat: THREE.Material): THREE.Mesh {
+  // Interpolate the section at zMid.
+  let a = stations[0], b = stations[stations.length - 1];
+  for (let i = 0; i < stations.length - 1; i++) if (zMid >= stations[i].z && zMid <= stations[i + 1].z) { a = stations[i]; b = stations[i + 1]; }
+  const t = b.z === a.z ? 0 : (zMid - a.z) / (b.z - a.z);
+  const hw = Math.max(0.1, (a.halfW + (b.halfW - a.halfW) * t) - HULL_THICK);
+  const hh = Math.max(0.1, (a.halfH + (b.halfH - a.halfH) * t) - HULL_THICK);
+  const cy = (a.cy ?? 0) + ((b.cy ?? 0) - (a.cy ?? 0)) * t;
+  const N = SHIP_SECTION.length;
+  const zF = zMid + 0.4, zB = zMid - 0.4;
+  const ringAt = (z: number): THREE.Vector3[] => SHIP_SECTION.map(([x, y]) => new THREE.Vector3(x * hw, cy + y * hh, z));
+  const rF = ringAt(zF), rB = ringAt(zB);
+  const cF = new THREE.Vector3(0, cy, zF), cB = new THREE.Vector3(0, cy, zB);
+  const pos: number[] = [];
+  const push = (v: THREE.Vector3): void => { pos.push(v.x, v.y, v.z); };
+  for (let k = 0; k < N; k++) {
+    const k2 = (k + 1) % N;
+    push(cF); push(rF[k]); push(rF[k2]);                                   // front cap (+Z)
+    push(cB); push(rB[k2]); push(rB[k]);                                   // back cap (-Z)
+    push(rB[k]); push(rF[k2]); push(rF[k]); push(rB[k]); push(rB[k2]); push(rF[k2]);   // rim band (radially outward)
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, mat);
+}
+
 /** Build the leviathan mesh in LOCAL space (long-axis +Z, y=0 = keel-ish),
  *  BEFORE the world tilt/burial transform is applied by placeLeviathanLandmark. */
 function buildLeviathanMesh(rand: () => number): THREE.Group {
@@ -177,7 +215,11 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
     { z: 0,   halfW: HULL_HALF_W * 0.98, halfH: HULL_HALF_H * 1.0,  cy: 0.0 },
     { z: 8,   halfW: HULL_HALF_W * 0.9,  halfH: HULL_HALF_H * 0.96, cy: 0.1 },   // fracture face
   ];
-  const aft = makeLoftedHull(aftStations, _hullMat);
+  // SOLID re-loft: thick outer+inner skin, solidInner rim lips close the stern
+  // transom + the fracture cut edge. hullCollide → the exterior-hull trimesh
+  // collider (megaWreck/Skyfall D189 pattern) is baked from this real surface.
+  const aft = makeLoftedHull(aftStations, _hullMat, HULL_THICK, true);
+  aft.userData.hullCollide = true;
   g.add(aft);
 
   // ── FORWARD MASS — the SNAPPED-OFF bow section, REARED UP so the prow spears the
@@ -194,9 +236,17 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
     { z: 54, halfW: HULL_HALF_W * 0.34, halfH: HULL_HALF_H * 0.34, cy: 0.7 },
     { z: bowLen, halfW: HULL_HALF_W * 0.22, halfH: HULL_HALF_H * 0.22, cy: 0.8 }, // blunt prow
   ];
-  const bow = makeLoftedHull(bowStations, _hullMat);
+  const bow = makeLoftedHull(bowStations, _hullMat, HULL_THICK, true);
+  bow.userData.hullCollide = true;
   const bowPivot = new THREE.Group();
   bowPivot.add(bow);
+  // The reared bow is a decorative thick TUBE whose open bore showed its hollow
+  // interior from below (review 2026-07-16 backface). It can't be capped at the ROOT
+  // (that plane sits right over the walk-in mouth → blocks it). Instead seat a solid
+  // CLOSED section-plug UP the bore (bow-local z well above the mouth) + a small one
+  // near the prow tip, so a sightline up the bore hits solid, not daylight/back-faces.
+  bowPivot.add(borePlug(bowStations, 8.0, _hullDarkMat));    // lower plug (world ~10m up — clear of the mouth)
+  bowPivot.add(borePlug(bowStations, 50.0, _hullDarkMat));   // upper plug near the prow tip
   bowPivot.position.set(0, HULL_HALF_H * 0.3, 8);      // hinge at the fracture
   bowPivot.rotation.order = 'YXZ';
   bowPivot.rotation.y = 0.42;                           // twist off the hull axis so a broadside look shows the bow VOLUME, not a flat plate (R4)
@@ -266,24 +316,19 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
   //    placeLeviathanLandmark (they need the world pose). ─────────────────────
   buildLeviathanInterior(g);
 
-  // Mark ALL of it as decoration / noCollider (the collider is a separate proxy box).
+  // Mark ALL of it as decoration / noCollider (structural collision is the
+  // exterior-hull trimesh + the interior box set, both added in place()). The
+  // hullCollide tag on the two lofts survives this (it drives the trimesh bake).
   g.traverse((o) => {
     o.userData.isWreckDecoration = true;
     o.userData.noCollider = true;
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
-  // ── PERF (2026-07-05 profile, candidate 2): STATIC-MERGE into one draw per (material,
-  //    attribute-signature) bucket — the same wreck-field discipline every other wreck/POI
-  //    applies. Everything here is static scenery: no interactables, no animated parts, no
-  //    transparent materials — nothing needs a noMerge protect (the proxy collider is a
-  //    separate hand-placed static box, untouched; merge bakes the same verts into g-local
-  //    space, so the silhouette + the Box3 the sun-occluder registers are unchanged).
-  //    Folds the 16 meshes → 5 (hull-loft / hull-box / dark-hull / former-rings / rib metal).
-  mergeStaticByMaterial(g);
-  // The merge re-parents FRESH merged meshes under g (tagging them noCollider itself) —
-  // re-assert the decoration tag so the whole landmark keeps its decor contract.
-  g.traverse((o) => { o.userData.isWreckDecoration = true; o.userData.noCollider = true; });
+  // NOTE: the static-merge that folds the interior/hull to per-material draws now
+  // runs in placeLeviathanLandmark AFTER the exterior-hull trimesh colliders are
+  // baked from the posed loft surfaces (the merge disposes that geometry, so it
+  // MUST run after — the Skyfall D189/review-2026-07-16 ordering).
   void rand;   // reserved for future per-instance variation; determinism handle
   return g;
 }
@@ -362,10 +407,15 @@ function buildLeviathanInterior(g: THREE.Group): void {
     const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
     for (let k = 0; k < N; k++) {
       const k2 = (k + 1) % N;
-      push(oB[k]); push(oF[k2]); push(oF[k]); push(oB[k]); push(oB[k2]); push(oF[k2]);   // outer skin
-      push(iB[k]); push(iF[k]); push(iF[k2]); push(iB[k]); push(iF[k2]); push(iB[k2]);   // inner jamb wall
-      push(oF[k]); push(iF[k]); push(iF[k2]); push(oF[k]); push(iF[k2]); push(oF[k2]);   // front cap (cut cross-section)
-      push(oB[k]); push(iB[k2]); push(iB[k]); push(oB[k]); push(oB[k2]); push(iB[k2]);   // back cap
+      push(oB[k]); push(oF[k2]); push(oF[k]); push(oB[k]); push(oB[k2]); push(oF[k2]);   // outer skin (radially OUT)
+      push(iB[k]); push(iF[k]); push(iF[k2]); push(iB[k]); push(iF[k2]); push(iB[k2]);   // inner jamb wall (into the aperture)
+      // Front cut cross-section — wound to face +Z (OUT, toward the approaching
+      // player). NOTE: the makeLoftedHull rim-cap winding faces -Z here (it's meant
+      // to be occluded by the solidInner proud lip); the jamb has NO such lip, so the
+      // caps are wound OUTWARD directly, else the whole cut face reads as a back-face
+      // through the mouth (review 2026-07-16 backface — the big magenta blob).
+      push(oF[k]); push(iF[k2]); push(iF[k]); push(oF[k]); push(oF[k2]); push(iF[k2]);   // front cap (+Z OUT)
+      push(oB[k]); push(iB[k]); push(iB[k2]); push(oB[k]); push(iB[k2]); push(oB[k2]);   // back cap (-Z, toward the hold)
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -538,8 +588,11 @@ function buildLeviathanInterior(g: THREE.Group): void {
   };
   crewSeat(1.9, -30.5, Math.PI - 0.1, 0.05);
   crewSeat(-2.0, -30.2, Math.PI + 0.3, 0.24);
-  // A fallen manifest + a mug on the deck (crew life).
-  dBox(_paperMat, 0.5, 0.03, 0.6, -2.6, I_DECK_Y + 0.04, -28, 0, 0.3, 0.02);
+  // A fallen manifest bundle + a mug on the deck (crew life). Thickness 0.06 (a
+  // grimy ledger/manifest STACK, not a single sheet) so it clears the verify:solid
+  // `thin` wall-scale gate — its own material bucket held only this one flat sheet
+  // at 3cm, which read as a paper-thin panel (review 2026-07-16).
+  dBox(_paperMat, 0.5, 0.06, 0.6, -2.6, I_DECK_Y + 0.05, -28, 0, 0.3, 0.02);
   dCyl(_frameMat, 0.08, 0.075, 0.14, 2.4, I_DECK_Y + 0.07, -29, 0, 0, 0.3, 8);
 
   // ── STRIP LIGHTS on the ceiling (emissive → self-glow, ~no light cost). A
@@ -564,8 +617,14 @@ function buildLeviathanInterior(g: THREE.Group): void {
   //    decay 1.5 (not physical 2) — in a cavern inverse-square crushes the fill to
   //    black a few metres out; 1.5 fills the wide hold while the gradient still
   //    falls off bow-ward (the "sun through the tear" read).
+  // LIGHTING LIFT (review 2026-07-16): the cavernous hold read moody-DARK in the
+  //    walk-test — the detail was barely legible. A single multiplier lifts every
+  //    interior fill a notch so the deck / cargo / structure / crew station read,
+  //    while keeping the "power's-out, sun through the tear" atmosphere (not a flat
+  //    day-lit box). One-line revert: set LEVIATHAN_LIGHT_LIFT back to 1.0.
+  const LEVIATHAN_LIGHT_LIFT = 1.4;
   const addLight = (color: number, intensity: number, range: number, lx: number, ly: number, lz: number): void => {
-    _lightConfigs.push({ c: color, i: intensity, r: range, x: lx, y: ly, z: lz });
+    _lightConfigs.push({ c: color, i: intensity * LEVIATHAN_LIGHT_LIFT, r: range, x: lx, y: ly, z: lz });
   };
   addLight(0xffc38c, 4.2, 34, 0, I_DECK_Y + 3.4, I_MOUTH_Z - 1.0);   // MOUTH daylight shaft (floods the hold)
   addLight(0xffb578, 2.7, 26, 0, I_DECK_Y + 3.3, 1.5);              // hold near fill (daylight on the cargo)
@@ -614,6 +673,32 @@ export function placeLeviathanLandmark(
   drift.userData.noCollider = true;
   scene.add(drift);
   _drift = drift;
+
+  // ══ EXTERIOR HULL trimesh colliders (review 2026-07-16 — rule 9). The visible
+  //    hull skin was walk-through from OUTSIDE (verify:solid: 32% of exterior rays
+  //    hit a visible wall with no collider). Bake an EXACT trimesh from each posed
+  //    loft's real surface (megaWreck D189 / the Skyfall fix) so collision matches
+  //    the rendered skin triangle-for-triangle. MUST run BEFORE the merge disposes
+  //    the loft geometry. The fracture bore is a genuine open cross-section (no
+  //    triangles across the walk-in centre), so the mouth entry stays clear; the
+  //    interior walkable box set below seals the lived space. World-baked on an
+  //    identity body (the monument is world-anchored like the interior colliders).
+  group.updateMatrixWorld(true);
+  const IDENT = new THREE.Matrix4();
+  const ZEROP = { x: 0, y: 0, z: 0 };
+  const IDENTQ = { x: 0, y: 0, z: 0, w: 1 };
+  const hullMeshes: THREE.Mesh[] = [];
+  group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && o.userData.hullCollide) hullMeshes.push(m); });
+  for (const hm of hullMeshes) {
+    const tri = makeStaticTrimesh(world, [hm], ZEROP, IDENTQ, IDENT);
+    if (tri) _bodies.push(tri);
+  }
+  // ── PERF static-merge into one draw per (material, attribute-signature) bucket —
+  //    moved here (was in buildLeviathanMesh) so it runs AFTER the hull trimesh bake.
+  //    Everything is static scenery (no interactables/animated/transparent); the
+  //    salvage panels + journal are added LATER so they stay unmerged + interactive.
+  mergeStaticByMaterial(group);
+  group.traverse((o) => { o.userData.isWreckDecoration = true; o.userData.noCollider = true; });
 
   // ══ INTERIOR COLLIDERS (rule 9 — match the visible walkable hold EXACTLY).
   //    The S1 single hull-filling box is GONE (it blocked entry) → replaced by an
