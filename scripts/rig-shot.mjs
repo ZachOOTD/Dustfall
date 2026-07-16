@@ -2469,9 +2469,39 @@ const SCENARIOS = {
       const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
       const sk = rc.userData.skullLocal
         ? rc.localToWorld(rc.userData.skullLocal.clone()) : p0;
+      // The SNAP the tight fracture read frames: pick the break whose stump face sits
+      // highest above the sand near mid-span — the most legible one at eye height,
+      // and the one whose fallen half is also in frame.
+      let brk = null;
+      const bl = rc.userData.breaks || [];
+      let best = -Infinity;
+      for (const b of bl) {
+        const sw = rc.localToWorld(b.stump.clone());
+        const fw = rc.localToWorld(b.fallen.clone());
+        const h = sw.y - ctx.terrain.heightAt(sw.x, sw.z);
+        // want it clearly above eye height but still readable from the ground
+        const score = -Math.abs(h - 3.4) - Math.abs(sw.x - p0.x) * 0.02 - Math.abs(sw.z - p0.z) * 0.02;
+        if (h > 1.8 && score > best) {
+          best = score;
+          // The axis is a DIRECTION — rotate it by the group's world matrix, don't
+          // localToWorld it (that would add the translation).
+          const ax = b.axis.clone().transformDirection(rc.matrixWorld);
+          // The landmark is placed with a SCALE, so the local radius is not the world
+          // radius — framing off the local one put the camera ~2× too far out and made
+          // three rounds of fracture reads uselessly small. Measure the scale.
+          const s0 = rc.localToWorld(new V(0, 0, 0));
+          const s1 = rc.localToWorld(new V(1, 0, 0));
+          const scale = Math.hypot(s1.x - s0.x, s1.y - s0.y, s1.z - s0.z);
+          brk = {
+            s: { x: sw.x, y: sw.y, z: sw.z }, f: { x: fw.x, y: fw.y, z: fw.z },
+            a: { x: ax.x, y: ax.y, z: ax.z }, r: b.r * scale, scale,
+          };
+        }
+      }
       return {
         cx: p0.x, cy: p0.y, cz: p0.z, fwd,
         skull: { x: sk.x, y: sk.y, z: sk.z },
+        brk,
         length: rc.userData.length || 40,
         maxH: rc.userData.maxHeight || 15,
       };
@@ -2573,6 +2603,58 @@ const SCENARIOS = {
       cam.lookAt(${info.cx} + ${side.x} * 6, ${gy} + 0.4, ${info.cz} + ${side.z} * 6);
       cam.updateMatrixWorld(true);
     })()`);
+    // (9) BREAK-CLOSE + (10) BREAK-PAIR — the TIGHT fracture read. The flank shots are
+    //     15-20m out; at that range a jagged snap and a rounded sausage end are the
+    //     same handful of pixels. These frame ONE real snap (userData.breaks, resolved
+    //     above): `breakclose` is ~4m off the STUMP's break face — is it unmistakably a
+    //     splintered snap? `breakpair` backs off to hold the stump AND the half that
+    //     fell off it in one frame — do the two faces read as one break?
+    if (info.brk) {
+      const b = info.brk;
+      console.log(`[bone-hero] framing snap at ${b.s.x.toFixed(0)},${b.s.y.toFixed(1)},${b.s.z.toFixed(0)} worldR=${b.r.toFixed(2)}m (group scale ${b.scale.toFixed(2)})`);
+      // Framing the fracture took three tries; both prerequisites are load-bearing:
+      //  • FRONT-LIT. Shooting from wherever the flank normal pointed put the sun
+      //    BEHIND the break — it rendered as an undifferentiated dark cavity and I was
+      //    grading the lighting, not the geometry (visual-diagnostic-methodology).
+      //  • PERPENDICULAR TO THE SHAFT. Standing "sunward of the break" put the camera
+      //    down the rib's own axis, filling the frame with shaft. Project the sun
+      //    azimuth onto the plane ⊥ the rib axis (falling back to axis × up when the
+      //    rib points at the sun) → front-lit AND square-on to the break face.
+      const camCode = (dist, up, roll) => `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const V = cam.position.constructor;
+        const ax = new V(${b.a.x}, ${b.a.y}, ${b.a.z}).normalize();
+        const sd = ctx.time.sunDir;
+        let view = new V(sd.x, 0, sd.z).normalize();       // stand toward the sun
+        view.addScaledVector(ax, -view.dot(ax));           // ...but ⊥ to the rib
+        if (view.length() < 0.25) view.copy(ax).cross(new V(0, 1, 0));
+        view.normalize();
+        // roll the view around the rib axis so the shard side is not self-occluded
+        view.applyAxisAngle(ax, ${roll});
+        const p = new V(${b.s.x}, ${b.s.y}, ${b.s.z}).addScaledVector(view, ${dist});
+        cam.position.set(p.x, p.y + ${up}, p.z);
+        cam.lookAt(${b.s.x}, ${b.s.y}, ${b.s.z});
+        cam.updateMatrixWorld(true);
+      })()`;
+      // Distances are in BONE DIAMETERS, not metres — the landmark is placed at a
+      // per-instance scale, so a fixed metre standoff frames a different-sized bone
+      // every seed. Square-on to the break face at ~5 diameters.
+      await shot('breakclose', camCode((5.0 * b.r).toFixed(2), (0.5 * b.r).toFixed(2), 0));
+      // ...and 55° around the shaft — a fracture has to read as a snap from more than
+      // one angle (verify-visual-multi-angle), and the oblique slash only shows its
+      // slant once you are off-square.
+      await shot('breakprofile', camCode((5.6 * b.r).toFixed(2), (1.2 * b.r).toFixed(2), 0.95));
+      await shot('breakpair', `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const mx = (${b.s.x} + ${b.f.x}) * 0.5, my = (${b.s.y} + ${b.f.y}) * 0.5, mz = (${b.s.z} + ${b.f.z}) * 0.5;
+        const d = 9.5;
+        cam.position.set(mx + ${side.x} * d, ctx.terrain.heightAt(mx + ${side.x} * d, mz + ${side.z} * d) + 1.7, mz + ${side.z} * d);
+        cam.lookAt(mx, my, mz);
+        cam.updateMatrixWorld(true);
+      })()`);
+    } else {
+      console.log('[bone-hero] no snap found in userData.breaks — fracture read SKIPPED');
+    }
     // (DIAG) Isolate the ribcage — hide every OTHER scene child so only the
     //   ribcage renders. Any bone still visible in the other shots but GONE here
     //   is a separate boneScatter decoration, not a ribcage floater.

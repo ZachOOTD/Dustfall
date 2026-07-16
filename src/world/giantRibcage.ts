@@ -80,16 +80,20 @@ _ribBone.emissiveIntensity = 0.36;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
-// ── BONE GAUGE (reviewer-tuned, and the tuning has history — do not overshoot in
-//    either direction). Ribs: r ~0.82 base → "thin curved spikes / tusks" (REJECTED);
-//    r ~1.34 base → "too chunky and wide" (REJECTED). These are the middle: a rib is
-//    a substantial curved BONE, ~2.1m across at the spine, slimming to a still-blunt
-//    ~0.76m across at the buried tip. The spine tube slims in step so the ridge keeps
-//    its relative mass without reading as a pipeline. ──
-const RIB_R_BASE = 1.00;   // rib tube radius at the spine attach (× the size envelope)
-const RIB_R_TIP = 0.36;    // rib tube radius at the buried tip (× the size envelope)
-const SPINE_R0 = 0.60;     // backbone radius at the buried ends
-const SPINE_R1 = 0.36;     // + this × envelope at the crown (→ 0.96 max)
+// ── BONE GAUGE (reviewer-tuned, and the tuning has history — read it before you
+//    move these). r ~1.34 base → "too chunky and wide" (REJECTED); r ~0.82 base →
+//    "thin curved spikes / tusks" (REJECTED) — BUT that rejection predates the arc /
+//    fore-aft rake / ±6% section wobble / taper AND the jagged fracture caps, all of
+//    which carry the "this is a BONE, not a tusk" read on their own. The reviewer has
+//    since asked for thinner TWICE (1.34 → 1.00 → 0.85), so 0.85 is the current dial:
+//    a rib is ~1.7m across at the spine, slimming to ~0.6m at the buried tip. The
+//    spine tube slims in step (−15%, same as the ribs) so the ridge keeps its relative
+//    mass without reading as a pipeline. If a future pass is told "too thin", come UP
+//    from here — do not go below ~0.8. ──
+const RIB_R_BASE = 0.85;   // rib tube radius at the spine attach (× the size envelope)
+const RIB_R_TIP = 0.30;    // rib tube radius at the buried tip (× the size envelope)
+const SPINE_R0 = 0.51;     // backbone radius at the buried ends
+const SPINE_R1 = 0.31;     // + this × envelope at the crown (→ 0.82 max)
 
 // ── DECAY RATES — a carcass that has sat weathering for YEARS, not a fresh cage
 //    (reviewer: "too intact"). Rolled per rib SIDE, so the colonnade is asymmetric. ──
@@ -132,14 +136,112 @@ function boneMesh(geo: THREE.BufferGeometry): THREE.Mesh {
   return m;
 }
 
+/** Deterministic per-vertex hash in [0,1). Used ONLY for the fracture caps: it must
+ *  never touch the `rand()` stream (procgen-seed-stability — the per-item RNG draw
+ *  budget is fixed, so cap detail is derived from a caller-supplied integer seed
+ *  rather than drawn). Same seed → byte-identical cap, every boot. */
+function jhash(seed: number, k: number): number {
+  const s = Math.sin(seed * 127.1 + k * 311.7 + 0.5) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+/** Which ends of a swept tube are FRACTURE faces. A number = that end is a jagged
+ *  snap seeded by this value; null/absent = a smooth blunt dome (the natural taper
+ *  ends + the buried ends, which nobody sees split open). Stump and its fallen half
+ *  are handed the SAME seed so the two faces of one snap share a shard profile. */
+interface JagSpec { start?: number | null; end?: number | null }
+
+/** THE FRACTURE PROFILE — the shape of one snapped bone face.
+ *
+ *  Returns `depth(j, radScale)`: how far (× the tube radius) the fracture surface
+ *  stands off the tube's nominal end, at angular slot `j`, on a ring at `radScale ×
+ *  r`. Four superposed terms, each doing a job the DOME cap failed:
+ *   • an OBLIQUE PLANE (`tilt·cos(a − phase)`) — a real snap is a slanted slash
+ *     across the shaft, never a face square to the axis. This alone kills most of the
+ *     "sausage end" read. It scales linearly with radScale because that is literally
+ *     what a tilted plane does.
+ *   • a SADDLE (`tilt2·cos(2(a − phase2))`) — the second harmonic. Without it the
+ *     slash is a clean ellipse and the break reads as a MITRE CUT (round 2's verdict:
+ *     jagged, but suspiciously like a workshop chamfer). Bone snaps twist: one side
+ *     tears long, the opposite side short, and the two flanks between them step.
+ *   • RELIEF — two octaves of per-slot noise, so the fracture LINE is chipped and
+ *     stepped rather than smooth. Amplitude ±0.5 r, which is deliberately LOUD: this
+ *     is the term that has to survive to the flank read (~16m, where the reviewer
+ *     actually judges). At ±0.2 r the chipping was ~4 px on screen there and the break
+ *     collapsed back to "rounded blob". Unlike `tilt`, relief is per-slot and
+ *     uncorrelated, so raising it chips the rim rather than growing a beak — it is the
+ *     safe lever, and the `floor` clamp catches the deep notches it cuts.
+ *   • SPLINTERS — 3-5 slots pushed 0.26-0.54 r along the axis, most of them two slots
+ *     WIDE, with their neighbours flared 0.40-0.70. A shard must be a solid WEDGE
+ *     with real thickness, never a paper knife-edge (rule 7): round 3 ran a single
+ *     slot at up to 1.4 r and the shards rendered as dark needles/thorns — visibly
+ *     the wrong material. Ramped by radScale^1.5 → the push is concentrated at the
+ *     RIM, where a torn-off piece of cortical wall actually lives, but still carries
+ *     far enough inward to give the shard a real shaft rather than a rim-only tooth.
+ *
+ *  `floor` clamps how far the profile may cut BACKWARDS into the tube. The caller
+ *  passes −0.75 × (the end segment's length) / r: cutting deeper than the previous
+ *  ring would fold the wall through itself and re-open the "pipe mouth with a lid
+ *  sitting inside it" read (round 1's failure — worse than the dome it replaced).
+ *  Everything is `jhash`-derived → no `rand()` draws, so the procgen seed budget does
+ *  not move. */
+function jagProfile(
+  seed: number, radial: number, floor: number,
+): (j: number, radScale: number) => number {
+  // AMPLITUDES. These are small on purpose and the reason is the round-4 failure: at
+  // base 0.50 / tilt ≤ 0.60 / shard ≤ 0.95 the terms STACK when a splinter lands on
+  // the tilt maximum, pushing the end out ~2.7 r past the nominal tip — a 1.5m point
+  // on a 1.1m-diameter bone. That renders as a BEAK / TUSK, i.e. straight back into
+  // the exact read the rib gauge has been fighting for three revisions. The plane
+  // component alone is now only ~8-19° of slant; the CHIPPING and the SPLINTERS carry
+  // the "snapped" read, which is what a real fracture looks like anyway.
+  const base = 0.30;
+  const tilt = 0.14 + jhash(seed, 800) * 0.20;
+  const tilt2 = 0.06 + jhash(seed, 802) * 0.10;
+  const phase = jhash(seed, 801) * Math.PI * 2;
+  const phase2 = jhash(seed, 803) * Math.PI * 2;
+  const nSh = 3 + Math.floor(jhash(seed, 900) * 2.999);   // 3-5 splinters
+  const shards: { slot: number; len: number; wide: boolean }[] = [];
+  for (let q = 0; q < nSh; q++) {
+    shards.push({
+      slot: Math.floor(jhash(seed, 910 + q * 7) * radial) % radial,
+      // MORE, SHORTER shards beat fewer long ones: a lone long one silhouettes
+      // edge-on as a thin blade (round 5) and edges back toward the spiky read.
+      len: 0.26 + jhash(seed, 930 + q) * 0.28,
+      wide: jhash(seed, 960 + q) > 0.35,
+    });
+  }
+  const wrap = (j: number) => ((j % radial) + radial) % radial;
+  return (j: number, rs: number): number => {
+    const jm = wrap(j);
+    const a = (jm / radial) * Math.PI * 2;
+    const relief = (jhash(seed, jm) - 0.5) * 0.66 + (jhash(seed, 60 + jm) - 0.5) * 0.34;
+    let sh = 0;
+    for (const s of shards) {
+      const raw = Math.abs(jm - s.slot);
+      const d = Math.min(raw, radial - raw);
+      const rawW = Math.abs(jm - wrap(s.slot + 1));
+      const dW = Math.min(rawW, radial - rawW);
+      if (d === 0 || (s.wide && dW === 0)) sh += s.len;
+      else if (d === 1 || (s.wide && dW === 1)) sh += s.len * (0.40 + jhash(seed, 940 + jm) * 0.30);
+    }
+    const raw = base
+      + tilt * Math.cos(a - phase) * rs
+      + tilt2 * Math.cos(2 * (a - phase2)) * rs
+      + relief * Math.pow(rs, 1.3) + sh * Math.pow(rs, 1.5);
+    return Math.max(floor, raw);
+  };
+}
+
 // ── A tapered, curved SOLID tube swept along a polyline (a rib or the backbone).
 //    Per-ring radius from `radii`; parallel-transport frames keep the tube from
-//    twisting on the curve. Both ends fan to a centre vertex → the tube is CAPPED
-//    at both ends (a broken rib leaves its terminal radius fat → a real snapped
-//    cross-section, never a knife edge). Carries UVs so it MERGES into the bone
-//    bucket (one draw call). ──
+//    twisting on the curve. Both ends are CLOSED — either a smooth blunt dome
+//    (default) or, where `jag` marks a real break, a JAGGED SPLINTERED FRACTURE
+//    (see `emitJagCap`). Carries UVs so it MERGES into the bone bucket (one draw
+//    call). ──
 function sweptTube(
   pts: THREE.Vector3[], radii: number[], radial: number, wobble = 0.06,
+  jag?: JagSpec,
 ): THREE.BufferGeometry {
   const n = pts.length;
   const tangents: THREE.Vector3[] = [];
@@ -156,6 +258,21 @@ function sweptTube(
   const positions: number[] = [];
   const uvs: number[] = [];
   const stride = radial + 1;
+  // Per-ring transported basis — the fracture caps must rebuild rings in the SAME
+  // frame as the terminal ring they attach to, or the cap would spiral off the tube.
+  const frames: { N: THREE.Vector3; B: THREE.Vector3 }[] = [];
+  // Fracture profiles for the ends that are real breaks. Built ONCE per end — the
+  // terminal RING itself is displaced by them (below), so the tube's side wall
+  // terminates on the jagged slash line. That is the whole trick: a splinter is a
+  // torn piece of the WALL, not a lid floating in a pipe mouth. The `floor` is
+  // geometric, not a magic number: never cut back further than 0.75 of the end
+  // segment's own length, or the wall folds through itself (see `jagProfile`).
+  const backFloor = (i: number, k: number): number =>
+    -0.75 * pts[i].distanceTo(pts[k]) / Math.max(0.05, radii[i]);
+  const pStart = jag?.start != null && n >= 2
+    ? jagProfile(jag.start, radial, backFloor(0, 1)) : null;
+  const pEnd = jag?.end != null && n >= 2
+    ? jagProfile(jag.end, radial, backFloor(n - 1, n - 2)) : null;
   for (let i = 0; i < n; i++) {
     if (i > 0) {
       q.setFromUnitVectors(prevT, tangents[i]);
@@ -164,6 +281,7 @@ function sweptTube(
     }
     normal.addScaledVector(tangents[i], -normal.dot(tangents[i])).normalize();
     const B = new THREE.Vector3().crossVectors(tangents[i], normal).normalize();
+    frames.push({ N: normal.clone(), B: B.clone() });
     const r = radii[i];
     for (let j = 0; j <= radial; j++) {
       const a = (j / radial) * Math.PI * 2;
@@ -175,10 +293,17 @@ function sweptTube(
       // still closes exactly at j=0 ≡ j=radial — a non-periodic wobble would split the
       // seam open and hand `openend` a boundary loop.
       const rw = r * (1 + wobble * (0.62 * Math.sin(i * 1.9 + 2 * a) + 0.38 * Math.sin(i * 0.7 - 3 * a)));
+      // At a FRACTURE end, slide this ring's vertex along the axis by the fracture
+      // profile → the side wall runs out to an oblique, uneven, splintered edge
+      // instead of stopping on a clean circle. (Profiles are ≥ 0 by construction, so
+      // this only ever extends the tube — it can never fold back through the wall.)
+      let ax = 0;
+      if (i === 0 && pStart) ax = -r * pStart(j, 1);
+      else if (i === n - 1 && pEnd) ax = r * pEnd(j, 1);
       positions.push(
-        pts[i].x + (normal.x * c + B.x * s) * rw,
-        pts[i].y + (normal.y * c + B.y * s) * rw,
-        pts[i].z + (normal.z * c + B.z * s) * rw,
+        pts[i].x + (normal.x * c + B.x * s) * rw + tangents[i].x * ax,
+        pts[i].y + (normal.y * c + B.y * s) * rw + tangents[i].y * ax,
+        pts[i].z + (normal.z * c + B.z * s) * rw + tangents[i].z * ax,
       );
       uvs.push(i / (n - 1), j / radial);
     }
@@ -196,28 +321,92 @@ function sweptTube(
       indices.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
-  // End caps — fan each terminal ring to a centre vertex (both ends CLOSED). The
-  // centre vertex is pushed OUT along the tangent by DOME × r, so a terminal ring is
-  // a shallow blunt DOME rather than a flat disc: a flat disc cap on a fat snapped
-  // radius reads as a sawn-off PIPE end, while a years-weathered bone break is fat
-  // but rounded off. Still fully closed (no boundary edges → `openend` stays clean)
-  // and still a FAT cross-section (no knife edge, no taper-to-nothing).
+  // ── END CAPS. Both ends are always CLOSED (no boundary edges → the harness
+  //    `open-end` check stays [OK]); the QUESTION is what shape. ──
+
+  // (a) A smooth blunt DOME — for the ends nobody reads as a break: the buried rib
+  //     tips, the spine's ends diving under the dune, the natural taper of a fallen
+  //     bone. A centre vertex pushed OUT along the tangent by DOME × r.
   const DOME = 0.42;
-  const baseC = positions.length / 3;
-  positions.push(
-    pts[0].x - tangents[0].x * radii[0] * DOME,
-    pts[0].y - tangents[0].y * radii[0] * DOME,
-    pts[0].z - tangents[0].z * radii[0] * DOME,
-  ); uvs.push(0, 0.5);
-  for (let j = 0; j < radial; j++) indices.push(baseC, j + 1, j);
-  const tipC = positions.length / 3;
+  const emitDome = (ci: number, ringBase: number, outT: THREE.Vector3, forward: boolean) => {
+    const c = positions.length / 3;
+    positions.push(
+      pts[ci].x + outT.x * radii[ci] * DOME,
+      pts[ci].y + outT.y * radii[ci] * DOME,
+      pts[ci].z + outT.z * radii[ci] * DOME,
+    ); uvs.push(forward ? 1 : 0, 0.5);
+    for (let j = 0; j < radial; j++) {
+      if (forward) indices.push(c, ringBase + j, ringBase + j + 1);
+      else indices.push(c, ringBase + j + 1, ringBase + j);
+    }
+  };
+
+  // (b) A JAGGED SPLINTERED FRACTURE — for a real snap. The reviewer's read on the
+  //     dome caps was exact: a rounded end is a SAUSAGE end, and a tube with sausage
+  //     ends is a tube. (History: flat disc → "sawn-off PVC"; dome → "too rounded,
+  //     reads as tubes". This is the third answer — neither disc nor dome.)
+  //
+  //     The terminal RING is already riding the fracture profile (above), so the side
+  //     wall runs out to the jagged slash and each splinter is a torn piece of the
+  //     WALL — solid, ~0.3 r thick radially, its neighbour slots flared so it is a
+  //     wedge and not a paper knife-edge (rule 7). All that is left here is to SEAL
+  //     that jagged mouth: two inner rings (0.62 r, 0.30 r) riding the SAME profile,
+  //     then a centre vertex at the profile's flat base. Because every ring is fully
+  //     connected and the profile is indexed by j MOD radial (so j=0 ≡ j=radial
+  //     exactly), the result has ZERO boundary edges → the harness `open-end` check
+  //     stays [OK]. The inner rings inherit the tilt and shard terms at reduced
+  //     radScale, which is what gives each splinter a real inner face / shaft rather
+  //     than a flat lid stretched across the mouth.
+  const emitJagCap = (
+    ci: number, ringBase: number, outT: THREE.Vector3,
+    prof: (j: number, rs: number) => number, forward: boolean,
+  ) => {
+    const c = pts[ci], r = radii[ci], { N, B } = frames[ci];
+    const ring = (rs: number, u: number): number => {
+      const base = positions.length / 3;
+      for (let j = 0; j <= radial; j++) {
+        const a = (j / radial) * Math.PI * 2;
+        const cs = Math.cos(a), sn = Math.sin(a);
+        const rr = r * rs;
+        const dd = r * prof(j, rs);
+        positions.push(
+          c.x + (N.x * cs + B.x * sn) * rr + outT.x * dd,
+          c.y + (N.y * cs + B.y * sn) * rr + outT.y * dd,
+          c.z + (N.z * cs + B.z * sn) * rr + outT.z * dd,
+        );
+        uvs.push(u, j / radial);
+      }
+      return base;
+    };
+    const aBase = ring(0.62, forward ? 0.94 : 0.06);
+    const bBase = ring(0.30, forward ? 0.97 : 0.03);
+    const cIdx = positions.length / 3;
+    const dd = r * prof(0, 0);   // rs=0 → tilt/relief/shard all vanish; the flat base
+    positions.push(c.x + outT.x * dd, c.y + outT.y * dd, c.z + outT.z * dd);
+    uvs.push(forward ? 1 : 0, 0.5);
+    // Wound OUTWARD, matching the dome fan's sign at each end.
+    for (let j = 0; j < radial; j++) {
+      const R0 = ringBase + j, R1 = ringBase + j + 1;
+      const A0 = aBase + j, A1 = aBase + j + 1;
+      const B0 = bBase + j, B1 = bBase + j + 1;
+      if (forward) {
+        indices.push(A0, R0, R1, A0, R1, A1);
+        indices.push(B0, A0, A1, B0, A1, B1);
+        indices.push(cIdx, B0, B1);
+      } else {
+        indices.push(A0, R1, R0, A0, A1, R1);
+        indices.push(B0, A1, A0, B0, B1, A1);
+        indices.push(cIdx, B1, B0);
+      }
+    }
+  };
+
+  const startT = tangents[0].clone().negate();
   const last = (n - 1) * stride;
-  positions.push(
-    pts[n - 1].x + tangents[n - 1].x * radii[n - 1] * DOME,
-    pts[n - 1].y + tangents[n - 1].y * radii[n - 1] * DOME,
-    pts[n - 1].z + tangents[n - 1].z * radii[n - 1] * DOME,
-  ); uvs.push(1, 0.5);
-  for (let j = 0; j < radial; j++) indices.push(tipC, last + j, last + j + 1);
+  if (pStart) emitJagCap(0, 0, startT, pStart, false);
+  else emitDome(0, 0, startT, false);
+  if (pEnd) emitJagCap(n - 1, last, tangents[n - 1], pEnd, true);
+  else emitDome(n - 1, last, tangents[n - 1], true);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -277,6 +466,14 @@ export function makeGiantRibcage(
 
   const colliders: ColliderDesc[] = [];
   let maxHeight = 0;
+  // Every SNAP's two faces, ribcage-local — the stump's break face and the matching
+  // fallen half's. Published on userData purely so the verify/rig harness can frame a
+  // TIGHT read on a real fracture (the flank shots are too wide to judge the jag);
+  // nothing in the game reads this. Same spirit as skyfallProbe/leviathanProbe.
+  // `axis` = the rib's direction at the break, so the harness can frame the face
+  // PERPENDICULAR to the shaft (shooting down a rib's own axis just fills the frame
+  // with shaft and hides the very thing under test — rounds 2-3 both did that).
+  const breaks: { stump: THREE.Vector3; fallen: THREE.Vector3; axis: THREE.Vector3; r: number }[] = [];
 
   // ── Box ONE sub-run (index a..b) of a swept tube as an oriented box collider
   //    (rule 9 — collision tracks the visible tube; `rr` is the tube radius +
@@ -476,6 +673,14 @@ export function makeGiantRibcage(
         THREE.MathUtils.lerp(RIB_R_BASE, RIB_R_TIP, Math.pow(u, 0.7)) * (0.82 + 0.18 * e);
       const radAll = fullAll.map((_, k) => radiusAt(k / (fullAll.length - 1)));
       let full = fullAll, radii = radAll.slice();
+      // Fracture seeds — derived from the station index + side, NOT drawn from `rand()`
+      // (the per-side RNG budget above is fixed and must stay fixed). `snapSeed` is
+      // shared by the stump's break face and its fallen half's break face: two faces of
+      // ONE snap, so they get the same shard profile / count. (They can't mirror
+      // vertex-for-vertex — the fallen half is re-laid in its own transported frame —
+      // but the pair reads as the same break, not two unrelated ends.)
+      const snapSeed = i * 31 + (side < 0 ? 0 : 1) + 3;
+      const reSeed = snapSeed + 977;
       if (broken) {
         // WHERE it snapped — sampled as a HEIGHT ABOVE THE SAND spanning the rib's whole
         // visible arc: 1.1m (a low break, most of the arch still standing) up to
@@ -495,8 +700,9 @@ export function makeGiantRibcage(
         cut = THREE.MathUtils.clamp(cut, 3, fullAll.length - 3);
         full = fullAll.slice(0, cut);
         radii = radAll.slice(0, cut);
-        // The snapped face keeps the tube's FULL local radius (×0.96) → sweptTube's end
-        // cap fans a FAT blunt cross-section, a real broken bone, never a knife edge.
+        // The snapped face keeps the tube's FULL local radius (×0.96) → the jagged
+        // fracture cap is fanned over a FAT cross-section, a real broken bone, never a
+        // knife edge and never a taper-to-nothing.
         radii[radii.length - 1] = radAll[cut - 1] * 0.96;
 
         // ── ...and the piece that broke OFF is lying RIGHT THERE beside its stump —
@@ -525,7 +731,29 @@ export function makeGiantRibcage(
             second ? fallRoll2 : fallRoll, fallBury,
           );
           if (!laid) continue;
-          group.add(boneMesh(sweptTube(laid.pts, laid.rad, 8)));
+          // Fracture faces on the fallen half: piece 0's START is the ORIGINAL snap
+          // (same `snapSeed` as the stump it fell from), its END is the re-break where
+          // it shattered on landing; piece 1's START is that same re-break.
+          // The LAST piece's far end is the rib's own tapered tip — and it gets a snap
+          // too. Leaving it domed was defensible on paper (a rib tip is naturally
+          // round) but it was the single most tube-like thing in the flank shot: these
+          // halves lie horizontal, fully lit, and long, so a smooth bullet nose on one
+          // end reads as a PILL. A tip that has spent years in a moving dune is broken
+          // off, so a snap is also the truer answer.
+          const lastPiece = s === runs.length - 1;
+          group.add(boneMesh(sweptTube(laid.pts, laid.rad, 10, 0.06, {
+            start: second ? reSeed : snapSeed,
+            end: lastPiece ? reSeed + 313 : reSeed,
+          })));
+          if (!second) {
+            breaks.push({
+              stump: full[full.length - 1].clone(),
+              fallen: laid.pts[0].clone(),
+              axis: new THREE.Vector3()
+                .subVectors(full[full.length - 1], full[full.length - 2]).normalize(),
+              r: radii[radii.length - 1],
+            });
+          }
           // Rule 9: a fallen half-rib is a chunky knee/waist-high obstacle out on the
           // flank, not scatter gravel — box its run. (Small tip shards stay decoration,
           // per the scatter-rock rule.)
@@ -539,7 +767,11 @@ export function makeGiantRibcage(
           }
         }
       }
-      group.add(boneMesh(sweptTube(full, radii, 9)));
+      // The rib itself. A SNAPPED one gets the jagged fracture on its cut end (the
+      // stump's break face); an intact one's tip is buried in the sand → plain dome.
+      // radial 12: the fracture cap's shards live on angular slots, so a coarse ring
+      // yields 120° "teeth" instead of splinters.
+      group.add(boneMesh(sweptTube(full, radii, 12, 0.06, { end: broken ? snapSeed : null })));
       maxHeight = Math.max(maxHeight, full[0].y - lgB);
 
       // Rib LEG COLLIDERS — box the reachable lower run (ground..~4.3m up), out at
@@ -583,7 +815,9 @@ export function makeGiantRibcage(
           fpts.push(new THREE.Vector3(Math.cos(a) * fr, Math.sin(a) * fr * 0.4, 0));
         }
         const frad = fpts.map((_, k) => THREE.MathUtils.lerp(0.42, 0.24, k / seg));
-        const arc = boneMesh(sweptTube(fpts, frad, 7));
+        // A loose fragment is a bone broken at BOTH ends → jagged both ways (seeded
+        // off the fragment index, not the rand() stream).
+        const arc = boneMesh(sweptTube(fpts, frad, 10, 0.06, { start: f * 53 + 7, end: f * 53 + 41 }));
         arc.rotation.y = rand() * Math.PI * 2;
         arc.rotation.z = (rand() - 0.5) * 0.4;
         arc.position.set(fx, lgF - 0.15, fz);
@@ -612,6 +846,7 @@ export function makeGiantRibcage(
 
   group.userData.length = length;
   group.userData.maxHeight = maxHeight;
+  group.userData.breaks = breaks;   // harness-only: tight fracture framing (see `breaks`)
   group.userData.centerLocal = new THREE.Vector3(0, maxHeight * 0.5, 0);
 
   const applyColliders = (
