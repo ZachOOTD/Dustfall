@@ -550,11 +550,14 @@ export function updateWeather(ctx: GameContext, dt: number): void {
     w.cloudiness += (target - w.cloudiness) * Math.min(1, Tuning.CLOUD_COVER_LERP_RATE * dt);
   }
 
-  // FogExp2 density curve. Smoothstep from CLEAR→STORM density so the
-  // start of a building storm rolls in gently instead of immediately
-  // dropping visibility off a cliff. Color is set in updateLighting.
+  // FogExp2 density curve. Smoothstep from CLEAR→STORM density. review 2026-07-15
+  // (TOTAL whiteout) — the fog now collapses visibility EARLIER in the ramp: full
+  // storm density is reached by intensity STORM_FOG_RAMP_HI (~0.6), not at the very
+  // peak, so distant wrecks + the terrain horizon fog out well before the wall engulfs
+  // you. The approach (low intensity) still holds the near wreck clear. Color set in
+  // updateLighting.
   const fog = ctx.three.scene.fog as THREE.FogExp2;
-  const densityT = ramp(w.intensity, 0, 1);
+  const densityT = ramp(w.intensity, 0, Tuning.STORM_FOG_RAMP_HI);
   fog.density =
     Tuning.FOG_DENSITY_CLEAR +
     (Tuning.FOG_DENSITY_STORM - Tuning.FOG_DENSITY_CLEAR) * densityT;
@@ -642,7 +645,9 @@ export function updateWeather(ctx: GameContext, dt: number): void {
     updateDustWall(dw, {
       visible: wall.active && op > 0.002,
       edgeX, edgeZ, baseY,
-      playerX: px, playerZ: pz,
+      // Wind-locked orientation: pass the wall's fixed travel heading (NOT the player
+      // position) so the wall never re-yaws to face the player → no spin/wrap.
+      dirX: wall.dirX, dirZ: wall.dirZ,
       opacity: op,
       elapsed: ctx.time.elapsed,
       wind: Math.min(1.5, w.intensity * 1.2),

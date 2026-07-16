@@ -308,14 +308,17 @@ export const Tuning = {
   // density), storm peak chokes visibility to ~30m. Density follows
   // an eased curve from CLEAR→STORM as weather.intensity ramps.
   FOG_DENSITY_CLEAR: 0.0018,  // EE — tightened so 1km+ remains visible in the larger world
-  FOG_DENSITY_STORM: 0.16,    // review 2026-07-14/15 — a real BROWNOUT WHITEOUT at peak. Was 0.055 (~50m vis: distant wrecks/terrain still ghosted). 0.16 collapses useful visibility to ~8m so even the far TERRAIN horizon fogs out; FogExp2 = exp(-(density·dist)²), so ~28m+ is gone.
-  // review 2026-07-14 — storm fog/sky tinting. At peak the fog pulls almost fully
-  // to a luminous dust-brown so the whole distance reads as churning sand, not a
-  // grey haze. Sky background goes further (near-solid dust dome behind the murk).
+  FOG_DENSITY_STORM: 0.18,    // review 2026-07-14/15 — a real BROWNOUT WHITEOUT at peak. Was 0.055 (~50m vis: distant wrecks/terrain still ghosted). 0.18 collapses useful visibility to ~8m so even the far TERRAIN horizon fogs out; FogExp2 = exp(-(density·dist)²), so ~25m+ is gone.
+  STORM_FOG_RAMP_HI: 0.6,     // review 2026-07-15 (TOTAL whiteout) — intensity at which the fog reaches FULL storm density. <1 so visibility collapses EARLIER in the ramp (denser well before peak), killing distant outlines before the wall engulfs you.
+  // review 2026-07-14/15 — storm fog/sky tinting. At peak the fog + the sky dome BOTH
+  // collapse to the SAME luminous dust-brown so the horizon has no value edge (no far
+  // outline). The LERP values (>1) saturate the blend to a FULL 1.0 just before peak;
+  // clamped in lighting.ts / sky.ts.
   STORM_FOG_DUST_HEX: 0xa5743f,   // luminous mid dust-brown the fog collapses toward at peak (daytime brownout glow)
   STORM_SKY_DUST_HEX: 0xa5743f,   // dust the sky pulls toward — MATCHES the FOG dust hex so the ground-fog and sky are the same brown at the horizon → the far terrain outline fully dissolves (near-zero visibility, no visible far edge)
-  STORM_FOG_LERP: 0.92,           // fraction toward STORM_FOG_DUST_HEX at peak intensity (was 0.70 — too grey/bichromatic)
-  STORM_BG_LERP: 0.9,             // fraction toward STORM_SKY_DUST_HEX at peak
+  STORM_FOG_LERP: 1.12,           // fraction toward STORM_FOG_DUST_HEX (clamped ≤1) — saturates to full dust colour ~0.9 intensity so the fogged distance EXACTLY matches the flattened sky
+  STORM_BG_LERP: 1.12,            // fraction toward STORM_SKY_DUST_HEX (clamped ≤1)
+  STORM_SKY_FLATTEN: 1.12,        // review 2026-07-15 — sky-dome flatten: horizon + zenith both lerp to the fog dust hue; >1 (clamped ≤1) reaches a FULL flat dome ~0.9 intensity so no ground/sky value edge remains for silhouettes
   WORLD_RADIUS: 900,  // EE — soft visibility cap; was 280 for the 800m world
 
   // World chunks (Session EE — world rework #1). The terrain is a
@@ -1854,13 +1857,16 @@ export const Tuning = {
   STORM_WALL_DEPART_FALLOFF: 300,  // ramp distance (u) over which intensity falls as the wall departs
   STORM_WALL_RETIRE_DIST: 260,     // signed distance past the player at which the wall is spent (ends storm early)
   STORM_WALL_WIND_BIAS: 5.5,       // extra wind (u/s) along wall dir at full intensity for mid dust layer (far x1.4, near x0.6)
-  // review 2026-07-14 — the visible approaching DUSTWALL (Dune/Mad-Max front). A tall
-  // curved wall of billowing dust rendered at the storm wall's leading edge, facing the
-  // player, that advances as the storm ramps and then hands off to the whiteout fog as
-  // it engulfs. Opacity ramps by the leading edge's distance ahead of the player.
-  STORM_DUSTWALL_RADIUS: 230,      // curve radius (world u) — the wall bows toward the player
-  STORM_DUSTWALL_HEIGHT: 300,      // ground-to-high-sky height (world u) — towering, but leaves a strip of storm sky above the boiling crest at approach distance
-  STORM_DUSTWALL_ARC: 2.1,         // arc angle (rad, ~120°) so it spans the horizon
+  // review 2026-07-14/15 — the visible approaching DUSTWALL (Dune/Mad-Max front). A tall
+  // wall of billowing dust rendered at the storm wall's leading edge that ADVANCES along
+  // the fixed wind heading (never re-yaws to the player → no spin) then hands off to the
+  // whiteout fog as it engulfs. Opacity ramps by the leading edge's distance ahead of the
+  // player. review 2026-07-15 — geometry is now a WIDE, near-FLAT front (decoupled width
+  // + a gentle quadratic bow, replacing the circular arc) so it spans the WHOLE horizon
+  // as a Dune advancing wall and never reads as a wrapping cylinder.
+  STORM_DUSTWALL_WIDTH: 1500,      // world u across — very wide so the front spans horizon-to-horizon at approach distance (~340m ⇒ well beyond the FOV → reads as an infinite advancing wall)
+  STORM_DUSTWALL_BOW: 0.09,        // flank recession as a fraction of width (0 = dead flat). 0.09·1500 ≈ 135m of gentle depth at the far flanks — a whisper of girth, no cylinder wrap
+  STORM_DUSTWALL_HEIGHT: 340,      // ground-to-high-sky height (world u) — towering, but leaves a strip of storm sky above the boiling crest at approach distance
   STORM_DUSTWALL_SEG_W: 48,        // horizontal segments (billow detail across)
   STORM_DUSTWALL_SEG_H: 20,        // vertical segments
   STORM_DUSTWALL_FADE_FAR: 700,    // leading-edge dist (m) at which the wall starts fading IN on the horizon

@@ -1,13 +1,22 @@
-// The approaching DUSTWALL (review 2026-07-14) — a Dune / Mad-Max sandstorm FRONT
-// you SEE coming: a towering, curved wall of billowing dust rendered at the storm
-// wall's leading edge, tinted dust-brown, ground-to-high-sky. It advances toward the
-// player as the storm ramps, then hands off to the whiteout fog as it engulfs you.
+// The approaching DUSTWALL — a Dune / Mad-Max sandstorm FRONT you SEE coming: a
+// towering wall of billowing dust, tinted dust-brown, ground-to-high-sky. It grows
+// on the horizon and ADVANCES toward the player along the storm's FIXED wind
+// direction, then hands off to the whiteout fog as it engulfs you.
 //
-// Built as 2 concentric curved shells (a partial vertical cylinder each) sharing a
-// scrolling turbulent fbm shader — the outer shell reads as the far mass, the inner as
-// the churning near billows, so the front has depth instead of reading as one flat
-// sheet. Each frame the group is repositioned at the wall's leading edge and yawed to
-// face the player; opacity is driven by how far ahead of the player that edge is.
+// review 2026-07-15 — DE-SPIN REWORK. The old wall was a curved cylinder re-yawed to
+// FACE the player every frame (a per-frame lookAt), so as you moved/turned it read as
+// spinning/wrapping around you. Now the wall's orientation is LOCKED to the wind vector
+// (yaw derived from wall.dir, which is fixed for the whole storm) — it TRANSLATES toward
+// the player along that heading, it never rotates. The geometry is a wide, gently
+// convex front (the centre bulges toward you and the flanks curve AWAY into the horizon
+// haze), so from any player yaw it reads as one flat advancing wall, NOT a cylinder
+// hugging the player.
+//
+// Built as 2 concentric shells sharing a scrolling turbulent fbm shader — the outer
+// reads as the far mass, the inner as the churning near billows, so the front has depth
+// instead of a flat sheet. Each frame the group is repositioned at the wall's leading
+// edge and yawed to the wind heading; opacity is driven by how far ahead of the player
+// that edge still is.
 //
 // Determinism: no RNG (pure geometry + a time uniform driven by ctx.time.elapsed, which
 // freezes on pause). Nothing here touches the seeded chunk/scatter stream.
@@ -85,7 +94,7 @@ const FRAG = /* glsl */ `
 
     // BOILING top: big low-frequency rolls (the classic haboob rolling crest) modulate
     // the wall height so the silhouette heaves, not a flat line.
-    float roll = fbm(vec2(uv.x * 3.4 + uSeed + uTime * uWind * 0.05, 7.3));
+    float roll = fbm(vec2(uv.x * 9.0 + uSeed + uTime * uWind * 0.05, 7.3));
     float topEdge = 0.50 + 0.46 * roll;
     float vShape = smoothstep(topEdge, topEdge - 0.30, uv.y); // 1 below crest → 0 above
     // Ground the base into the fog/terrain (a hair of translucency at the very bottom).
@@ -106,11 +115,16 @@ const FRAG = /* glsl */ `
   }
 `;
 
-/** Build a single curved shell — a partial vertical cylinder (arc) concave toward
- *  local +Z, base at y=0, top at y=height. `radius`/`height` size it; `uvX` sets how
- *  many billows read across its width. */
-function buildShell(radius: number, height: number, uvX: number, seed: number, scroll: number): Shell {
-  const arc = Tuning.STORM_DUSTWALL_ARC;
+/** Build a single wall shell — a WIDE, near-FLAT front with only a gentle bow, base at
+ *  y=0, top at y=height. Local +Z is the wind heading (toward the player as the wall
+ *  advances). Width + bow are DECOUPLED (linear width, an independent quadratic bow) so
+ *  the wall can span the whole horizon while staying nearly flat — unlike a circular arc,
+ *  where widening forces the flanks to wrap forward and read as a cylinder. The centre
+ *  (u=0.5) is the leading bulge at z=0 (closest to the player); the flanks recede a small
+ *  `bow` fraction of the width toward local -Z into the horizon haze. With the wind-locked
+ *  yaw (never a lookAt to the player) this reads as one advancing Dune wall, never a
+ *  wrapping cylinder. `width`/`height` size it; `uvX` sets how many billows read across. */
+function buildShell(width: number, height: number, bow: number, uvX: number, seed: number, scroll: number): Shell {
   const segW = Tuning.STORM_DUSTWALL_SEG_W;
   const segH = Tuning.STORM_DUSTWALL_SEG_H;
   const cols = segW + 1;
@@ -122,10 +136,13 @@ function buildShell(radius: number, height: number, uvX: number, seed: number, s
     const y = vy * height;
     for (let c = 0; c < cols; c++) {
       const u = c / segW;
-      const a = (u - 0.5) * arc;             // -arc/2 .. +arc/2
-      // Concave toward +Z: center (a=0) at z=0, edges advance toward +Z (wrap the player).
-      const x = Math.sin(a) * radius;
-      const z = (1 - Math.cos(a)) * radius;
+      const s = u - 0.5;                       // -0.5 .. +0.5 across the width
+      // Linear width (full span control) + a gentle quadratic bow: centre (s=0) bulges to
+      // z=0 (leading edge, closest), flanks (|s|=0.5) recede by bow·width into -Z (the
+      // haze). Because width is independent of the bow, we get a horizon-spanning FLAT
+      // front with only a whisper of depth — never the arc's forward-wrapping flanks.
+      const x = s * width;
+      const z = -bow * width * (2 * s) * (2 * s);   // 0 at centre, -bow·width at the flanks
       const idx = r * cols + c;
       positions[idx * 3] = x;
       positions[idx * 3 + 1] = y;
@@ -180,25 +197,27 @@ export function createDustWall(scene: THREE.Scene): DustWall {
   const group = new THREE.Group();
   group.name = 'stormDustWall';
   const H = Tuning.STORM_DUSTWALL_HEIGHT;
-  const R = Tuning.STORM_DUSTWALL_RADIUS;
-  // Outer mass (bigger, slower, coarser billows) + inner churn (closer, faster, finer).
-  const outer = buildShell(R * 1.18, H * 1.12, 11.0, 11.3, Tuning.STORM_DUSTWALL_SCROLL * 0.8);
-  const inner = buildShell(R, H, 17.0, 47.9, Tuning.STORM_DUSTWALL_SCROLL * 1.25);
+  const W = Tuning.STORM_DUSTWALL_WIDTH;
+  const B = Tuning.STORM_DUSTWALL_BOW;
+  // Outer mass (bigger, slower, coarser billows, sits a touch further back) + inner churn
+  // (closer, faster, finer). Both are the same wide near-flat wind-locked front.
+  const outer = buildShell(W * 1.12, H * 1.12, B, 24.0, 11.3, Tuning.STORM_DUSTWALL_SCROLL * 0.8);
+  const inner = buildShell(W, H, B, 36.0, 47.9, Tuning.STORM_DUSTWALL_SCROLL * 1.25);
   const shells = [outer, inner];
   for (const s of shells) group.add(s.mesh);
   scene.add(group);
   return { group, shells };
 }
 
-const _toPlayer = new THREE.Vector3();
-
 export interface DustWallUpdate {
   visible: boolean;
   edgeX: number;
   edgeZ: number;
   baseY: number;
-  playerX: number;
-  playerZ: number;
+  /** Storm wind / travel heading (unit XZ). The wall's yaw is LOCKED to this —
+   *  fixed for the whole storm — so it never re-yaws to the player (no spin). */
+  dirX: number;
+  dirZ: number;
   opacity: number;   // 0..1 ramp (already includes the max-opacity scale)
   elapsed: number;
   wind: number;      // wind magnitude for the sideways churn drift
@@ -211,10 +230,11 @@ export function updateDustWall(dw: DustWall, p: DustWallUpdate): void {
     if (s.mesh.visible !== vis) s.mesh.visible = vis;
   }
   if (!vis) return;
-  // Seat the group at the leading edge, yawed so its concave (+Z) face embraces the player.
+  // Seat the group at the leading edge, yawed to the WIND HEADING (not a lookAt to the
+  // player). local +Z → wall.dir, which is fixed for the storm, so the wall only
+  // TRANSLATES toward the player as edgeX/edgeZ advance — it never rotates/spins.
   dw.group.position.set(p.edgeX, p.baseY, p.edgeZ);
-  _toPlayer.set(p.playerX - p.edgeX, 0, p.playerZ - p.edgeZ);
-  const yaw = Math.atan2(_toPlayer.x, _toPlayer.z);   // local +Z → toward player
+  const yaw = Math.atan2(p.dirX, p.dirZ);   // local +Z → wind travel direction (toward player)
   dw.group.rotation.y = yaw;
   for (const s of dw.shells) {
     s.mat.uniforms.uTime.value = p.elapsed;

@@ -1101,11 +1101,22 @@ export function updateSky(ctx: GameContext, dt: number): void {
   const storm = ctx.weather.intensity;
   if (storm > 0.001) {
     // review 2026-07-14 — a LUMINOUS daytime brownout, not a near-black murk. The
-    // horizon glows dust-ochre and the zenith stays a lit mid dust-brown (was
-    // 0x6e3a22 / 0x4a2614 — those read as an oppressive night dome). The whole sky
-    // reads as thick, sun-through sand.
-    _horizonColor.lerp(new THREE.Color(Tuning.STORM_FOG_DUST_HEX), storm * 0.95);
-    _topColor.lerp(new THREE.Color(Tuning.STORM_SKY_DUST_HEX), storm * 0.95);
+    // horizon glows dust-ochre and the zenith stays a lit mid dust-brown.
+    //
+    // review 2026-07-15 (TOTAL whiteout) — SKY-DOME HORIZON FLATTEN. The persistent
+    // far-horizon LINE was the sky dome rendering a different value at the zenith than
+    // at the horizon (and than the fog), so a value edge remained for distant
+    // silhouettes to read against. Fix: as the storm peaks, drive BOTH the horizon AND
+    // the zenith to the SAME single dust colour (STORM_FOG_DUST_HEX — the exact hue the
+    // fog collapses to), and ramp the blend to a FULL 1.0 (STORM_SKY_FLATTEN saturates
+    // it just before peak). The dome then becomes a uniform slab of the fog colour: the
+    // far terrain (fogged to that same colour) and the sky share one value → no ground/
+    // sky edge, so no far outline can read. Early/low storm keeps the gradient (a
+    // legible daytime brownout with the wreck still clear).
+    const flat = Math.min(1, storm * Tuning.STORM_SKY_FLATTEN);
+    const dust = new THREE.Color(Tuning.STORM_FOG_DUST_HEX);
+    _horizonColor.lerp(dust, flat);
+    _topColor.lerp(dust, flat);
   }
 
   // Push uniforms.

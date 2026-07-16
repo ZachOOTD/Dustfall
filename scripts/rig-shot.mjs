@@ -8873,41 +8873,51 @@ const SCENARIOS = {
       }, { sh, cfg, wreck });
       // Tick live so fog + intensity + dust layers + the dust wall all settle.
       await page.waitForTimeout(2200);
-      const r = await page.evaluate(({ sh, wreck, cfg }) => {
-        const ctx = window.__game.ctx;
-        const w = ctx.weather;
-        const cam = ctx.three.camera;
-        const px = wreck.cx, pz = wreck.cz + cfg.wreckDist;
-        const gy = ctx.terrain.heightAt(px, pz);
-        ctx.flags.paused = true;
-        // Eye at 1.7m, looking -Z toward the wreck top / incoming wall, slightly up so the
-        // towering front reads.
-        cam.position.set(px, gy + 1.7, pz);
-        const aimY = gy + Math.max(4, Math.min(16, (wreck.topY - gy) * 0.5));
-        cam.lookAt(wreck.cx, aimY, wreck.cz);
-        cam.updateMatrixWorld(true);
-        ctx.three.renderer.render(ctx.three.scene, cam);
-        const fog = ctx.three.scene.fog;
-        const dw = w.dustWall;
-        return {
-          shot: sh,
-          intensity: +w.intensity.toFixed(3),
-          pi: +w.perceivedIntensity.toFixed(3),
-          fogDensity: fog ? +fog.density.toFixed(4) : null,
-          fogColor: fog ? '#' + fog.color.getHexString() : null,
-          dustWallVisible: dw ? dw.group.visible : null,
-          dustWallOp: dw && dw.shells[0] ? +dw.shells[0].mat.uniforms.uOpacity.value.toFixed(3) : null,
-          layerOp: [
-            +w.layers.near.mat.opacity.toFixed(2),
-            +w.layers.mid.mat.opacity.toFixed(2),
-            +w.layers.far.mat.opacity.toFixed(2),
-            +w.layers.streak.mat.opacity.toFixed(2),
-          ],
-        };
-      }, { sh, wreck, cfg });
-      await page.waitForTimeout(120);
-      await page.screenshot({ path: join(OUT, `scen-storm-${sh}.png`), fullPage: false });
-      console.log(`[storm] ${JSON.stringify(r)}`);
+      // review 2026-07-15 — the approach shot renders from a YAW SWEEP (pan the camera
+      // left/centre/right from a FIXED position) so we can confirm the wall reads as a
+      // flat WORLD-fixed advancing front and does NOT spin/re-yaw with the view. Other
+      // shots stay single-view.
+      const yaws = sh === 'approach' ? [{ tag: 'L', d: -34 }, { tag: '', d: 0 }, { tag: 'R', d: 34 }] : [{ tag: '', d: 0 }];
+      for (const yv of yaws) {
+        const r = await page.evaluate(({ sh, wreck, cfg, yawDeg }) => {
+          const ctx = window.__game.ctx;
+          const w = ctx.weather;
+          const cam = ctx.three.camera;
+          const px = wreck.cx, pz = wreck.cz + cfg.wreckDist;
+          const gy = ctx.terrain.heightAt(px, pz);
+          ctx.flags.paused = true;
+          // Eye at 1.7m, looking -Z toward the wreck top / incoming wall, slightly up so the
+          // towering front reads.
+          cam.position.set(px, gy + 1.7, pz);
+          const aimY = gy + Math.max(4, Math.min(16, (wreck.topY - gy) * 0.5));
+          cam.lookAt(wreck.cx, aimY, wreck.cz);
+          // Pan the VIEW about world-Y by yawDeg (the wall must not follow it).
+          if (yawDeg) cam.rotateOnWorldAxis(new (ctx.time.sunDir.constructor)(0, 1, 0), yawDeg * Math.PI / 180);
+          cam.updateMatrixWorld(true);
+          ctx.three.renderer.render(ctx.three.scene, cam);
+          const fog = ctx.three.scene.fog;
+          const dw = w.dustWall;
+          return {
+            shot: sh, yawDeg,
+            intensity: +w.intensity.toFixed(3),
+            pi: +w.perceivedIntensity.toFixed(3),
+            fogDensity: fog ? +fog.density.toFixed(4) : null,
+            fogColor: fog ? '#' + fog.color.getHexString() : null,
+            dustWallVisible: dw ? dw.group.visible : null,
+            dustWallYaw: dw ? +dw.group.rotation.y.toFixed(4) : null,
+            dustWallOp: dw && dw.shells[0] ? +dw.shells[0].mat.uniforms.uOpacity.value.toFixed(3) : null,
+            layerOp: [
+              +w.layers.near.mat.opacity.toFixed(2),
+              +w.layers.mid.mat.opacity.toFixed(2),
+              +w.layers.far.mat.opacity.toFixed(2),
+              +w.layers.streak.mat.opacity.toFixed(2),
+            ],
+          };
+        }, { sh, wreck, cfg, yawDeg: yv.d });
+        await page.waitForTimeout(120);
+        await page.screenshot({ path: join(OUT, `scen-storm-${sh}${yv.tag ? '-yaw' + yv.tag : ''}.png`), fullPage: false });
+        console.log(`[storm] ${JSON.stringify(r)}`);
+      }
     }
   },
 
