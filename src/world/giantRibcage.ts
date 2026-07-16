@@ -55,9 +55,19 @@ import { mergeStaticByMaterial } from './wreckForms.ts';
 //    "bones too white") — a warmer/greyer base + a modest, less-cool emissive so
 //    it reads as OLD sun-bleached bone, not stark blue-white. Kept in sync with
 //    boneScatter._boneMat + the chunkManager scatter-ribcage override. ──
-const _ribBone = createBoneMaterial(0xdcd8cf, { marrowHint: 0.3, ageBleach: 0.7 });
-_ribBone.emissive = new THREE.Color(0x545a60);   // near-neutral grey, faint cool bias
-_ribBone.emissiveIntensity = 0.55;
+const _ribBone = createBoneMaterial(0xc9c5bc, {
+  crackDensity: 1.3,   // denser hairline network
+  crackDepth: 0.4,     // DEEP dark cracks (was the fixed 0.65 faint)
+  marrowHint: 0.5,     // stronger yellow-brown mineral staining
+  ageBleach: 0.55,     // a little less top-bleach so it's not washed white
+  weathering: 0.9,     // heavy broad grime/AO — the distance-surviving contrast
+});
+// Greyer/darker base (0xc9c5bc vs 0xdcd8cf) + a LOWER, greyer emissive: the old
+// 0x545a60@0.55 self-illuminated the bone toward flat blue-white (reviewer: "too
+// white + flat"). This keeps just enough cool fill to POP against the warm sand
+// without washing the weathering out.
+_ribBone.emissive = new THREE.Color(0x494d52);
+_ribBone.emissiveIntensity = 0.36;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -143,7 +153,13 @@ function sweptTube(pts: THREE.Vector3[], radii: number[], radial: number): THREE
   for (let i = 0; i < n - 1; i++) {
     for (let j = 0; j < radial; j++) {
       const a = i * stride + j, b = (i + 1) * stride + j;
-      indices.push(a, b, a + 1, a + 1, b, b + 1);
+      // OUTWARD winding. The frame is B = tangent × normal, so at a ring the
+      // circumferential direction (increasing radial angle) crosses the tangent to
+      // give −radial: winding (a, b, a+1) faces INWARD (the old see-through bug —
+      // FrontSide culled the exterior, 90%+ back-faces from every orbit angle).
+      // (a, a+1, b) / (a+1, b+1, b) reverse it so the face normal is +radial =
+      // outward; both end caps below are already outward-wound (fan sign checked). ──
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
   // End caps — fan each terminal ring to a centre vertex (both ends CLOSED).
@@ -163,29 +179,6 @@ function sweptTube(pts: THREE.Vector3[], radii: number[], radial: number): THREE
   return geo;
 }
 
-// ── A dorsal neural-spine BLADE — a bony fin/spike, wide at the base, tapering
-//    to a point, extruded to a REAL thickness (rule 7 — a closed solid, not a
-//    single-sided plate: it has front + back + bevelled edges so it never reads
-//    paper-thin edge-on). Built in its own X-Y plane (wide along X = spine axis,
-//    tall along +Y), `thick` along Z. The caller positions + rakes it. ──
-function bladeGeo(baseW: number, height: number, thick: number): THREE.BufferGeometry {
-  const w = baseW * 0.5;
-  const shape = new THREE.Shape();
-  shape.moveTo(-w, 0);
-  shape.lineTo(w, 0);
-  shape.lineTo(w * 0.66, height * 0.4);
-  shape.lineTo(w * 0.3, height * 0.78);
-  shape.lineTo(0, height);
-  shape.lineTo(-w * 0.3, height * 0.78);
-  shape.lineTo(-w * 0.66, height * 0.4);
-  shape.lineTo(-w, 0);
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: thick, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 1, steps: 1,
-  });
-  geo.translate(0, 0, -thick * 0.5);   // centre the thickness on Z
-  return geo;
-}
-
 /** Build the colossal walk-under ribcage. `rand` drives per-instance variation
  *  (length, rib count, arch height, per-rib decay + skew, fallen fragments). */
 export function makeGiantRibcage(
@@ -195,14 +188,18 @@ export function makeGiantRibcage(
   group.name = opts?.name ?? 'giantRibcage';
   const conform = opts?.conform;
 
-  // ── Silhouette parameters ──
-  const length = 42 + rand() * 10;                // spine span along X (42-52m)
+  // ── Silhouette parameters — a LONG, LOW, half-buried SANDWORM skeleton (reviewer:
+  //    "less arched, lower, more sunken, longer — a massive sandworm skeleton, not a
+  //    tall arched ribcage"). Longer spine, much lower crown, deeper burial at the
+  //    ends + rib tips. Walk-under is preserved: even the lowered crown clears ~6m
+  //    over the centre aisle. ──
+  const length = 64 + rand() * 14;                // spine span along X (64-78m — LONG worm)
   const sHalf = length * 0.5;
-  const ribPairs = 13 + Math.floor(rand() * 4);   // 13-16 rib pairs
-  const crownH = 12.5 + rand() * 2.5;             // spine CROWN height above sand (12.5-15m)
-  const endBury = 2.5 + rand() * 0.8;             // how deep the spine dives + buries at each end (m)
-  const footZ0 = 5.2 + rand() * 1.3;             // half-width of the tunnel at the sand (m)
-  const ribBury = 2.2;                            // how deep each rib tip plants below ground (m)
+  const ribPairs = 19 + Math.floor(rand() * 5);   // 19-23 rib pairs (denser over the long spine)
+  const crownH = 7.0 + rand() * 1.6;             // spine CROWN height above sand (7-8.6m — LOW, settled)
+  const endBury = 3.6 + rand() * 1.1;             // how deep the spine dives + buries at each end (m)
+  const footZ0 = 5.6 + rand() * 1.4;             // half-width of the tunnel at the sand (m)
+  const ribBury = 3.0;                            // how deep each rib tip plants below ground (m — deeper = more sunken)
   const inset = 0.7;                              // lateral offset of a rib's spine attach from centre
 
   // Local ground height (ribcage-local Y) at a local (x,z): sample the REAL
@@ -215,10 +212,18 @@ export function makeGiantRibcage(
     return conform.groundAt(wx, wz) - conform.baseY;
   };
 
-  // Spine ARCH profile (height ABOVE local ground): crown in the middle, diving
-  // to −endBury (buried) at the ends. A gentle rounded crown (parabola-derivative
-  // is 0 at t=0) dropping fast toward the ends where it sinks into the dune.
-  const spineArch = (t: number): number => crownH * (1 - t * t) - endBury * t * t;
+  // SETTLE — drop the whole arch by this much so the carcass reads as SUNKEN into
+  // the dune (reviewer: "more sunken into the sand"), not perched on top. Rib tips
+  // + spine ends bury deeper; the crown lowers to ~5.5-6.5m (walk-under preserved,
+  // ~5m aisle clearance).
+  const sink = 1.9;
+  // Spine ARCH profile (height ABOVE local ground): a LONG, FLAT-crowned ridge that
+  // dives to −endBury (buried) at the ends. The |t|^2.6 crown term stays near full
+  // height across a broad central span (a settled sandworm back, not a peaked dome)
+  // and only drops steeply near the ends where it sinks into the dune. (Was a plain
+  // parabola crownH*(1−t²) — too peaked/arched; the reviewer wanted lower + longer.)
+  const spineArch = (t: number): number =>
+    crownH * (1 - Math.pow(t * t, 1.3)) - endBury * t * t - sink;
   // Size envelope: full in the middle, ~0.45 at the ends (shorter ribs + blades).
   const env = (t: number): number => 0.45 + 0.55 * (1 - t * t);
 
@@ -287,7 +292,6 @@ export function makeGiantRibcage(
     const decayL = rand(), decayR = rand();
     const brokenFracL = 0.56 + rand() * 0.28;   // keep MOST of the rib (broken near the buried tip, not a high stub)
     const brokenFracR = 0.56 + rand() * 0.28;
-    const bladeRoll = rand();
     const ringSkew = rand();
 
     // Vertebra RING — a torus girdling the backbone (reads as a segmented drum),
@@ -300,19 +304,10 @@ export function makeGiantRibcage(
       group.add(ring);
     }
 
-    // Dorsal NEURAL BLADE rising UP off the ridge (a solid thick fin). A few are
-    // broken short or missing (weathering). Only where the ridge is above ground.
-    if (bladeRoll > 0.16 && spineY - lgC > 1.5) {
-      const broken = bladeRoll < 0.3;
-      const bh = (2.9 + rand() * 1.4) * e * (broken ? 0.4 + rand() * 0.25 : 1);
-      const bw = 1.3 + e * 0.9;
-      const blade = boneMesh(bladeGeo(bw, bh, 0.6));
-      blade.position.set(x, spineY + spineR * 0.7, 0);
-      blade.rotation.z = archAng * 0.5 + 0.1 + (rand() - 0.5) * 0.12;   // rake with the arch + a little back
-      blade.rotation.y = (rand() - 0.5) * 0.14;
-      group.add(blade);
-      maxHeight = Math.max(maxHeight, spineY + spineR * 0.7 + bh - lgC);
-    }
+    // (Dorsal neural BLADES removed — they read as dark spiky dragon-fins from the
+    //  side and added height, fighting the reviewer's "lower, less arched,
+    //  ribcage-ONLY" direction. The spine tube + vertebra rings carry the ridge.)
+    maxHeight = Math.max(maxHeight, Math.max(0, spineY - lgC) + spineR);
 
     // A RIB hanging DOWN + OUT to the sand on each side (skip near the buried ends
     // where the ridge is already at/under the ground — no room for an arch).
@@ -329,7 +324,7 @@ export function makeGiantRibcage(
       // Fore/aft RAKE — the rib's tip sweeps along X as it descends (crown ribs
       // near-vertical, flank ribs fanning toward the ends). Turns the flat "row of
       // vertical legs" side-read into a barrel RIBCAGE that reads as curved ribs.
-      const rake = t * 3.0 + lean;
+      const rake = t * 3.8 + lean;
 
       // Control points TOP→BOTTOM: attach at the spine (near centre, high), sweep
       // OUT + DOWN with fore/aft rake, bowing to max width around mid-height (a

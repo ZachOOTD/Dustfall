@@ -145,7 +145,7 @@ export interface ChunkLandmarkDesc {
 
 /** bone_field scatter — one half-buried bone prop. `ribcage` bits render via
  *  placeRibcage (a real collidered hero silhouette); the cheap decoration bits
- *  (`skull`/`ribarch`/`spine`/`longbone`) render merged, no collider (the
+ *  (`ribarch`/`spine`/`longbone`) render merged, no collider (the
  *  scatter-rock rule). Present only on bone_field chunks. */
 export interface ChunkBoneDesc {
   x: number;
@@ -946,7 +946,7 @@ export function createChunkManager(
     // ── bone_field — the titan-graveyard bone SCATTER (the biome POP). Two
     //    classes: `ribcage` bits are REAL collidered hero silhouettes (via
     //    placeRibcage → the collider body tracked in bodies[], removed on
-    //    unload); the cheap decoration bits (skull/ribarch/spine/longbone)
+    //    unload); the cheap decoration bits (ribarch/spine/longbone)
     //    render MERGED into ONE draw call, half-buried, no collider (the
     //    established scatter-rock rule). Bit geometry is disposed on unload
     //    via the merge's noCollider tag; the shared bone material survives. ──

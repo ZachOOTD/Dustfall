@@ -35,46 +35,20 @@ const _boneMat = createBoneMaterial(0xdcd8cf, {
 // too white") — a near-neutral grey fill, not a blue-white lamp.
 _boneMat.emissive = new THREE.Color(0x545a60);
 _boneMat.emissiveIntensity = 0.55;
-const _socketMat = new THREE.MeshLambertMaterial({ color: 0x140f09, flatShading: true });
 
-export type BoneBitKind = 'skull' | 'ribarch' | 'spine' | 'longbone';
+export type BoneBitKind = 'ribarch' | 'spine' | 'longbone';
 
 /** All the bone-bit kinds a scatter descriptor can pick (fixed order → a
- *  descriptor's kindRoll maps stably). */
-export const BONE_BIT_KINDS: readonly BoneBitKind[] = ['skull', 'ribarch', 'spine', 'longbone'];
+ *  descriptor's kindRoll maps stably). The old `skull` bit (a scaled icosahedron
+ *  cranium) was REMOVED per the reviewer — it read as a featureless dome-ish blob
+ *  in the field; only the strong reads (rib arches, spines, long-bones) remain. */
+export const BONE_BIT_KINDS: readonly BoneBitKind[] = ['ribarch', 'spine', 'longbone'];
 
 function bone(geo: THREE.BufferGeometry): THREE.Mesh {
   const m = new THREE.Mesh(geo, _boneMat);
   m.castShadow = true;
   m.receiveShadow = true;
   return m;
-}
-
-// A titan SKULL — elongated icosahedron with recessed dark eye sockets + a
-// nasal void. Reads as a skull, not a rock, from a glance.
-function buildSkull(rand: Rng): THREE.Group {
-  const g = new THREE.Group();
-  const r = 0.7 + rand() * 0.5;                     // ~0.7-1.2m radius base
-  const cranium = bone(new THREE.IcosahedronGeometry(r, 1));
-  cranium.scale.set(1.35, 0.9, 0.95);               // snout elongated along +X
-  cranium.position.y = r * 0.75;
-  g.add(cranium);
-  // Snout / muzzle — a tapered cone extending the face.
-  const snout = bone(new THREE.ConeGeometry(r * 0.55, r * 1.1, 7));
-  snout.rotation.z = -Math.PI / 2;
-  snout.position.set(r * 1.25, r * 0.7, 0);
-  g.add(snout);
-  // Recessed dark eye sockets (read as hollow eyes) — the "skull" tell.
-  for (const dz of [-1, 1]) {
-    const socket = new THREE.Mesh(new THREE.CircleGeometry(r * 0.28, 10), _socketMat);
-    socket.position.set(r * 0.62, r * 0.95, dz * r * 0.5);
-    socket.rotation.y = dz * 0.5;
-    socket.rotation.x = -0.15;
-    g.add(socket);
-  }
-  g.rotation.y = rand() * Math.PI * 2;
-  g.rotation.z = (rand() - 0.5) * 0.3;              // fallen at an angle
-  return g;
 }
 
 // A run of RIB arches breaching the sand — a partial ribcage of a huge beast,
@@ -153,7 +127,6 @@ function buildLongBone(rand: Rng): THREE.Group {
  *  NOT chunkMat, or merge the group). */
 export function buildBoneBit(kind: BoneBitKind, rand: Rng): THREE.Group {
   switch (kind) {
-    case 'skull': return buildSkull(rand);
     case 'ribarch': return buildRibArch(rand);
     case 'spine': return buildSpine(rand);
     case 'longbone': return buildLongBone(rand);
