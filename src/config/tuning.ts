@@ -1861,6 +1861,14 @@ export const Tuning = {
   STORM_WALL_DEPART_FALLOFF: 300,  // ramp distance (u) over which intensity falls as the wall departs
   STORM_WALL_RETIRE_DIST: 260,     // signed distance past the player at which the wall is spent (ends storm early)
   STORM_WALL_WIND_BIAS: 5.5,       // extra wind (u/s) along wall dir at full intensity for mid dust layer (far x1.4, near x0.6)
+  // review 2026-07-16 — the heading was a full random 0..2π, so the front usually armed
+  // off-screen and the player only ever caught it tracking ACROSS their view — never the
+  // "it's coming for me" read. The storm now arms within ±this many degrees of head-on
+  // (the front approaches FROM the direction the player is currently facing). A modest
+  // spread, NOT a hard lock: the wall still arrives off-axis and still crosses obliquely,
+  // it just starts inside/near the field of view so the approach is legible.
+  STORM_WALL_HEADING_BIAS_DEG: 55, // ± spread (deg) around head-on when arming a storm wall
+
   // review 2026-07-14/15 — the visible approaching DUSTWALL (Dune/Mad-Max front). A tall
   // wall of billowing dust rendered at the storm wall's leading edge that ADVANCES along
   // the fixed wind heading (never re-yaws to the player → no spin) then hands off to the
@@ -1875,11 +1883,34 @@ export const Tuning = {
   STORM_DUSTWALL_SEG_H: 20,        // vertical segments
   STORM_DUSTWALL_FADE_FAR: 700,    // leading-edge dist (m) at which the wall starts fading IN on the horizon
   STORM_DUSTWALL_FADE_FULL: 420,   // dist (m) at which the wall is at full opacity (looming)
-  STORM_DUSTWALL_FADE_NEAR: 120,   // dist (m) below which it starts fading OUT (the whiteout fog takes over)
-  STORM_DUSTWALL_FADE_GONE: 30,    // dist (m) at which it's fully hidden (engulfed)
+  // review 2026-07-16 — THE WALL NOW WASHES OVER YOU. Was NEAR:120 / GONE:30 — the front
+  // dissolved 30m IN FRONT of the player and handed off to fog, so the moment of
+  // engulfment never rendered: you watched a wall dissolve ahead of you while the storm
+  // "arrived" by fog density alone. With no approach event to read, the only motion left
+  // to perceive was the front's lateral drift → "it slides sideways and never hits me".
+  // Now opacity holds FULL right through the crossing (FADE_NEAR = 0, i.e. the wall is at
+  // full strength the instant its plane reaches the camera — it screen-fills and engulfs)
+  // and only dissolves once the front is BEHIND the player (negative = metres past), where
+  // it is out of view anyway and the whiteout fog has taken over.
+  STORM_DUSTWALL_FADE_NEAR: 0,     // dist (m) at which fade-out BEGINS — 0 = full opacity all the way to the camera
+  STORM_DUSTWALL_FADE_GONE: -90,   // dist (m) at which it's fully hidden — NEGATIVE = 90m PAST the player (fades out behind you)
   STORM_DUSTWALL_MAX_OPACITY: 0.97,
-  STORM_DUSTWALL_COLOR_LO: 0x6b4526,  // shadowed billow undersides (brightened from 0x4d3120 so the wall doesn't read as dark sky)
-  STORM_DUSTWALL_COLOR_HI: 0xe0b483,  // sun-lit billow crests — bright ochre so the front POPS against the darkened storm sky (haboob read)
+  // review 2026-07-16 — these are rendered by a raw ShaderMaterial with NO linear→sRGB
+  // output encode (see the colour-space note in sky.ts), so they were being written as raw
+  // linear bytes: 0x4d3120 → (23,10,3) ≈ BLACK. That is why this constant kept getting
+  // "brightened" (0x4d3120 → 0x6b4526) to fight a darkness that was a colour-space bug, not
+  // a colour choice. dustWall.ts now pre-encodes both, so these hexes finally render as the
+  // ochre they name.
+  // Review 2026-07-16 — RE-TUNED for the colour-space fix. These were hand-brightened
+  // over several passes to fight a bug: dustWall is a RAW ShaderMaterial, so three never
+  // injected the linear→sRGB encode and the uniforms rendered DARK (0x6b4526 arrived as
+  // ~(37,16,5), 0xe0b483 as ~(190,116,58)). encodeForRawShader() now fixes that — but the
+  // old constants then double-counted and the wall went pale/washed-out. These values are
+  // the OLD EFFECTIVE RENDER (the rich-ochre haboob that was actually approved): bright
+  // ochre crests that also sit close to the storm fog (165,116,63) so engulfment hands off
+  // without a flash, over near-black undersides for the billow contrast.
+  STORM_DUSTWALL_COLOR_LO: 0x2e1608,  // shadowed billow undersides — near-black (the contrast that sells the boil)
+  STORM_DUSTWALL_COLOR_HI: 0xbe743a,  // sun-lit billow crests — rich ochre, ~= the storm fog hue so the wall dissolves INTO the whiteout
   STORM_DUSTWALL_SCROLL: 0.04,        // vertical churn scroll speed (uv/sec)
   STORM_DUSTWALL_LIFT: 0.02,          // Y drop of the wall base below ground so it seats without a floating gap
   // ACW E (#146/#134) — storm wind pushes loose bodies + in-storm sensory.

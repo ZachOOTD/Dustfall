@@ -24,6 +24,22 @@
 import * as THREE from 'three';
 import { Tuning } from '../config/tuning.ts';
 
+// review 2026-07-16 — COLOUR-SPACE ENCODE (same trap as the sky dome; see the long note in
+// sky.ts). This is a raw ShaderMaterial: three.js only injects `<colorspace_fragment>` (the
+// linear→sRGB output encode) into its OWN material shaders, so whatever we hand a custom
+// shader gets written to the drawing buffer as raw LINEAR bytes. A THREE.Color holds linear
+// components, so `new THREE.Color(0xe0b483)` reaches the screen as (192,118,61), and the
+// shadow tone 0x4d3120 arrived as (23,10,3) — near black. That is why the wall read as a
+// dark mass and why these constants kept getting hand-brightened: the fix was never a
+// brighter hex, it was the missing encode. Pre-encode here (stuff the sRGB components into
+// the linear slot) so the named hex is what actually renders.
+function encodeForRawShader(hex: number): THREE.Color {
+  const src = new THREE.Color(hex);
+  const srgb = { r: 0, g: 0, b: 0 };
+  src.getRGB(srgb, THREE.SRGBColorSpace);
+  return new THREE.Color().setRGB(srgb.r, srgb.g, srgb.b, THREE.LinearSRGBColorSpace);
+}
+
 interface Shell {
   mesh: THREE.Mesh;
   mat: THREE.ShaderMaterial;
@@ -174,8 +190,8 @@ function buildShell(width: number, height: number, bow: number, uvX: number, see
       uWind: { value: 1 },
       uUvX: { value: uvX },
       uSeed: { value: seed },
-      uColorLo: { value: new THREE.Color(Tuning.STORM_DUSTWALL_COLOR_LO) },
-      uColorHi: { value: new THREE.Color(Tuning.STORM_DUSTWALL_COLOR_HI) },
+      uColorLo: { value: encodeForRawShader(Tuning.STORM_DUSTWALL_COLOR_LO) },
+      uColorHi: { value: encodeForRawShader(Tuning.STORM_DUSTWALL_COLOR_HI) },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,

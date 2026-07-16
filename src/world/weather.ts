@@ -249,8 +249,33 @@ function wallIntensityAt(wall: StormWall, px: number, pz: number): number {
 /** ACL SKY+WEATHER — arm a fresh wall upwind of the player, heading toward and
  *  across them. Direction is randomized; the wall is placed STORM_WALL_SPAWN_DIST
  *  back along -dir so it sweeps over the player as it travels +dir. */
-function armWall(wall: StormWall, px: number, pz: number, rand: () => number): void {
-  const heading = rand() * Math.PI * 2;
+/** review 2026-07-16 — bias the arming heading toward the player's VIEW direction so the
+ *  front is seen COMING AT you instead of tracking across the horizon.
+ *
+ *  The wall spawns at `-dir * SPAWN_DIST` and travels along `+dir`, so it arrives FROM the
+ *  `-dir` side. For a head-on approach we therefore want `dir ≈ -view`. A fully random
+ *  heading (the old behaviour) armed the front off-screen most of the time — by the time
+ *  the player noticed it, it was already abeam, and all that remained to perceive was
+ *  lateral drift. We keep a ±STORM_WALL_HEADING_BIAS_DEG spread so it is a bias, not a
+ *  lock: the wall still arrives off-axis and crosses obliquely, it just starts in view.
+ *
+ *  `viewX/viewZ` = the camera's forward XZ (need not be normalised). Omit/zero → uniform
+ *  random (the opening-storm + save-restore paths, where there is no meaningful view yet).
+ *  Uses Math.random, NOT the seeded chunk/scatter stream — no procgen seed-stability impact. */
+function armWall(
+  wall: StormWall, px: number, pz: number, rand: () => number,
+  viewX = 0, viewZ = 0,
+): void {
+  let heading: number;
+  const viewLen2 = viewX * viewX + viewZ * viewZ;
+  if (viewLen2 > 1e-6) {
+    // dir = -view ⇒ heading = atan2(-viewZ, -viewX) (dirX=cos, dirZ=sin).
+    const headOn = Math.atan2(-viewZ, -viewX);
+    const spread = (Tuning.STORM_WALL_HEADING_BIAS_DEG * Math.PI) / 180;
+    heading = headOn + (rand() * 2 - 1) * spread;
+  } else {
+    heading = rand() * Math.PI * 2;
+  }
   const dirX = Math.cos(heading);
   const dirZ = Math.sin(heading);
   wall.active = true;
@@ -394,6 +419,9 @@ export function createWeather(
 }
 
 const _camPos = new THREE.Vector3();
+// review 2026-07-16 — scratch for the arming heading bias (camera forward XZ). Shared, no
+// per-call alloc; only read during the rare clear→building transition.
+const _viewFwd = new THREE.Vector3();
 
 // ACL SKY+WEATHER — extra wind bias (world u/s) applied on top of each
 // particle's baked velocity, aligned with the sweeping wall's travel dir.
@@ -486,7 +514,10 @@ export function updateWeather(ctx: GameContext, dt: number): void {
         w.currentStormDuration = curve.duration;
         // ACL SKY+WEATHER — arm a fresh wall upwind of the player. It sweeps
         // across them; intensity now derives from distance to the wall.
-        armWall(wall, px, pz, Math.random);
+        // review 2026-07-16 — biased toward the player's view so the front arrives
+        // head-on-ish and reads as approaching, not sliding past.
+        w.cameraRef.getWorldDirection(_viewFwd);
+        armWall(wall, px, pz, Math.random, _viewFwd.x, _viewFwd.z);
       }
       break;
     case 'building':
@@ -662,7 +693,10 @@ export function triggerStorm(ctx: GameContext): void {
   // ACL SKY+WEATHER — arm the sweeping wall upwind of the player so the
   // debug-triggered storm actually ramps in (intensity is wall-derived).
   const tr = getPlayerWorldPos(ctx);
-  armWall(ctx.weather.wall, tr.x, tr.z, Math.random);
+  // review 2026-07-16 — same view bias as the natural storm path, so a debug-triggered
+  // storm reproduces what the player actually sees.
+  ctx.weather.cameraRef.getWorldDirection(_viewFwd);
+  armWall(ctx.weather.wall, tr.x, tr.z, Math.random, _viewFwd.x, _viewFwd.z);
 }
 
 /**

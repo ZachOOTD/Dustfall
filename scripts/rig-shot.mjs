@@ -6688,13 +6688,37 @@ const SCENARIOS = {
     // Exterior: full broadside length (aim mid aft-mass), a 3/4 approach.
     await shot('long', [1, 0], -20, 96, 10, -20, 8);
     await shot('approach', [0.8, 0.7], 4, 60, 6, -14, 6);
-    // The breach MOUTH (fracture ~local z+8): head-on-ish from outside + a bit to
-    // the side + LOW so the reared prow doesn't occlude the lit breach (frame the
-    // deck-level aperture + the thick cut jamb), and a GRAZING side angle across the
-    // mouth plane (prove the thick cut cross-section, no paper edge / see-through slot).
-    await shot('mouth-head', [0.35, 1], 8, 15, 1.4, 3, 2.2, 1);
-    await shot('mouth-graze', [0.9, 0.5], 8, 11, 1.3, 5, 2.4, 1);
-    await shot('mouth-graze2', [0.9, 0.5], 8, 11, 1.3, 5, 2.4, -1);
+    // ── THE BREACH (2026-07-16). These used to aim at the amidships FRACTURE (local
+    //    z≈+8) and were a FALSE PASS: the reared bow's 21m bore encloses that face, so
+    //    a camera placed 15m "outside" it was in fact standing INSIDE the bow's bore
+    //    shooting the interior through a hole no player could reach. Framing an
+    //    unreachable opening from an unreachable viewpoint is how the sealed build got
+    //    signed off. The entrance is now the STARBOARD breach at local (≈+10.9, -0.5),
+    //    so these shots are posed in the wreck's LOCAL frame against real coordinates,
+    //    from real player standing positions on the sand/ramp.
+    const localShot = async (name, cam, aim) => {
+      await page.evaluate(({ cam, aim }) => {
+        const ctx = window.__game.ctx; const c = ctx.three.camera; ctx.flags.paused = true;
+        const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+        const V = c.position.constructor;
+        const cw = lev.localToWorld(new V(cam[0], cam[1], cam[2]));
+        const aw = lev.localToWorld(new V(aim[0], aim[1], aim[2]));
+        c.position.copy(cw); c.lookAt(aw); c.updateMatrixWorld(true);
+      }, { cam, aim });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+      console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+    };
+    // Head-on into the tear from the sand, at eye height — the REAL approach read.
+    await localShot('breach-head', [24, -0.2, -0.5], [9, 5.4, -0.5]);
+    // Standing OUTSIDE at the ramp lip, looking straight INTO the hold.
+    await localShot('breach-into-hold', [12.6, 4.4, -0.5], [-2, 5.0, -3]);
+    // GRAZING both ways across the opening — proves the 0.9m cut cross-section reads
+    // as a thick welded rim with NO bright gap/slot between the skins.
+    await localShot('breach-graze-fwd', [13.5, 4.6, 7.5], [10.4, 5.2, -1.5]);
+    await localShot('breach-graze-aft', [13.5, 4.6, -8.5], [10.4, 5.2, 0.5]);
+    // The DECOY: the reared bow's root, which used to read as an arched way in.
+    await localShot('bow-root-decoy', [16, 1.5, 16], [4, 8, 7]);
     // Interior player-eye reads from the builder's probe waypoints.
     if (info.probe) {
       const wps = Object.fromEntries(info.probe.waypoints.map((w) => [w.name, w]));
@@ -6749,11 +6773,27 @@ const SCENARIOS = {
       const fails = [];
       const CAP = 1.05;
       const placeAt = async (w) => { body.setTranslation({ x: w.x, y: w.y + CAP + 0.25, z: w.z }, true); body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(45); };
+      // Teleport-march along the path, RIDING the surface under each step.
+      //
+      // This used to grant a flat +0.12m of lift per 0.5m step and leave the rest to
+      // the solver — i.e. it could only follow ground shallower than ~13°. That was
+      // invisible while every leviathan/skyfall surface was a flat deck, but the
+      // moment the entrance gained a sand ramp the probe buried the capsule in it and
+      // then reported "FALL-THROUGH" at every waypoint — on a wreck whose deck was
+      // fine. It was conflating "can't climb" with "no floor", which is not what this
+      // gate is for: it exists to prove a floor is THERE and the fit is right.
+      // castDown-following makes it measure that honestly. The 1.4m look-up cap keeps
+      // it from scaling a wall. Whether the ramp FEELS good to climb is a motion
+      // question a teleport probe cannot answer — that is for the human walk-test.
+      const CAPSULE_FOOT = 1.05;
       const walkTo = async (w) => {
         for (let i = 0; i < 240; i++) {
           const p = body.translation(); const dx = w.x - p.x, dz = w.z - p.z; const d = Math.hypot(dx, dz);
           if (d < 0.35) break; const s = Math.min(0.5, d);
-          body.setTranslation({ x: p.x + (dx / d) * s, y: p.y + 0.12, z: p.z + (dz / d) * s }, true);
+          const nx = p.x + (dx / d) * s, nz = p.z + (dz / d) * s;
+          const surf = g.castDown(nx, nz, p.y + 1.4, true);
+          const ny = surf ? Math.max(surf.hitY + CAPSULE_FOOT + 0.05, p.y - 1.5) : p.y + 0.12;
+          body.setTranslation({ x: nx, y: ny, z: nz }, true);
           body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(6);
         }
         await frames(30);
@@ -9088,7 +9128,12 @@ const SCENARIOS = {
     const wreck = await page.evaluate(() => {
       const ctx = window.__game.ctx;
       window.__game.setTime(0.34);                 // bright midday for a legible daytime brownout
-      ctx.three.renderer.toneMappingExposure = 1.35;
+      // review 2026-07-16 — was 1.35: the harness graded the storm at an exposure the game
+      // never ships (scene.ts sets 1.05). That matters more than it looks here — the sky dome
+      // is toneMapped:false while fogged geometry is tone-mapped, so exposure moves ONLY the
+      // fogged half of the image and the sky/ground match was being judged against a
+      // brightness the player never sees. Grade what ships.
+      ctx.three.renderer.toneMappingExposure = 1.05;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
@@ -9183,8 +9228,64 @@ const SCENARIOS = {
           ctx.three.renderer.render(ctx.three.scene, cam);
           const fog = ctx.three.scene.fog;
           const dw = w.dustWall;
+
+          // ── review 2026-07-16 — SILHOUETTE GATE (the reviewer's exact complaint:
+          //    "i can still see the outline of distant wrecks ... a yellow silhouette
+          //    against the sky no matter how far away it is").
+          //    A silhouette REQUIRES a value edge, so we measure one directly off the
+          //    framebuffer: sky above the horizon vs the fogged ground below it. At peak
+          //    they must converge — if they differ, EVERY distant object reads as a cutout.
+          //    Root cause this gate exists to catch: the sky dome is a raw ShaderMaterial
+          //    (three injects no <colorspace_fragment>, so it writes LINEAR bytes) while
+          //    fogged geometry is sRGB-encoded — the same hex rendered 69 RGB units apart.
+          //    Code inspection CANNOT see this; only pixels can. ──
+          let silhouette = null;
+          if (sh === 'peak') {
+            const gl = ctx.three.renderer.getContext();
+            const BW = gl.drawingBufferWidth, BH = gl.drawingBufferHeight;
+            const buf = new Uint8Array(BW * BH * 4);
+            gl.readPixels(0, 0, BW, BH, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+            const patch = (cx, cyTop) => {   // readPixels is bottom-left origin
+              let rr = 0, gg = 0, bb = 0, n = 0;
+              for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+                const x = Math.max(0, Math.min(BW - 1, cx + dx));
+                const y = Math.max(0, Math.min(BH - 1, BH - 1 - (cyTop + dy)));
+                const i = (y * BW + x) * 4;
+                rr += buf[i]; gg += buf[i + 1]; bb += buf[i + 2]; n++;
+              }
+              return [Math.round(rr / n), Math.round(gg / n), Math.round(bb / n)];
+            };
+            // Sample RELATIVE TO THE HORIZON, not to the frame. Fixed frame fractions are
+            // wrong: the peak camera aims up, so a "0.82" row lands on terrain ~3m from the
+            // player's boots — near-field, barely fogged, and inside the storm vignette. That
+            // measures the vignette, not the whiteout. Project a point at eye height far down
+            // the view axis to get the true horizon row, then straddle it: the ground sample
+            // must sit just below it (≳40m out ⇒ fully fogged at density 0.18), not at the feet.
+            const V = ctx.time.sunDir.constructor;
+            const fwd = new V();
+            cam.getWorldDirection(fwd);
+            const far = new V(
+              cam.position.x + fwd.x * 4000,
+              cam.position.y,                 // eye height ⇒ the true horizon
+              cam.position.z + fwd.z * 4000,
+            );
+            const ndc = far.clone().project(cam);
+            const horizonY = Math.round((-ndc.y * 0.5 + 0.5) * BH);
+            const midX = Math.round(BW / 2);
+            const skyY2 = Math.max(3, horizonY - 90);
+            const gndY2 = Math.min(BH - 4, horizonY + 22);
+            const skyRGB = patch(midX, skyY2);   // well above the horizon
+            const gndRGB = patch(midX, gndY2);   // fogged distant ground, just below it
+            const delta = Math.max(
+              Math.abs(skyRGB[0] - gndRGB[0]),
+              Math.abs(skyRGB[1] - gndRGB[1]),
+              Math.abs(skyRGB[2] - gndRGB[2]),
+            );
+            silhouette = { skyRGB, gndRGB, delta, horizonY, skyY: skyY2, gndY: gndY2, pass: delta <= 6 };
+          }
           return {
             shot: sh, yawDeg,
+            silhouette,
             intensity: +w.intensity.toFixed(3),
             pi: +w.perceivedIntensity.toFixed(3),
             fogDensity: fog ? +fog.density.toFixed(4) : null,
@@ -9203,6 +9304,23 @@ const SCENARIOS = {
         await page.waitForTimeout(120);
         await page.screenshot({ path: join(OUT, `scen-storm-${sh}${yv.tag ? '-yaw' + yv.tag : ''}.png`), fullPage: false });
         console.log(`[storm] ${JSON.stringify(r)}`);
+        // review 2026-07-16 — the peak whiteout is now a hard PASS/FAIL, not a vibe check.
+        if (r.silhouette) {
+          const s = r.silhouette;
+          console.log(
+            `[storm] SILHOUETTE GATE ${s.pass ? 'PASS' : 'FAIL'} — ` +
+            `sky=(${s.skyRGB}) ground=(${s.gndRGB}) delta=${s.delta} (must be <= 6)`,
+          );
+          if (!s.pass) {
+            console.log(
+              '[storm] FAIL: sky and fogged ground render different values at peak, so every ' +
+              'distant object silhouettes against the sky. Check the sky-dome colour-space ' +
+              'encode (sky.ts _stormDustSky) vs the fog colour — a raw ShaderMaterial gets no ' +
+              '<colorspace_fragment>, so the same hex renders ~69 RGB units apart.',
+            );
+            process.exitCode = 1;
+          }
+        }
       }
     }
   },
