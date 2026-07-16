@@ -151,11 +151,12 @@ and promotes the second.
 > - **✅ M11 — Retire legacy tube-wrecks COMPLETE** (cycle 23, D306): `ship` removed from the world-gen
 >   roulette (weight → the socket `derelict`; fallback retargeted) — 0/278 far-field POIs are tubes, by
 >   construction. The low-risk endpoint of the D227/D249 strategy (not the rewrite they rejected).
-> - **✅ M12 — New far-field biome COMPLETE** (cycle 24, D307): `ash_barren` — a rare regional-anchored
->   scorched-flats zone (dark charred ground + cinder mottle + a low flatten + a burned-industrial POI
->   mix), mirroring the wreck-yard regional anchor (own appended seed → yard byte-identical; far-field
->   only, ≥2600m from origin). Reads distinct from the light desert. Gate-clean. Residual: the dark
->   read could be pushed more dramatic (polish, flagged for the human review).
+> - **✅ M12 — New far-field biome COMPLETE** (cycle 24, D307): originally `ash_barren` — a rare
+>   regional-anchored scorched-flats zone (dark charred ground + cinder mottle + a low flatten + a
+>   burned-industrial POI mix), mirroring the wreck-yard regional anchor (own appended seed → yard
+>   byte-identical; far-field only, ≥2600m from origin). **⚠ SUPERSEDED: `ash_barren` was REPLACED by
+>   the `bone_field` biome (a titan graveyard with a colossal ribcage centerpiece) on 2026-07-14 —
+>   `ash_barren` no longer exists in the game.**
 >
 > **🏁 THE WHOLE M7-R→M12 QUEUE IS COMPLETE (cycles 14-24, one overnight, UNDER the 8.75M cap).**
 > Campaign `completed` (until-met). Awaiting Zach's morning walk-test + merge review — nothing pushed.

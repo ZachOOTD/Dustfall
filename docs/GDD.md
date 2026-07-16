@@ -229,6 +229,7 @@ these, stop, log to `backlog.md` as `[idea]`, and return to the
 current direction.
 
 - **Not an MMO / multiplayer.** Solo experience by design.
+  > *⚠ OPEN CONTRADICTION (flagged 2026-07-15): multiplayer (co-op) is now on the active idea list — see `docs/campaign/feedback-and-ideas-2026-07-15.md` §C and `docs/campaign/audit-and-roadmap-2026-07-15.md` C3. This anti-feature (and the "No MP planned" hard stop in §14, and "No multiplayer. No server." in §10) has NOT been resolved. Resolve deliberately via `/interview-vision` BEFORE any Phase-5 MP work — do not silently drift.*
 - **Not a base-builder primarily.** Tents + fires are placeable, but
   the game isn't "build a fortress" — it's "survive a hostile
   geography".

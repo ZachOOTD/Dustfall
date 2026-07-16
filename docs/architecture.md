@@ -11,7 +11,7 @@ Detailed file map, footguns, FPS-debug path, and full session history. CLAUDE.md
 
 ```
 src/
-  main.ts                 — orchestrator. ~130 lines. Builds ctx, registers per-frame tick.
+  main.ts                 — orchestrator. ~1080 lines. Builds ctx, registers per-frame tick.
   GameContext.ts          — the shared `ctx` type passed to every system.
   config/
     tuning.ts             — EVERY magic number. Don't sprinkle constants elsewhere.
@@ -30,8 +30,8 @@ src/
   world/
     terrain.ts            — simplex-noise heightmap mesh + Rapier heightfield collider, heightAt/normalAt
     sculpt.ts             — perturbOutward, tintByHeight (helpers for rocks)
-    landmarks.ts          — scatter loop. Rocks + trunks INSTANCED (4 + 3 templates × near/far). Wreckage + mesa are groups.
-    heroLandmarks.ts      — placeRibcage/TruckWreck/RadioTower/Obelisk + placeHeroLandmarks
+    rockScatter.ts        — instanced rock/scenery scatter (the old monolithic `landmarks.ts` was split out).
+    heroLandmarks.ts      — origin-region hero landmarks: placeRibcage/TruckWreck/RadioTower/Obelisk + placeHeroLandmarks.
     sky.ts                — sky-sphere shader + sun-disc sprite + horizon/top color blend
     weather.ts            — sandstorm state machine + Points particles
     waterSources.ts       — stone-ring + wooden-hatch wells; salt-flats biome ONLY (Session Z); refill canteens via E
@@ -40,6 +40,28 @@ src/
     fire.ts               — placeable fire (deployFire); flicker + fuelSeconds + shelter zone + cook/add_fuel interactions
     tent.ts               — placeable tent (deployTent); shelter zone + sleep interactable
     footprints.ts         — InstancedMesh decal pools (player + lizard). Canvas-drawn textures; per-instance opacity via onBeforeCompile shader patch; smoothstep fade over FOOTPRINT_LIFETIME_S.
+    -- Infinite-world / procgen (campaign "Infinite Sands", SAVE_VERSION 17) --
+    chunkManager.ts       — infinite streamed-world manager: anchor-margin chunk streaming, perf-sliced (hitch-free) generation, descriptor-pure determinism, sparse far-field persistence (`chunkDiffs` + `pickups.taken`). Gated by verify:chunks (determinism / leak / perf / skyfall-walk).
+    biomes.ts             — biome registry + `biomeAt()`: `dune / rocky / salt / wreck_yard / bone_field` (regional-anchored, far-field). NOTE: the short-lived `ash_barren` biome was REPLACED by `bone_field` on 2026-07-14 and no longer exists.
+    poiArchetypes.ts      — the procgen POI roulette: 15 entries in the `ARCHETYPES` registry (derelict, hollow_husk, crash_husk, enterable_wreck, satellite, wrecked_tank, debris_field, debris_trail, well, relay_mast, buried_pipeline, cargo_crawler, refinery_stack, hab_dome, transit_car) + biome-weighted `ARCH_WEIGHTS`. NOTE: `crash_husk` is forced-only (`landCrashAt`, not in ARCH_WEIGHTS); the legacy tube-`ship` was retired from the scatter (D306).
+    poiComponents.ts      — shared building-block parts (greebles, plates, struts) the archetypes compose from.
+    poiAssembler.ts       — assembles an archetype descriptor into meshes + colliders (collision matches geometry per rule 9).
+    procgenPoi.ts / procgenWreck.ts — procedural POI + wreck generators feeding the roulette.
+    wreckYard.ts          — the regional wreck-yard biome (dense wreck knot).
+    -- Streamed / fixed hero landmarks (region-grid kinds: colossal_ribcage / wreck_knot / skyfall_freighter) --
+    skyfallWreck.ts       — the enterable Skyfall hero freighter (~46m; hero exterior + walkable interior + salvage + crash-log journal). `FEATURES.skyfall` / `VITE_SKYFALL=0`. ~1000 lines.
+    leviathanLandmark.ts  — the fixed big-fin "leviathan" wreck; walkable hero interior + exact collision (`leviathan-walk` gate).
+    giantRibcage.ts       — the `bone_field` colossal ribcage centerpiece — a walk-under bone tunnel (redesigned 2026-07-15).
+    boneScatter.ts        — scattered weathered-bone debris dressing the bone_field biome.
+    wormHorizonCrossing.ts — the distant sandworm-crossing horizon spectacle (silhouette color tuned 2026-07-15).
+    crashLog.ts           — the pilot's crash-log journal content (Skyfall).
+    -- Other world systems --
+    deepCave.ts           — the single deep-cave chamber (the companion egg's home; D255).
+    speeder.ts            — hover speeder vehicle (mount, chase cam, seated rig).
+    sled.ts               — placeable scrap sled + inextensible tow rope (deploySled; `FEATURES.rideableSled` exists but is INERT — zero code readers, the ride mechanic is unbuilt).
+    salvage.ts            — salvage-panel pry → per-component extract; condition tiers; WYSIWYG depletion.
+    dustWall.ts           — the approaching dustwall / haboob storm wall (2026-07-15 storm overhaul).
+    (Material shaders: metalMaterial / fabricMaterial / woodGrainMaterial / boneMaterial / glassMaterial / stoneMaterial / paintMaterial / skinMaterial / concreteMaterial / terrainMaterial / hullMaterial — procedural, D107 zero-asset.)
   assets/
     loader.ts             — GLTFLoader wrapper + SkeletonUtils.clone (for future rigged assets)
     manifest.ts           — typed list of asset URLs (empty registry tolerated; primitive fallback)
@@ -52,7 +74,7 @@ src/
     survival.ts           — thirst/two-way-temperature/hunger/health drain, shelter modifier, storm modifier, die() (stamina ticks in controller.ts)
   inventory/
     types.ts              — ItemId/ItemDef/Slot+meta/InventoryState{slots,backpack,selectedIdx,hover}/HoverState{type,promptNoun}/InteractType (cook/add_fuel/sleep/relight added)/ItemMeta{fillLevel,cookState}
-    items.ts              — 12 items: canteen, scrap, bandage, machete, cactus_pulp, cooked_cactus_pulp, raw_lizard_meat, cooked_lizard_meat, branch, cloth, fire_kit, tent_kit. onUse(ctx, slot). fire_kit/tent_kit onUse spawns the entity.
+    items.ts              — 44 registered items (the `ItemId` union in types.ts + the `_DEFS` registry — count verified 2026-07-16). Consumables (canteen, cactus_pulp/cooked, raw/cooked lizard/shrew/vulture/worm meat, alien_fruit, relic_core), materials (scrap, branch, cloth, rope, scrap_bullet), weapons/tools (machete, scrap_machete, scrap_bar, pipe_staff, scrap_gun, amban_rifle, pulse_rifle, energy_pistol, torch, flashlight, spyglass, worm_lure), and placeable kits (fire_kit, signal_kit, tent_kit, large_tent_kit, sled_kit, bedroll_kit, lantern_kit, locker_kit, grill_kit, stake_kit, companion_pod). onUse(ctx, slot). kit onUse spawns the entity.
     inventory.ts          — addItem (auto-overflows to backpack; returns 100+i for backpack slots), countItems / removeItems (walk both arrays; skip slots w/ meta), useSelected → onUse(ctx,slot), dropSelected (G), don't auto-stack with meta, hotbar 1-4/wheel/Q + C (craft) + I (inv overlay) + G (drop)
   pickups/
     pickups.ts            — spawnCanteens, spawnBranches, spawnDroppedPickup (generic — reuses item makeViewModel scaled 1.5×), bobPickups (sin Y), findPickupById, despawnPickup
@@ -72,7 +94,7 @@ src/
     menus.ts              — start overlay extras + pause overlay + settings panel + localStorage; exports resumeFromPause for lootMenu / sleepOverlay / craftingMenu / inventoryOverlay
     lootMenu.ts           — overlay shown when player searches a loot container; clickable item rows; pauses game while open
     sleepOverlay.ts       — choose 4h/8h sleep; advances dayTime + applies stat scale + wraps day counter
-    craftingMenu.ts       — C key; 3 recipes (bandage / fire_kit / tent_kit); 1s rAF progress bar; ingredients consumed only on completion
+    craftingMenu.ts       — C key; renders the 20 recipes from `inventory/recipeDiscovery.ts` (`RECIPES`, ids 1-20) as a card grid with cold / warm-tease / unlocked states (pickup-gated discovery, D277); 1s rAF progress bar; ingredients consumed only on completion
     inventoryOverlay.ts   — I key; hotbar + 10-slot backpack grids; click-then-click swap between any two slots
     perfHud.ts            — dev-only F1 overlay (FPS / draws / tris / GPU ms / CPU ms / frame)
     tutorial.ts           — first-boot controls panel + H-key reopen + per-item pickup hints (localStorage `dustfall.tutorial.v1`)
