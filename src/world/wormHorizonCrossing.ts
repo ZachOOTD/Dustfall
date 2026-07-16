@@ -36,7 +36,7 @@ let _c: Crossing | null = null;
 // sun-catching facets read as crystalline rock + only ~20 lum below the sand). MeshBasic
 // = no light response → no bright facets, a clean dark shape that pops vs the warm sand
 // at ANY distance (fog:false so it doesn't haze away at the in-play 430-850m range).
-const HIDE = new THREE.MeshBasicMaterial({ color: 0x6b5e4c, fog: false, toneMapped: false });
+const HIDE = new THREE.MeshBasicMaterial({ color: 0x8c7c64, fog: false, toneMapped: false });
 
 /** Build the (hidden) dorsal-ridge humps once, at boot. */
 export function initWormHorizonCrossing(scene: THREE.Scene): void {

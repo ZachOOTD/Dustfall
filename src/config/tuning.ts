@@ -865,7 +865,11 @@ export const Tuning = {
   WORM_CROSSING_WAVE_AMP: 18,        // m — lateral body undulation (a clear serpentine S)
   WORM_CROSSING_UNDULATE_SPEED: 1.1, // body-wave rate
   WORM_CROSSING_CREST: 6.5,          // m — dorsal crest height above the sand (a massive proud back)
-  WORM_CROSSING_BURY: 1.5,           // m — base sink (the body is mostly under the sand)
+  WORM_CROSSING_BURY: 2.5,           // m — base sink. Review 2026-07-15: was 1.5 — the humps rode
+                                     // proud and read as FLOATING ON TOP of the sand. 2.5 drops the
+                                     // hump centres ~1m so the lower body sits UNDER the terrain and
+                                     // the dorsal crest breaks the surface (rides THROUGH the dunes).
+                                     // (3.5 over-sank it — the ridge nearly vanished at range.)
   PLANET_DISTANCE: 420,
   PLANET_SIZE: 14,
   // Fixed direction: low on the eastern horizon (azimuth ~+X, elev ~0.18)
