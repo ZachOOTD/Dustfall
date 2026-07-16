@@ -2549,6 +2549,30 @@ const SCENARIOS = {
       cam.lookAt(${info.cx}, ${gy} + 1.2, ${info.cz});
       cam.updateMatrixWorld(true);
     })()`);
+    // (7) FLANK-CLOSE — the RIB-GAUGE + DECAY read the far shots can't give: a
+    //     player-eye stand ~16m off the flank at the tall mid-section. This is the
+    //     frame that answers "are the bones too chunky / too thin?" and "do the
+    //     snapped stumps + the halves lying beside them read as a weathered
+    //     carcass?" (the 70m broadside renders a 77×8m carcass as a thin band).
+    await shot('flankclose', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * 16 - ${info.fwd.x} * ${L * 0.16};
+      const fz = ${info.cz} + ${side.z} * 16 - ${info.fwd.z} * ${L * 0.16};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx}, ${gy} + 3.2, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (8) FALLEN-CLOSE — a 9m player-eye read of the sand OUTBOARD of the rib feet,
+    //     where the snapped-off halves came to rest: are they resting IN the sand
+    //     (part-buried, not floating), and does a fallen half pair up with a stump?
+    await shot('fallenclose', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * 19 + ${info.fwd.x} * ${L * 0.1};
+      const fz = ${info.cz} + ${side.z} * 19 + ${info.fwd.z} * ${L * 0.1};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.6, fz);
+      cam.lookAt(${info.cx} + ${side.x} * 6, ${gy} + 0.4, ${info.cz} + ${side.z} * 6);
+      cam.updateMatrixWorld(true);
+    })()`);
     // (DIAG) Isolate the ribcage — hide every OTHER scene child so only the
     //   ribcage renders. Any bone still visible in the other shots but GONE here
     //   is a separate boneScatter decoration, not a ribcage floater.

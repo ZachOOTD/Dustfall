@@ -13,11 +13,20 @@
 //   2. DORSAL NEURAL SPINES — solid bony blades/spikes with real 3D thickness,
 //      pointing UP off the ridge along its length (tallest over the crown ~16m).
 //   3. RIBS hanging DOWN + OUT from each spine vertebra on BOTH sides, curving to
-//      plant their tips in the SAND — forming walk-under ARCHES. THICK at the
-//      spine (base tube r ~1.3), tapering toward the buried tip. Adjacent arches
-//      form a continuous colonnade → a walkable TUNNEL down the centre aisle,
-//      clearance well over player height. ~13-16 rib pairs; ~15% broken/missing
-//      (a decayed carcass) + a few fallen rib fragments resting on the sand.
+//      plant their tips in the SAND — forming walk-under ARCHES. SUBSTANTIAL but
+//      not chunky at the spine (base tube r ~1.06 × envelope), tapering to a still-
+//      fat buried tip (~0.38). The radius has HISTORY: r~0.82 read as "thin curved
+//      spikes / tusks" (rejected), r~1.34 read as "too chunky and wide" (rejected) —
+//      1.06→0.38 is the middle: slim, never spiky. Adjacent arches form a
+//      colonnade → a walkable TUNNEL down the centre aisle, clearance well over
+//      player height.
+//   3b. DECAY — this carcass has been weathering for YEARS, so the cage must NOT
+//      read intact: ~17% of ribs are missing entirely and ~41% are SNAPPED, with
+//      the break sampled by HEIGHT ABOVE THE SAND across the whole visible arc
+//      (low stubs near the sand ↔ high snaps just under the crown). Every snapped
+//      rib's broken-off lower half is re-laid ON THE SAND beside its own stump
+//      (`layFallen`), part-buried at a tumble angle — "that broke off and fell
+//      here". Plus loose fragments + vertebra drums scattered around the base.
 //   4. NO skull, NO tail (both removed per the reviewer).
 //   5. Half-buried — rib tips + the spine's dipping ends sink below the local sand.
 //
@@ -71,6 +80,22 @@ _ribBone.emissiveIntensity = 0.36;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+// ── BONE GAUGE (reviewer-tuned, and the tuning has history — do not overshoot in
+//    either direction). Ribs: r ~0.82 base → "thin curved spikes / tusks" (REJECTED);
+//    r ~1.34 base → "too chunky and wide" (REJECTED). These are the middle: a rib is
+//    a substantial curved BONE, ~2.1m across at the spine, slimming to a still-blunt
+//    ~0.76m across at the buried tip. The spine tube slims in step so the ridge keeps
+//    its relative mass without reading as a pipeline. ──
+const RIB_R_BASE = 1.00;   // rib tube radius at the spine attach (× the size envelope)
+const RIB_R_TIP = 0.36;    // rib tube radius at the buried tip (× the size envelope)
+const SPINE_R0 = 0.60;     // backbone radius at the buried ends
+const SPINE_R1 = 0.36;     // + this × envelope at the crown (→ 0.96 max)
+
+// ── DECAY RATES — a carcass that has sat weathering for YEARS, not a fresh cage
+//    (reviewer: "too intact"). Rolled per rib SIDE, so the colonnade is asymmetric. ──
+const RIB_MISSING = 0.17;  // decay roll below this → the rib is gone entirely (~17%)
+const RIB_SNAPPED = 0.58;  // ...below this → the rib is SNAPPED (~41%); the rest intact
+
 interface ColliderDesc {
   center: THREE.Vector3;   // ribcage-local
   half: { x: number; y: number; z: number };
@@ -113,7 +138,9 @@ function boneMesh(geo: THREE.BufferGeometry): THREE.Mesh {
 //    at both ends (a broken rib leaves its terminal radius fat → a real snapped
 //    cross-section, never a knife edge). Carries UVs so it MERGES into the bone
 //    bucket (one draw call). ──
-function sweptTube(pts: THREE.Vector3[], radii: number[], radial: number): THREE.BufferGeometry {
+function sweptTube(
+  pts: THREE.Vector3[], radii: number[], radial: number, wobble = 0.06,
+): THREE.BufferGeometry {
   const n = pts.length;
   const tangents: THREE.Vector3[] = [];
   for (let i = 0; i < n; i++) {
@@ -141,10 +168,17 @@ function sweptTube(pts: THREE.Vector3[], radii: number[], radial: number): THREE
     for (let j = 0; j <= radial; j++) {
       const a = (j / radial) * Math.PI * 2;
       const c = Math.cos(a), s = Math.sin(a);
+      // Deterministic surface WOBBLE — a perfectly circular constant-section sweep
+      // reads as an extruded PIPE, which is most of why the ribs read "chunky" even at
+      // an honest bone gauge. This lumps the section by a few percent so it reads as a
+      // weathered organic shaft. Both terms are periodic in `a` (2a / 3a), so the ring
+      // still closes exactly at j=0 ≡ j=radial — a non-periodic wobble would split the
+      // seam open and hand `openend` a boundary loop.
+      const rw = r * (1 + wobble * (0.62 * Math.sin(i * 1.9 + 2 * a) + 0.38 * Math.sin(i * 0.7 - 3 * a)));
       positions.push(
-        pts[i].x + (normal.x * c + B.x * s) * r,
-        pts[i].y + (normal.y * c + B.y * s) * r,
-        pts[i].z + (normal.z * c + B.z * s) * r,
+        pts[i].x + (normal.x * c + B.x * s) * rw,
+        pts[i].y + (normal.y * c + B.y * s) * rw,
+        pts[i].z + (normal.z * c + B.z * s) * rw,
       );
       uvs.push(i / (n - 1), j / radial);
     }
@@ -162,13 +196,27 @@ function sweptTube(pts: THREE.Vector3[], radii: number[], radial: number): THREE
       indices.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
-  // End caps — fan each terminal ring to a centre vertex (both ends CLOSED).
+  // End caps — fan each terminal ring to a centre vertex (both ends CLOSED). The
+  // centre vertex is pushed OUT along the tangent by DOME × r, so a terminal ring is
+  // a shallow blunt DOME rather than a flat disc: a flat disc cap on a fat snapped
+  // radius reads as a sawn-off PIPE end, while a years-weathered bone break is fat
+  // but rounded off. Still fully closed (no boundary edges → `openend` stays clean)
+  // and still a FAT cross-section (no knife edge, no taper-to-nothing).
+  const DOME = 0.42;
   const baseC = positions.length / 3;
-  positions.push(pts[0].x, pts[0].y, pts[0].z); uvs.push(0, 0.5);
+  positions.push(
+    pts[0].x - tangents[0].x * radii[0] * DOME,
+    pts[0].y - tangents[0].y * radii[0] * DOME,
+    pts[0].z - tangents[0].z * radii[0] * DOME,
+  ); uvs.push(0, 0.5);
   for (let j = 0; j < radial; j++) indices.push(baseC, j + 1, j);
   const tipC = positions.length / 3;
   const last = (n - 1) * stride;
-  positions.push(pts[n - 1].x, pts[n - 1].y, pts[n - 1].z); uvs.push(1, 0.5);
+  positions.push(
+    pts[n - 1].x + tangents[n - 1].x * radii[n - 1] * DOME,
+    pts[n - 1].y + tangents[n - 1].y * radii[n - 1] * DOME,
+    pts[n - 1].z + tangents[n - 1].z * radii[n - 1] * DOME,
+  ); uvs.push(1, 0.5);
   for (let j = 0; j < radial; j++) indices.push(tipC, last + j, last + j + 1);
 
   const geo = new THREE.BufferGeometry();
@@ -230,6 +278,72 @@ export function makeGiantRibcage(
   const colliders: ColliderDesc[] = [];
   let maxHeight = 0;
 
+  // ── Box ONE sub-run (index a..b) of a swept tube as an oriented box collider
+  //    (rule 9 — collision tracks the visible tube; `rr` is the tube radius +
+  //    padding, so a thinner rib automatically yields a thinner collider). ──
+  const boxRun = (pts: THREE.Vector3[], rr: number, a: number, b: number): void => {
+    const pa = pts[a], pb = pts[b];
+    const mid = pa.clone().add(pb).multiplyScalar(0.5);
+    const dir = new THREE.Vector3().subVectors(pb, pa);
+    const len = dir.length();
+    if (len < 0.2) return;
+    dir.normalize();
+    const quat = new THREE.Quaternion().setFromUnitVectors(UP, dir);
+    colliders.push({ center: mid, half: { x: rr, y: len * 0.5 + rr, z: rr }, quat });
+  };
+
+  // ── LAY A SNAPPED-OFF PIECE ON THE SAND — the reviewer's specific ask: when a rib
+  //    breaks, its broken-off half must be lying right there beside the stump.
+  //    `run` is the parent rib's DISCARDED points (break → old tip, ribcage-local) and
+  //    `runRad` its matching radii, so the fallen piece is literally the bone that left
+  //    the stump: same arc, same taper, same FAT snapped cross-section at the break.
+  //    We flatten the parent's 3D arc into (u = along its chord, v = its lateral bow),
+  //    then re-lay that 2D bone on the dune at a tumble `yaw`/`roll`. Every sample is
+  //    TERRAIN-CONFORMED — y = the real local ground + ~0.45r, minus a `bury` ramp that
+  //    digs the far end in — so a fallen piece can never float over a dune dip and
+  //    always reads as part-buried in the sand. ──
+  const layFallen = (
+    run: THREE.Vector3[], runRad: number[],
+    ox: number, oz: number, yaw: number, roll: number, bury: number,
+  ): { pts: THREE.Vector3[]; rad: number[] } | null => {
+    const n = run.length;
+    if (n < 3) return null;
+    const c0 = run[0];
+    const chord = new THREE.Vector3().subVectors(run[n - 1], c0);
+    const chordLen = chord.length();
+    if (chordLen < 1.2) return null;                 // too stubby to read as a fallen bone
+    const dir = chord.clone().divideScalar(chordLen);
+    // Reference perpendicular = the direction of the arc's largest deviation from its
+    // chord → laying the bone flat preserves its natural bow instead of straightening it.
+    const tmp = new THREE.Vector3(), perp = new THREE.Vector3();
+    let bow = 0;
+    for (let k = 1; k < n - 1; k++) {
+      tmp.subVectors(run[k], c0).addScaledVector(dir, -tmp.dot(dir));
+      if (tmp.length() > bow) { bow = tmp.length(); perp.copy(tmp); }
+    }
+    if (bow > 1e-3) perp.normalize();
+    const fxh = Math.cos(yaw), fzh = Math.sin(yaw);  // horizontal along-axis
+    const pxh = -Math.sin(yaw), pzh = Math.cos(yaw); // horizontal lateral
+    const cr = Math.cos(roll), sr = Math.sin(roll);
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k < n; k++) {
+      tmp.subVectors(run[k], c0);
+      const u = tmp.dot(dir);
+      const v = bow > 1e-3 ? tmp.dot(perp) : 0;
+      const wx = ox + fxh * u + pxh * v * cr;
+      const wz = oz + fzh * u + pzh * v * cr;
+      const lg = localGroundAt(wx, wz);
+      // The tube's AXIS sits ~0.3r above the local sand → the shaft is drifted over to
+      // roughly a third of its diameter: it still READS as a long curved bone (r1 laid
+      // them fully on the surface → "smooth sausages"; sinking to the midline over-
+      // corrected → they read as boulders), while the `bury` ramp drives the far end
+      // progressively under the dune. The bottom of the tube is always below the sand,
+      // so a fallen piece can never trip the `floating` detector.
+      pts.push(new THREE.Vector3(wx, lg + runRad[k] * 0.3 - bury * (u / chordLen) + v * sr * 0.45, wz));
+    }
+    return { pts, rad: runRad.slice() };
+  };
+
   // ── The arched BACKBONE — one continuous swept tube along the ridge (crown
   //    overhead, ends diving to bury). Fat mid, tapering toward the buried ends. ──
   {
@@ -241,7 +355,7 @@ export function makeGiantRibcage(
       const xx = t * sHalf;
       const lg = localGroundAt(xx, 0);
       spinePts.push(new THREE.Vector3(xx, lg + spineArch(t), 0));
-      spineRadii.push(0.72 + 0.42 * env(t));
+      spineRadii.push(SPINE_R0 + SPINE_R1 * env(t));
     }
     group.add(boneMesh(sweptTube(spinePts, spineRadii, 12)));
 
@@ -276,22 +390,19 @@ export function makeGiantRibcage(
   }
 
   // ── Per-station loop: vertebra ring + dorsal blade + a rib hanging down each side. ──
-  const _q = new THREE.Quaternion();
   for (let i = 0; i < ribPairs; i++) {
     const t = (i / (ribPairs - 1)) * 2 - 1;        // −1..1 end→end
     const x = t * sHalf;
     const e = env(t);
     const lgC = localGroundAt(x, 0);
     const spineY = lgC + spineArch(t);             // this vertebra's height overhead
-    const spineR = 0.72 + 0.42 * e;
+    const spineR = SPINE_R0 + SPINE_R1 * e;
     // Ridge slope here (for tilting the vertebra ring + blade to follow the arch).
     const slope = (-2 * t * (crownH + endBury)) / sHalf;
     const archAng = Math.atan(slope);
 
     // Per-station decay rolls (fixed draw count → deterministic).
     const decayL = rand(), decayR = rand();
-    const brokenFracL = 0.56 + rand() * 0.28;   // keep MOST of the rib (broken near the buried tip, not a high stub)
-    const brokenFracR = 0.56 + rand() * 0.28;
     const ringSkew = rand();
 
     // Vertebra RING — a torus girdling the backbone (reads as a segmented drum),
@@ -315,12 +426,28 @@ export function makeGiantRibcage(
     const footZ = footZ0 * (0.6 + 0.4 * e);        // tunnel narrows toward the ends
     for (const side of [-1, 1] as const) {
       const decay = side < 0 ? decayL : decayR;
-      if (decay < 0.09) continue;                  // ~9% missing (asymmetric)
-      const broken = decay < 0.3;                  // ~21% snapped short
+      // FIXED per-side RNG budget (procgen-seed-stability): every roll is drawn for
+      // every side, whether or not this rib survives / snaps — so the stream can't
+      // shift when a decay branch flips.
+      const lean = (rand() - 0.5) * 1.9;           // per-rib fore/aft jitter (breaks the parallel-pillar side-read)
+      const breakRoll = rand();                    // WHERE it snapped (0 = low by the sand, 1 = high under the crown)
+      const fallYawJit = (rand() - 0.5) * 1.4;     // tumble heading of the fallen half
+      const fallOut = 0.5 + rand() * 2.2;          // how far outboard of the old foot it came to rest
+      const fallSlide = (rand() - 0.5) * 3.2;      // ...and how far it slid along the spine axis
+      const fallRoll = (rand() - 0.5) * 1.7;       // roll of the bone's bow as it lies
+      const fallBury = 0.4 + rand() * 0.9;         // how deep the far end dug into the dune
+      const fallSplit = rand();                    // where a long fallen half broke AGAIN
+      const fallYaw2 = (rand() - 0.5) * 2.4;       // ...and how the second piece tumbled off
+      const fallOut2 = rand() * 2.6;
+      const fallSlide2 = (rand() - 0.5) * 4.0;
+      const fallRoll2 = (rand() - 0.5) * 1.7;
+      if (decay < RIB_MISSING) continue;           // gone entirely (asymmetric — real gaps in the colonnade)
       const lgB = localGroundAt(x, side * footZ);  // ground under this rib's foot
       const G = lgB - ribBury;                     // buried tip Y
       const V = spineY - G;                         // vertical span of the rib
-      const lean = (rand() - 0.5) * 1.9;           // per-rib fore/aft jitter (breaks the parallel-pillar side-read)
+      const aboveH = spineY - lgB;                 // this rib's VISIBLE height above the sand
+      // Snapped? Short flank ribs stay whole — there's no visible arc to break.
+      const broken = decay < RIB_SNAPPED && aboveH > 2.4;
       // Fore/aft RAKE — the rib's tip sweeps along X as it descends (crown ribs
       // near-vertical, flank ribs fanning toward the ends). Turns the flat "row of
       // vertical legs" side-read into a barrel RIBCAGE that reads as curved ribs.
@@ -342,18 +469,75 @@ export function makeGiantRibcage(
       ];
       const curve = new THREE.CatmullRomCurve3(cps);
       const SAMP = 26;
-      let full = curve.getPoints(SAMP);
-      // FAT at the spine, tapering to a still-chunky buried tip (never a needle).
+      const fullAll = curve.getPoints(SAMP);
+      // Substantial at the spine, tapering to a still-blunt buried tip (never a needle,
+      // never a tusk — see the RIB_R_* history note).
       const radiusAt = (u: number): number =>
-        THREE.MathUtils.lerp(1.34, 0.5, Math.pow(u, 0.7)) * (0.82 + 0.18 * e);
-      let radii = full.map((_, k) => radiusAt(k / (full.length - 1)));
+        THREE.MathUtils.lerp(RIB_R_BASE, RIB_R_TIP, Math.pow(u, 0.7)) * (0.82 + 0.18 * e);
+      const radAll = fullAll.map((_, k) => radiusAt(k / (fullAll.length - 1)));
+      let full = fullAll, radii = radAll.slice();
       if (broken) {
-        // Snap the rib short partway DOWN (its lower/outer run gone), leaving a
-        // FAT broken cross-section mid-air (a real snapped bone, not a taper).
-        const cut = Math.max(6, Math.round(full.length * (side < 0 ? brokenFracL : brokenFracR)));
-        full = full.slice(0, cut);
-        radii = radii.slice(0, cut);
-        radii[radii.length - 1] = radiusAt((cut - 1) / SAMP) * 0.92;
+        // WHERE it snapped — sampled as a HEIGHT ABOVE THE SAND spanning the rib's whole
+        // visible arc: 1.1m (a low break, most of the arch still standing) up to
+        // aboveH−0.9 (snapped high, only a nub left under the crown). Two things matter
+        // here and BOTH were wrong before:
+        //  • The old build cut on a raw ARC-FRACTION (0.56-0.84 of the curve), which
+        //    parked nearly every break down in the BURIED tip — invisible. That, not the
+        //    rate, is why a "21% snapped" cage still read INTACT.
+        //  • The 1.1m floor: a break any lower leaves the rib all but touching the sand
+        //    and reads intact at a glance. Every break now clears a visible gap.
+        // pow(·,0.85) leans the spread mildly toward the higher, more obvious snaps.
+        const bh = 1.1 + Math.pow(breakRoll, 0.85) * Math.max(0.4, aboveH - 2.0);
+        let cut = fullAll.length;
+        for (let k = 0; k < fullAll.length; k++) {
+          if (fullAll[k].y < lgB + bh) { cut = k; break; }   // pts run spine → tip
+        }
+        cut = THREE.MathUtils.clamp(cut, 3, fullAll.length - 3);
+        full = fullAll.slice(0, cut);
+        radii = radAll.slice(0, cut);
+        // The snapped face keeps the tube's FULL local radius (×0.96) → sweptTube's end
+        // cap fans a FAT blunt cross-section, a real broken bone, never a knife edge.
+        radii[radii.length - 1] = radAll[cut - 1] * 0.96;
+
+        // ── ...and the piece that broke OFF is lying RIGHT THERE beside its stump —
+        //    the reviewer's specific ask. The fallen bone is literally the rib's own
+        //    discarded run (same arc, same taper, same snapped face), re-laid outboard
+        //    of where its foot used to plant. ──
+        const runAll = fullAll.slice(cut - 1);
+        const rradAll = radAll.slice(cut - 1);
+        rradAll[0] = radAll[cut - 1] * 0.96;                // matching snapped face
+        // Years of weathering rarely leave the fallen half in ONE clean piece: a long
+        // one has broken AGAIN where it hit, so it lies as two tumbled-apart pieces.
+        const runs: { p: THREE.Vector3[]; r: number[] }[] = [];
+        if (runAll[0].distanceTo(runAll[runAll.length - 1]) > 9 && runAll.length >= 8) {
+          const m = Math.round(runAll.length * (0.4 + fallSplit * 0.24));
+          runs.push({ p: runAll.slice(0, m), r: rradAll.slice(0, m) });
+          runs.push({ p: runAll.slice(m - 1), r: rradAll.slice(m - 1) });
+        } else runs.push({ p: runAll, r: rradAll });
+        const outYaw = side > 0 ? Math.PI / 2 : -Math.PI / 2;   // radiating away from the cage
+        for (let s = 0; s < runs.length; s++) {
+          const second = s > 0;
+          const laid = layFallen(
+            runs[s].p, runs[s].r,
+            x + rake + fallSlide + (second ? fallSlide2 : 0),           // near the old foot
+            side * (footZ + fallOut + (second ? 3.2 + fallOut2 : 0)),   // OUTBOARD — the aisle stays clear
+            outYaw + fallYawJit + (second ? fallYaw2 : 0),
+            second ? fallRoll2 : fallRoll, fallBury,
+          );
+          if (!laid) continue;
+          group.add(boneMesh(sweptTube(laid.pts, laid.rad, 8)));
+          // Rule 9: a fallen half-rib is a chunky knee/waist-high obstacle out on the
+          // flank, not scatter gravel — box its run. (Small tip shards stay decoration,
+          // per the scatter-rock rule.)
+          if (laid.rad[0] > 0.5) {
+            const nb = laid.pts.length >= 12 ? 2 : 1;
+            for (let b0 = 0; b0 < nb; b0++) {
+              const a = Math.floor((b0 * (laid.pts.length - 1)) / nb);
+              const b = Math.floor(((b0 + 1) * (laid.pts.length - 1)) / nb);
+              boxRun(laid.pts, laid.rad[Math.floor((a + b) / 2)] + 0.2, a, b);
+            }
+          }
+        }
       }
       group.add(boneMesh(sweptTube(full, radii, 9)));
       maxHeight = Math.max(maxHeight, full[0].y - lgB);
@@ -371,15 +555,8 @@ export function makeGiantRibcage(
         for (let s = 0; s < nBox; s++) {
           const a = band[Math.floor((s * band.length) / nBox)];
           const b = band[Math.min(band.length - 1, Math.floor(((s + 1) * band.length) / nBox) - 1)];
-          const pa = full[a], pb = full[b];
-          const mid = pa.clone().add(pb).multiplyScalar(0.5);
-          const dir = new THREE.Vector3().subVectors(pb, pa);
-          const len = dir.length();
-          if (len < 0.2) continue;
-          dir.normalize();
-          const quat = _q.clone().setFromUnitVectors(UP, dir);
-          const rr = radiusAt((0.5 * (a + b)) / SAMP) + 0.28;
-          colliders.push({ center: mid, half: { x: rr, y: len * 0.5 + rr, z: rr }, quat: quat.clone() });
+          // rr tracks the (now thinner) tube radius → collision follows the visible rib.
+          boxRun(full, radiusAt((0.5 * (a + b)) / SAMP) + 0.25, a, b);
         }
       }
     }
