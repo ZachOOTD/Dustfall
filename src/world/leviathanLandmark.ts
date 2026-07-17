@@ -26,7 +26,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { makeRng } from '../core/rng.ts';
-import { makeLoftedHull, makeFormerRings, makeSandMound, mergeStaticByMaterial, SHIP_SECTION, type LoftStation, type HullCut } from './wreckForms.ts';   // PERF (2026-07-05 profile #2) — static-merge the landmark into per-material draws
+import { makeLoftedHull, makeFormerRings, mergeStaticByMaterial, SHIP_SECTION, type LoftStation, type HullCut } from './wreckForms.ts';   // PERF (2026-07-05 profile #2) — static-merge the landmark into per-material draws
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { makeStaticBox, makeStaticTrimesh } from '../physics/bodies.ts';
@@ -46,7 +46,6 @@ const LANDMARK_Z = 106;
 //    Sized MONUMENTAL — it is read at ~365m, so it must dominate the horizon (R2:
 //    a fin read as too small; the long hull must present broadside + rise clear of
 //    the horizon line, with the reared prow the tall peak).
-const HULL_LEN = 128;         // stem-to-stern span of the two masses
 const HULL_HALF_W = 11.0;     // beam half-width at the fat midships
 const HULL_HALF_H = 11.0;     // hull half-height at midships
 // Yaw that presents the long hull BROADSIDE to the step-out gaze (~(-0.949,+0.315)):
@@ -282,7 +281,6 @@ function makeLevSite(terrain: Terrain): LevSite {
 }
 
 let _group: THREE.Group | null = null;
-let _drift: THREE.Mesh | null = null;
 let _bodies: RAPIER.RigidBody[] = [];
 let _salvage: Salvageable[] = [];
 // Interior lights are proximity-gated through the shared pool: the leviathan is a
@@ -416,7 +414,7 @@ function refineStations(stations: LoftStation[], maxStep: number, zMax: number):
 
 /** Build the leviathan mesh in LOCAL space (long-axis +Z, y=0 = keel-ish),
  *  BEFORE the world tilt/burial transform is applied by placeLeviathanLandmark. */
-function buildLeviathanMesh(rand: () => number, site: LevSite): THREE.Group {
+function buildLeviathanMesh(rand: () => number, site: LevSite, terrain: Terrain): THREE.Group {
   const g = new THREE.Group();
 
   // ── AFT MASS — the bulk of the hull: a LONG low body lying broadside (the "beached
@@ -543,7 +541,7 @@ function buildLeviathanMesh(rand: () => number, site: LevSite): THREE.Group {
   //    the decoration-tag + merge so every interior surface folds into the shared
   //    per-material draws. Colliders + salvage/journal are added post-transform in
   //    placeLeviathanLandmark (they need the world pose). ─────────────────────
-  buildLeviathanInterior(g, site);
+  buildLeviathanInterior(g, site, terrain);
 
   // Mark ALL of it as decoration / noCollider (structural collision is the
   // exterior-hull trimesh + the interior box set, both added in place()). The
@@ -568,7 +566,7 @@ function buildLeviathanMesh(rand: () => number, site: LevSite): THREE.Group {
  *  group). NO colliders here — they need the world pose (added in place()).
  *  Deterministic layout (a fixed monument). Rule 7: every surface is a solid box
  *  with real thickness; no single-sided flats. */
-function buildLeviathanInterior(g: THREE.Group, site: LevSite): void {
+function buildLeviathanInterior(g: THREE.Group, site: LevSite, terrain: Terrain): void {
   _lightConfigs = [];   // (re)collect the interior light configs for this build
   const dBox = (
     mat: THREE.Material, w: number, h: number, d: number,
@@ -784,8 +782,31 @@ function buildLeviathanInterior(g: THREE.Group, site: LevSite): void {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       geo.computeVertexNormals();
-      const driftMesh = new THREE.Mesh(geo, _sandDriftMat);
+      // TERRAIN-MATCH (Zach 2026-07-17): render the drift with the ground's OWN
+      // shared material + per-vertex biome color/raw sampled at each vertex's
+      // WORLD position, so the entrance bank is indistinguishable from the dune
+      // it rises out of (the old flat-ochre _sandDriftMat read as a pasted-on
+      // mound). site.matrix == the group's world matrix, so the world XZ sampled
+      // here is exactly what the terrain shader recomputes at render — the FBM
+      // grain/ripple/streak/slope detail lines up with the surrounding sand, and
+      // the color picks up THIS site's biome (not a global average). The mesh is
+      // tagged noMerge because mergeStaticByMaterial strips every attribute but
+      // position/normal/uv, which would gut the color/aBiomeRaw the shader needs.
+      const vCount = pos.length / 3;
+      const colAttr = new Float32Array(vCount * 3);
+      const rawAttr = new Float32Array(vCount);
+      const _wv = new THREE.Vector3();
+      for (let vi = 0; vi < vCount; vi++) {
+        _wv.set(pos[vi * 3], pos[vi * 3 + 1], pos[vi * 3 + 2]).applyMatrix4(site.matrix);
+        const s = terrain.groundSample(_wv.x, _wv.z);
+        colAttr[vi * 3] = s.color[0]; colAttr[vi * 3 + 1] = s.color[1]; colAttr[vi * 3 + 2] = s.color[2];
+        rawAttr[vi] = s.biomeRaw;
+      }
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colAttr, 3));
+      geo.setAttribute('aBiomeRaw', new THREE.Float32BufferAttribute(rawAttr, 1));
+      const driftMesh = new THREE.Mesh(geo, terrain.groundMaterial);
       driftMesh.userData.driftCollide = true;   // → trimesh collider baked in place() (rule 9)
+      driftMesh.userData.noMerge = true;        // keep color/aBiomeRaw through the static merge
       g.add(driftMesh);
     }
     // Hand the probe its waypoints in the drift's own terms. They MUST come from the
@@ -1059,7 +1080,7 @@ export function placeLeviathanLandmark(
   // It is built FIRST because the drift geometry is derived from the real terrain at
   // build time (see the DRIFT block), so the builder needs the pose up front.
   const site = makeLevSite(terrain);
-  const group = buildLeviathanMesh(rand, site);
+  const group = buildLeviathanMesh(rand, site, terrain);
   group.name = 'leviathanLandmark';            // findable by the rig-shot framer + occluder-by-name
 
   // ── Tilt (a crashed-and-settled list) + burial. The hull long-axis is local +Z;
@@ -1076,11 +1097,13 @@ export function placeLeviathanLandmark(
   group.updateMatrixWorld(true);
   scene.add(group);
 
-  // ── Windward sand drift banked against the buried flank (the dune reclaims it).
-  const drift = makeSandMound(terrain, LANDMARK_X, LANDMARK_Z, new THREE.Vector2(0.7, 0.5), HULL_LEN * 0.34, rand, { proud: 0.03 });
-  drift.userData.noCollider = true;
-  scene.add(drift);
-  _drift = drift;
+  // ── Windward sand mound REMOVED (Zach 2026-07-17: standalone sand mounds read
+  //    weird + conflict with the terrain). The terrain-conforming ENTRANCE drift
+  //    (built in buildLeviathanInterior, now on the ground's own material) stays —
+  //    that one is the approved walk-in ramp. This decorative cone against the
+  //    buried flank was the last live makeSandMound mesh in the game; its removal
+  //    consumes no seeded rand (it was the terminal draw of this monument's stream,
+  //    and lootRand is separate), so the monument geometry is byte-identical.
 
   // ══ EXTERIOR HULL trimesh colliders (review 2026-07-16 — rule 9). The visible
   //    hull skin was walk-through from OUTSIDE (verify:solid: 32% of exterior rays
@@ -1337,11 +1360,6 @@ export function removeLeviathanLandmark(scene: THREE.Scene, world?: RAPIER.World
       if (m.isMesh) { m.geometry?.dispose(); }
     });
     _group = null;
-  }
-  if (_drift) {
-    scene.remove(_drift);
-    _drift.geometry?.dispose();
-    _drift = null;
   }
   // Remove every interior static body (deck/walls/roof/bulkheads/furniture) so a
   // world rebuild does not leave orphaned invisible colliders (rule 9).
