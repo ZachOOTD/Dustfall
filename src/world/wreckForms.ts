@@ -301,10 +301,22 @@ export function makeLoftedHull(stations: LoftStation[], material: THREE.Material
           // proud front annulus — faces the end's outward-z (the visible cut face)
           if (endFlip) { push(Op[k]); push(Ip[k]); push(Ip[k2]); push(Op[k]); push(Ip[k2]); push(Op[k2]); }
           else { push(Op[k]); push(Ip[k2]); push(Ip[k]); push(Op[k]); push(Op[k2]); push(Ip[k2]); }
-          // outer bridge band O→Op (radially outward face)
-          push(O[k]); push(Op[k2]); push(Op[k]); push(O[k]); push(O[k2]); push(Op[k2]);
-          // inner bridge band I→Ip (radially inward face)
-          push(I[k]); push(Ip[k]); push(Ip[k2]); push(I[k]); push(Ip[k2]); push(I[k2]);
+          // outer bridge band O→Op (radially outward face). BUGFIX (defect #28):
+          // Op is offset from O by dz, whose SIGN flips with endFlip (−0.03 at the
+          // idx-0 end, +0.03 at the idx-last end). The winding must flip too, exactly
+          // like the front annulus + end cap above — otherwise the band is wound
+          // inside-out at ONE end and, under a FrontSide hull, gets culled, leaving a
+          // hairline see-through slot the width of the 3cm proud lip all round that
+          // rim. Symptom: the Skyfall STERN fracture (its VISIBLE mouth is the idx-0
+          // endFlip end) showed a bright daylight crack tracing the rim arch, while
+          // the FORE mouth (idx-last, non-endFlip) — same code, correct winding —
+          // read clean. Positions are unchanged (winding-only), so collider trimeshes
+          // + determinism are byte-identical.
+          if (endFlip) { push(O[k]); push(Op[k]); push(Op[k2]); push(O[k]); push(Op[k2]); push(O[k2]); }
+          else { push(O[k]); push(Op[k2]); push(Op[k]); push(O[k]); push(O[k2]); push(Op[k2]); }
+          // inner bridge band I→Ip (radially inward face) — same endFlip winding flip.
+          if (endFlip) { push(I[k]); push(Ip[k2]); push(Ip[k]); push(I[k]); push(I[k2]); push(Ip[k2]); }
+          else { push(I[k]); push(Ip[k]); push(Ip[k2]); push(I[k]); push(Ip[k2]); push(I[k2]); }
         }
       }
     }
