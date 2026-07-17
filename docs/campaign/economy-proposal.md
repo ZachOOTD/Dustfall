@@ -119,3 +119,51 @@ SAVE_VERSION 17; no migration).
 
 **To approve:** `/campaign-approve` (optionally with edits/answers to Q1-Q6 — unanswered = the
 defaults). The build campaign then runs the §7 ladder.
+
+---
+
+# APPROVED DESIGN (2026-07-18, interactive review with Zach) — THIS SUPERSEDES §1-§3 ABOVE
+
+Zach's revisions during review:
+- NO new craftable outputs — new materials craft EXISTING items only.
+- `metal` rejected (too close to scrap) · `casing` rejected · `fuel` replaced by battery (sci-fi
+  coherence: the wrecks are starships — you strip power cells, not jerrycans).
+- cactus_pulp is dead code (only alien cacti spawn since CC-4) — do NOT use it; clean it up.
+
+## Final material set (4 new ItemIds)
+| Material | What it is | Identity drops |
+|---|---|---|
+| `metal_pipe` | a length of salvaged tube | buried_pipeline (primary), refinery, transit_car, debris fields |
+| `machine_part` | gears/springs/actuators | wrecked_tank, cargo_crawler, transit_car, Skyfall machine bay, leviathan |
+| `wiring` | cabling + electronics | relay_mast, satellite, hab_dome, hero wrecks |
+| `battery` | a small salvaged power cell | satellite, relay_mast, hab_dome, escape pods, hero wrecks |
+
+## Final recipes
+NEW (existing loot-only outputs become craftable):
+- pipe_staff = metal_pipe + cloth + rope
+- scrap_gun = metal_pipe + machine_part + scrap
+- worm_lure = battery + wiring + raw meat (a powered thumper)
+
+UPDATED existing recipes:
+- flashlight: scrap×2+cloth → battery + wiring + scrap
+- lantern_kit: cloth×2+scrap×2+branch → battery + wiring + scrap + cloth
+- sled_kit: scrap×2+branch+rope → metal_pipe + scrap + branch + rope
+- grill_kit: scrap×2+branch×2 → metal_pipe + scrap + branch
+- locker_kit: scrap×4+branch×2 → metal_pipe + scrap×2 + branch
+- stake_kit: scrap×3+branch → metal_pipe + scrap
+- spyglass: scrap×3+cloth → machine_part + scrap + cloth
+
+UNCHANGED: the whole tutorial arc (bandage/fire_kit/tent_kit/torch/rope), canteen,
+scrap_machete (a SCRAP machete stays scrap), signal_kit (a flare is pyrotechnic — reverted),
+scrap_bullet, large_tent_kit, bedroll_kit, scrap_bar, foods.
+Still loot-only by design: machete, energy_pistol, pulse_rifle, amban_rifle, companion_pod,
+relic_core.
+
+## Approved build ladder
+1. Loot-registry unification (loot-preserving; 1000-roll digest old=new gate) — plumbing, in.
+2. 4 ItemIds + pickup meshes + drop matrix live (identity table above; 70/20/10 panel rolls per
+   Q4 default) + cactus_pulp dead-code cleanup.
+3. Recipes (3 new + 7 updated) + discovery auto-unlock + UX-S (announce unlocked cards on first
+   pickup; cards name where a missing material lives).
+4. Balance pass + walk-test prep + morning summary.
+Q1-Q6 defaults stand except as revised above. Additive-only save-wise (Q6).
