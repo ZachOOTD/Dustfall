@@ -1,53 +1,46 @@
-# Next cycle (3) — the research swarm (4 digests)
+# Next cycle (4) — the ECONOMY PROPOSAL, then PAUSE (the milestone)
 
 **State:** campaign "Scavenger's Economy (setup)" `active` on `campaign/2026-07-17-economy`
-(2 cycles done, ~0.75M/6M spent, max-cycles 16). Checkpoint = pause at the economy proposal.
-Self-author = none. **Plan of record: `docs/campaign/plan-2026-07-17.md` — do NOT re-plan.**
+(3 cycles done, ~0.9M/6M spent, max-cycles 16). **This is the LAST cycle before the planned
+pause** — `until: milestone:economy-proposal`.
 
-## The fixed queue (in order)
-1. ~~#28 Skyfall stern seam~~ ✅ SHIPPED (009ccca)
-2. ~~#29 Boneyard scatter overhaul~~ ✅ SHIPPED (e90344b)
-3. **Research swarm (4 digests)** ← THIS cycle
-4. Economy proposal → PAUSE
+## The fixed queue
+1. ~~#28 Skyfall stern seam~~ ✅ (009ccca) · 2. ~~#29 boneyard scatter~~ ✅ (e90344b) ·
+3. ~~research swarm~~ ✅ (2c58916) · 4. **economy proposal → PAUSE** ← THIS cycle
 
-## Model split (Zach steering, in force)
-Fable for thinking/planning (the main loop — including the cycle-4 proposal synthesis);
-**Opus (`model: opus`) for execution subagents**. Researchers stay on the framework's cheap
-researcher model (information gathering per the approved plan).
+## Cycle 4 mission
+Per the model-split steering, the MAIN LOOP (Fable) writes this — it's synthesis/planning, do NOT
+delegate to an execution agent.
 
-## Cycle 3 mission — 4 research digests to docs/research/
-Fan out via `/research-topic` / the `game-researcher` agent. **This is the sanctioned parallel
-exception**: read-only researchers, each writing ONLY its own `docs/research/<topic>.md` — safe to
-run concurrently. No source-code changes this cycle.
+Inputs to read:
+- `docs/research/crafting-improvements.md` (the recommended 4-5 material set + recipe patterns).
+- The CURRENT code (ground truth): `src/inventory/types.ts` (ItemId union), `src/inventory/items.ts`
+  (registration), `src/inventory/recipeDiscovery.ts` (bench-free discovery), and the THREE loot
+  systems to be unified (grep: `rollLoot` in lootContainers, `TABLES` in salvage, `COMPONENT_LOOT`).
+- Locked decisions (`plan-2026-07-17.md`): bench-free stays; leaner set (~4-5) building on existing
+  `scrap`; per-POI loot identity; NO ItemIds baked, NO loot tables changed until approval.
 
-1. **`crafting-improvements`** — survival-crafting material/recipe taxonomies (Long Dark, Rust,
-   Subnautica + any strong desert/scavenger analogues) AND concrete ways to improve Dustfall's
-   CURRENT bench-free crafting (recipe depth, discovery flow, material identity, inventory
-   pressure). Constraint to honor: crafting stays BENCH-FREE (locked). This digest FEEDS cycle 4's
-   economy proposal — bias toward actionable taxonomies + a leaner-set recommendation (~4-5
-   materials building on the existing `scrap`), per-POI loot identity ideas, and recipe patterns.
-2. **`multiplayer-architecture`** — co-op over Dustfall's seed+descriptor deterministic world:
-   Colyseus-style hosted server vs P2P/relay; state sync for chunkDiffs/creatures/physics
-   authority; what 2-4-player co-op needs vs many-player. Note the GDD currently FORBIDS MP — this
-   is decision support for the re-anchor, not a commitment.
-3. **`character-pipeline`** — procedural-rig ceiling-push vs imported rigged glTF (which would
-   break the zero-asset pillar D1/D107); skinning/cloth/animation options in Three.js for each
-   fork; what a 2-4-co-op remote-player silhouette minimally needs.
-4. **`cave-feasibility`** — cave-gen methods compatible with Rapier heightfield terrain (room-kit
-   under a carve vs tunnel-carving vs hand-authored modules); the D254 open question (can the KCC
-   walk BELOW the heightfield sheet and back?); dark-nav/torch-economy reference (Long Dark).
-   Flag clearly that a 10-min ATTENDED spike must precede any cave build.
+Output: **`docs/campaign/economy-proposal.md`** — decision-ready for a coffee-length read:
+1. The proposed material set (4-5 new ItemIds + why each earns its slot; keep `scrap` as the base).
+2. A ONE-PAGE drop matrix: rows = POI archetypes + hero landmarks, cols = materials (incl. `scrap`),
+   cells = relative weight — the per-POI identity at a glance.
+3. Proposed recipes: which existing recipes deepen (multi-material), which new ones arrive; repair
+   costs if recommended. Bench-free discovery flow notes (auto-unlock on first collect, per the
+   research).
+4. The unification plan (3 loot systems → 1 data-driven registry) as pure plumbing, flagged
+   loot-preserving.
+5. Crafting-UX improvements worth doing (from the research), each S/M sized.
+6. OPEN QUESTIONS for Zach, each with a recommended default so approval can be "yes to defaults."
+7. A build plan for the approved campaign (ordered cycles, gates per cycle).
 
-**Done =** all 4 digests exist in `docs/research/`, each structured (sources, findings, options
-with trade-offs, a recommendation, open questions). Commit them. No gates needed beyond tsc-noop
-(no source changes) — but run `npm run verify` once anyway as the cheap invariant.
-
-## Then cycle 4 (the LAST before the pause)
-Synthesize digest 1 + the current inventory/recipe code into `docs/campaign/economy-proposal.md`
-(leaner ~4-5 material set, 1-page recipe/drop matrix w/ per-POI identity, crafting-UX
-improvements). **Bake NO ItemIds, change NO loot tables.** Then set `awaiting_approval: true`,
-`stop_reasons: ["milestone-review"]`, write the morning summary, STOP the loop.
+Then close out:
+- Write `docs/campaign/morning-summary-2026-07-18.md` (what shipped overnight: #28/#29/research/
+  proposal; what needs his eyes: boneyard scatter renders, stern seam, the proposal itself; how to
+  approve: `/campaign-approve`).
+- Set state: `status: "paused"`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`,
+  cycles_completed 4, current_tier "PAUSED:awaiting-economy-approval".
+- Log cycle 4 in campaign-log. Commit everything. **STOP the loop** (ScheduleWakeup stop: true).
 
 ## Hard rules
-Never `git stash` here · one code-writing agent at a time (read-only researchers exempt) · no
-AskUserQuestion overnight · push HELD.
+No ItemIds/loot-table changes. No AskUserQuestion (write open questions into the proposal instead).
+Push HELD.

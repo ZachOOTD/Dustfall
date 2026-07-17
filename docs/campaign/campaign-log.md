@@ -4,6 +4,21 @@ Newest cycle at top. Prior campaign ("Sharpen & Deepen", 24 cycles, COMPLETE + S
 2026-07-17) archived at `campaign-log-sharpen-deepen-DONE.md` /
 `campaign-state-sharpen-deepen-DONE.json`.
 
+## Cycle 3 — research swarm (2026-07-17) — SHIPPED
+- Planned: 4 read-only research digests (the sanctioned parallel exception).
+- Shipped: `docs/research/crafting-improvements.md` (taxonomy survey + a recommended leaner 4-5
+  material set mapped to POI archetypes + bench-free recipe patterns — feeds cycle 4),
+  `multiplayer-architecture.md` (P2P host-auth + relay for a 2-4 co-op MVP; the deterministic
+  world means only inputs/diffs/creatures sync), `character-pipeline.md` (procedural-push vs
+  import vs animation-only retarget; current rig likely adequate for a co-op MVP silhouette),
+  `cave-feasibility.md` (heightfield is one-sided/fragile; architecture ladder + the concrete
+  D254 spike script).
+- Verify: no source changes; tsc clean.
+- Spend: ~0.15M (campaign total ~0.9M / 6M; cycle 3/16).
+- Commit: 2c58916.
+- Next: Cycle 4 — synthesize the economy proposal (Fable/main-loop per steering), then PAUSE
+  awaiting Zach's morning approval.
+
 ## Cycle 2 — #29 boneyard scatter overhaul (2026-07-17) — SHIPPED
 - Planned: bring the boneyard scatter to hero quality — darker hero material, real bones instead
   of rounded rings, more skeleton variety, night-correct lighting.
