@@ -1529,7 +1529,10 @@ const SCENARIOS = {
       out.afterCloth = { machete: g.craftCardState(MACHETE) };
       g.giveItem('branch', 1);
       out.afterBranch = { fire: g.craftCardState(FIRE), signal: g.craftCardState(SIGNAL) };
-      out.sledBefore = g.craftCardState(SLED);           // warm — scrap+branch collected, no rope
+      // Scavenger's Economy (build 3) — sled_kit now also needs metal_pipe. Give it
+      // FIRST so the chain still proves "the CRAFTED rope is what flips warm→unlocked".
+      g.giveItem('metal_pipe', 1);
+      out.sledBefore = g.craftCardState(SLED);           // warm — pipe+scrap+branch collected, no rope
       g.giveItem('rope', 1);                             // simulate crafting a rope
       out.sledAfter = g.craftCardState(SLED);            // unlocked — crafted-ingredient chain
       return out;
@@ -1544,8 +1547,146 @@ const SCENARIOS = {
       && s.afterBranch.signal.state === 'unlocked' && s.afterBranch.signal.discovered;
     const chain = s.sledBefore && s.sledBefore.state === 'warm'
       && s.sledAfter && s.sledAfter.state === 'unlocked' && s.sledAfter.discovered;
-    const pass = coldStart && warmScrap && unlockedCloth && collision && chain;
-    console.log(`[craft-unlock] ${pass ? 'PASS' : 'FAIL'} (cold=${coldStart} warm=${warmScrap} unlocked=${unlockedCloth} collision=${collision} chain=${chain}) ${JSON.stringify(r)}`);
+
+    // ── Scavenger's Economy (build 3) — new/updated recipe craft gate. Proves:
+    //   • the 3 NEW recipes (pipe_staff 21, scrap_gun 22, worm_lure 23) unlock on
+    //     collecting their inputs, craft through the REAL craft path, CONSUME the
+    //     right inputs, and YIELD the output.
+    //   • worm_lure's "raw meat" input is ANY-OF (raw_shrew_meat satisfies it).
+    //   • flashlight (5) now requires battery+wiring+scrap — the OLD scrap×2+cloth
+    //     must NOT unlock or craft it.
+    const eco = await page.evaluate(async () => {
+      const g = window.__game;
+      const inv = g.ctx.inventory;
+      const count = (id) => {
+        let n = 0;
+        for (const s of [...inv.slots, ...inv.backpack]) {
+          if (s.item === id && s.count > 0 && !s.meta) n += s.count;
+        }
+        return n;
+      };
+      const reset = () => { inv.discoveredRecipes.length = 0; inv.collectedItemTypes.clear();
+        for (const s of [...inv.slots, ...inv.backpack]) { s.item = null; s.count = 0; s.meta = undefined; } };
+      const PIPE = 21, GUN = 22, LURE = 23, FLASH = 5;
+      const out = {};
+
+      // — NEW recipes: grant the full material spread + rope/cloth/scrap. —
+      reset();
+      for (const [id, n] of [['metal_pipe',2],['machine_part',1],['wiring',1],['battery',1],
+                             ['scrap',2],['cloth',1],['rope',1],['raw_shrew_meat',1]]) g.giveItem(id, n);
+      out.states = { pipe: g.craftCardState(PIPE), gun: g.craftCardState(GUN), lure: g.craftCardState(LURE) };
+
+      // pipe_staff — consumes metal_pipe+cloth+rope, yields pipe_staff.
+      const pipeBefore = { pipe: count('metal_pipe'), cloth: count('cloth'), rope: count('rope'), out: count('pipe_staff') };
+      out.pipeCraft = await g.craft(PIPE);
+      out.pipeAfter = { pipe: count('metal_pipe'), cloth: count('cloth'), rope: count('rope'), out: count('pipe_staff'), before: pipeBefore };
+
+      // scrap_gun — consumes metal_pipe+machine_part+scrap, yields scrap_gun.
+      const gunBefore = { pipe: count('metal_pipe'), mp: count('machine_part'), scrap: count('scrap'), out: count('scrap_gun') };
+      out.gunCraft = await g.craft(GUN);
+      out.gunAfter = { pipe: count('metal_pipe'), mp: count('machine_part'), scrap: count('scrap'), out: count('scrap_gun'), before: gunBefore };
+
+      // worm_lure — consumes battery+wiring+ANY raw meat (raw_shrew_meat here), yields worm_lure.
+      const lureBefore = { batt: count('battery'), wire: count('wiring'), shrew: count('raw_shrew_meat'), out: count('worm_lure') };
+      out.lureCraft = await g.craft(LURE);
+      out.lureAfter = { batt: count('battery'), wire: count('wiring'), shrew: count('raw_shrew_meat'), out: count('worm_lure'), before: lureBefore };
+
+      // — flashlight negative: OLD recipe (scrap×2 + cloth) must NOT make it. —
+      reset();
+      g.giveItem('scrap', 2); g.giveItem('cloth', 1);
+      out.flashOld = { state: g.craftCardState(FLASH), craft: await g.craft(FLASH) };
+      // — flashlight positive: battery+wiring+scrap DOES. —
+      reset();
+      g.giveItem('battery', 1); g.giveItem('wiring', 1); g.giveItem('scrap', 1);
+      const flBefore = { batt: count('battery'), wire: count('wiring'), scrap: count('scrap'), out: count('flashlight') };
+      out.flashNewState = g.craftCardState(FLASH);
+      out.flashNewCraft = await g.craft(FLASH);
+      out.flashNewAfter = { batt: count('battery'), wire: count('wiring'), scrap: count('scrap'), out: count('flashlight'), before: flBefore };
+      return out;
+    });
+
+    const e = eco || {};
+    const newUnlocked = e.states
+      && e.states.pipe.state === 'unlocked' && e.states.pipe.discovered
+      && e.states.gun.state === 'unlocked' && e.states.gun.discovered
+      && e.states.lure.state === 'unlocked' && e.states.lure.discovered;
+    const pipeOk = e.pipeCraft && e.pipeCraft.crafted && e.pipeCraft.output === 'pipe_staff'
+      && e.pipeAfter.out === 1 && e.pipeAfter.pipe === e.pipeAfter.before.pipe - 1
+      && e.pipeAfter.cloth === e.pipeAfter.before.cloth - 1 && e.pipeAfter.rope === e.pipeAfter.before.rope - 1;
+    const gunOk = e.gunCraft && e.gunCraft.crafted && e.gunCraft.output === 'scrap_gun'
+      && e.gunAfter.out === 1 && e.gunAfter.pipe === e.gunAfter.before.pipe - 1
+      && e.gunAfter.mp === e.gunAfter.before.mp - 1 && e.gunAfter.scrap === e.gunAfter.before.scrap - 1;
+    const lureOk = e.lureCraft && e.lureCraft.crafted && e.lureCraft.output === 'worm_lure'
+      && e.lureAfter.out === 1 && e.lureAfter.batt === e.lureAfter.before.batt - 1
+      && e.lureAfter.wire === e.lureAfter.before.wire - 1 && e.lureAfter.shrew === e.lureAfter.before.shrew - 1;
+    const flashNeg = e.flashOld && e.flashOld.state.state !== 'unlocked' && !e.flashOld.craft.crafted;
+    const flashPos = e.flashNewState && e.flashNewState.state === 'unlocked'
+      && e.flashNewCraft && e.flashNewCraft.crafted && e.flashNewCraft.output === 'flashlight'
+      && e.flashNewAfter.out === 1 && e.flashNewAfter.batt === 0 && e.flashNewAfter.wire === 0 && e.flashNewAfter.scrap === 0;
+
+    const pass = coldStart && warmScrap && unlockedCloth && collision && chain
+      && newUnlocked && pipeOk && gunOk && lureOk && flashNeg && flashPos;
+    console.log(`[craft-unlock] ${pass ? 'PASS' : 'FAIL'} (cold=${coldStart} warm=${warmScrap} unlocked=${unlockedCloth} collision=${collision} chain=${chain} newUnlocked=${newUnlocked} pipe=${pipeOk} gun=${gunOk} lure=${lureOk} flashNeg=${flashNeg} flashPos=${flashPos}) ${JSON.stringify(r)} ECO=${JSON.stringify(eco)}`);
+  },
+
+  // Scavenger's Economy (build 3) — SCREENSHOT the crafting panel with the new
+  // cards visible + a source-hint line for a missing material. Enters NON-dev
+  // (real card states), collects every material type so the new recipes unlock,
+  // then EMPTIES battery from the bag so flashlight reads unlocked-but-short →
+  // its detail footer shows the "battery — found in pods, habs and relays" hint.
+  //   node scripts/rig-shot.mjs --scenario=craft-panel --port=5263
+  'craft-panel': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game;
+      g.enterGame(false);                 // NON-dev: real card states
+      const ctx = g.ctx;
+      ctx.input.controls.isLocked = false;
+      ctx.flags.paused = false;
+      g.setTime(0.42);
+      ctx.three.renderer.setSize(1000, 1300, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 1300; cam.updateProjectionMatrix(); }
+      // Deterministic clean slate (a CONTINUE loadout can otherwise pre-fill the
+      // bag): empty every slot + the discovery ledgers before granting exactly
+      // what we want on screen.
+      const inv = ctx.inventory;
+      inv.discoveredRecipes.length = 0; inv.collectedItemTypes.clear();
+      for (const s of [...inv.slots, ...inv.backpack]) { s.item = null; s.count = 0; s.meta = undefined; }
+      // Collect every material TYPE so the new + updated recipes all unlock, and
+      // leave enough in the bag that pipe_staff is fully craftable (green).
+      for (const [id, n] of [['metal_pipe',2],['machine_part',1],['wiring',1],['battery',1],
+                             ['scrap',3],['cloth',2],['branch',2],['rope',1],['raw_lizard_meat',1]]) {
+        g.giveItem(id, n);
+      }
+      // Drop battery OUT of the bag (its TYPE stays collected) so battery-bearing
+      // recipes read unlocked-but-short → the source hint renders. Zero the slots
+      // directly (no in-page import — Vite dynamic-import module isolation).
+      for (const s of [...inv.slots, ...inv.backpack]) {
+        if (s.item === 'battery') { s.item = null; s.count = 0; s.meta = undefined; }
+      }
+      await g.openCrafting();
+    });
+    await page.waitForTimeout(400);
+    // Select the worm-lure card (a NEW recipe, short on battery) so the detail
+    // footer + its source-hint line render for the shot.
+    const sel = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('.craft-card')];
+      const names = cards.map((c) => c.querySelector('.craft-card-name')?.textContent || '');
+      const idx = names.findIndex((n) => n.startsWith('worm-lure'));
+      if (idx >= 0) cards[idx].click();
+      return { count: cards.length, names, picked: idx };
+    });
+    console.log('[craft-panel] ' + JSON.stringify(sel));
+    await page.waitForTimeout(300);
+    const diag = await page.evaluate(() => {
+      const selCard = document.querySelector('.craft-card.selected .craft-card-name')?.textContent || '(none)';
+      const detail = (document.querySelector('.craft-detail')?.textContent || '').slice(0, 240);
+      const el = document.querySelector('.craft-detail-sources');
+      return { selCard, detail, src: el ? el.textContent : '(no source block)' };
+    });
+    console.log('[craft-panel] diag = ' + JSON.stringify(diag));
+    await page.screenshot({ path: join(OUT, 'scen-craft-panel.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-craft-panel.png');
   },
 
   // M6 ② (C38) — survival-rebalance gate. Drives the REAL updateStats deterministically

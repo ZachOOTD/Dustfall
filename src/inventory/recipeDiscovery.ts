@@ -27,10 +27,23 @@
 
 import type { ItemId, ItemMeta } from './types.ts';
 
-/** A single input stack — `count` of a given ItemId. */
+/** A single input stack — `count` of a given ItemId.
+ *
+ *  Scavenger's Economy (build 3) — an input may accept ANY of a set of
+ *  interchangeable ids via `anyOf` (e.g. worm_lure takes "raw meat" = any of
+ *  the four raw-meat ids). When `anyOf` is present the `id` field is the
+ *  REPRESENTATIVE (used for the icon fallback + the source-hint key); the pool
+ *  in `anyOf` is what actually satisfies + gets consumed. `label` overrides the
+ *  displayed material name for such generic inputs ("raw meat"). Discovery,
+ *  craftability, and consumption all treat the whole `anyOf` pool as one. */
 export interface RecipeInput {
   id: ItemId;
   count: number;
+  /** Interchangeable ids that all satisfy this input (any-of). If set, `id`
+   *  is only the representative for display; consumption draws from this pool. */
+  anyOf?: ItemId[];
+  /** Display-name override for generic anyOf inputs (e.g. "raw meat"). */
+  label?: string;
 }
 
 /** A single output stack. */
@@ -122,9 +135,12 @@ export const RECIPES: Recipe[] = [
   {
     id: 5,
     displayName: 'flashlight',
+    // Scavenger's Economy (build 3) — a battery-powered light: was scrap×2+cloth,
+    // now a salvaged power cell + wiring + a scrap housing.
     inputs: [
-      { id: 'scrap', count: 2 },
-      { id: 'cloth', count: 1 },
+      { id: 'battery', count: 1 },
+      { id: 'wiring', count: 1 },
+      { id: 'scrap', count: 1 },
     ],
     output: { id: 'flashlight', count: 1 },
     category: 'tool',
@@ -164,8 +180,11 @@ export const RECIPES: Recipe[] = [
   {
     id: 9,
     displayName: 'sled kit',
+    // Scavenger's Economy (build 3) — a scavenged frame: a salvaged pipe replaces
+    // one of the scrap billets (was scrap×2+branch+rope).
     inputs: [
-      { id: 'scrap', count: 2 },
+      { id: 'metal_pipe', count: 1 },
+      { id: 'scrap', count: 1 },
       { id: 'branch', count: 1 },
       { id: 'rope', count: 1 },
     ],
@@ -201,10 +220,13 @@ export const RECIPES: Recipe[] = [
   {
     id: 12,
     displayName: 'lantern',
+    // Scavenger's Economy (build 3) — a powered camp lamp: power cell + wiring +
+    // a scrap frame + a cloth shade (was cloth×2+scrap×2+branch).
     inputs: [
-      { id: 'cloth', count: 2 },
-      { id: 'scrap', count: 2 },
-      { id: 'branch', count: 1 },
+      { id: 'battery', count: 1 },
+      { id: 'wiring', count: 1 },
+      { id: 'scrap', count: 1 },
+      { id: 'cloth', count: 1 },
     ],
     output: { id: 'lantern_kit', count: 1 },
     category: 'shelter',
@@ -213,9 +235,11 @@ export const RECIPES: Recipe[] = [
   {
     id: 13,
     displayName: 'locker',
+    // Scavenger's Economy (build 3) — a pipe-framed chest: was scrap×4+branch×2.
     inputs: [
-      { id: 'scrap', count: 4 },
-      { id: 'branch', count: 2 },
+      { id: 'metal_pipe', count: 1 },
+      { id: 'scrap', count: 2 },
+      { id: 'branch', count: 1 },
     ],
     output: { id: 'locker_kit', count: 1 },
     category: 'shelter',
@@ -226,9 +250,12 @@ export const RECIPES: Recipe[] = [
   {
     id: 14,
     displayName: 'grill kit',
+    // Scavenger's Economy (build 3) — a salvaged-pipe grate over the fire (was
+    // scrap×2+branch×2).
     inputs: [
-      { id: 'scrap', count: 2 },
-      { id: 'branch', count: 2 },
+      { id: 'metal_pipe', count: 1 },
+      { id: 'scrap', count: 1 },
+      { id: 'branch', count: 1 },
     ],
     output: { id: 'grill_kit', count: 1 },
     category: 'shelter',
@@ -255,19 +282,23 @@ export const RECIPES: Recipe[] = [
   {
     id: 16,
     displayName: 'iron stake',
+    // Scavenger's Economy (build 3) — a driven length of pipe (was scrap×3+branch).
     inputs: [
-      { id: 'scrap', count: 3 },
-      { id: 'branch', count: 1 },
+      { id: 'metal_pipe', count: 1 },
+      { id: 'scrap', count: 1 },
     ],
     output: { id: 'stake_kit', count: 1 },
     category: 'tool',
   },
   {
     // M5a (C29) — salvaged spyglass: a brass tube (scrap) + a wrapped grip (cloth).
+    // Scavenger's Economy (build 3) — the lens optics now want a machine_part
+    // (was scrap×3+cloth).
     id: 17,
     displayName: 'spyglass',
     inputs: [
-      { id: 'scrap', count: 3 },
+      { id: 'machine_part', count: 1 },
+      { id: 'scrap', count: 1 },
       { id: 'cloth', count: 1 },
     ],
     output: { id: 'spyglass', count: 1 },
@@ -319,7 +350,73 @@ export const RECIPES: Recipe[] = [
     output: { id: 'canteen', count: 1, meta: { fillLevel: 0 } },
     category: 'tool',
   },
+  // ── Scavenger's Economy (build 3) — new recipes ───────────────────
+  // These make EXISTING loot-only items craftable using the new materials.
+  // D71: ids continue the sequence (21, 22, 23); never reuse 1-20.
+  {
+    // pipe staff — a scavenged plumbing melee weapon: a salvaged pipe, a
+    // cloth grip, rope lashing.
+    id: 21,
+    displayName: 'pipe staff',
+    inputs: [
+      { id: 'metal_pipe', count: 1 },
+      { id: 'cloth', count: 1 },
+      { id: 'rope', count: 1 },
+    ],
+    output: { id: 'pipe_staff', count: 1 },
+    category: 'tool',
+  },
+  {
+    // scrap gun — a crude single-shot pistol: a pipe barrel, a salvaged
+    // firing mechanism (machine_part), a scrap receiver. Crafts EMPTY
+    // (ammoRemaining undefined → 0); load scrap bullets with R.
+    id: 22,
+    displayName: 'scrap gun',
+    inputs: [
+      { id: 'metal_pipe', count: 1 },
+      { id: 'machine_part', count: 1 },
+      { id: 'scrap', count: 1 },
+    ],
+    output: { id: 'scrap_gun', count: 1 },
+    category: 'tool',
+  },
+  {
+    // worm-lure — a powered thumper: a salvaged power cell, wiring, and a
+    // hunk of raw flesh for scent. Any raw meat works (anyOf pool).
+    id: 23,
+    displayName: 'worm-lure',
+    inputs: [
+      { id: 'battery', count: 1 },
+      { id: 'wiring', count: 1 },
+      {
+        id: 'raw_lizard_meat',
+        count: 1,
+        label: 'raw meat',
+        anyOf: ['raw_lizard_meat', 'raw_shrew_meat', 'raw_vulture_meat', 'raw_worm_meat'],
+      },
+    ],
+    output: { id: 'worm_lure', count: 1 },
+    category: 'tool',
+  },
 ];
+
+// ── Scavenger's Economy (build 3) — material source hints ─────────
+// Single source of truth for the diegetic "where does this live" line shown
+// on a recipe card when a material is missing. Keyed by ItemId. Teaches the
+// per-POI drop matrix (lootRegistry.ts POI_IDENTITY_SCATTER) in the game's
+// lowercase laconic voice. Any material without an entry simply shows no hint.
+export const MATERIAL_SOURCE: Partial<Record<ItemId, string>> = {
+  metal_pipe:    'salvaged from pipelines and refineries',
+  machine_part:  'pulled from dead tanks and crawlers',
+  wiring:        'stripped from relays and satellites',
+  battery:       'found in pods, habs and relays',
+  scrap:         'scavenged off any wreck or debris field',
+  cloth:         'torn from fuselage textiles and old tents',
+  branch:        'gathered from the dead desert trees',
+  rope:          'craft it from cloth, or pull it from cargo',
+  // worm-lure's generic "raw meat" input keys its hint off the representative id.
+  raw_lizard_meat: 'butchered from prey you hunt out there',
+};
 
 /** Session ABE — display order for category sub-headers. Recipes within
  *  each (craftable / missing) bucket render grouped by category in this
@@ -371,12 +468,41 @@ export function recipeCardState(
   recipe: Recipe,
   collected: ReadonlySet<ItemId>,
 ): 'cold' | 'warm' | 'unlocked' {
-  const types = new Set(recipe.inputs.map((i) => i.id));
+  const inputs = recipe.inputs;
   let have = 0;
-  for (const id of types) if (collected.has(id)) have++;
+  for (const inp of inputs) if (inputTypeCollected(inp, collected)) have++;
   if (have === 0) return 'cold';
-  if (have === types.size) return 'unlocked';
+  if (have === inputs.length) return 'unlocked';
   return 'warm';
+}
+
+// ── Scavenger's Economy (build 3) — anyOf input helpers ───────────
+// One place decides how an input is satisfied / counted / consumed, so the
+// discovery gate, the crafting UI, and the verify probe all agree on anyOf.
+
+/** The ids that can satisfy this input — its `anyOf` pool, or just `id`. */
+export function inputIds(inp: RecipeInput): ItemId[] {
+  return inp.anyOf ?? [inp.id];
+}
+
+/** True once the player has ever collected SOME id that satisfies this input
+ *  (any of the anyOf pool, or the single id). Drives cold/warm/unlocked. */
+export function inputTypeCollected(
+  inp: RecipeInput,
+  collected: ReadonlySet<ItemId>,
+): boolean {
+  for (const id of inputIds(inp)) if (collected.has(id)) return true;
+  return false;
+}
+
+/** Total count the player holds across every id that satisfies this input. */
+export function inputHeld(
+  inp: RecipeInput,
+  totals: ReadonlyMap<ItemId, number>,
+): number {
+  let n = 0;
+  for (const id of inputIds(inp)) n += totals.get(id) ?? 0;
+  return n;
 }
 
 /** Scan every recipe not yet in `discovered` and, for any whose input

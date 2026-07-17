@@ -1063,8 +1063,10 @@ canvas {
 .craft-detail-ings {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 14px;
   align-items: flex-start;
+  justify-content: center;
 }
 .craft-detail-ing {
   display: flex;
@@ -1104,6 +1106,25 @@ canvas {
   letter-spacing: 2px;
   color: #e8dcc0;
   text-align: center;
+}
+.craft-detail-sources {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 460px;
+}
+.craft-detail-source {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: #8a7a5e;
+  text-align: center;
+  line-height: 1.3;
+}
+.craft-detail-source-name {
+  color: #c8a868;
+  text-transform: uppercase;
 }
 .craft-detail-desc {
   font-family: 'Cormorant Garamond', serif;
