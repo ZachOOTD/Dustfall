@@ -1,42 +1,36 @@
-# Next cycle (24) — M12: a new far-field biome (LAST queued milestone)
+# Next cycle (1) — #28 Skyfall stern seam
 
-**State:** campaign "Sharpen & Deepen" `active` on `campaign/2026-07-12-skyfall` (23 cycles, ~6.9M/8.75M
-spent; **~1.85M left** of the +4M cap). Checkpoint none. **M7-R + M8 + M9 + M10 + M11 COMPLETE.** Queue: **M12** (last).
+**State:** campaign "Scavenger's Economy (setup)" `active` on `campaign/2026-07-17-economy`
+(0 cycles, 0/6M spent, max-cycles 16). Checkpoint = pause at the economy proposal.
+Self-author = none. **Plan of record: `docs/campaign/plan-2026-07-17.md` — do NOT re-plan.**
 
-## Cycle 24 = M12 — a new far-field biome
-A new biome beyond salt/rocky/dune/wreck_yard for the infinite world: distinct ground (colour/mottle),
-palette, scatter (rocks/props), and a hazard or destination flavour. Study `src/world/biomes.ts` (the
-`BiomeSampler` / `BiomeId` union / `biomeAt` / how biomes are sampled per-region + blended) and how the
-terrain colours + scatter read the biome (terrain.ts vertex colours, chunkManager scatter rolls that
-gate on `biomes.biomeAt`). Add a new `BiomeId` + its sampler region + ground/palette + scatter tuning +
-(optional) a signature hazard/prop, weighting it into the biome field.
+## The fixed queue (in order)
+1. **#28 Skyfall stern seam** ← THIS cycle
+2. #29 Boneyard scatter overhaul (hero visual)
+3. Research swarm (4 digests)
+4. Economy proposal → PAUSE
 
-**`/feature-slice` it** (write `docs/feature-biome-m12.md` — the concept + the DoD + sub-tasks). A new
-biome touches: the BiomeId union (+ every `Record<BiomeId, ...>` — ARCH_WEIGHTS, colour tables, etc. —
-TypeScript will flag the exhaustiveness gaps, which is your checklist), descriptor purity (D290 — the
-biome field must be pure), streamed-teardown-safety (D292), and the gates (verify:all, verify-chunks
-determinism). Concept ideas: a **salt-crust / cracked-hardpan flat** (bright, mirror-flat, sparse — a
-different desolation); an **ash/scorched barren** (dark volcanic-ash ground, charred props, a "something
-burned through here" read); a **dune-sea / erg** (deep rolling dunes, near-empty, wind-sculpted). Pick
-one that reads DISTINCT from the existing four + fits the Dune/Mad-Max tone. Real thickness (rule 7) +
-no sand mounds (steering) for any new props.
+## Cycle 1 mission — #28 Skyfall stern seam
+**Symptom (Zach's playtest):** "the smaller side that's broken off … a slight gap, like a crack
+between the edges of the walls where the ship splits. just need to connect the seam."
 
-Gate: verify:all (placement 5-seed + colliders — new biome bakes byte-safe) + verify-chunks (determinism
-stable per seed, no leak, the new biome streams). The `chunk-vista` rig for the biome's look.
+**Diagnosis of record (from `STATE-2026-07-16.md`):** this is almost certainly the SHARED
+`solidInner` lip weld in `src/world/wreckForms.ts`, not a stern-only defect — the fore mouth +
+the leviathan use the same `makeLoftedHull(..., solidInner)` path and hide it. So fix it at the
+SOURCE in `wreckForms.ts` (the rim-lip weld / bridge bands), and confirm the fore mouth + leviathan
+seams stay clean after. Do NOT hand-patch the stern.
 
-**⚠ BUDGET:** ~1.85M left — a new biome may not fully finish. Feature-slice it, do the CORE (the biome
-exists + reads distinct + streams gate-clean) first; if the cap hits mid-way, the campaign stops at
-`budget` (`status:"completed"`, `stop_reasons:["budget"]`) — the clean end of this overnight. Don't leave
-a broken half-biome: each committed cycle must be gate-green. If M12 needs >1 cycle and the budget won't
-cover it, ship a coherent minimal biome + note the polish for a future session.
+**Watch out:** no existing gate catches inter-mesh sliver gaps — `open-end` is per-mesh topology,
+so two closed solids with daylight between them both pass. If cheap, add a daylight-leak / seam
+check to `verify:solid` (a ray fired across the fracture rim from just outside should hit hull, not
+sky) so this class stops recurring. If not cheap this cycle, log it as a follow-up — don't block.
 
-## After M12 / at the budget cap — THE OVERNIGHT IS DONE
-When `spend.total >= 8.75M`, set `status:"completed"`, `stop_reasons:["budget"]`, STOP the loop. Then
-write a **morning summary** (`docs/campaign/morning-summary-2026-07-14.md`) covering the whole batch
-(M7-R Skyfall fixes → M8 vultures → M9 archetypes → M10 vignettes → M11 tube retirement → M12 biome),
-the owed walk-tests, and the cleanup (remove `scratch-baseline/`, `scripts/_vultcheck.mjs`,
-`scripts/_scenecheck.mjs`). Reap dev servers. The branch awaits Zach's morning review + merge decision.
+**Gates:** `npm run verify` → `verify:all` → `verify:solid --asset=skyfall` (+ leviathan, to prove
+the shared weld didn't regress) → `chunk` gate's `skyfall-walk`. Screenshot the stern fracture from
+a grazing angle to confirm the crack is gone (rule 8 — don't ship geometry on tsc alone).
 
-## Standing constraints (steering.md)
-- **models-need-thickness** (rule 7) · **100% collision** (rule 9, swept) · determinism (D290) +
-  streamed-teardown (D292/rule 9, NO body leaks) · no save-schema change without the D81 pause · GPU probe default.
+**Commit** to `campaign/2026-07-17-economy`. Push HELD.
+
+## Hard rules
+Never `git stash` here · one agent at a time (research swarm excepted) · no AskUserQuestion
+overnight (decisions are locked in the plan doc) · trust the playtest over a green gate.
