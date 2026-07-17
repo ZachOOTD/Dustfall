@@ -12,3 +12,5 @@ Examples: "skip #29, go straight to research" · "the boneyard scatter is too de
 - **100% accurate collision** — every visible mass gets a matching collider, swept (rule 9).
 - **Never `git stash` here; run agents ONE AT A TIME** (read-only research swarm excepted).
 - **Push is HELD** — commit to `campaign/2026-07-17-economy`, never merge to master.
+- **Model split (Zach, 2026-07-17 overnight):** Fable for thinking/planning (the main loop),
+  Opus for execution — code-writing subagents get an explicit `model: opus` override.

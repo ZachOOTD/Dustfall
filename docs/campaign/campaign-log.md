@@ -4,6 +4,29 @@ Newest cycle at top. Prior campaign ("Sharpen & Deepen", 24 cycles, COMPLETE + S
 2026-07-17) archived at `campaign-log-sharpen-deepen-DONE.md` /
 `campaign-state-sharpen-deepen-DONE.json`.
 
+## Cycle 2 — #29 boneyard scatter overhaul (2026-07-17) — SHIPPED
+- Planned: bring the boneyard scatter to hero quality — darker hero material, real bones instead
+  of rounded rings, more skeleton variety, night-correct lighting.
+- Shipped: 5-type real-bone vocabulary (cracked longbones w/ jagged snap ends + epiphysis
+  knuckles; rib-fans; vertebral chains w/ neural fins + decay; loose vertebra chunks; small
+  partial CARCASS skeletons), all reusing the hero's sweptTube+jag fracture pipeline and the
+  hero's material OBJECT (one shared material, one sun-driven emissive registration). Scatter
+  bits stay deliberately noCollider (step-over decoration); walk-into silhouettes keep colliders.
+- Verify: tsc clean; verify:all PASS (placement 5/5, colliders 70, chunks determinism 8/8 ×2
+  seeds, streaming no-leak, both walk gates); verify:solid --asset=ribcage all OK (hero
+  no-regression). Night probe: emissive live=0.000 night / 0.360 day; 273/273 streamed bone
+  meshes on 1 registered material. **The scatter no longer glows at night.**
+- Visual iteration: 2 agent rounds (round 2 reshaped the vertebra — read rock-like) + my own
+  independent read of day-ground / night-flank / entry-vista screenshots. Appearance-verified;
+  feel-pending (walk-under density is on Zach's walk-test list).
+- Steering received (mid-cycle, processed at this boundary): "use fable for the thinking and
+  planning and opus for the execution" → main loop stays Fable; execution subagents get
+  `model: opus` from cycle 3 on; researchers stay on the cheap researcher model per the approved
+  plan. Archived to steering-archive.md.
+- Spend: ~0.35M (campaign total ~0.75M / 6M; cycle 2/16).
+- Commit: e90344b.
+- Next: Cycle 3 — the 4-digest research swarm (crafting / multiplayer / character / cave).
+
 ## Cycle 1 — #28 Skyfall stern seam (2026-07-17) — SHIPPED
 - Planned: fix the hairline daylight crack at the Skyfall stern fracture rim.
 - Shipped: root-caused to the SHARED `solidInner` bridge-band winding in `wreckForms.ts` — the

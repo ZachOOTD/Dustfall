@@ -1,60 +1,53 @@
-# Next cycle (2) — #29 Boneyard scatter overhaul (HERO visual)
+# Next cycle (3) — the research swarm (4 digests)
 
 **State:** campaign "Scavenger's Economy (setup)" `active` on `campaign/2026-07-17-economy`
-(1 cycle done, ~0.4M/6M spent, max-cycles 16). Checkpoint = pause at the economy proposal.
+(2 cycles done, ~0.75M/6M spent, max-cycles 16). Checkpoint = pause at the economy proposal.
 Self-author = none. **Plan of record: `docs/campaign/plan-2026-07-17.md` — do NOT re-plan.**
 
 ## The fixed queue (in order)
 1. ~~#28 Skyfall stern seam~~ ✅ SHIPPED (009ccca)
-2. **#29 Boneyard scatter overhaul** ← THIS cycle (HERO visual)
-3. Research swarm (4 digests)
+2. ~~#29 Boneyard scatter overhaul~~ ✅ SHIPPED (e90344b)
+3. **Research swarm (4 digests)** ← THIS cycle
 4. Economy proposal → PAUSE
 
-## Cycle 2 mission — #29 boneyard scatter overhaul
-**Zach's feedback (verbatim):** "lets make all of the other bones match the same new darker texture
-material we used for the larger skeleton. also i want to add more variation to the kinds of bones
-and skeletons … these look totally outdated now … add the cracked bones, make them less of just
-rounded rings in the sand and more like real bones … more variations on types of skeletons."
+## Model split (Zach steering, in force)
+Fable for thinking/planning (the main loop — including the cycle-4 proposal synthesis);
+**Opus (`model: opus`) for execution subagents**. Researchers stay on the framework's cheap
+researcher model (information gathering per the approved plan).
 
-**What "the scatter" is:** the smaller bone props strewn around the boneyard biome, SEPARATE from
-the colossal hero ribcage. It currently uses the OLDER lighter `_boneMat` + a ring-y `placeRibcage`
-so the small skeletons read as rounded rings in the sand — outdated next to the redesigned hero.
+## Cycle 3 mission — 4 research digests to docs/research/
+Fan out via `/research-topic` / the `game-researcher` agent. **This is the sanctioned parallel
+exception**: read-only researchers, each writing ONLY its own `docs/research/<topic>.md` — safe to
+run concurrently. No source-code changes this cycle.
 
-**Files (verify against the code — it merged recently, names may have shifted):**
-- `src/world/boneScatter.ts` — the scatter placement (the thing to overhaul).
-- `src/world/giantRibcage.ts` — the HERO vocabulary to reuse: `jagProfile()` jagged caps,
-  `layFallen()`, section wobble, the darker `_ribBone` material recipe.
-- `src/world/boneMaterial.ts` — `createBoneMaterial(hex, opts)` (crackDensity/crackDepth/marrowHint/
-  ageBleach/weathering) + `registerBoneEmissive(mat, hex, base)` + `updateBoneEmissiveDaylight(sunHeight)`.
-  The hero ribcage uses ~`0xc9c5bc` with `emissive 0x494d52 @ 0.36`, DAYLIGHT-DRIVEN.
+1. **`crafting-improvements`** — survival-crafting material/recipe taxonomies (Long Dark, Rust,
+   Subnautica + any strong desert/scavenger analogues) AND concrete ways to improve Dustfall's
+   CURRENT bench-free crafting (recipe depth, discovery flow, material identity, inventory
+   pressure). Constraint to honor: crafting stays BENCH-FREE (locked). This digest FEEDS cycle 4's
+   economy proposal — bias toward actionable taxonomies + a leaner-set recommendation (~4-5
+   materials building on the existing `scrap`), per-POI loot identity ideas, and recipe patterns.
+2. **`multiplayer-architecture`** — co-op over Dustfall's seed+descriptor deterministic world:
+   Colyseus-style hosted server vs P2P/relay; state sync for chunkDiffs/creatures/physics
+   authority; what 2-4-player co-op needs vs many-player. Note the GDD currently FORBIDS MP — this
+   is decision support for the re-anchor, not a commitment.
+3. **`character-pipeline`** — procedural-rig ceiling-push vs imported rigged glTF (which would
+   break the zero-asset pillar D1/D107); skinning/cloth/animation options in Three.js for each
+   fork; what a 2-4-co-op remote-player silhouette minimally needs.
+4. **`cave-feasibility`** — cave-gen methods compatible with Rapier heightfield terrain (room-kit
+   under a carve vs tunnel-carving vs hand-authored modules); the D254 open question (can the KCC
+   walk BELOW the heightfield sheet and back?); dark-nav/torch-economy reference (Long Dark).
+   Flag clearly that a 10-min ATTENDED spike must precede any cave build.
 
-**Definition of Done:**
-1. All scatter bones use the SAME darker hero bone material (match the ribcage's tone + weathering),
-   and — critically — its emissive is DAYLIGHT-DRIVEN via `registerBoneEmissive` /
-   `updateBoneEmissiveDaylight`. **The scatter must NOT glow at night** (this is the exact
-   lighting-invariant bug that bit the hero bones + the worm; the scatter likely still opts out).
-2. Real bone VARIETY replacing rounded rings: cracked/snapped long bones (femurs, jagged ends via
-   the hero `jagProfile`), rib fragments, vertebrae, partial small skeletons — not just torus rings.
-   Several distinct skeleton TYPES, not one repeated.
-3. 100% collision matches the visible bones (rule 9) where they're substantial enough to block.
-4. `verify:all` green.
+**Done =** all 4 digests exist in `docs/research/`, each structured (sources, findings, options
+with trade-offs, a recommendation, open questions). Commit them. No gates needed beyond tsc-noop
+(no source changes) — but run `npm run verify` once anyway as the cheap invariant.
 
-## GATES — this is a HERO visual (rule 8 + the lighting-invariant lesson)
-- **Do NOT ship on tsc alone.** Delegate to the `procedural-modeler` agent; iterate
-  build→shoot→critique **5-8 rounds** against a quality bar ("reads as a real bone graveyard,
-  released-game quality" — not "reads as bones").
-- **ADD A DAY/NIGHT RENDER CHECK.** Two bugs (hero bones, worm) shipped because a constant was tuned
-  by eye in daylight and opted out of lighting, with no gate covering that class. Shoot the scatter
-  at BOTH day and night (there's a `bone-daynight` rig scenario — grep `scripts/rig-shot.mjs`) and
-  confirm the scatter tracks the light level (no pale/glowing blobs at night). Make this a repeatable
-  check if cheap.
-- Shoot the PLAYER'S REAL IN-GAME VIEW in the real boneyard placement (use the `bone-field` /
-  `boneyard` review hook — `__game.gotoBoneField` / the debug-panel button), multiple angles + the
-  walk-under, close AND mid distance. Fresh-critic pass (N≥3, one adversarial).
-- FRESH `--port=52xx` per rig run.
-
-**Commit** to `campaign/2026-07-17-economy`. Push HELD.
+## Then cycle 4 (the LAST before the pause)
+Synthesize digest 1 + the current inventory/recipe code into `docs/campaign/economy-proposal.md`
+(leaner ~4-5 material set, 1-page recipe/drop matrix w/ per-POI identity, crafting-UX
+improvements). **Bake NO ItemIds, change NO loot tables.** Then set `awaiting_approval: true`,
+`stop_reasons: ["milestone-review"]`, write the morning summary, STOP the loop.
 
 ## Hard rules
-Never `git stash` here · ONE agent at a time · no AskUserQuestion overnight · trust the
-playtest/day-night render over a green tsc.
+Never `git stash` here · one code-writing agent at a time (read-only researchers exempt) · no
+AskUserQuestion overnight · push HELD.
