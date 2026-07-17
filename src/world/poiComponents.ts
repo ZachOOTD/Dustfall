@@ -1408,7 +1408,9 @@ export function habDome(seed: number): BuiltComponent {
   // ring cells k∈[DOOR_K0,DOOR_K1) (α≈67°→112° → y from ~2.1m down through the floor into the
   // buried sill) over an x-window ±DOOR_HX around the dome centre → a floor-to-head opening.
   const DOOR_K0 = 6, DOOR_K1 = 10;
-  const DOOR_HX = 0.8;
+  const DOOR_HX = 1.1;   // half-width of the door window in x → a ~2.3m opening (0.8 gave ~1.6m:
+                         // passable by a 1.4m player sphere with only ~11cm of slack, and that
+                         // slack varied with RA across seeds. A habitat door reads better wide.)
   const doorXs = [xA, xB];
   const inDoorCell = (xmid: number, ck: number): number => {
     if (ck < DOOR_K0 || ck >= DOOR_K1) return -1;
@@ -1486,6 +1488,17 @@ export function habDome(seed: number): BuiltComponent {
   shellGeo.computeVertexNormals();
   const shell = new THREE.Mesh(shellGeo, _hullMat);
   shell.userData.auditExempt = true; g.add(shell);
+  // Declare the dome-A doorway as an INTENDED opening (component-LOCAL). `openend` is a topology
+  // detector and cannot tell a torn hull from a front door — told to close every open loop, a
+  // pass will brick up the entrance (this is exactly how the leviathan got sealed). Declaring it
+  // excuses the door from `openend` and gives `walkin` the true target to aim at.
+  // It lives on the GROUP, not on `shell`: the POI pipeline static-merges `shell` away (it shares
+  // _hullMat with the airlock), which would take its userData with it. The group survives the
+  // merge, which is why the walk-probe is stashed here too.
+  g.userData.intendedOpening = {
+    center: { x: xA, y: AXIS_Y, z: Math.sqrt(Math.max(0.04, RA * RA - AXIS_Y * AXIS_Y)) },
+    radius: DOOR_HX,
+  };
 
   // ── decoration: latitude hoops + meridian ribs on each dome, corridor arch ribs + junction
   //    collars, a few portholes, an airlock module, a bent dead antenna. All seated on the shell
@@ -1574,6 +1587,11 @@ export function habDome(seed: number): BuiltComponent {
   const WALL_H = 2.15;                            // walk-height wall band for the pole caps
   const CI = 4, CK = 2;                          // collider grid coarsening (stations, rings)
   const rSlope = (x: number) => (rAt(x + 0.05) - rAt(x - 0.05)) / 0.1;
+  // The door's x-window taken from the ACTUAL mesh hole (rule 9: collision matches the model),
+  // so a trimmed box abuts the jamb exactly — wall covered right up to the opening, nothing
+  // protruding into it.
+  const doorWin = doorRims.map((rm) => (rm.i1 < rm.i0 ? null : { x0: xs[rm.i0], x1: xs[rm.i1] }));
+  const inDoorBand = (k: number) => ((k + nS - DOOR_K0) % nS) < (DOOR_K1 - DOOR_K0 + 1);
   const _tx = new THREE.Vector3(), _ta = new THREE.Vector3(), _nn = new THREE.Vector3();
   const _mtx = new THREE.Matrix4();
   for (let i = CI; i <= M - CI; i += CI) {
@@ -1583,10 +1601,23 @@ export function habDome(seed: number): BuiltComponent {
       const a = (k / nS) * Math.PI * 2;
       const py = AXIS_Y + ri * Math.cos(a);
       if (py < 0.25) continue;                    // buried patch — skip (bottom is under the sand)
-      // doorway holes (skip so the opening stays clear): near a door centre in x AND its k-band
-      let inDoor = false;
-      for (const dx of doorXs) if (Math.abs(x - dx) <= DOOR_HX + 0.35 && ((k + nS - DOOR_K0) % nS) < (DOOR_K1 - DOOR_K0 + 1)) inDoor = true;
-      if (inDoor) continue;
+      // Doorway: TRIM this box's x EXTENT out of the door window rather than testing its
+      // CENTRE. `dxSpan` is the full station spacing but is used as a HALF-extent, so each box
+      // is ~2.9m wide while stations sit 1.31m apart. A centre-distance skip therefore kept the
+      // boxes flanking the door, and their bodies still reached into the opening — leaving only
+      // ~1.0m clear against a 1.4m player sphere. That WAS the hab_dome seal (walkin 0/16): the
+      // mesh hole was right and only the collision intruded, which is why every mesh-topology
+      // check passed while the interior was unreachable.
+      let lo = x - dxSpan * 1.12, hi = x + dxSpan * 1.12, dropped = false;
+      if (inDoorBand(k)) {
+        for (const w of doorWin) {
+          if (!w || hi <= w.x0 || lo >= w.x1) continue;          // no overlap with this door
+          if (lo >= w.x0 && hi <= w.x1) { dropped = true; break; }  // wholly inside the hole
+          if (w.x0 - lo >= hi - w.x1) hi = w.x0; else lo = w.x1;  // keep the larger surviving side
+        }
+      }
+      if (dropped || hi - lo < 0.06) continue;
+      const xc = (lo + hi) / 2;
       const pz = ri * Math.sin(a);
       // orthonormal tangent frame: along-X, along-ring, outward normal
       _tx.set(1, rp * Math.cos(a), rp * Math.sin(a)).normalize();
@@ -1596,8 +1627,8 @@ export function habDome(seed: number): BuiltComponent {
       _mtx.makeBasis(_tx, _ta, _nn);
       const q = new THREE.Quaternion().setFromRotationMatrix(_mtx);
       const arc = ri * (CK / nS) * Math.PI * 2;
-      colliders.push({ kind: 'box', half: { x: dxSpan * 1.12, y: arc * 0.62, z: 0.2 },
-        pos: { x, y: py, z: pz }, quat: { x: q.x, y: q.y, z: q.z, w: q.w } });
+      colliders.push({ kind: 'box', half: { x: (hi - lo) / 2, y: arc * 0.62, z: 0.2 },
+        pos: { x: xc, y: py, z: pz }, quat: { x: q.x, y: q.y, z: q.z, w: q.w } });
     }
   }
   // pole-tip caps — the first/last CI station bands are too small to tile; a solid box fills
