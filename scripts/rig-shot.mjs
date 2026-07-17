@@ -9857,6 +9857,236 @@ const SCENARIOS = {
     }
   },
 
+  // storm-drift (review 2026-07-17) — Zach's 3rd storm round: the dust WALL must have
+  // ZERO sideways movement — "just look like it's moving forward toward the player." This
+  // probe proves it in three parts, with numbers:
+  //   A) GEOMETRY  — over N advancing frames, the wall's heading vector stays constant
+  //      (dot≈1), the group yaw is constant, a FIXED reference point on the wall face has
+  //      ~0 lateral displacement (projected onto the wall's width axis) while its forward
+  //      advance (projected onto the travel dir) is monotonic.
+  //   B) SHADER    — the FACE itself must not scroll along its width. We freeze the wall
+  //      head-on on a BLACK background (re-parent → the wall is the ONLY signal, no static
+  //      terrain/sky to bias the correlation toward 0), render two frames at uTime 0 and
+  //      6.0s WITHOUT moving the geometry, and cross-correlate the horizontal luminance
+  //      profile. The best-fit horizontal shift is the net sideways drift of the surface
+  //      pattern in px — must be ~0. A region frame-delta proves the mass IS animating
+  //      (so a 0 shift isn't a frozen frame); the vertical shift is printed as evidence the
+  //      churn moves up/in-place, not sideways.
+  //   C) SEQUENCE  — a 3-frame approach (far → near → enveloping) from ONE fixed camera for
+  //      the human: the wall grows while its features hold the SAME horizontal position.
+  // The prior rounds fixed the geometry (wind-locked yaw, linear wall, dir frozen at arm) —
+  // this probe guards A as a regression gate AND targets the real remaining source, B.
+  'storm-drift': async (page) => {
+    // ── PART A — GEOMETRY: heading constant + zero lateral group translation. ──
+    console.log('[storm-drift] PART A — geometry (heading dot, group yaw, ref-point lateral vs forward)');
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const w = ctx.weather;
+      window.__game.setTime(0.34);                 // bright midday
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1200, 680, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 680; cam.updateProjectionMatrix(); }
+      const px = 0, pz = 0;
+      const gy = ctx.terrain.heightAt(px, pz);
+      ctx.player.body.body.setTranslation({ x: px, y: gy + 1.6, z: pz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      ctx.player.inShelter = false;
+      // Storm with a wall travelling +Z toward the player at origin. speed=0 so ONLY our
+      // manual per-frame advance moves it (deterministic under the slow headless clock);
+      // updateWeather still re-seats the dust-wall group from the wall state each frame.
+      w.state = 'storm'; w.currentStormDuration = 1e6; w.stateTimer = 0; w.longStormAnnounced = true;
+      w.wall.active = true;
+      w.wall.dirX = 0; w.wall.dirZ = 1; w.wall.width = 140; w.wall.speed = 0; w.wall.age = 0; w.wall.approaching = true;
+      const edge = 500;                            // leading edge 500m south (-Z) of the player
+      w.wall.posX = px; w.wall.posZ = (pz - edge) - w.wall.width;
+    });
+    const STEP = 45;   // manual +dir advance per frame (world u) — guarantees forward motion
+    const samples = [];
+    for (let i = 0; i < 8; i++) {
+      await page.evaluate((step) => {
+        const w = window.__game.ctx.weather;
+        w.wall.posX += w.wall.dirX * step;
+        w.wall.posZ += w.wall.dirZ * step;
+      }, i === 0 ? 0 : STEP);
+      await page.waitForTimeout(150);              // let ≥1 RAF run updateWeather → updateDustWall (re-seat)
+      const s = await page.evaluate(() => {
+        const ctx = window.__game.ctx; const w = ctx.weather; const dw = w.dustWall;
+        const V = ctx.time.sunDir.constructor;
+        dw.group.updateMatrixWorld(true);
+        const ref = new V(300, 170, 0);            // FIXED flank point on the face, in LOCAL space
+        dw.group.localToWorld(ref);
+        return {
+          dirX: w.wall.dirX, dirZ: w.wall.dirZ,
+          yaw: +dw.group.rotation.y.toFixed(6),
+          rx: +ref.x.toFixed(4), rz: +ref.z.toFixed(4),
+          op: dw.shells[0] ? +dw.shells[0].mat.uniforms.uOpacity.value.toFixed(3) : 0,
+          vis: dw.group.visible,
+        };
+      });
+      samples.push(s);
+    }
+    const s0 = samples[0];
+    const dir0 = { x: s0.dirX, z: s0.dirZ };
+    const widthAxis = { x: dir0.z, z: -dir0.x };   // perpendicular to dir in XZ
+    let maxHeadingErr = 0, maxLateral = 0, forwardMonotonic = true, prevFwd = -Infinity;
+    const rows = samples.map((s) => {
+      const dot = s.dirX * dir0.x + s.dirZ * dir0.z;
+      maxHeadingErr = Math.max(maxHeadingErr, Math.abs(1 - dot));
+      const drx = s.rx - s0.rx, drz = s.rz - s0.rz;
+      const fwd = drx * dir0.x + drz * dir0.z;
+      const lat = drx * widthAxis.x + drz * widthAxis.z;
+      maxLateral = Math.max(maxLateral, Math.abs(lat));
+      if (fwd < prevFwd - 0.01) forwardMonotonic = false;
+      prevFwd = fwd;
+      return { fwd: +fwd.toFixed(3), lat: +lat.toFixed(5), dot: +dot.toFixed(6), yaw: s.yaw, op: s.op, vis: s.vis };
+    });
+    console.log('[storm-drift] geometry samples:');
+    rows.forEach((r, i) => console.log(`  f${i}: ${JSON.stringify(r)}`));
+    const yawConst = samples.every((s) => Math.abs(s.yaw - s0.yaw) < 1e-4);
+    const headingPass = maxHeadingErr < 1e-6;
+    const lateralPass = maxLateral < 0.05;         // world u — essentially zero
+    const geomPass = headingPass && yawConst && lateralPass && forwardMonotonic;
+    console.log(
+      `[storm-drift] GEOMETRY ${geomPass ? 'PASS' : 'FAIL'} — headingDotErr=${maxHeadingErr.toExponential(2)} (want <1e-6) | ` +
+      `yawConst=${yawConst} | maxLateral=${maxLateral.toFixed(5)}u (want <0.05) | forwardMonotonic=${forwardMonotonic} ` +
+      `(fwd ${rows[0].fwd}→${rows[rows.length - 1].fwd}u)`,
+    );
+    if (!geomPass) process.exitCode = 1;
+
+    // ── PART B — SHADER: the FACE must not scroll along its width axis. ──
+    console.log('[storm-drift] PART B — shader face-scroll (cross-correlate two frames at fixed geometry)');
+    const sig = await page.evaluate(() => {
+      const ctx = window.__game.ctx; const w = ctx.weather; const dw = w.dustWall;
+      const cam = ctx.three.camera; const R = ctx.three.renderer;
+      ctx.flags.paused = true;
+      R.setSize(1200, 680, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 680; cam.updateProjectionMatrix(); }
+      const H = 340;
+      // Freeze the wall head-on: local +Z (leading/face dir) → world +Z; face at z≈0.
+      dw.group.position.set(0, 0, 0);
+      dw.group.rotation.set(0, 0, 0);
+      dw.group.updateMatrixWorld(true);
+      dw.group.visible = true;
+      for (const s of dw.shells) {
+        s.mesh.visible = true;
+        s.mat.uniforms.uOpacity.value = 0.97;      // MAX — read the pattern clearly
+        s.mat.uniforms.uWind.value = 1.5;          // representative wind (the OLD code scrolled x by uTime·uWind·0.12)
+      }
+      cam.position.set(0, H * 0.45, 470);
+      cam.lookAt(0, H * 0.45, 0);
+      cam.updateMatrixWorld(true);
+      // Isolate the wall on BLACK so the ONLY varying signal is the wall itself (static
+      // terrain/sky would bias the correlation toward shift 0 and mask a real drift).
+      const Col = ctx.three.scene.fog.color.constructor;
+      const prevClear = R.getClearColor(new Col());
+      const prevAlpha = R.getClearAlpha();
+      const tmp = new (ctx.three.scene.constructor)();
+      tmp.add(dw.group);                           // re-parent the wall out of the main scene
+      R.setClearColor(0x000000, 1);
+      const gl = R.getContext();
+      const BW = gl.drawingBufferWidth, BH = gl.drawingBufferHeight;
+      const x0 = 300, x1 = 900, y0 = 200, y1 = 480;
+      function readFrame(t) {
+        for (const s of dw.shells) s.mat.uniforms.uTime.value = t;
+        R.render(tmp, cam);
+        const buf = new Uint8Array(BW * BH * 4);
+        gl.readPixels(0, 0, BW, BH, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+        return buf;
+      }
+      const lum = (buf, i) => 0.299 * buf[i] + 0.587 * buf[i + 1] + 0.114 * buf[i + 2];
+      const bufA = readFrame(0.0);
+      const bufB = readFrame(6.0);
+      const colA = [], colB = [], rowA = [], rowB = [];
+      for (let x = x0; x < x1; x++) {
+        let a = 0, b = 0;
+        for (let y = y0; y < y1; y++) { const i = (y * BW + x) * 4; a += lum(bufA, i); b += lum(bufB, i); }
+        colA.push(a / (y1 - y0)); colB.push(b / (y1 - y0));
+      }
+      for (let y = y0; y < y1; y++) {
+        let a = 0, b = 0;
+        for (let x = x0; x < x1; x++) { const i = (y * BW + x) * 4; a += lum(bufA, i); b += lum(bufB, i); }
+        rowA.push(a / (x1 - x0)); rowB.push(b / (x1 - x0));
+      }
+      let dsum = 0, dn = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const i = (y * BW + x) * 4; dsum += Math.abs(lum(bufB, i) - lum(bufA, i)); dn++;
+      }
+      // restore
+      ctx.three.scene.add(dw.group);
+      R.setClearColor(prevClear, prevAlpha);
+      return { colA, colB, rowA, rowB, meanRegionDelta: +(dsum / dn).toFixed(3) };
+    });
+    // Node-side normalized cross-correlation → best integer shift (px).
+    const bestShift = (a, b, maxShift) => {
+      const n = a.length;
+      const ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n;
+      const A = a.map((v) => v - ma), B = b.map((v) => v - mb);
+      let best = 0, bestC = -Infinity;
+      for (let s = -maxShift; s <= maxShift; s++) {
+        let num = 0, da = 0, db = 0;
+        for (let x = 0; x < n; x++) { const xb = x + s; if (xb < 0 || xb >= n) continue; num += A[x] * B[xb]; da += A[x] * A[x]; db += B[xb] * B[xb]; }
+        const c = num / (Math.sqrt(da * db) || 1);
+        if (c > bestC) { bestC = c; best = s; }
+      }
+      return { shift: best, corr: +bestC.toFixed(4) };
+    };
+    const horiz = bestShift(sig.colA, sig.colB, 40);
+    const vert = bestShift(sig.rowA, sig.rowB, 40);
+    const animates = sig.meanRegionDelta > 1.5;
+    const shaderPass = Math.abs(horiz.shift) <= 1 && animates;
+    console.log(
+      `[storm-drift] SHADER ${shaderPass ? 'PASS' : 'FAIL'} — horizShift=${horiz.shift}px (corr=${horiz.corr}, want |shift|<=1) | ` +
+      `meanFrameDelta=${sig.meanRegionDelta} (want >1.5 → the mass IS churning) | vertShift=${vert.shift}px (corr=${vert.corr}, evidence of vertical/in-place churn)`,
+    );
+    if (!shaderPass) {
+      console.log('[storm-drift] SHADER FAIL: the wall face translates along its width axis — a uTime term leaked into the .x noise coordinate in dustWall.ts FRAG.');
+      process.exitCode = 1;
+    }
+    // Human eyeball of the face (T1 frame currently on the buffer would be black — re-render lit).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+    });
+    await page.waitForTimeout(80);
+    await page.screenshot({ path: join(OUT, 'scen-stormdrift-face.png'), fullPage: false });
+    console.log('[storm-drift] saved scen-stormdrift-face.png');
+
+    // ── PART C — 3-frame approach sequence from ONE fixed camera. ──
+    console.log('[storm-drift] PART C — 3-frame approach (fixed camera; features hold azimuth as it grows)');
+    for (const [tag, approachDist] of [['1-far', 500], ['2-near', 260], ['3-envelop', 70]]) {
+      await page.evaluate((ad) => {
+        const ctx = window.__game.ctx; const w = ctx.weather;
+        ctx.flags.paused = false;
+        const px = 0, pz = 0;
+        const gy = ctx.terrain.heightAt(px, pz);
+        w.state = 'storm'; w.currentStormDuration = 1e6;
+        w.wall.active = true; w.wall.dirX = 0; w.wall.dirZ = 1; w.wall.width = 140; w.wall.speed = 0; w.wall.age = 0;
+        w.wall.posX = px; w.wall.posZ = (pz - ad) - w.wall.width;
+        ctx.player.body.body.setTranslation({ x: px, y: gy + 1.6, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.inShelter = false;
+      }, approachDist);
+      await page.waitForTimeout(600);              // let the loop re-seat the group + settle fog/opacity
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = 0, pz = 0; const gy = ctx.terrain.heightAt(px, pz);
+        // IDENTICAL camera every frame (fixed pos + fixed look target) → azimuth reference.
+        cam.position.set(px, gy + 1.7, pz);
+        cam.lookAt(px, gy + 40, pz - 300);
+        cam.updateMatrixWorld(true);
+        ctx.three.renderer.render(ctx.three.scene, cam);
+      });
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-stormdrift-seq-${tag}.png`), fullPage: false });
+      console.log(`[storm-drift] saved scen-stormdrift-seq-${tag}.png (approachDist=${approachDist})`);
+    }
+    console.log('[storm-drift] done.');
+  },
+
   // Smoke-plume (C21): deploy a lit fire + let its smoke-signal column build, then
   // frame it from a distance against the sky (the "visible-from-afar" signal read).
   // Tall frame for a vertical plume. --storm forces a peak storm (the plume tears flat).

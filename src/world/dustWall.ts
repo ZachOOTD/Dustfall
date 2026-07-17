@@ -98,8 +98,16 @@ const FRAG = /* glsl */ `
 
   void main() {
     vec2 uv = vUv;
-    // Churn coordinates: billows rise (scroll up) and drift sideways with the wind.
-    vec2 p = vec2(uv.x * uUvX + uSeed + uTime * uWind * 0.12,
+    // review 2026-07-17 — ZERO SIDEWAYS DRIFT (Zach, 3rd storm round: "not move sideways
+    // at all, just look like it's moving forward toward the player"). The billow field must
+    // NOT translate along the width axis (uv.x): any uTime term in the .x coordinate makes
+    // the whole surface pattern march horizontally across the face, which reads as the wall
+    // strafing even though the geometry advances head-on. So the .x coordinate is PURELY
+    // spatial (uv.x·uUvX + uSeed) — no time. The churn/boil is driven ONLY through the .y
+    // (vertical) scroll + a vertical domain-warp on n2, so the mass seethes/rises in place
+    // with no net lateral motion. (uWind is no longer used here; kept as a uniform for the
+    // wind-audio/particle path parity — harmless if unread.)
+    vec2 p = vec2(uv.x * uUvX + uSeed,
                   uv.y * 4.6 - uTime * uScroll);
     float n  = fbm(p);
     float n2 = fbm(p * 2.4 + n * 1.6 + vec2(0.0, uTime * uScroll * 0.7));
@@ -109,8 +117,10 @@ const FRAG = /* glsl */ `
     billow = smoothstep(0.18, 0.86, billow);
 
     // BOILING top: big low-frequency rolls (the classic haboob rolling crest) modulate
-    // the wall height so the silhouette heaves, not a flat line.
-    float roll = fbm(vec2(uv.x * 9.0 + uSeed + uTime * uWind * 0.05, 7.3));
+    // the wall height so the silhouette heaves, not a flat line. The crest BOILS in place
+    // (a slow vertical evolution in the .y coordinate) — it must NOT scroll along uv.x, or
+    // the silhouette lumps slide sideways (the same drift bug as the billow field above).
+    float roll = fbm(vec2(uv.x * 9.0 + uSeed, 7.3 + uTime * uScroll * 0.6));
     float topEdge = 0.50 + 0.46 * roll;
     float vShape = smoothstep(topEdge, topEdge - 0.30, uv.y); // 1 below crest → 0 above
     // Ground the base into the fog/terrain (a hair of translucency at the very bottom).
@@ -236,7 +246,7 @@ export interface DustWallUpdate {
   dirZ: number;
   opacity: number;   // 0..1 ramp (already includes the max-opacity scale)
   elapsed: number;
-  wind: number;      // wind magnitude for the sideways churn drift
+  wind: number;      // wind magnitude (drives uWind; no longer moves the face — see FRAG note)
 }
 
 export function updateDustWall(dw: DustWall, p: DustWallUpdate): void {
