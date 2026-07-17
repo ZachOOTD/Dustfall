@@ -1447,6 +1447,60 @@ const SCENARIOS = {
     console.log(`[drop-test] ${allOk ? 'PASS' : 'FAIL'} ${JSON.stringify(after)}`);
   },
 
+  // Scavenger's Economy (build 2) — MATERIAL PICKUP + ICON probe. Spawns the four
+  // new salvage-material WORLD pickups (spawnMaterialTest → the streamed-scatter
+  // path) in a row in front of the player, asserts each builds a non-degenerate
+  // mesh + carries the right itemId (what E-take grants), takes them via the real
+  // acquire path (giveItem = addItem) so the ItemId lands in inventory, and puts
+  // the four in the (cleared) hotbar so their makeIcon glyphs render for a
+  // screenshot. Screenshots the game view (ground pickups + hotbar icons).
+  'material-probe': async (page) => {
+    const IDS = ['metal_pipe', 'machine_part', 'wiring', 'battery'];
+    const r = await page.evaluate((IDS) => {
+      const g = window.__game; g.enterGame(true);
+      const ctx = g.ctx;
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.toneMappingExposure = 1.15;
+      ctx.flags.paused = false;
+      // Clear the dev loadout so the 4 materials land in the 4 hotbar slots (icons).
+      for (const s of ctx.inventory.slots) { s.item = null; s.count = 0; s.meta = undefined; }
+      for (const s of ctx.inventory.backpack) { s.item = null; s.count = 0; s.meta = undefined; }
+      const world = {};
+      let off = -2.1;
+      for (const id of IDS) {
+        const pid = g.spawnMaterialTest(id, off); off += 1.4;
+        const p = ctx.pickups.list.find((pp) => pp.id === pid);
+        const geo = p && p.mesh && p.mesh.geometry;
+        let sz = null;
+        if (geo) { geo.computeBoundingBox(); const b = geo.boundingBox; sz = { x: +(b.max.x - b.min.x).toFixed(3), y: +(b.max.y - b.min.y).toFixed(3), z: +(b.max.z - b.min.z).toFixed(3) }; }
+        world[id] = {
+          spawned: !!p,
+          itemIdMatches: !!p && p.itemId === id,          // what E-take would grant
+          meshNonZero: !!sz && sz.x > 0.02 && sz.y > 0.02 && sz.z > 0.02,
+          sz,
+        };
+      }
+      // Take path: the four via the REAL acquire path (giveItem = addItem, exactly
+      // what interaction.ts calls on E), landing them in the cleared hotbar.
+      for (const id of IDS) g.giveItem(id, 1);
+      const inv = {};
+      for (const id of IDS) {
+        inv[id] = ctx.inventory.slots.concat(ctx.inventory.backpack)
+          .filter((s) => s.item === id).reduce((a, s) => a + s.count, 0);
+      }
+      // Icons: after giveItem, the hotbar DOM re-renders makeIcon SVGs into its
+      // slots. Count the rendered <svg> nodes in the hotbar (>0 = icons render).
+      const hotbarSvgs = document.querySelectorAll('#hotbar svg').length;
+      return { world, inv, hotbarSvgs };
+    }, IDS);
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: join(OUT, 'scen-material-probe.png'), fullPage: false, timeout: 60000 });
+    const worldOk = IDS.every((id) => r.world[id].spawned && r.world[id].itemIdMatches && r.world[id].meshNonZero);
+    const takeOk = IDS.every((id) => r.inv[id] === 1);
+    const pass = worldOk && takeOk;
+    console.log(`[material-probe] ${pass ? 'PASS' : 'FAIL'} (world=${worldOk} take=${takeOk}) ${JSON.stringify(r)}`);
+  },
+
   // Crafting rework — PICKUP-GATED discovery gate (replaces the old craft-chooser
   //   gate). A recipe unlocks once ALL its ingredient TYPES have been collected
   //   (any means — pickup/craft/loot, all via addItem). Runs NON-dev (enterGame(false),

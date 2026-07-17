@@ -67,6 +67,10 @@ export const SALVAGE_TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'scrap',         chance: 0.50 },
     { id: 'rope',          chance: 0.10 },
     { id: 'scrap_bullet',  chance: 0.12 },   // AAL — bumped 0.05 → 0.12; ammo was scrap_bullet-recipe-dependent in practice
+    // Scavenger's Economy (build 2) — an engine block yields machinery (primary)
+    // + the odd bit of tube. APPENDED (existing rolls keep their rng sequence).
+    { id: 'machine_part',  chance: 0.30 },
+    { id: 'metal_pipe',    chance: 0.12 },
   ],
   // Fuselage — interior textiles + bulkhead cabling. The cloth/rope wreck of choice.
   fuselage: [
@@ -76,6 +80,10 @@ export const SALVAGE_TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'bandage',    chance: 0.25 },
     { id: 'rope',       chance: 0.15 },
     { id: 'flashlight', chance: 0.04 },
+    // Scavenger's Economy (build 2) — debris fields / derelicts carry salvaged
+    // tube (secondary) + the odd loose cable.
+    { id: 'metal_pipe', chance: 0.22 },
+    { id: 'wiring',     chance: 0.12 },
   ],
   // Escape pod — medical kit + survival gear. Bandage-heavy.
   escape_pod: [
@@ -84,6 +92,11 @@ export const SALVAGE_TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'cloth',   chance: 0.35 },
     { id: 'scrap',   chance: 0.20 },
     { id: 'branch',  chance: 0.08 },
+    // Scavenger's Economy (build 2) — this is the SalvageKind shared by the
+    // electronic POIs (satellite / relay_mast / hab_dome) + actual escape pods,
+    // so it owns wiring (primary) + battery (secondary) — the powered-wreck loot.
+    { id: 'wiring',  chance: 0.45 },
+    { id: 'battery', chance: 0.28 },
   ],
   // Cargo container — varied lottery + rope (lashing material).
   cargo_container: [
@@ -93,12 +106,21 @@ export const SALVAGE_TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'branch',   chance: 0.25 },
     { id: 'rope',     chance: 0.15 },
     { id: 'tent_kit', chance: 0.04 },
+    // Scavenger's Economy (build 2) — the SalvageKind shared by the industrial
+    // ground POIs (buried_pipeline / refinery / transit_car / cargo_crawler /
+    // wrecked_tank / well): metal_pipe + machine_part (their identity split),
+    // with a rare loose cable. Ground scatter carries the precise per-POI identity.
+    { id: 'metal_pipe',   chance: 0.30 },
+    { id: 'machine_part', chance: 0.24 },
+    { id: 'wiring',       chance: 0.08 },
   ],
   // Engine bell — pure scrap, occasional rope (cabling around the nozzle).
   engine_bell: [
     { id: 'scrap', chance: 1.00, count: 2 },
     { id: 'scrap', chance: 0.60 },
     { id: 'rope',  chance: 0.05 },
+    // Scavenger's Economy (build 2) — a bit of machinery stowed in the nozzle housing.
+    { id: 'machine_part', chance: 0.18 },
   ],
   // Massive POIs — richer rolls incl. rope + rare hero-tier weapons. AAL added
   // energy_pistol + scrap_bullet so ammo isn't gated on the scrap recipe alone.
@@ -117,6 +139,13 @@ export const SALVAGE_TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'amban_rifle',   chance: 0.02 },
     // ACAC — pulse rifle: the rarest hero find (self-recharging cell, no ammo item).
     { id: 'pulse_rifle',   chance: 0.015 },
+    // Scavenger's Economy (build 2) — massive/hero wrecks (husks, enterable
+    // wrecks, Skyfall, leviathan) are the RICHEST single material stops: they
+    // earn the walk with machine_part + wiring, plus tube + the odd power cell.
+    { id: 'machine_part',  chance: 0.40 },
+    { id: 'wiring',        chance: 0.35 },
+    { id: 'metal_pipe',    chance: 0.20 },
+    { id: 'battery',       chance: 0.15 },
   ],
 };
 
@@ -172,14 +201,24 @@ export const CONTAINER_CONFIG = {
 
 /** The container drop table — a WEIGHTED-PICK cascade (exactly one item per
  *  entry-roll). Thresholds ascending + cumulative; `machete` at 1.0 is the
- *  fallback tail. Same buckets as the former tuning.LOOT_CONTAINER_* thresholds:
- *  bandage 25% / cloth 30% / scrap 20% / canteen 17% / machete 8%. */
+ *  fallback tail.
+ *
+ *  Scavenger's Economy (build 2) — the four materials are woven in as UNCOMMON
+ *  buckets (~5-7% each) between scrap and canteen; the surrounding buckets were
+ *  narrowed slightly to make room (bandage 25→22%, cloth 30→26%, scrap 20→18%,
+ *  canteen 17→5.5%, machete 8→4.5%). Old buckets: bandage 25 / cloth 30 / scrap
+ *  20 / canteen 17 / machete 8. This drift is INTENDED (loot-digest baseline
+ *  regenerated this cycle). */
 export const CONTAINER_LOOT: ContainerLootOption[] = [
-  { id: 'bandage', threshold: 0.25 },
-  { id: 'cloth',   threshold: 0.55, countMax: 2 },
-  { id: 'scrap',   threshold: 0.75, countMax: 3 },
-  { id: 'canteen', threshold: 0.92, canteenFill: true },
-  { id: 'machete', threshold: 1.00 },
+  { id: 'bandage',      threshold: 0.22 },
+  { id: 'cloth',        threshold: 0.48, countMax: 2 },
+  { id: 'scrap',        threshold: 0.66, countMax: 3 },
+  { id: 'metal_pipe',   threshold: 0.73 },
+  { id: 'machine_part', threshold: 0.79 },
+  { id: 'wiring',       threshold: 0.85 },
+  { id: 'battery',      threshold: 0.90 },
+  { id: 'canteen',      threshold: 0.955, canteenFill: true },
+  { id: 'machete',      threshold: 1.00 },
 ];
 
 /** Roll the contents of ONE loot container — WEIGHTED-PICK cascade. Byte-for-byte
@@ -216,8 +255,12 @@ export interface ComponentLoot {
 }
 
 // AAS — standard (baseline) mapping: each PanelComponentKind → a fixed item.
+// Scavenger's Economy (build 2) — red_wire (a stripped cable) now yields `wiring`
+// (was rope; rope still drops from engine/fuselage/cargo/massive panels). The
+// "cabling components → wiring" teach the proposal called for. yellow_wire stays
+// cloth for material variety.
 export const COMPONENT_LOOT: Record<string, ComponentLoot> = {
-  red_wire:     { id: 'rope' },
+  red_wire:     { id: 'wiring' },
   yellow_wire:  { id: 'cloth', count: 2 },
   chip:         { id: 'scrap_bullet' },
   fuse:         { id: 'scrap_bullet' },
@@ -243,4 +286,44 @@ export const COMPONENT_LOOT_CORRODED: Record<string, ComponentLoot> = {
  *  premium roll (mostly ammo bundles). Rewards finding the rare intact wreck. */
 export const COMPONENT_LOOT_PRISTINE_BONUS: ComponentLoot = {
   id: 'scrap_bullet', count: 3,
+};
+
+// ════════════════════════════════════════════════════════════════
+// 4. POI GROUND SCATTER — per-ARCHETYPE identity material pickups
+// ════════════════════════════════════════════════════════════════
+//
+// Scavenger's Economy (build 2) — the D299 scrap-ring pattern scatters `scrap`
+// pickups around every wreck; this adds 1-3 of the POI's IDENTITY material as
+// ground pickups so the drop matrix is legible WITHOUT prying a panel ("this is
+// the pipeline → pipes lie around it"). Keyed by ARCHETYPE id (the precise
+// identity — salvage panels can only distinguish by the coarser SalvageKind).
+//
+// Each roll is diced independently (`chance`); `count` = how many INDEPENDENT
+// attempts at that id (so `{chance:0.9,count:2}` ≈ 1.8 expected pipes). The
+// chunkManager streamer draws these on an INDEPENDENT renderSeed-derived rng so
+// it never disturbs the scrap-ring / salvage-panel draw sequences (determinism).
+// The `bone_field` biome is excluded at the call site (boneyard = scrap only).
+//
+// P = primary (high chance + count), s = secondary (lower). Matches the approved
+// matrix: pipeline→pipe P · refinery→pipe P,wiring s · transit_car→pipe P,
+// machine_part s · debris→pipe s · wrecked_tank→machine_part P · cargo_crawler→
+// machine_part P · satellite/relay_mast/hab_dome→wiring P,battery s · derelict/
+// hollow_husk/enterable_wreck→scrap-dominant + one uncommon identity pick.
+export const POI_IDENTITY_SCATTER: Record<string, LootRoll[]> = {
+  buried_pipeline: [{ id: 'metal_pipe', chance: 0.9, count: 2 }],
+  refinery_stack:  [{ id: 'metal_pipe', chance: 0.85, count: 2 }, { id: 'wiring', chance: 0.4 }],
+  transit_car:     [{ id: 'metal_pipe', chance: 0.85, count: 2 }, { id: 'machine_part', chance: 0.4 }],
+  debris_field:    [{ id: 'metal_pipe', chance: 0.5 }],
+  debris_trail:    [{ id: 'metal_pipe', chance: 0.5 }],
+  wrecked_tank:    [{ id: 'machine_part', chance: 0.9, count: 2 }],
+  cargo_crawler:   [{ id: 'machine_part', chance: 0.9, count: 2 }],
+  well:            [{ id: 'metal_pipe', chance: 0.55 }],
+  satellite:       [{ id: 'wiring', chance: 0.9, count: 2 }, { id: 'battery', chance: 0.45 }],
+  relay_mast:      [{ id: 'wiring', chance: 0.9, count: 2 }, { id: 'battery', chance: 0.45 }],
+  hab_dome:        [{ id: 'wiring', chance: 0.9, count: 2 }, { id: 'battery', chance: 0.45 }],
+  // Scrap-dominant hulls (the scrap ring already carries their identity) get ONE
+  // uncommon identity pick so a walk-up still occasionally reveals a material.
+  derelict:        [{ id: 'machine_part', chance: 0.3 }],
+  hollow_husk:     [{ id: 'wiring', chance: 0.3 }],
+  enterable_wreck: [{ id: 'machine_part', chance: 0.3 }],
 };

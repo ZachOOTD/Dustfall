@@ -16,6 +16,7 @@ import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../wor
 import { buildRelicCoreMesh } from '../world/relicMesh.ts';  // ACAQ — shared relic-core model (wreck-yard exclusive)
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';  // ACAE — dark wood branches
 import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model
+import { buildMetalPipeMesh, buildMachinePartMesh, buildWiringMesh, buildBatteryMesh } from '../world/materialMesh.ts';  // Scavenger's Economy — shared salvage-material models
 import { createMetalMaterial } from '../world/metalMaterial.ts';  // ACAH — world scrap material
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';  // ACAH perf — merge world pickups
 
@@ -502,6 +503,107 @@ export function spawnScrapAt(
     bobPhase: rand() * Math.PI * 2,
     hovered: false,
     body: null,   // seed-spawned, static (like branches)
+    ridingSledId: null,
+    inst,
+  };
+  list.push(pickup);
+  return pickup;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Scavenger's Economy (build 2) — salvage MATERIAL pickups scattered at POIs
+// per the per-POI identity matrix (config/lootRegistry.ts POI_IDENTITY_SCATTER;
+// chunkManager streams them). Mirrors the scrap-pickup pooling exactly: one
+// shared merged geometry + one InstancedMesh pool PER material kind, built lazily.
+// World-space single material (drops the held item's accent tint, invisible at
+// pickup distance). DoubleSide so the open-ended pipe bore renders in world too.
+// ────────────────────────────────────────────────────────────────
+type MaterialItemId = 'metal_pipe' | 'machine_part' | 'wiring' | 'battery';
+
+// One shared world material per kind (matte-rusty; single program each).
+const _matMaterials: Record<MaterialItemId, THREE.Material> = {
+  metal_pipe:   createMetalMaterial(0x8a8278, { wornScale: 12.0, scratchStrength: 0.07, rustLevel: 0.55 }),
+  machine_part: createMetalMaterial(0x5a564e, { wornScale: 9.0, scratchStrength: 0.08, rustLevel: 0.55 }),
+  wiring:       createMetalMaterial(0x7a5230, { wornScale: 10.0, scratchStrength: 0.05, rustLevel: 0.4 }),
+  battery:      createMetalMaterial(0x3a4a44, { wornScale: 8.0, scratchStrength: 0.05, rustLevel: 0.35 }),
+};
+_matMaterials.metal_pipe.side = THREE.DoubleSide;   // the pipe bore shows through its open ends
+
+function _buildMatGroup(id: MaterialItemId): THREE.Group {
+  const m = _matMaterials[id];
+  switch (id) {
+    case 'metal_pipe':   return buildMetalPipeMesh(m, m);
+    case 'machine_part': return buildMachinePartMesh(m, m);
+    case 'wiring':       return buildWiringMesh(m, m);
+    case 'battery':      return buildBatteryMesh(m, m);
+  }
+}
+
+const _matGeo: Partial<Record<MaterialItemId, THREE.BufferGeometry>> = {};
+const _matPools: Partial<Record<MaterialItemId, PickupInstPool>> = {};
+const MATERIAL_POOL_CAP = 256;   // materials scatter 1-3 per POI (far sparser than scrap)
+
+function _matGeometry(id: MaterialItemId): THREE.BufferGeometry {
+  let g = _matGeo[id];
+  if (!g) { g = mergeGroupToGeometry(_buildMatGroup(id)); _matGeo[id] = g; }
+  return g;
+}
+
+/** Spawn a single salvage-material pickup at (x, z). Terrain-aligned, no-shadow,
+ *  pickup-tagged; pooled per kind like scrap. Appends to `list`, returns the Pickup.
+ *  Used by the streamed-POI identity scatter (chunkManager). */
+export function spawnMaterialAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  x: number,
+  z: number,
+  itemId: MaterialItemId,
+  rand: Rng,
+  list: Pickup[],
+): Pickup {
+  const groundY = terrain.heightAt(x, z);
+  const restY = groundY + 0.03;
+  const yaw = rand() * Math.PI * 2;   // SAME rand-draw order as scrap (yaw, bobPhase)
+
+  const pickupId = _nextId++;
+  let pool = _matPools[itemId];
+  if (!pool) {
+    pool = _makeInstPool(scene, _matGeometry(itemId), _matMaterials[itemId], MATERIAL_POOL_CAP);
+    _matPools[itemId] = pool;
+  }
+  _instScratch.position.set(x, restY, z);
+  _instScratch.rotation.set(0, yaw, 0);
+  alignToTerrainNormal(_instScratch, terrain, x, z);
+  _instScratch.updateMatrix();
+  const slot = _poolAlloc(pool, pickupId, _instScratch.matrix);
+
+  let mesh: THREE.Object3D;
+  let inst: Pickup['inst'];
+  if (slot !== null) {
+    mesh = pool.imesh;
+    inst = { pool, index: slot };
+  } else {
+    console.warn(`[pickups] material pool ${itemId} full (${pool.capacity}) — legacy mesh fallback`);
+    const m = new THREE.Mesh(_matGeometry(itemId), _matMaterials[itemId]);
+    m.position.set(x, restY, z);
+    m.rotation.set(0, yaw, 0);
+    alignToTerrainNormal(m, terrain, x, z);
+    m.userData.noShadow = true;
+    m.castShadow = false;
+    m.receiveShadow = true;
+    tagPickupMeshes(m, pickupId);
+    scene.add(m);
+    mesh = m;
+  }
+
+  const pickup: Pickup = {
+    id: pickupId,
+    itemId,
+    mesh,
+    pos: new THREE.Vector3(x, restY, z),
+    bobPhase: rand() * Math.PI * 2,
+    hovered: false,
+    body: null,
     ridingSledId: null,
     inst,
   };

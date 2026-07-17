@@ -544,7 +544,11 @@ function applyDevLoadout(c: GameContext): void {
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'raw_worm_meat');
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'worm_lure');   // C18 — sand-worm lure (testability; craft recipe is a follow-up)
   addItem(c.inventory, 'spyglass');   // C29 — salvaged spyglass (testability; also a craft recipe below)
-  for (let i = 0; i < 2; i++) addItem(c.inventory, 'cactus_pulp');
+  // Scavenger's Economy (build 2) — new salvage materials in the dev loadout (icons/craft testability).
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'metal_pipe');
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'machine_part');
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'wiring');
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'battery');
   // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'fire_kit');

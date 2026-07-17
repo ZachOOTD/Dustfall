@@ -36,7 +36,11 @@ const HINTS: Partial<Record<ItemId, string>> = {
   machete: 'left-click swings the machete',
   fire_kit: 'select it and LMB-click to light a fire — RMB to pack later',
   tent_kit: 'select it and LMB-click to pitch a tent — E to sleep, RMB to pack',
-  cactus_pulp: 'raw food — cook at a fire for more hunger',
+  // Scavenger's Economy (build 2) — salvage materials feed the crafting menu.
+  metal_pipe: 'salvaged tube — a crafting material, press C',
+  machine_part: 'salvaged mechanism — a crafting material, press C',
+  wiring: 'salvaged cabling — a crafting material, press C',
+  battery: 'a salvaged power cell — a crafting material, press C',
   raw_lizard_meat: 'raw meat — cook at a fire to make it safe to eat',
   // Session AAC — craftable home placeables.
   bedroll_kit: 'LMB-click to lay it down — E to sleep, RMB to roll it back up',

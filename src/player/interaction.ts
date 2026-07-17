@@ -102,7 +102,8 @@ const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
   'raw_lizard_meat': 'cooked_lizard_meat',
   'raw_shrew_meat': 'cooked_shrew_meat',
   'raw_vulture_meat': 'cooked_vulture_meat',
-  'cactus_pulp': 'cooked_cactus_pulp',
+  // Scavenger's Economy (build 2) — cactus_pulp cook mapping removed (it is
+  // unobtainable: only ALIEN cacti spawn since CC-4 → alien_fruit).
   'raw_worm_meat': 'cooked_worm_meat',
   'lizard_on_a_stick_raw': 'lizard_on_a_stick_cooked',
 };
@@ -468,10 +469,12 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       };
       if (ctx.input.pressed.has('KeyE')) {
         const got = 1 + Math.floor(Math.random() * 2); // 1-2 yields
-        const yieldId: ItemId = isAlien ? 'alien_fruit' : 'cactus_pulp';
+        // Scavenger's Economy (build 2) — only ALIEN cacti spawn (CC-4), so the
+        // harvest always yields alien_fruit; the dead `cactus_pulp` else-branch
+        // was removed (the id is deprecated-unobtainable, kept only for load-compat).
         let added = 0;
         for (let i = 0; i < got; i++) {
-          if (addItem(ctx.inventory, yieldId, undefined, ctx) >= 0) added++;
+          if (addItem(ctx.inventory, 'alien_fruit', undefined, ctx) >= 0) added++;
         }
         if (added === 0) {
           ctx.ui.showToast('your bag is full');
@@ -479,11 +482,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
         harvestCactus(c, ctx.time.elapsed);
         playHarvest();
-        if (isAlien) {
-          ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);
-        } else {
-          ctx.ui.showToast(`you carve out ${added} piece${added > 1 ? 's' : ''} of pulp`);
-        }
+        ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);
       }
       return;
     }

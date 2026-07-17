@@ -45,7 +45,7 @@ import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.t
 import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
-import { spawnDroppedPickup, despawnPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook; D299 — despawnPickupById probe hook
+import { spawnDroppedPickup, despawnPickup, spawnMaterialAt } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook; D299 — despawnPickupById probe hook; Scavenger's Economy — spawnMaterialTest
 import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 
@@ -318,6 +318,11 @@ interface DebugApi {
    *  player so the per-item collider SHAPE (capsule/sphere/box) can be smoke-tested.
    *  Returns the new pickup id. */
   dropTestItem: (itemId: string) => number;
+  /** Scavenger's Economy (build 2) — DEV/TEST-only: spawn a salvage-MATERIAL
+   *  world pickup (the streamed-scatter path, spawnMaterialAt / merged instanced
+   *  geometry) at an offset in front of the player. Returns the new pickup id.
+   *  Proves the world scatter mesh builds non-degenerate + is takeable. */
+  spawnMaterialTest: (itemId: string, offset?: number) => number;
   /** Crafting rework — DEV/TEST-only: add `n` (default 1) of `itemId` to the
    *  inventory via the REAL acquire path (updates the collected-type ledger +
    *  fires pickup-gated recipe unlocks), so the unlock flow can be verified. */
@@ -1074,6 +1079,17 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         undefined, { world: ctx.physics.world, initialVel: { x: 0, y: 1.0, z: 0 } },
       );
       ctx.pickups.list.push(p);
+      return p.id;
+    },
+    spawnMaterialTest(itemId, offset = 1.2) {
+      // Scavenger's Economy (build 2) — spawn a MATERIAL world pickup via the real
+      // streamed-scatter path (spawnMaterialAt) in a line in front of the player.
+      const tr = ctx.player.body.body.translation();
+      const p = spawnMaterialAt(
+        ctx.three.scene, ctx.terrain, tr.x + offset, tr.z + 2.0,
+        itemId as 'metal_pipe' | 'machine_part' | 'wiring' | 'battery',
+        Math.random, ctx.pickups.list,
+      );
       return p.id;
     },
     giveItem(itemId, n = 1) {
