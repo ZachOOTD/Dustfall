@@ -81,6 +81,13 @@ const _ribBone = createBoneMaterial(0xc9c5bc, {
 // the full-daylight value → the day read is unchanged.
 registerBoneEmissive(_ribBone, 0x494d52, 0.36);
 
+/** The hero ribcage's weathered-grey bone material — the canonical bone_field
+ *  treatment (registered, sun-driven emissive). Exported so the bone SCATTER
+ *  (boneScatter.ts) shares the EXACT same material object → the whole graveyard,
+ *  hero + strewn bits, reads as one treatment and the daylight registry stays a
+ *  fixed two→one module singletons. NEVER dispose it (the _treeMat rule). */
+export const heroBoneMaterial = _ribBone;
+
 const UP = new THREE.Vector3(0, 1, 0);
 
 // ── BONE GAUGE (reviewer-tuned, and the tuning has history — read it before you
@@ -152,7 +159,7 @@ function jhash(seed: number, k: number): number {
  *  snap seeded by this value; null/absent = a smooth blunt dome (the natural taper
  *  ends + the buried ends, which nobody sees split open). Stump and its fallen half
  *  are handed the SAME seed so the two faces of one snap share a shard profile. */
-interface JagSpec { start?: number | null; end?: number | null }
+export interface JagSpec { start?: number | null; end?: number | null }
 
 /** THE FRACTURE PROFILE — the shape of one snapped bone face.
  *
@@ -242,7 +249,7 @@ function jagProfile(
 //    (default) or, where `jag` marks a real break, a JAGGED SPLINTERED FRACTURE
 //    (see `emitJagCap`). Carries UVs so it MERGES into the bone bucket (one draw
 //    call). ──
-function sweptTube(
+export function sweptTube(
   pts: THREE.Vector3[], radii: number[], radial: number, wobble = 0.06,
   jag?: JagSpec,
 ): THREE.BufferGeometry {
