@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { SkyColors, Tuning } from '../config/tuning.ts';
+import { updateBoneEmissiveDaylight } from '../world/boneMaterial.ts';
 
 export interface LightsBundle {
   sun: THREE.DirectionalLight;
@@ -107,6 +108,11 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   ctx.time.sunDir.copy(_sunDir);
   ctx.time.sunHeight = sy;
 
+  // The bone materials' cool emissive exists only to cancel the WARM sun's tint, so
+  // it must scale with the sun — otherwise it self-illuminates through the night and
+  // the bone_field glows (it is not lit by the scene). Registry-driven; one call site.
+  updateBoneEmissiveDaylight(sy);
+
   // Player (or speeder, when mounted) position drives the shadow camera so
   // shadows follow you. Reuses _shTr/_followBody from the shadow-move check above.
   _playerPos.set(_shTr.x, _shTr.y, _shTr.z);
@@ -157,9 +163,17 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   // the way (BB-4 — bumped from 0.45 since FogExp2's denser falloff makes
   // every surface read the fog color near the visibility limit, so the
   // fog needs to match the sky tint or the world reads bichromatic).
-  const dust = new THREE.Color(0x6e3a22);
-  const bgTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.95) : target;
-  const fogTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.70) : target;
+  // review 2026-07-14 — a real BROWNOUT: pull the fog almost fully to a luminous
+  // dust-brown (was 0.70 → grey/bichromatic) so the collapsed distance reads as
+  // churning sand, and the sky background toward a deeper dust dome behind it.
+  // review 2026-07-15 (TOTAL whiteout) — drive the FOG colour FULLY to the dust hue at
+  // peak (clamped to 1.0) so distant surfaces read the EXACT same colour the flattened
+  // sky dome does (sky.ts) — no value edge at the horizon, no far outline. STORM_FOG_LERP
+  // (>1) saturates it just before the peak; early storm keeps a lighter tint.
+  const fogDust = new THREE.Color(Tuning.STORM_FOG_DUST_HEX);
+  const skyDust = new THREE.Color(Tuning.STORM_SKY_DUST_HEX);
+  const bgTarget = storm > 0.001 ? target.clone().lerp(skyDust, Math.min(1, storm * Tuning.STORM_BG_LERP)) : target;
+  const fogTarget = storm > 0.001 ? target.clone().lerp(fogDust, Math.min(1, storm * Tuning.STORM_FOG_LERP)) : target;
   (scene.background as THREE.Color).copy(bgTarget);
   // scene.fog is FogExp2 (BB-4); FogBase has .color, same API as THREE.Fog.
   (scene.fog as THREE.FogExp2).color.copy(fogTarget);

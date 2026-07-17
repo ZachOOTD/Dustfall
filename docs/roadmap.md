@@ -132,7 +132,70 @@ and promotes the second.
 
 ## Up next
 
-> **⚙ ACTIVE CAMPAIGN — "Infinite Sands" (infinite procgen, started 2026-07-10, branch `campaign/2026-07-10-procgen`).**
+> **⚙ ACTIVE CAMPAIGN — "Sharpen & Deepen" +4M overnight batch (2026-07-13, branch `campaign/2026-07-12-skyfall`).**
+> After Zach's M7 Skyfall walk-test, the campaign extends with a refinement pass + a world-deepening
+> queue (priority order; ~4M cap = ceiling 8.75M; checkpoint none, morning batch review):
+> - **✅ M7-R — Skyfall refinement COMPLETE** (cycles 14-17, all 6 walk-test fixes): real hull thickness
+>   (paper-thin fix → NEW rule 7) + 100% collision (D304, c14) · interior floating-audit + more detail
+>   (c15) · broken cockpit glass + reversible cabin-light `SKYFALL_CABIN_FILL` (c16) · captain's-log
+>   drop-pod-evac story `generateSkyfallLog` (c17). Spec: [feature-skyfall.md](feature-skyfall.md).
+> - **✅ M8 — Far-field vultures COMPLETE** (cycle 18, D305): streamed circling vultures (pure wheelers
+>   over a chunk point — the FSM's self-contained circling state sidesteps the D294 perch-coupling);
+>   `roamVultures` roll + `spawnCirclingVultureAt`/`removeVultureFromWorld`; no body leak, 6 wheeling
+>   in the far field, transient. The infinite world has aerial life.
+> - **✅ M9 — New POI archetypes COMPLETE** (cycles 19-21): `refinery_stack` (cracking-tower ruin),
+>   `hab_dome` (collapsed habitat domes), `transit_car` (derailed rail car) — 3 new streamed far-field
+>   destinations, each gate-verified (placement/colliders/chunks), real thickness, no sand mounds.
+> - **✅ M10 — More story vignettes COMPLETE** (cycle 22): 3 new no-body wordless tableaus (cold camp,
+>   stripped vehicle, the abandoned cache) + 4 props — the mid-field storytelling tripled (2→5 scenes).
+> - **✅ M11 — Retire legacy tube-wrecks COMPLETE** (cycle 23, D306): `ship` removed from the world-gen
+>   roulette (weight → the socket `derelict`; fallback retargeted) — 0/278 far-field POIs are tubes, by
+>   construction. The low-risk endpoint of the D227/D249 strategy (not the rewrite they rejected).
+> - **✅ M12 — New far-field biome COMPLETE** (cycle 24, D307): originally `ash_barren` — a rare
+>   regional-anchored scorched-flats zone (dark charred ground + cinder mottle + a low flatten + a
+>   burned-industrial POI mix), mirroring the wreck-yard regional anchor (own appended seed → yard
+>   byte-identical; far-field only, ≥2600m from origin). **⚠ SUPERSEDED: `ash_barren` was REPLACED by
+>   the `bone_field` biome (a titan graveyard with a colossal ribcage centerpiece) on 2026-07-14 —
+>   `ash_barren` no longer exists in the game.**
+>
+> **🏁 THE WHOLE M7-R→M12 QUEUE IS COMPLETE (cycles 14-24, one overnight, UNDER the 8.75M cap).**
+> Campaign `completed` (until-met). Awaiting Zach's morning walk-test + merge review — nothing pushed.
+>
+> Standing constraints: **models-need-thickness** (no paper-thin double-sided), **100% collision**
+> (rule 9 swept). Probe rig is GPU-default (~10× faster). See `docs/campaign/` + `next-session-prompt.md`.
+
+> **✔ M7 SKYFALL BASE COMPLETE (S1-S6, cycles 9-13, 2026-07-13)** — walk-tested; refinement = M7-R above.
+
+> **⚙ (superseded header) — "Sharpen & Deepen" RESUMED at M7 Skyfall (2026-07-12, branch `campaign/2026-07-12-skyfall`).**
+> Plan (approved with changes — S4 far-field slot / larger ~30m+ freighter / FEATURES.skyfall):
+> [feature-skyfall.md](feature-skyfall.md). Steering fold-ins: NO sand mounds (retired for Skyfall);
+> interior bar = intro-ship detail in the wrecked art style. The M7 sub-ladder:
+> - **✅ S1 — research + exterior blockout** — SHIPPED cycle 9 (2026-07-12, D300). `skyfall_freighter`
+>   is a live S4 landmark kind (34% of landmark regions, flag-gated, kill-switch restores the old 50/50);
+>   NEW `src/world/skyfallWreck.ts` (~46m crashed heavy freighter: container spine + crane rail, fore-
+>   starboard bridge tower, engine block + triple nozzles, snapped stern, dark-baffled torn mouths, deep
+>   keel bury, NO mounds) iterated 4 rounds against the real streamed view (`skyfall-shot` scenario);
+>   research digest `docs/research/crashed-freighter-silhouettes.md`. All gates green.
+> - **✅ S2 — enterable interior + colliders** — SHIPPED cycle 10 (2026-07-13, D302). The fore hull
+>   opens into a walkable greybox: deck, 3 compartments (hold/mid/cabin), 2 bulkheads with doorways
+>   (jamb + lintel + 10cm sills), former rings framing the walk-in; exact walkable collider set
+>   replaces the S1 solid hull. NEW permanent `skyfall-walk` gate (verify:chunks leg 4). Slope-conform
+>   + stern-collider bugs probe-caught + fixed. Probe infra sped ~10× (D301, GPU default).
+>   ⏸ The charter's post-blockout human WALK-TEST is deferred to the morning review (overnight run).
+> - **✅ S3 — exterior hero detail** — SHIPPED cycle 11. Reads as a real crashed cargo hauler
+>   (multicoloured containers, plated hull, freighter greebles, warm-rust weathering).
+> - **✅ S4-S5 — interior hero detail + lighting** — SHIPPED cycle 12. Intro-ship detail density in
+>   the wrecked style (cargo hold / dead-console machine bay / crew cabin) + "sun through the tear"
+>   lighting. (Skyfall landing-fire item was moot — no fire code existed in the fresh streamed build.)
+> - **✅ S6 — integration + loot** — SHIPPED cycle 13 (D303). 2 cabin salvage panels (persist via the
+>   S5 chunkDiffs chain) + the pilot's crash-log journal. Occluder registration dropped (no removal
+>   path for streamed content — backlogged as a removable variant).
+>
+> **🏁 THE M7 SKYFALL LADDER IS COMPLETE (S1-S6, cycles 9-13).** Campaign PAUSED at the sanctioned
+> post-blockout human WALK-TEST (feel/scale/lighting — `docs/campaign/morning-summary-2026-07-13.md`).
+> `/campaign-approve` after the walk-test → M7 done → merge review (branch `campaign/2026-07-12-skyfall`).
+
+> **✔ MERGED — "Infinite Sands" (infinite procgen, 2026-07-10→12, merged to master + deployed 2026-07-12).**
 > Charter + answered design questions: [campaign/campaign.md](campaign/campaign.md); authoritative feature
 > slice: [feature-infinite-procgen.md](feature-infinite-procgen.md). The S-ladder (traverse in order):
 > - **✅ S1 — ChunkManager spike + determinism/streaming probes** — SHIPPED cycle 1 (2026-07-11, D288–D291).

@@ -42,3 +42,67 @@ Every cycle: `verify:all` + the 6 rig gates (smoke-intro/pod, pickup-take-sweep,
 2. **Interior scale**: "similar" (~17m, one deck) or "larger" (~25m, a taller multi-deck hall)? Default: larger single grand interior with 2-3 compartments.
 3. **Ship archetype/silhouette**: freighter / liner / military / science? (Drives the dressing role.) Default: a broken heavy freighter (fits the salvage/survival tone).
 4. **FEATURES flag**: gate Skyfall behind `FEATURES.skyfall` for reversibility, or always-on? Default: flag it (one-line kill-switch at review).
+
+---
+
+## PLAN-REVIEW OUTCOME (2026-07-12) — APPROVED with changes
+
+Human answers to the open questions:
+1. **Placement: the S4 far-field landmark slot** (NOT the fixed origin-field default). Skyfall ships as a region-rolled hero landmark KIND in the infinite world's landmark system (`chunkManager.ts` S4 grid — joins `colossal_ribcage` / `wreck_knot`, the slot reserved for it during Infinite Sands). Rare-roll it so an encounter stays special.
+2. **Interior: larger** — ~25m hull, tall grand interior, 2-3 compartments.
+3. **Archetype: heavy freighter** (cargo bays, crane spine, container spill).
+4. **`FEATURES.skyfall` flag: yes** (defaults ON, one-line kill-switch).
+
+### Infinite Sands reconciliation (the world changed under this plan — binding)
+- **Determinism law applies** (D290): Skyfall generation must be descriptor-pure — seeded from the landmark's region roll, fixed rand-draw budgets, no state-dependent reads (`terrain.pureHeightAt` for any descriptor-side gates).
+- **Streamed lifecycle** (D292 + rule 9): full teardown on chunk unload — every collider, body, horizon silhouette, and occluder registration must splice back out; the streaming gate's body-leak baseline will catch misses. Use a REMOVABLE horizon-silhouette variant (the module-global registry has no removal path — backlogged; either add removal or skip silhouettes for streamed instances).
+- **Hitch discipline** (D296): a hero-scale build cannot land in one frame — construct via the deferred landmark-piece thunk queue (1 piece/frame) like the wreck knot; the permanent `chunk-perf` gate tripwires it.
+- **Persistence** (S5/D298): interior salvage + the journal persist via `chunkDiffs` content ids (`lm/K/N` registration-order) — NOT the v16 id-keyed arrays (streamed content is save-transient). The plan's "no SAVE_VERSION bump" DoD HOLDS — chunkDiffs already ships in v17 and new content-id branches are additive.
+- **Gate list update**: every cycle runs `verify:all` (now includes `verify:chunks`: determinism ×2 seeds + streaming/leak + perf) + the 5 smokes. S2's new `skyfall-walk` probe teleports to the nearest region-rolled Skyfall instance via a descriptor scan (the chunk-vista pattern), then does the real-motion interior walk there — walking IN a streamed chunk also proves load/unload around an enterable landmark.
+- **The ⏸ post-blockout walk-test pause** (charter pause #1) stands: after S1+S2, the human walks the greybox interior in-app. Surface the nearest rolled instance's coordinates (+ a `__game` teleport helper) so the walk-test doesn't require a 20-minute ride.
+
+### Session flag (2026-07-12)
+The human is low on Fable 5 usage and may switch to Opus 4.8 mid-campaign. Campaign state is file-based, so a mid-loop model switch is safe; each cycle re-boots from docs/campaign/. Keep cycle-log entries extra explicit about in-flight state at cycle end (nothing implicit carried in-context).
+
+### Steering fold-in (2026-07-12, mid-cycle-9 — user directives, binding)
+1. **NO SAND MOUNDS.** The drift banks/mounds around the wreck read as geometric orange piles — removed from the S1 blockout; `makeSandMound` is retired for ALL Skyfall work going forward. The no-float read is carried by the deep keel bury alone (~half the hull below the pan). If a future pose reads floaty, deepen the bury or reshape terrain interaction some other way — never mounds.
+2. **Interior detail bar = the INTRO SHIP.** S2's enterable interior must ultimately reach the same detail level as the escape-pod intro ship (`shipScene.ts` — consoles, cabling, panel detail, lighting), but in the WRECKED art style of this hull (torn, sand-drifted, dead systems, scavenger-stripped). S2 ships the walkable greybox + collision (the walk-test pause gates it); S3-S5 hero passes carry the interior to that bar — treat interior detail as HERO work (adversarial gate, positive quality target), not set dressing.
+
+---
+
+## M7-R — REFINEMENT PASS (user walk-test feedback, 2026-07-13) — NEXT
+
+Zach walk-tested the shipped Skyfall wreck in-app and gave this feedback. These are the
+M7-R fixes (priority order). All are geometry/collision/text — **no save-schema changes**.
+
+1. **Real hull thickness — kill the paper-thin double-sided look.** The exterior hull reads
+   as a super-thin double-sided shell (unrealistic). Rebuild it to read as a THICK SOLID —
+   torn/fracture edges must show a real wall cross-section, not a paper edge. Bump the loft
+   wall thickness substantially (0.35m reads thin at 46m scale) and/or add a proper inner
+   skin so the hull has visible mass. Audit ALL Skyfall geometry — hull, cargo containers,
+   plating strakes, greebles, the `_voidMat`/baffle shells — and switch any zero-thickness
+   double-sided surface to a solid with depth.
+   **→ STANDING PROJECT RULE (add to CLAUDE.md when this ships):** models get real thickness;
+   no paper-thin zero-thickness double-sided shells. Extends rule 7 (box-decoration depth) to
+   hull/wall/canopy surfaces. Verify from grazing/edge angles, not just face-on.
+2. **Interior floating-model audit.** Sweep the interior — every panel/prop/greeble must sit
+   EXACTLY flush on its wall/surface. No floating panels, no gaps. (Wall panels especially:
+   neatly placed on the wall, not hovering off it.)
+3. **100% accurate collision (rule 9 sweep).** Every visible mass needs a matching collider.
+   CONFIRMED GAP: the dorsal cargo containers (on top of the hull) have NO collision — the
+   player walks through them. Add colliders for those + sweep the whole wreck (exterior masses
+   + interior furniture + new geometry) so collision matches the visible model everywhere.
+4. **More interior detail.** The interior wants another density pass (more lived-in tells,
+   props, wear) on top of the S4-S5 dressing.
+5. **Cockpit glass front.** Add a canopy/windscreen to the bridge/cockpit like the intro
+   ship's (`shipScene.ts` `_glass` / dome canopy vocabulary), most likely SHATTERED/broken to
+   fit the crash (cracked panes, a hole, missing shards). A hero read from the bridge.
+6. **Captain's log — a real story.** The crash-log journal should tell a specific story: the
+   CREW EJECTED IN THE DROP PODS before/at the crash (ties the empty wreck to the world — and
+   to a future drop-pod feature). Author it as bespoke journal content (extend `crashLog.ts` /
+   the journal's `content`), a short melancholy log, NOT generic freighter lore.
+
+**Gates:** verify:all (esp. verify:colliders for the new colliders + skyfall-walk still PASS)
++ the 5 smokes + the adversarial visual gate for the thickness/glass/interior (HERO bar) +
+the numeric loot/journal probe. Determinism digest may shift (geometry changes) — must stay
+STABLE per-seed. Run overnight (checkpoint none); Zach reviews the batch in the morning.

@@ -36,7 +36,14 @@ import { makeScatterRock } from './rockScatter.ts';
 import { buildWordlessTableau } from './wordlessScenes.ts';
 import { spawnLizard, despawnLizard, type Lizard } from '../enemies/lizard.ts';
 import { spawnShrew, removeShrew, type Shrew } from '../enemies/shrew.ts';
+import { spawnCirclingVultureAt, removeVultureFromWorld, type Vulture } from '../enemies/vulture.ts';   // M8 — streamed far-field aerial life
 import { placeRibcage } from './heroLandmarks.ts';
+import { buildBoneBit, BONE_BIT_KINDS, boneScatterMaterial, type BoneBitKind } from './boneScatter.ts';
+import { makeGiantRibcage } from './giantRibcage.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
+import { placeSkyfallWreck } from './skyfallWreck.ts';
+import type { Journal } from './journal.ts';
+import { FEATURES } from '../config/features.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import { spawnDeadTreeAt } from './deadTree.ts';
 import { spawnWellAt, type WaterSource } from './waterSources.ts';
@@ -109,6 +116,8 @@ export interface ChunkFaunaDesc {
   shrews: Array<{ x: number; z: number }>;
   roamLizards: Array<{ x: number; z: number }>;
   roamShrews: Array<{ x: number; z: number }>;
+  /** M8 — rare ambient circling vultures (aerial life; wheel over the point). */
+  roamVultures: Array<{ x: number; z: number }>;
 }
 
 /** D299 — origin-parity dressing: dead trees (salt, flat), a rare well
@@ -123,12 +132,26 @@ export interface ChunkDressingDesc {
  *  `present` is true only on the ONE chunk that hosts the region's
  *  landmark position. Kinds: 'colossal_ribcage' (a titan skeleton
  *  breaching the dunes — a silhouette destination) | 'wreck_knot' (a
- *  tight 3-wreck salvage knot + 2 carcasses — a reward destination). */
+ *  tight 3-wreck salvage knot + 2 carcasses — a reward destination) |
+ *  'skyfall_freighter' (M7 — the enterable hero freighter wreck;
+ *  FEATURES.skyfall-gated at the descriptor, purity holds per-build). */
 export interface ChunkLandmarkDesc {
   present: boolean;
-  kind: 'colossal_ribcage' | 'wreck_knot';
+  kind: 'colossal_ribcage' | 'wreck_knot' | 'skyfall_freighter';
   x: number;
   z: number;
+  seed: number;
+}
+
+/** bone_field scatter — one half-buried bone prop. `ribcage` bits render via
+ *  placeRibcage (a real collidered hero silhouette); the cheap decoration bits
+ *  (`ribarch`/`spine`/`longbone`) render merged, no collider (the
+ *  scatter-rock rule). Present only on bone_field chunks. */
+export interface ChunkBoneDesc {
+  x: number;
+  z: number;
+  scale: number;
+  kind: 'ribcage' | BoneBitKind;
   seed: number;
 }
 
@@ -144,6 +167,12 @@ export interface ChunkDesc {
   fauna: ChunkFaunaDesc;
   landmark: ChunkLandmarkDesc;
   dressing: ChunkDressingDesc;
+  /** bone_field titan-graveyard scatter (empty off-biome). */
+  bones: ChunkBoneDesc[];
+  /** The colossal sandworm-skeleton HERO — present on exactly ONE chunk per
+   *  bone_field region (the chunk containing the field anchor). null elsewhere.
+   *  Hash-seeded (yaw/seed derived from the anchor coords) → deterministic. */
+  wormSkeleton: { x: number; z: number; yaw: number; seed: number } | null;
 }
 
 interface LoadedChunk {
@@ -158,6 +187,8 @@ interface LoadedChunk {
    *  player already looted them). */
   lizards: Lizard[];
   shrews: Shrew[];
+  /** M8 — streamed circling vultures this chunk owns (despawned on unload). */
+  vultures: Vulture[];
   /** S6 — heavy content pieces (landmark knot wrecks/ribcages) deferred
    *  to ONE piece per frame so a landmark chunk can't blow a single
    *  frame. Executed thunks push into bodies/salvage/etc as usual;
@@ -172,6 +203,9 @@ interface LoadedChunk {
   wells: WaterSource[];
   cactiRecs: Cactus[];
   priorTaken: string[];
+  /** S6 — journals this chunk placed (the Skyfall crash-log); spliced out of
+   *  ctx.journals on unload (their meshes go with the group). */
+  journals: Journal[];
 }
 
 /** S5 — one chunk's deviations from its descriptor-pristine state
@@ -351,7 +385,7 @@ export function createChunkManager(
     const faunaRand = makeRng((seed ^ 0xfa0a) >>> 0);
     const lizCount = 1 + Math.floor(faunaRand() * Tuning.CHUNK_POI_LIZARDS_MAX);
     const shrewCount = Math.floor(faunaRand() * (Tuning.CHUNK_POI_SHREWS_MAX + 1));
-    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [], roamLizards: [], roamShrews: [] };
+    const fauna: ChunkFaunaDesc = { lizards: [], shrews: [], roamLizards: [], roamShrews: [], roamVultures: [] };
     const faunaOk = present && biome !== 'salt';
     for (let i = 0; i < Tuning.CHUNK_POI_LIZARDS_MAX; i++) {
       const ang = faunaRand() * Math.PI * 2;
@@ -375,7 +409,14 @@ export function createChunkManager(
     const rz = Math.floor(cz / REGION);
     const regionRand = makeRng(chunkSeed((worldSeed ^ 0x1a4d) >>> 0, rx, rz));
     const regionRoll = regionRand();
-    const regionKind: ChunkLandmarkDesc['kind'] = regionRand() < 0.5 ? 'colossal_ribcage' : 'wreck_knot';
+    // M7 — one kind draw either way (fixed budget). Flag ON: skyfall takes
+    // SKYFALL_KIND_SHARE, the remainder splits ribcage/knot evenly. Flag
+    // OFF: the exact pre-M7 50/50 (the kill-switch restores old worlds).
+    const kindRoll = regionRand();
+    const skyShare = FEATURES.skyfall ? Tuning.SKYFALL_KIND_SHARE : 0;
+    const regionKind: ChunkLandmarkDesc['kind'] =
+      kindRoll < skyShare ? 'skyfall_freighter'
+      : kindRoll < skyShare + (1 - skyShare) / 2 ? 'colossal_ribcage' : 'wreck_knot';
     const REGION_M = REGION * SIZE;
     const lmMargin = 150;
     const lx = rx * REGION_M + lmMargin + regionRand() * (REGION_M - 2 * lmMargin);
@@ -456,6 +497,57 @@ export function createChunkManager(
     if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt') {
       fauna.roamShrews = [{ x: rsx, z: rsz }];
     } else fauna.roamShrews = [];
+    // M8 — a rare CIRCLING vulture wheeling over this chunk (aerial life for the
+    // far field). Fixed draw budget (3 more from roamRand); any biome (it flies).
+    const vRoll = roamRand();
+    const vvx = cx * SIZE + roamRand() * SIZE;
+    const vvz = cz * SIZE + roamRand() * SIZE;
+    if (outsideOrigin && vRoll < Tuning.CHUNK_VULTURE_CHANCE) {
+      fauna.roamVultures = [{ x: vvx, z: vvz }];
+    } else fauna.roamVultures = [];
+    // ── bone_field — the titan-graveyard bone SCATTER (the biome's POP). A
+    //    dedicated stream; fixed draw budget (5 draws/candidate, always) so
+    //    the earlier streams stay byte-stable. A candidate is kept only where
+    //    biomeAt is bone_field (so a core zone chunk keeps most = strewn, an
+    //    edge chunk few) and outside the origin field. ~1/3 are collidered
+    //    ribcage silhouettes; the rest cheap merged decoration bits. ──
+    const boneRand = makeRng((seed ^ 0xb04e5) >>> 0);
+    const bones: ChunkBoneDesc[] = [];
+    for (let b = 0; b < Tuning.BONE_SCATTER_CANDIDATES; b++) {
+      const bx = cx * SIZE + boneRand() * SIZE;
+      const bz = cz * SIZE + boneRand() * SIZE;
+      const typeRoll = boneRand();
+      const scaleRoll = boneRand();
+      const bSeed = Math.floor(boneRand() * 0x100000000) >>> 0;
+      if (!outsideOrigin) continue;
+      if (biomes.biomeAt(bx, bz) !== 'bone_field') continue;
+      let kind: ChunkBoneDesc['kind'];
+      let scale: number;
+      if (typeRoll < Tuning.BONE_SCATTER_RIBCAGE_SHARE) {
+        kind = 'ribcage';
+        // Mostly small half-buried ribcages; a rare big hero one punctuates.
+        scale = scaleRoll < 0.15 ? 1.1 + scaleRoll * 3.0 : 0.28 + scaleRoll * 0.5;
+      } else {
+        // A cheap decoration bit — kind chosen from the remaining roll span.
+        const k = Math.floor(((typeRoll - Tuning.BONE_SCATTER_RIBCAGE_SHARE) /
+          (1 - Tuning.BONE_SCATTER_RIBCAGE_SHARE)) * BONE_BIT_KINDS.length);
+        kind = BONE_BIT_KINDS[Math.min(BONE_BIT_KINDS.length - 1, k)];
+        scale = 0.7 + scaleRoll * 1.1;
+      }
+      bones.push({ x: bx, z: bz, scale, kind, seed: bSeed });
+    }
+    // ── The colossal worm-skeleton HERO — one per bone_field region, hosted by
+    //    the ONE chunk containing the region's bone anchor (field centre). The
+    //    anchor lookup is RNG-FREE (memoized regionalBoneAnchor); yaw+seed are a
+    //    pure hash of the anchor coords → determinism untouched (no rand draws,
+    //    wreck_yard byte-identical). ──
+    let wormSkeleton: ChunkDesc['wormSkeleton'] = null;
+    const wa = biomes.boneFieldAnchor(centerX, centerZ);
+    if (wa && Math.floor(wa.x / SIZE) === cx && Math.floor(wa.z / SIZE) === cz) {
+      const hseed = chunkSeed((worldSeed ^ 0x1207e5) >>> 0, Math.round(wa.x), Math.round(wa.z));
+      const yaw = (((hseed >>> 8) & 0xffff) / 0x10000) * Math.PI * 2;
+      wormSkeleton = { x: wa.x, z: wa.z, yaw, seed: hseed };
+    }
     return {
       cx, cz, seed,
       markers: markerList,
@@ -465,6 +557,8 @@ export function createChunkManager(
       fauna,
       landmark,
       dressing: { trees, well: { present: wellPresent, x: wlx, z: wlz, seed: wSeed }, cacti },
+      bones,
+      wormSkeleton,
     };
   };
 
@@ -556,6 +650,7 @@ export function createChunkManager(
     const salvage: Salvageable[] = [];
     const chunkLizards: Lizard[] = [];
     const chunkShrews: Shrew[] = [];
+    const chunkVultures: Vulture[] = [];
     const deferred: Array<() => void> = [];
     const priorLooted: string[] = [];
     const chunkPickups: Pickup[] = [];
@@ -666,6 +761,47 @@ export function createChunkManager(
         tagRibcage(rc.group);
         const body = rc.collider.parent();
         if (body) bodies.push(body);
+      } else if (lm.kind === 'skyfall_freighter') {
+        // M7 — the enterable hero freighter. One heavy assembly (a loft +
+        // box masses, far cheaper than a knot's 3 POI assemblies) → one
+        // deferred thunk (S6 hitch rule). Seed drawn NOW (fixed budget).
+        const pieceSeed = Math.floor(rand() * 0x100000000) >>> 0;
+        const chunkRef = (): LoadedChunk | undefined => chunks.get(key(cx, cz));
+        deferred.push(() => {
+          const c = chunkRef();
+          if (!c) return;
+          // S6 — the wreck registers interior salvage panels + the pilot's
+          // crash-log journal. Salvage rides the SAME transient/tag/diff chain
+          // as the knot (S5-proven persistence); the journal is tracked on the
+          // chunk for teardown (new — see unloadChunk).
+          const sw = placeSkyfallWreck(scene, world, terrain, lm.x, lm.z, makeRng(pieceSeed), c.group, {
+            salvage: salvageables,
+            journal: !!gameCtx,
+          });
+          sw.group.userData.streamLandmark = lm.kind;
+          // Shared module materials — tag geometry only (the _treeMat rule).
+          // (Salvage panels + the journal are added AFTER this traverse by the
+          // builder and carry their own tags, so they're unaffected here.)
+          sw.group.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.isMesh && m.userData.chunkGeo === undefined) m.userData.chunkGeo = true;
+          });
+          c.bodies.push(...sw.bodies);
+          // S5/S6 — the salvage is ALREADY in salvageables.list (registerSalvageable
+          // pushed it); mark transient + track on the chunk for teardown, tag with
+          // descriptor-derived ids, apply any diff (mirrors the knot path).
+          for (const rec of sw.salvage) {
+            rec.transient = true;
+            c.salvage.push(rec);
+          }
+          tagSalvage(sw.salvage, 'sky');
+          applySalvageDiff(key(cx, cz), sw.salvage);
+          // The journal → the live list + the chunk's teardown list.
+          if (sw.journal && gameCtx) {
+            gameCtx.journals.list.push(sw.journal);
+            c.journals.push(sw.journal);
+          }
+        });
       } else {
         // wreck_knot — 5 heavy pieces. S6: DEFERRED, one piece per frame
         // (a single frame rendering 3 wreck assemblies + merges was the
@@ -779,6 +915,13 @@ export function createChunkManager(
         s.chunkContentId = `rs${i}`;
         chunkShrews.push(s);
       });
+      // M8 — ambient circling vultures (transient; despawned on unload). Wheel
+      // over the chunk point at soaring altitude; pure circlers (no swoop) so
+      // teardown is clean. Not save-persisted (aerial ambience regenerates).
+      desc.fauna.roamVultures.forEach((f) => {
+        const v = spawnCirclingVultureAt(scene, world, f.x, f.z, terrain.heightAt(f.x, f.z), makeRng((desc.seed ^ 0x7a1f) >>> 0));
+        chunkVultures.push(v);
+      });
     }
     // ── S3: scatter rocks (no colliders — visual props, the boot rule).
     //    Per-rock geometry is chunk-owned; materials are module singletons. ──
@@ -799,6 +942,101 @@ export function createChunkManager(
         if ((o as THREE.Mesh).isMesh) o.userData.chunkGeo = true;
       });
       group.add(tableau);
+    }
+    // ── bone_field — the titan-graveyard bone SCATTER (the biome POP). Two
+    //    classes: `ribcage` bits are REAL collidered hero silhouettes (via
+    //    placeRibcage → the collider body tracked in bodies[], removed on
+    //    unload); the cheap decoration bits (ribarch/spine/longbone)
+    //    render MERGED into ONE draw call, half-buried, no collider (the
+    //    established scatter-rock rule). Bit geometry is disposed on unload
+    //    via the merge's noCollider tag; the shared bone material survives. ──
+    if (desc.bones.length) {
+      const bitRoot = new THREE.Group();
+      let bitCount = 0;
+      for (const bd of desc.bones) {
+        const bRand = makeRng(bd.seed);
+        const y = terrain.heightAt(bd.x, bd.z);
+        if (bd.kind === 'ribcage') {
+          const rc = placeRibcage(scene, world, new THREE.Vector3(bd.x, y, bd.z), bRand, group, bd.scale);
+          rc.group.userData.streamBone = true;
+          // placeRibcage's default bone tone (HSL L≈0.55) reads as dark tan, so in
+          // the sun-bleached graveyard these ribcages ADOPT the SHARED bone-scatter
+          // material — the same weathered grey bone (+ the same registered, sun-driven
+          // cool emissive) as the bits they stand among. This replaces the old per-call
+          // recolour/emissive override, which (a) was already forcing the same look by
+          // hand and (b) created a NEW material per chunk — one the daylight registry
+          // would have had to track and prune. Adopting the singleton keeps the
+          // registry fixed-size and the graveyard visually consistent.
+          // Geometry stays per-call (chunkGeo → disposed on unload); chunkMat is NOT
+          // set — the shared material must survive unload (the _treeMat rule).
+          // The LANDMARK colossal_ribcage branch is untouched (it keeps placeRibcage's
+          // default material and has no emissive).
+          let orphanMat: THREE.Material | null = null;
+          rc.group.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (m.isMesh) {
+              m.userData.chunkGeo = true;
+              if (!orphanMat && m.material !== boneScatterMaterial) {
+                orphanMat = m.material as THREE.Material;   // placeRibcage's per-call Lambert
+              }
+              m.material = boneScatterMaterial;
+            }
+          });
+          // Dispose the now-orphaned per-call material ONCE (every mesh shared it).
+          if (orphanMat) (orphanMat as THREE.Material).dispose();
+          const body = rc.collider.parent();
+          if (body) bodies.push(body);
+        } else {
+          const bit = buildBoneBit(bd.kind, bRand);
+          bit.scale.setScalar(bd.scale);
+          bit.rotation.y = bRand() * Math.PI * 2;
+          // Seat by the bit's ACTUAL bounding box, not a fixed fraction: every
+          // builder offsets its geometry ABOVE the group origin (skull +r·0.75,
+          // longbone +len·0.18, …), so a fixed bury FLOATS the bone at larger
+          // scales (the graveyard-floater bug). Measure the real extent, then
+          // sink its BOTTOM below the sand so it reads as emerging — no floaters.
+          bit.updateMatrixWorld(true);
+          const bbox = new THREE.Box3().setFromObject(bit);
+          const bitH = bbox.max.y - bbox.min.y;
+          const bury = 0.18 + bRand() * 0.22;              // sink 18-40% of the bit's height
+          bit.position.set(bd.x, y - bury * bitH - bbox.min.y, bd.z);
+          bitRoot.add(bit);
+          bitCount++;
+        }
+      }
+      if (bitCount > 0) {
+        bitRoot.userData.streamBone = true;
+        mergeStaticByMaterial(bitRoot);   // → one draw call; merged mesh tagged noCollider
+        group.add(bitRoot);
+      }
+    }
+    // ── The colossal RIBCAGE HERO (one per bone_field region — the biome's
+    //    "wow" centerpiece; the `wormSkeleton` descriptor slot is retained as
+    //    the "bone hero at the anchor" slot, it now builds a half-buried titan
+    //    ribcage instead of a breaching worm). Built + merged inside
+    //    makeGiantRibcage (→ ~2 draw calls, meshes tagged noCollider by
+    //    mergeStaticByMaterial → geometry disposed on unload, the shared bone
+    //    material survives). Placed at the field anchor on the terrain: the
+    //    ribcage's own geometry handles burial via local y (buried keel + rib
+    //    bases + skull extend below local y=0), so NO extra sink. CONFORM samples
+    //    the real ground per element so nothing floats over a dune dip. Colliders
+    //    land on the reachable rib runs + the spine/sail + the skull, tracked in
+    //    bodies[] (rule 9 — removed on unload). ──
+    if (desc.wormSkeleton) {
+      const ws = desc.wormSkeleton;
+      const gy = terrain.heightAt(ws.x, ws.z);
+      const rc = makeGiantRibcage(makeRng(ws.seed), {
+        conform: {
+          groundAt: (x, z) => terrain.heightAt(x, z),
+          originX: ws.x, originZ: ws.z, yaw: ws.yaw, baseY: gy,
+        },
+      });
+      rc.group.position.set(ws.x, gy, ws.z);
+      rc.group.rotation.y = ws.yaw;
+      rc.group.userData.streamWorm = true;
+      group.add(rc.group);
+      const wbodies = rc.applyColliders(world, new THREE.Vector3(ws.x, gy, ws.z), ws.yaw);
+      bodies.push(...wbodies);
     }
     if (markers) {
       for (let m = 0; m < desc.markers.length; m++) {
@@ -836,9 +1074,10 @@ export function createChunkManager(
     scene.add(group);
     chunks.set(key(cx, cz), {
       cx, cz, group, bodies, salvage,
-      lizards: chunkLizards, shrews: chunkShrews,
+      lizards: chunkLizards, shrews: chunkShrews, vultures: chunkVultures,
       deferred, priorLooted,
       pickups: chunkPickups, wells: chunkWells, cactiRecs: chunkCacti, priorTaken,
+      journals: [],
     });
     const _ms = performance.now() - _t0;
     _perf.loads++;
@@ -889,6 +1128,9 @@ export function createChunkManager(
     for (const s of c.shrews) {
       if (!s.looted) removeShrew(s, scene, world);
     }
+    // M8 — despawn this chunk's circling vultures (idempotent-safe: a shot+looted
+    // one is already out of the module list, so removeVultureFromWorld skips it).
+    for (const v of c.vultures) removeVultureFromWorld(v, scene, world);
     // D299 dressing teardown: pickups despawn pool-aware (taken ones are
     // already gone from the live list — skip); wells/cacti splice out of
     // their ctx lists (their meshes go with the group; cactus bodies are
@@ -912,6 +1154,15 @@ export function createChunkManager(
     for (const rec of c.salvage) {
       const idx = salvageables.list.indexOf(rec);
       if (idx >= 0) salvageables.list.splice(idx, 1);
+    }
+    // S6 — splice this chunk's journals out of the live list (their meshes
+    // are children of c.group, so scene.remove(c.group) + the chunkGeo/chunkMat
+    // traverse above already disposed the geometry + per-call materials).
+    if (gameCtx) {
+      for (const j of c.journals) {
+        const ji = gameCtx.journals.list.indexOf(j);
+        if (ji >= 0) gameCtx.journals.list.splice(ji, 1);
+      }
     }
     for (const body of c.bodies) world.removeRigidBody(body);
   };

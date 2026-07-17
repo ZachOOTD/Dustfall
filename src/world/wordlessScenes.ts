@@ -105,6 +105,69 @@ function scrapBit(): THREE.Group {
   return buildScrapMesh(METAL_D, CHAR);
 }
 
+// M10 (2026-07-13) — a few more simple props for the "what was left behind"
+// vignettes (no body — someone camped/broke-down/sorted-a-haul and walked on).
+// All solid geometry (rule 7 — no paper-thin cards) on the shared materials.
+const CRATE = new THREE.MeshStandardMaterial({ color: 0x8f7a52, roughness: 0.9, metalness: 0.05, flatShading: true });
+
+/** An unrolled bedroll — a flat padded mat + a rolled pillow at one end. */
+function makeBedroll(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 1.5), FABRIC);   // thick padded mat (rule 7)
+  mat.position.y = 0.03; g.add(mat);
+  const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.58, 10), FABRIC);
+  roll.rotation.z = Math.PI / 2;
+  roll.position.set(0, 0.09, -0.72); g.add(roll);   // pillow at the head
+  // a rumpled fold across the mat
+  const fold = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.34), FABRIC);
+  fold.position.set((rand() - 0.5) * 0.06, 0.075, 0.3); fold.rotation.x = (rand() - 0.5) * 0.2; g.add(fold);
+  return g;
+}
+
+/** A supply crate — a thick-walled box with corner posts + plank lines. Optionally open. */
+function makeCrate(rand: () => number, open = false): THREE.Group {
+  const g = new THREE.Group();
+  const w = 0.44, h = 0.40, d = 0.44;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), CRATE);
+  body.position.y = h / 2; g.add(body);
+  // corner posts (real depth — rule 7)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, h + 0.02, 0.05), METAL_D);
+    post.position.set(sx * (w / 2 - 0.01), h / 2, sz * (d / 2 - 0.01)); g.add(post);
+  }
+  if (open) {
+    // lid ajar, leaning off one edge
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), CRATE);
+    lid.position.set(w * 0.55, h + 0.12, 0); lid.rotation.z = -0.7; g.add(lid);
+  } else {
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), CRATE);
+    lid.position.y = h + 0.025; g.add(lid);
+  }
+  g.rotation.y = (rand() - 0.5) * 0.4;
+  return g;
+}
+
+/** A stripped wheel/tyre lying half-sunk (a broke-down vehicle's cannibalised part). */
+function makeStrippedWheel(): THREE.Group {
+  const g = new THREE.Group();
+  const tyre = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.1, 8, 18), CHAR);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.14, 12), METAL_D);
+  hub.rotation.x = Math.PI / 2; g.add(tyre); g.add(hub);
+  g.rotation.set(Math.PI / 2 - 0.35, 0, 0);   // canted, resting partly on its side
+  g.position.y = 0.12;
+  return g;
+}
+
+/** A dropped wrench-like tool (two crossed bars). */
+function makeTool(): THREE.Group {
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.05), METAL);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.11), METAL_D);
+  head.position.x = 0.18; g.add(shaft); g.add(head);
+  g.position.y = 0.02; g.rotation.y = Math.PI * 0.3;
+  return g;
+}
+
 // ── Scene composers — each returns a group with the skeleton facing +Z. ─────
 
 /** "The last fire" — slumped by a dead fire, a dropped canteen at hand. */
@@ -142,7 +205,53 @@ function sceneWatcher(rand: () => number): THREE.Group {
 // ("The pair" — two skeletons slumped toward a shared dead fire — REMOVED 2026-07-09
 // per user request. The single-figure vignettes below remain.)
 
-const ARCHETYPES = [sceneLastFire, sceneWatcher];
+// ── M10 (2026-07-13) — NO-BODY "what was left behind" vignettes. The crew is
+//    GONE (walked off, moved on) — implied by what remains, never a figure. Adds
+//    variety to the two skeleton vignettes above (the desert isn't only death). ──
+
+/** "Cold camp" — a bedroll, a spent fire, a dropped canteen. Someone slept here + moved on. */
+function sceneColdCamp(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const bed = makeBedroll(rand);
+  bed.position.set(-0.35, 0, 0); bed.rotation.y = 0.15; g.add(bed);
+  const fire = makeColdFirePit(rand);
+  fire.position.set(0.55, 0, 0.5); g.add(fire);               // the fire beside the bed
+  const canteen = makeFallenCanteen();
+  canteen.position.set(0.15, 0, -0.5); canteen.rotation.y = rand() * Math.PI; g.add(canteen);
+  if (rand() < 0.6) { const s = scrapBit(); s.scale.setScalar(0.5); s.position.set(0.9, 0.05, -0.2); g.add(s); }
+  return g;
+}
+
+/** "Stripped" — a broke-down vehicle cannibalised for parts: a half-sunk wheel, a
+ *  torn panel, a dropped tool, scattered scrap. Someone salvaged it + carried on. */
+function sceneStripped(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const wheel = makeStrippedWheel();
+  wheel.position.set(0, 0, 0.2); wheel.rotation.z = rand() * Math.PI; g.add(wheel);
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.09, 0.5), METAL_D);   // a torn hull/body panel (thick)
+  panel.position.set(-0.7, 0.06, -0.3); panel.rotation.set(0.2, rand() * Math.PI, 0.15); g.add(panel);
+  const tool = makeTool(); tool.position.set(0.5, 0, -0.35); g.add(tool);
+  for (let i = 0; i < 2 + Math.floor(rand() * 2); i++) {
+    const s = scrapBit(); s.scale.setScalar(0.45 + rand() * 0.2);
+    s.position.set((rand() - 0.5) * 1.4, 0.05, (rand() - 0.5) * 1.2); g.add(s);
+  }
+  return g;
+}
+
+/** "The cache" — a sorted haul, abandoned: a couple of crates (one open + spilling),
+ *  a canteen. Someone triaged their salvage + left what they couldn't carry. */
+function sceneCache(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const c1 = makeCrate(rand, false); c1.position.set(-0.3, 0, 0); g.add(c1);
+  const c2 = makeCrate(rand, true); c2.position.set(0.45, 0, 0.25); g.add(c2);   // open, rifled
+  if (rand() < 0.7) { const c3 = makeCrate(rand, false); c3.position.set(0.1, 0.44, -0.05); c3.rotation.y = 0.3; g.add(c3); }  // stacked
+  // scrap spilling from the open crate
+  for (let i = 0; i < 2; i++) { const s = scrapBit(); s.scale.setScalar(0.4); s.position.set(0.65 + rand() * 0.3, 0.05, 0.45 + (rand() - 0.5) * 0.3); g.add(s); }
+  const canteen = makeFallenCanteen(); canteen.position.set(-0.1, 0, 0.7); canteen.rotation.y = rand() * Math.PI; g.add(canteen);
+  return g;
+}
+
+const ARCHETYPES = [sceneLastFire, sceneWatcher, sceneColdCamp, sceneStripped, sceneCache];
 
 /** Infinite Sands S3 — build ONE tableau (unpositioned) for the chunk
  *  streamer. `index` cycles the archetype list; `rand` should be a

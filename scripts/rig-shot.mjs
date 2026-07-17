@@ -96,6 +96,44 @@ async function enterLive(page, thirdPerson) {
   await page.waitForTimeout(500); // let several ticks run so the rig settles at the body
 }
 
+/** FAST STREAM-TO-SITE (2026-07-13 probe-infra pass). Replaces the old
+ *  multi-hop 140m streaming walk that dominated skyfall probe wall-clock (~1-2
+ *  min/run at 14fps/hop). A SINGLE teleport past the anchor margin re-anchors
+ *  the chunk ring at the destination in a few frames — the gradual hop was
+ *  cargo-culted caution. Parks ~`park`m off the target, then POLLS (not a
+ *  fixed 140-frame wait) until the deferred landmark thunk has built the named
+ *  group near the site, or a frame cap. Streaming CORRECTNESS is covered by the
+ *  chunk-streaming gate; re-proving it in every shot is pure tax.
+ *  Returns { built, frames } — built=false means the group never appeared. */
+async function streamToSite(page, x, z, { park = 30, groupName = 'skyfallWreck', maxFrames = 240 } = {}) {
+  return page.evaluate(async ({ x, z, park, groupName, maxFrames }) => {
+    const ctx = window.__game.ctx;
+    ctx.flags.paused = false;
+    const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+    // ONE jump to the park spot (past the anchor margin → full re-anchor).
+    const px = x - park;
+    ctx.player.body.body.setTranslation({ x: px, y: ctx.terrain.heightAt(px, z) + 1.6, z }, true);
+    ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    // Poll: the chunk streams in + its ONE deferred skyfall thunk builds (a
+    // few frames), then the merged group appears. Stop as soon as it's there.
+    let built = false, f = 0;
+    for (; f < maxFrames; f++) {
+      await raf();
+      let found = false;
+      ctx.three.scene.traverse((o) => {
+        if (o.name === groupName && o.userData && o.userData.skyfallCenter) {
+          const c = o.userData.skyfallCenter;
+          if ((c.x - x) ** 2 + (c.z - z) ** 2 < 4) found = true;
+        }
+      });
+      if (found) { built = true; break; }
+    }
+    // A few settle frames so colliders register + the merge finalizes.
+    for (let i = 0; i < 12; i++) await raf();
+    return { built, frames: f };
+  }, { x, z, park, groupName, maxFrames });
+}
+
 /** Capture FRAMES screenshots spaced INTERVAL ms apart. `perFrame` (optional)
  *  is a function string run in-page each frame before the wait (gets the frame
  *  index) — used to drive aim sweep / trigger fire / re-aim a tracking camera. */
@@ -1020,7 +1058,7 @@ const SCENARIOS = {
     // is exercised — seeds 1/42/1337/2024 all roll the linear/stacked forms (ACBB Tier 4).
     const seeds = (argv.seeds !== undefined ? String(argv.seeds) : '1,2,42,1337,2024')
       .split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
-    const archs = (argv.archetype ? String(argv.archetype) : 'satellite,wrecked_tank,debris_field,hollow_husk,derelict,well,debris_trail,enterable_wreck,relay_mast,buried_pipeline,cargo_crawler')
+    const archs = (argv.archetype ? String(argv.archetype) : 'satellite,wrecked_tank,debris_field,hollow_husk,derelict,well,debris_trail,enterable_wreck,relay_mast,buried_pipeline,cargo_crawler,refinery_stack,hab_dome,transit_car')
       .split(',').map((s) => s.trim()).filter(Boolean);
     await page.waitForFunction(() => !!(window.__game && window.__game.auditPOIColliders), { timeout: 20000 });
     const rows = await page.evaluate(({ archs, seeds }) => {
@@ -2217,6 +2255,631 @@ const SCENARIOS = {
   //   back1500 — same spot looking back toward the origin
   //   seam     — looking +X across the 800m terrain-tile boundary at x=1200
   //   marker   — close-up of a marker post (ground contact, not floating)
+  // ── bone_field — the titan-graveyard biome POP check. Finds the nearest
+  //    far-field bone_field zone, streams into it, and shoots the REAL player-
+  //    eye reads: (1) the ground-colour CONTRAST at the biome edge (bleached
+  //    bone vs tan desert in one frame), (2) an entry-distance vista over the
+  //    strewn field, (3) a close half-buried bone read. The bar: a fresh
+  //    viewer goes "whoa, a bone field" on sight.
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-field --port=5781
+  'bone-field': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0; g.setTime(0.5);          // noon — high neutral sun so the pale ground + bleached bone read true
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    // Find the nearest bone_field core, then REFINE to the true field centroid
+    // (a coarse grid cell can sit near the rim → cameras placed off it land on
+    // dune; the probe caught exactly that). The centroid of all bf>0.5 cells in
+    // a local fine sweep is the plateau centre — cameras offset from it stay
+    // solidly inside the field.
+    const center = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let coarse = null, bestD = Infinity;
+      for (let x = -13000; x <= 13000; x += 200) {
+        for (let z = -13000; z <= 13000; z += 200) {
+          if (x * x + z * z < 2600 * 2600) continue;
+          if (ctx.biomes.boneFieldAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; coarse = { x, z }; }
+          }
+        }
+      }
+      if (!coarse) return null;
+      let sx = 0, sz = 0, w = 0;
+      for (let dx = -200; dx <= 200; dx += 8) {
+        for (let dz = -200; dz <= 200; dz += 8) {
+          const bf = ctx.biomes.boneFieldAt(coarse.x + dx, coarse.z + dz);
+          if (bf > 0.5) { sx += coarse.x + dx; sz += coarse.z + dz; w++; }
+        }
+      }
+      return w ? { x: Math.round(sx / w), z: Math.round(sz / w) } : coarse;
+    });
+    if (!center) { console.log('[bone-field] no bone_field zone found in the 13km scan (seed-dependent)'); return; }
+    console.log(`[bone-field] zone core at ${center.x.toFixed(0)},${center.z.toFixed(0)} (dist ${Math.hypot(center.x, center.z).toFixed(0)}m)`);
+    // Stream the zone in: one teleport past the anchor margin, then wait for
+    // the ring (incl. the bone scatter, built synchronously in loadChunk).
+    await page.evaluate(async (c) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: c.x, y: ctx.terrain.heightAt(c.x, c.z) + 1.6, z: c.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 150; f++) await raf();
+    }, center);
+    // Diagnostics: bone-scatter descriptor density + the biome-edge location.
+    const diag = await page.evaluate((c) => {
+      const g = window.__game; const ctx = g.ctx;
+      const SIZE = 112;
+      const cx0 = Math.floor(c.x / SIZE), cz0 = Math.floor(c.z / SIZE);
+      let ribcages = 0, bits = 0, chunksWithBones = 0;
+      let ribT = null, ribScale = 0;
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const d = g.chunkDescribe(cx0 + dx, cz0 + dz);
+          if (d.bones.length) chunksWithBones++;
+          for (const b of d.bones) {
+            if (b.kind === 'ribcage') { ribcages++; if (b.scale > ribScale) { ribScale = b.scale; ribT = { x: b.x, z: b.z, scale: b.scale }; } }
+            else bits++;
+          }
+        }
+      }
+      // Walk outward from core to find the bone/desert edge (boneFieldAt→0).
+      let edge = null;
+      for (let r = 20; r <= 260; r += 6) {
+        const ex = c.x + r, ez = c.z;
+        if (ctx.biomes.biomeAt(ex, ez) !== 'bone_field') { edge = { x: ex, z: ez }; break; }
+      }
+      // Ground truth: boneFieldAt + the nearest BAKED terrain vertex colour at
+      // the core and at the entry-camera spot (is the pale overlay real, not fog?).
+      const sampleVtx = (sx, sz) => {
+        let best = null;
+        for (const m of ctx.terrain.meshes) {
+          const posA = m.geometry.getAttribute('position');
+          const colA = m.geometry.getAttribute('color');
+          if (!colA) continue;
+          for (let i = 0; i < posA.count; i += 37) {
+            const wx = posA.getX(i) + m.position.x;
+            const wz = posA.getZ(i) + m.position.z;
+            const dd = (wx - sx) ** 2 + (wz - sz) ** 2;
+            if (!best || dd < best.dd) best = { dd, r: colA.getX(i), g: colA.getY(i), b: colA.getZ(i) };
+          }
+        }
+        return best ? { rgb: [best.r.toFixed(2), best.g.toFixed(2), best.b.toFixed(2)], at: Math.sqrt(best.dd).toFixed(0) + 'm' } : null;
+      };
+      const core = { bf: +ctx.biomes.boneFieldAt(c.x, c.z).toFixed(2), vtx: sampleVtx(c.x, c.z) };
+      const cam = { x: c.x - 38, z: c.z - 24 };
+      const camPt = { bf: +ctx.biomes.boneFieldAt(cam.x, cam.z).toFixed(2), vtx: sampleVtx(cam.x, cam.z) };
+      return { ribcages, bits, chunksWithBones, ribT, edge, core, camPt };
+    }, center);
+    console.log(`[bone-field] scatter (5x5 chunks): ${diag.ribcages} ribcages + ${diag.bits} bits across ${diag.chunksWithBones} chunks`);
+    console.log(`[bone-field] core boneFieldAt=${diag.core.bf} vtxColor=${JSON.stringify(diag.core.vtx)}`);
+    console.log(`[bone-field] entry-cam boneFieldAt=${diag.camPt.bf} vtxColor=${JSON.stringify(diag.camPt.vtx)}`);
+    const aim = (fx, fz, tx, tz, lift = 1.7, tiltDown = 0) => `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      cam.position.set(${fx}, ctx.terrain.heightAt(${fx}, ${fz}) + ${lift}, ${fz});
+      cam.lookAt(${tx}, ctx.terrain.heightAt(${tx}, ${tz}) - ${tiltDown}, ${tz});
+      cam.updateMatrixWorld(true);
+    })()`;
+    const shot = async (name, code) => {
+      await page.evaluate(code);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-bone-field-${name}.png`), timeout: 60000 });
+      console.log(`[bone-field] saved scen-bone-field-${name}.png`);
+    };
+    // (1) EDGE contrast — stand ~25m out on the tan desert, look across the
+    //     boundary into the pale field (both grounds in one frame).
+    if (diag.edge) {
+      const ex = diag.edge.x + 25, ez = diag.edge.z;
+      await shot('edge-contrast', aim(ex, ez, center.x, center.z, 1.8, 0.55));
+    }
+    // (2) ENTRY vista — INSIDE the field at eye level, looking across the
+    //     strewn floor (bones in the near/mid ground, pale floor filling the
+    //     lower frame). tiltDown drops the horizon so it's field, not sky.
+    await shot('entry-vista', aim(center.x - 38, center.z - 24, center.x - 6, center.z - 2, 1.7, 0.45));
+    // (3) A second entry angle for coverage.
+    await shot('entry-vista2', aim(center.x + 34, center.z + 28, center.x + 4, center.z + 4, 1.7, 0.45));
+    // (4) CLOSE read — the biggest nearby ribcage from ~10m, half-buried.
+    if (diag.ribT) {
+      console.log(`[bone-field] close ribcage at ${diag.ribT.x.toFixed(0)},${diag.ribT.z.toFixed(0)} scale ${diag.ribT.scale.toFixed(2)}`);
+      const rx = diag.ribT.x, rz = diag.ribT.z;
+      await shot('close-ribcage', aim(rx - 9, rz - 7, rx, rz, 1.6, 0.9));
+    }
+    // (5) A top-down-ish ground read to confirm the pale colour + mottle.
+    await shot('ground', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      const px = ${center.x}, pz = ${center.z};
+      cam.position.set(px, ctx.terrain.heightAt(px, pz) + 8, pz);
+      cam.lookAt(px + 6, ctx.terrain.heightAt(px + 6, pz), pz + 6);
+      cam.updateMatrixWorld(true);
+    })()`);
+  },
+
+  // ── bone-hero — the bone_field HERO "wow" gate. Finds the nearest bone_field
+  //    region, streams to its ANCHOR (the field centre, where the colossal
+  //    half-buried RIBCAGE spawns), and shoots the REAL player-eye reads:
+  //    (1) ENTRY — a player-eye 3/4 approach: does it read as a colossal walk-under
+  //        ribcage tunnel — spine ridge overhead, ribs to the ground, dwarfing us?
+  //    (2) BROADSIDE — full length + the arched backbone ridge + the hanging ribs.
+  //    (3) UNDER-TUNNEL — player-eye INSIDE, level down the centre aisle: arches
+  //        must pass OVER the head, backbone running overhead.
+  //    (4) UNDER-LOOKUP — player-eye pitched UP: the spine + ribs arch overhead.
+  //    (5) END-ON — from the tunnel mouth looking in: the arch colonnade read.
+  //    (6) LOWGRAZE — a very low angle across the rib bases (float / paper check).
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-hero --port=5782
+  // ── bone-daynight — the NIGHT-GLOW gate. Same real bone_field player-eye reads
+  //    as bone-hero, but shot at NIGHT (setTime 0.0) and DAY (setTime 0.5) from the
+  //    IDENTICAL cameras, so the pair can be compared directly:
+  //      NIGHT: the bones must sit DARK with the terrain/rocks — the sun-cancelling
+  //             bone emissive must be off (it is self-illumination; a constant one
+  //             made the graveyard glow in the dark).
+  //      DAY:   unchanged — pale weathered bone popping against the warm sand.
+  //    Also prints each registered bone material's live emissiveIntensity at both
+  //    times (the mechanism check behind the pixels).
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-daynight --port=5793
+  'bone-daynight': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const anchor = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let coarse = null, bestD = Infinity;
+      for (let x = -13000; x <= 13000; x += 200) {
+        for (let z = -13000; z <= 13000; z += 200) {
+          if (x * x + z * z < 2600 * 2600) continue;
+          if (ctx.biomes.boneFieldAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; coarse = { x, z }; }
+          }
+        }
+      }
+      if (!coarse) return null;
+      const a = ctx.biomes.boneFieldAnchor(coarse.x, coarse.z);
+      return a ? { x: a.x, z: a.z } : coarse;
+    });
+    if (!anchor) { console.log('[bone-daynight] no bone_field zone found'); return; }
+    console.log(`[bone-daynight] field anchor at ${anchor.x.toFixed(0)},${anchor.z.toFixed(0)}`);
+    await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: a.x, y: ctx.terrain.heightAt(a.x, a.z) + 1.6, z: a.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();
+    }, anchor);
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let rc = null;
+      ctx.three.scene.traverse((o) => { if (o.name === 'giantRibcage') rc = o; });
+      if (!rc) return null;
+      rc.updateMatrixWorld(true);
+      const V = ctx.three.camera.position.constructor;
+      const p0 = rc.localToWorld(new V(0, 0, 0));
+      const p1 = rc.localToWorld(new V(1, 0, 0));
+      const fwd = { x: p1.x - p0.x, y: 0, z: p1.z - p0.z };
+      const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
+      return { cx: p0.x, cy: p0.y, cz: p0.z, fwd, length: rc.userData.length || 40, maxH: rc.userData.maxHeight || 15 };
+    });
+    if (!info) { console.log('[bone-daynight] ribcage group not found under the anchor'); return; }
+    const side = { x: -info.fwd.z, z: info.fwd.x };
+    const L = info.length, H = info.maxH, gy = info.cy;
+    // The SAME cameras at both times — a night/day pair is only readable if nothing
+    // else moved between the two frames.
+    const CAMS = {
+      // ENTRY — player-eye 3/4 approach across the open field (bones + dunes + rocks
+      // all in frame: the "are the bones darker than their surroundings" comparison).
+      entry: `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const fx = ${info.cx} + ${side.x} * ${L * 0.72} - ${info.fwd.x} * ${L * 0.42};
+        const fz = ${info.cz} + ${side.z} * ${L * 0.72} - ${info.fwd.z} * ${L * 0.42};
+        cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+        cam.lookAt(${info.cx}, ${gy} + ${H * 0.42}, ${info.cz});
+        cam.updateMatrixWorld(true);
+      })()`,
+      // BROADSIDE — the whole carcass + the surrounding field of scatter bits.
+      broadside: `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const fx = ${info.cx} + ${side.x} * ${L * 0.92};
+        const fz = ${info.cz} + ${side.z} * ${L * 0.92};
+        cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.5}, fz);
+        cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
+        cam.updateMatrixWorld(true);
+      })()`,
+      // FLANKCLOSE — 16m player-eye off the flank: the close bone-surface read.
+      flankclose: `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const fx = ${info.cx} + ${side.x} * 16 - ${info.fwd.x} * ${L * 0.16};
+        const fz = ${info.cz} + ${side.z} * 16 - ${info.fwd.z} * ${L * 0.16};
+        cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+        cam.lookAt(${info.cx}, ${gy} + 3.2, ${info.cz});
+        cam.updateMatrixWorld(true);
+      })()`,
+    };
+    for (const [when, t] of [['night', 0.0], ['day', 0.5]]) {
+      // Unpause + tick so updateLighting actually runs at the new time (it is inside
+      // the pause gate — a paused setTime would leave the emissive on its old value).
+      const probe = await page.evaluate(async (tt) => {
+        const g = window.__game; const ctx = g.ctx;
+        ctx.flags.paused = false;
+        g.setTime(tt);
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        for (let f = 0; f < 12; f++) await raf();
+        const mats = new Set();
+        ctx.three.scene.traverse((o) => {
+          const m = o.material;
+          if (m && m.userData && m.userData.boneEmissiveBase !== undefined) mats.add(m);
+        });
+        return {
+          sunHeight: ctx.time.sunHeight,
+          bones: [...mats].map((m) => ({
+            base: m.userData.boneEmissiveBase,
+            live: m.emissiveIntensity,
+            hex: m.emissive.getHexString(),
+          })),
+        };
+      }, t);
+      console.log(`[bone-daynight] ${when}: sunHeight=${probe.sunHeight.toFixed(3)} ` +
+        probe.bones.map((b) => `#${b.hex} base=${b.base} live=${b.live.toFixed(3)}`).join(' | '));
+      for (const [name, code] of Object.entries(CAMS)) {
+        await page.evaluate(code);
+        await page.waitForTimeout(450);
+        await page.screenshot({ path: join(OUT, `scen-bone-${when}-${name}.png`), timeout: 60000 });
+        console.log(`[bone-daynight] saved scen-bone-${when}-${name}.png`);
+      }
+    }
+    // ── ADOPTION + SHARED-MATERIAL-SURVIVAL probe. Two failure modes this catches:
+    //    (a) the scatter ribcages keep a per-call material → it is NOT registered,
+    //        so it glows at night (the bug, in a branch the shots may under-sample);
+    //    (b) an adopted SHARED material gets disposed on chunk unload (the _treeMat
+    //        rule) → the bones render black/broken after a revisit. Load→unload→
+    //        reload the field and assert the shared material is still alive + still
+    //        the one on the meshes. ──
+    const adopt = await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const scan = () => {
+        let rcMeshes = 0, adopted = 0, unregistered = 0;
+        const mats = new Set();
+        ctx.three.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          let w = o, streamed = false;
+          while (w) { if (w.userData && w.userData.streamBone) { streamed = true; break; } w = w.parent; }
+          if (!streamed) return;
+          rcMeshes++;
+          const m = o.material;
+          if (m && m.userData && m.userData.boneEmissiveBase !== undefined) { adopted++; mats.add(m); }
+          else unregistered++;
+        });
+        return { rcMeshes, adopted, unregistered, mats: [...mats] };
+      };
+      const before = scan();
+      const matRefs = before.mats;
+      // Walk far away → the field unloads; come back → it re-streams.
+      ctx.player.body.body.setTranslation({ x: a.x + 4000, y: 200, z: a.z + 4000 }, true);
+      for (let f = 0; f < 120; f++) await raf();
+      ctx.player.body.body.setTranslation({ x: a.x, y: ctx.terrain.heightAt(a.x, a.z) + 1.6, z: a.z }, true);
+      for (let f = 0; f < 200; f++) await raf();
+      const after = scan();
+      // A disposed material has had its program/uniform state torn down; three sets
+      // `version`-tracked internals, but the robust signal is identity + still usable:
+      // the re-streamed meshes must point at the SAME material objects.
+      const sameRefs = after.mats.every((m) => matRefs.includes(m));
+      return {
+        before: { meshes: before.rcMeshes, adopted: before.adopted, unregistered: before.unregistered, mats: before.mats.length },
+        after: { meshes: after.rcMeshes, adopted: after.adopted, unregistered: after.unregistered, mats: after.mats.length },
+        sameRefs,
+      };
+    }, anchor);
+    console.log(`[bone-daynight] adoption: before ${adopt.before.adopted}/${adopt.before.meshes} streamed bone meshes on registered materials ` +
+      `(${adopt.before.mats} distinct, ${adopt.before.unregistered} unregistered)`);
+    console.log(`[bone-daynight] after unload+reload: ${adopt.after.adopted}/${adopt.after.meshes} on registered materials ` +
+      `(${adopt.after.mats} distinct, ${adopt.after.unregistered} unregistered) — shared refs reused: ${adopt.sameRefs}`);
+    const ok = adopt.before.unregistered === 0 && adopt.after.unregistered === 0 && adopt.sameRefs
+      && adopt.after.mats <= adopt.before.mats;
+    console.log(`[bone-daynight] ${ok ? '[OK]' : '[FAIL]'} every streamed bone mesh is on a registered, sun-driven, reused shared material`);
+  },
+
+  'bone-hero': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0; g.setTime(0.5);          // noon — pale bone reads true
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    // Find the nearest bone_field zone, then resolve its exact anchor (the field
+    // centre — where the worm skeleton is hosted).
+    const anchor = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let coarse = null, bestD = Infinity;
+      for (let x = -13000; x <= 13000; x += 200) {
+        for (let z = -13000; z <= 13000; z += 200) {
+          if (x * x + z * z < 2600 * 2600) continue;
+          if (ctx.biomes.boneFieldAt(x, z) > 0.9) {
+            const dd = x * x + z * z;
+            if (dd < bestD) { bestD = dd; coarse = { x, z }; }
+          }
+        }
+      }
+      if (!coarse) return null;
+      const a = ctx.biomes.boneFieldAnchor(coarse.x, coarse.z);
+      return a ? { x: a.x, z: a.z } : coarse;
+    });
+    if (!anchor) { console.log('[bone-hero] no bone_field zone found in the 13km scan (seed-dependent)'); return; }
+    console.log(`[bone-hero] field anchor at ${anchor.x.toFixed(0)},${anchor.z.toFixed(0)} (dist ${Math.hypot(anchor.x, anchor.z).toFixed(0)}m)`);
+    // Stream the anchor chunk in (teleport onto it, let the ring settle).
+    await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: a.x, y: ctx.terrain.heightAt(a.x, a.z) + 1.6, z: a.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();
+    }, anchor);
+    // Locate the ribcage group + read its world frame (centre, +X spine axis,
+    // skull world point, length, height) from userData — no global THREE needed.
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let rc = null;
+      ctx.three.scene.traverse((o) => { if (o.name === 'giantRibcage') rc = o; });
+      if (!rc) return null;
+      rc.updateMatrixWorld(true);
+      const V = ctx.three.camera.position.constructor;
+      const p0 = rc.localToWorld(new V(0, 0, 0));
+      const p1 = rc.localToWorld(new V(1, 0, 0));
+      const fwd = { x: p1.x - p0.x, y: 0, z: p1.z - p0.z };
+      const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
+      const sk = rc.userData.skullLocal
+        ? rc.localToWorld(rc.userData.skullLocal.clone()) : p0;
+      // The SNAP the tight fracture read frames: pick the break whose stump face sits
+      // highest above the sand near mid-span — the most legible one at eye height,
+      // and the one whose fallen half is also in frame.
+      let brk = null;
+      const bl = rc.userData.breaks || [];
+      let best = -Infinity;
+      for (const b of bl) {
+        const sw = rc.localToWorld(b.stump.clone());
+        const fw = rc.localToWorld(b.fallen.clone());
+        const h = sw.y - ctx.terrain.heightAt(sw.x, sw.z);
+        // want it clearly above eye height but still readable from the ground
+        const score = -Math.abs(h - 3.4) - Math.abs(sw.x - p0.x) * 0.02 - Math.abs(sw.z - p0.z) * 0.02;
+        if (h > 1.8 && score > best) {
+          best = score;
+          // The axis is a DIRECTION — rotate it by the group's world matrix, don't
+          // localToWorld it (that would add the translation).
+          const ax = b.axis.clone().transformDirection(rc.matrixWorld);
+          // The landmark is placed with a SCALE, so the local radius is not the world
+          // radius — framing off the local one put the camera ~2× too far out and made
+          // three rounds of fracture reads uselessly small. Measure the scale.
+          const s0 = rc.localToWorld(new V(0, 0, 0));
+          const s1 = rc.localToWorld(new V(1, 0, 0));
+          const scale = Math.hypot(s1.x - s0.x, s1.y - s0.y, s1.z - s0.z);
+          brk = {
+            s: { x: sw.x, y: sw.y, z: sw.z }, f: { x: fw.x, y: fw.y, z: fw.z },
+            a: { x: ax.x, y: ax.y, z: ax.z }, r: b.r * scale, scale,
+          };
+        }
+      }
+      return {
+        cx: p0.x, cy: p0.y, cz: p0.z, fwd,
+        skull: { x: sk.x, y: sk.y, z: sk.z },
+        brk,
+        length: rc.userData.length || 40,
+        maxH: rc.userData.maxHeight || 15,
+      };
+    });
+    if (!info) { console.log('[bone-hero] ribcage group not found under the anchor (descriptor/placement bug)'); return; }
+    console.log(`[bone-hero] ribcage center ${info.cx.toFixed(0)},${info.cz.toFixed(0)} len ${info.length.toFixed(0)}m height ${info.maxH.toFixed(1)}m`);
+    const shot = async (name, code) => {
+      await page.evaluate(code);
+      await page.waitForTimeout(450);
+      await page.screenshot({ path: join(OUT, `scen-ribcage-${name}.png`), timeout: 60000 });
+      console.log(`[bone-hero] saved scen-ribcage-${name}.png`);
+    };
+    const side = { x: -info.fwd.z, z: info.fwd.x };  // perpendicular to the spine axis
+    const L = info.length, H = info.maxH;
+    const gy = info.cy;
+    // (1) ENTRY — a 3/4 approach at player eye height: the "does it read colossal
+    //     + dwarfing" gate.
+    await shot('entry', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * ${L * 0.72} - ${info.fwd.x} * ${L * 0.42};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.72} - ${info.fwd.z} * ${L * 0.42};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.42}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (2) BROADSIDE — perpendicular, lifted, framing the whole length + the ribs
+    //     + the dorsal sail.
+    await shot('broadside', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * ${L * 0.92};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.92};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.5}, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (3) UNDER-TUNNEL — the KEY walk-under read: player-eye, standing INSIDE on
+    //     the centre aisle (Z≈0) in the tall mid-section, looking level down the
+    //     tunnel. The rib arches must clearly pass OVER the player's head + the
+    //     backbone run overhead down the length.
+    await shot('undertunnel', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.3};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.3};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx} + ${info.fwd.x} * ${L * 0.32}, ${gy} + 3.0, ${info.cz} + ${info.fwd.z} * ${L * 0.32});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (4) UNDER-LOOKUP — player-eye at the tunnel centre, pitched UP: confirms the
+    //     spine ridge + ribs arch OVERHEAD (the "walk beneath the backbone" read).
+    await shot('underlookup', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.12};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.12};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx} + ${info.fwd.x} * ${L * 0.14}, ${gy} + ${H * 0.85}, ${info.cz} + ${info.fwd.z} * ${L * 0.14});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (5) END-ON — from just outside the tunnel MOUTH at eye height, looking in
+    //     along the spine axis: the arch cross-section / colonnade read.
+    await shot('endon', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} - ${info.fwd.x} * ${L * 0.62};
+      const fz = ${info.cz} - ${info.fwd.z} * ${L * 0.62};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 2.0, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.5}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (6) LOWGRAZE — a very low angle skimming across the rib bases: the FLOAT
+    //     check (every rib base must plant in the sand, no gaps under the bones).
+    await shot('lowgraze', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * ${L * 0.55} - ${info.fwd.x} * ${L * 0.3};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.55} - ${info.fwd.z} * ${L * 0.3};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 0.8, fz);
+      cam.lookAt(${info.cx}, ${gy} + 1.2, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (7) FLANK-CLOSE — the RIB-GAUGE + DECAY read the far shots can't give: a
+    //     player-eye stand ~16m off the flank at the tall mid-section. This is the
+    //     frame that answers "are the bones too chunky / too thin?" and "do the
+    //     snapped stumps + the halves lying beside them read as a weathered
+    //     carcass?" (the 70m broadside renders a 77×8m carcass as a thin band).
+    await shot('flankclose', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * 16 - ${info.fwd.x} * ${L * 0.16};
+      const fz = ${info.cz} + ${side.z} * 16 - ${info.fwd.z} * ${L * 0.16};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.7, fz);
+      cam.lookAt(${info.cx}, ${gy} + 3.2, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (8) FALLEN-CLOSE — a 9m player-eye read of the sand OUTBOARD of the rib feet,
+    //     where the snapped-off halves came to rest: are they resting IN the sand
+    //     (part-buried, not floating), and does a fallen half pair up with a stump?
+    await shot('fallenclose', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const fx = ${info.cx} + ${side.x} * 19 + ${info.fwd.x} * ${L * 0.1};
+      const fz = ${info.cz} + ${side.z} * 19 + ${info.fwd.z} * ${L * 0.1};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + 1.6, fz);
+      cam.lookAt(${info.cx} + ${side.x} * 6, ${gy} + 0.4, ${info.cz} + ${side.z} * 6);
+      cam.updateMatrixWorld(true);
+    })()`);
+    // (9) BREAK-CLOSE + (10) BREAK-PAIR — the TIGHT fracture read. The flank shots are
+    //     15-20m out; at that range a jagged snap and a rounded sausage end are the
+    //     same handful of pixels. These frame ONE real snap (userData.breaks, resolved
+    //     above): `breakclose` is ~4m off the STUMP's break face — is it unmistakably a
+    //     splintered snap? `breakpair` backs off to hold the stump AND the half that
+    //     fell off it in one frame — do the two faces read as one break?
+    if (info.brk) {
+      const b = info.brk;
+      console.log(`[bone-hero] framing snap at ${b.s.x.toFixed(0)},${b.s.y.toFixed(1)},${b.s.z.toFixed(0)} worldR=${b.r.toFixed(2)}m (group scale ${b.scale.toFixed(2)})`);
+      // Framing the fracture took three tries; both prerequisites are load-bearing:
+      //  • FRONT-LIT. Shooting from wherever the flank normal pointed put the sun
+      //    BEHIND the break — it rendered as an undifferentiated dark cavity and I was
+      //    grading the lighting, not the geometry (visual-diagnostic-methodology).
+      //  • PERPENDICULAR TO THE SHAFT. Standing "sunward of the break" put the camera
+      //    down the rib's own axis, filling the frame with shaft. Project the sun
+      //    azimuth onto the plane ⊥ the rib axis (falling back to axis × up when the
+      //    rib points at the sun) → front-lit AND square-on to the break face.
+      const camCode = (dist, up, roll) => `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const V = cam.position.constructor;
+        const ax = new V(${b.a.x}, ${b.a.y}, ${b.a.z}).normalize();
+        const sd = ctx.time.sunDir;
+        let view = new V(sd.x, 0, sd.z).normalize();       // stand toward the sun
+        view.addScaledVector(ax, -view.dot(ax));           // ...but ⊥ to the rib
+        if (view.length() < 0.25) view.copy(ax).cross(new V(0, 1, 0));
+        view.normalize();
+        // roll the view around the rib axis so the shard side is not self-occluded
+        view.applyAxisAngle(ax, ${roll});
+        const p = new V(${b.s.x}, ${b.s.y}, ${b.s.z}).addScaledVector(view, ${dist});
+        cam.position.set(p.x, p.y + ${up}, p.z);
+        cam.lookAt(${b.s.x}, ${b.s.y}, ${b.s.z});
+        cam.updateMatrixWorld(true);
+      })()`;
+      // Distances are in BONE DIAMETERS, not metres — the landmark is placed at a
+      // per-instance scale, so a fixed metre standoff frames a different-sized bone
+      // every seed. Square-on to the break face at ~5 diameters.
+      await shot('breakclose', camCode((5.0 * b.r).toFixed(2), (0.5 * b.r).toFixed(2), 0));
+      // ...and 55° around the shaft — a fracture has to read as a snap from more than
+      // one angle (verify-visual-multi-angle), and the oblique slash only shows its
+      // slant once you are off-square.
+      await shot('breakprofile', camCode((5.6 * b.r).toFixed(2), (1.2 * b.r).toFixed(2), 0.95));
+      await shot('breakpair', `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const mx = (${b.s.x} + ${b.f.x}) * 0.5, my = (${b.s.y} + ${b.f.y}) * 0.5, mz = (${b.s.z} + ${b.f.z}) * 0.5;
+        const d = 9.5;
+        cam.position.set(mx + ${side.x} * d, ctx.terrain.heightAt(mx + ${side.x} * d, mz + ${side.z} * d) + 1.7, mz + ${side.z} * d);
+        cam.lookAt(mx, my, mz);
+        cam.updateMatrixWorld(true);
+      })()`);
+    } else {
+      console.log('[bone-hero] no snap found in userData.breaks — fracture read SKIPPED');
+    }
+    // (DIAG) Isolate the ribcage — hide every OTHER scene child so only the
+    //   ribcage renders. Any bone still visible in the other shots but GONE here
+    //   is a separate boneScatter decoration, not a ribcage floater.
+    await shot('isolate', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      let rc = null; ctx.three.scene.traverse((o) => { if (o.name === 'giantRibcage') rc = o; });
+      window.__diagHidden = [];
+      ctx.three.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        let w = o, isRc = false;
+        while (w) { if (w === rc) { isRc = true; break; } w = w.parent; }
+        const isTerrain = /terrain|tile|ground|sky/i.test(o.name || '');
+        if (!isRc && !isTerrain && o.visible) { window.__diagHidden.push(o); o.visible = false; }
+      });
+      const fx = ${info.cx} + ${side.x} * ${L * 0.92};
+      const fz = ${info.cz} + ${side.z} * ${L * 0.92};
+      cam.position.set(fx, ctx.terrain.heightAt(fx, fz) + ${H * 0.5}, fz);
+      cam.lookAt(${info.cx}, ${gy} + ${H * 0.4}, ${info.cz});
+      cam.updateMatrixWorld(true);
+    })()`);
+    await page.evaluate(`(() => { (window.__diagHidden||[]).forEach(o => o.visible = true); window.__diagHidden = []; })()`);
+    // ── Rule-9 leak probe: the ribcage's rib + spine + skull colliders must tear
+    //    down on unload and not accumulate across repeated visits. Load→unload→
+    //    reload the anchor chunk; the physics-body count must return to baseline. ──
+    const leak = await page.evaluate(async (a) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const settle = async (x, z, frames) => {
+        ctx.player.body.body.setTranslation({ x, y: ctx.terrain.heightAt(x, z) + 1.6, z }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        for (let f = 0; f < frames; f++) await raf();
+      };
+      await settle(a.x, a.z, 200);
+      const loaded = ctx.physics.world.bodies.len();
+      await settle(a.x + 3000, a.z + 3000, 220);   // far → worm chunk unloads
+      const away = ctx.physics.world.bodies.len();
+      await settle(a.x, a.z, 220);                  // back → worm chunk reloads
+      const reloaded = ctx.physics.world.bodies.len();
+      return { loaded, away, reloaded };
+    }, anchor);
+    const leakOk = leak.loaded === leak.reloaded;
+    console.log(`[bone-hero] body-leak probe: loaded=${leak.loaded} away=${leak.away} reloaded=${leak.reloaded} ${leakOk ? 'NO LEAK' : 'LEAK!'}`);
+  },
+
   'chunk-vista': async (page) => {
     await page.evaluate(async () => {
       const g = window.__game; const ctx = g.ctx;
@@ -2464,6 +3127,37 @@ const SCENARIOS = {
     });
     if (s4targets.lmT) console.log(`[chunk-vista] landmark: ${s4targets.lmT.kind} at ${s4targets.lmT.x.toFixed(0)},${s4targets.lmT.z.toFixed(0)}`);
     await walkShoot('streamed-landmark', s4targets.lmT, 4.0);
+    // M7 — the nearest SKYFALL freighter, player-eye at two reads: an
+    // approach framing (~45m) and a close hull read (~15m).
+    const skyT = await page.evaluate(() => {
+      const g = window.__game;
+      for (let r = 1; r <= 8; r++) {                       // spiral out by chunk rings
+        for (let cx = -r * 16; cx <= r * 16; cx += 4) {
+          for (let cz = -r * 16; cz <= r * 16; cz += 4) {
+            for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              if (d.landmark.present && d.landmark.kind === 'skyfall_freighter') {
+                return { x: d.landmark.x, z: d.landmark.z };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    if (skyT) console.log(`[chunk-vista] SKYFALL freighter at ${skyT.x.toFixed(0)},${skyT.z.toFixed(0)}`);
+    await walkShoot('skyfall-approach', skyT, 3.0);
+    if (skyT) {
+      await shot('skyfall-close', `(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = ${skyT.x}, pz = ${skyT.z};
+        const cx2 = px + 11, cz2 = pz + 11;
+        cam.position.set(cx2, ctx.terrain.heightAt(cx2, cz2) + 1.7, cz2);
+        cam.lookAt(px, ctx.terrain.heightAt(px, pz) + 2.0, pz);
+        cam.updateMatrixWorld(true);
+      })()`);
+    }
     if (s4targets.yardT) console.log(`[chunk-vista] regional wreck-yard at ${s4targets.yardT.x.toFixed(0)},${s4targets.yardT.z.toFixed(0)}`);
     await walkShoot('regional-wreck-yard', s4targets.yardT, 1.2);
     if (s4targets.yardT) {
@@ -2488,6 +3182,314 @@ const SCENARIOS = {
       }, s4targets.yardT);
       console.log('[chunk-vista] yard diag: ' + JSON.stringify(diag));
     }
+  },
+
+  // ── M7 SKYFALL — a DEDICATED fast exterior framer for the crashed heavy
+  //    freighter blockout (S1). Copies the chunk-vista teleport-stream pattern
+  //    but skips the whole 1500m biome sweep: spiral-scan for the nearest
+  //    region-rolled 'skyfall_freighter', hop the player there (~140m steps so
+  //    chunks stream + the deferred build fires), read the wreck's true yaw off
+  //    the built group, then shoot 4 player-eye reads keyed to the hull axis:
+  //    a long broadside silhouette (~70m), an approach (~40m), a close broadside
+  //    (~20m), and a bow close-quarter (~12m). ~1 min vs ~5.
+  //    Run: node scripts/rig-shot.mjs --scenario=skyfall-shot --seed=1337 --port=5760
+  'skyfall-shot': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.sandWorms.list.length = 0;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      g.setTime(0.40);                                 // mid-morning: raking front light, form reads
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1280, 720, false);    // wide frame — length must dominate
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1280 / 720; cam.updateProjectionMatrix(); }
+      await frames(4);
+    });
+    // Spiral-scan the descriptor grid for the nearest skyfall freighter.
+    const skyT = await page.evaluate(() => {
+      const g = window.__game;
+      for (let r = 1; r <= 10; r++) {
+        for (let cx = -r * 16; cx <= r * 16; cx += 4) {
+          for (let cz = -r * 16; cz <= r * 16; cz += 4) {
+            for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              if (d.landmark.present && d.landmark.kind === 'skyfall_freighter') {
+                return { x: d.landmark.x, z: d.landmark.z };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    if (!skyT) { console.log('[skyfall-shot] no skyfall freighter found in scan window (check FEATURES.skyfall / seed)'); return; }
+    console.log(`[skyfall-shot] SKYFALL freighter at ${skyT.x.toFixed(0)},${skyT.z.toFixed(0)}`);
+    // FAST: single-teleport stream + poll-until-built (was a multi-hop walk).
+    const streamed = await streamToSite(page, skyT.x, skyT.z, { park: 30 });
+    console.log(`[skyfall-shot] streamed in ${streamed.frames} frames (built=${streamed.built})`);
+    // Read the wreck's true yaw + center off the built group (the builder stashes
+    // it on root.userData) so the camera can frame a genuine broadside/bow read.
+    const info = await page.evaluate((t) => {
+      const ctx = window.__game.ctx;
+      let wreck = null, bestD = Infinity;
+      ctx.three.scene.traverse((o) => {
+        if (o.name === 'skyfallWreck' && o.userData && o.userData.skyfallCenter) {
+          const c = o.userData.skyfallCenter;
+          const dd = (c.x - t.x) ** 2 + (c.z - t.z) ** 2;
+          if (dd < bestD) { bestD = dd; wreck = o; }
+        }
+      });
+      if (!wreck) return { built: false };
+      return { built: true, yaw: wreck.userData.skyfallYaw, cx: wreck.userData.skyfallCenter.x, cz: wreck.userData.skyfallCenter.z };
+    }, skyT);
+    if (!info.built) { console.log('[skyfall-shot] WARN: wreck group not found near target (deferred build did not fire?)'); }
+    const yaw = info.built ? info.yaw : 0;
+    console.log(`[skyfall-shot] wreck built=${info.built} yaw=${(yaw).toFixed(2)}rad`);
+    // Hull local +Z (forward) maps to world (sin yaw, cos yaw) under the Y-rot;
+    // broadside is perpendicular. skyfallCenter is the BOW origin, so aim at a
+    // point ~22m forward = the whole-wreck midpoint (fore + snap + stern), so
+    // the long/broadside reads capture the full length AND the snapped stern.
+    const fwd = [Math.sin(yaw), Math.cos(yaw)];
+    const broad = [Math.cos(yaw), -Math.sin(yaw)];
+    const norm = (v) => { const m = Math.hypot(v[0], v[1]) || 1; return [v[0] / m, v[1] / m]; };
+    const bcx = info.cx ?? skyT.x, bcz = info.cz ?? skyT.z;
+    // aimAlong = forward offset (m) of the look target from the bow origin.
+    const shot = async (name, camDir, dist, lift, lookY, aimAlong = 22) => {
+      const ax = bcx + fwd[0] * aimAlong, az = bcz + fwd[1] * aimAlong;
+      await page.evaluate(({ ax, az, dx, dz, dist, lift, lookY }) => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = ax + dx * dist, pz = az + dz * dist;
+        const gy = ctx.terrain.heightAt(px, pz);
+        cam.position.set(px, gy + lift, pz);
+        cam.lookAt(ax, ctx.terrain.heightAt(ax, az) + lookY, az);
+        cam.updateMatrixWorld(true);
+      }, { ax, az, dx: camDir[0], dz: camDir[1], dist, lift, lookY });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-skyfall-${name}.png`), timeout: 60000 });
+      console.log(`[skyfall-shot] saved scen-skyfall-${name}.png`);
+    };
+    const threeQ = norm([broad[0] * 0.8 + fwd[0] * 0.6, broad[1] * 0.8 + fwd[1] * 0.6]);
+    const bowDir = norm([fwd[0] * 0.7 + broad[0] * 0.5, fwd[1] * 0.7 + broad[1] * 0.5]);
+    await shot('long', broad, 72, 4.0, 2.0, 20);      // long broadside silhouette — full length + snap
+    await shot('approach', threeQ, 42, 3.0, 2.5, 20); // 3/4 approach
+    await shot('broadside', broad, 22, 2.6, 2.5, 20); // close broadside — bridge + containers + snap
+    await shot('close', bowDir, 12, 1.9, 2.4, 5);     // bow close-quarter — burial + blunt bow read
+    await shot('snap', threeQ, 18, 2.6, 1.5, 36);     // the SNAP: fracture mouths + stern engine block + gap
+    // ── M7-R BUGHUNT — grazing-flank / underside / along-hull reads that
+    //    REPRODUCE the user's close-range viewpoint (the curated angles above
+    //    hide the hull-skin culling bug). The camera stands RIGHT BESIDE the
+    //    hull flank at eye height and looks ALONG the length, so a culled outer
+    //    skin reads as "see through the hull to the inner wall / to the sky."
+    const flankShot = async (name, side, camAlong, camOut, camLift, aimAlong, aimOut, aimY) => {
+      await page.evaluate(({ side, camAlong, camOut, camLift, aimAlong, aimOut, aimY, fwd, broad, bcx, bcz }) => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = bcx + fwd[0] * camAlong + broad[0] * camOut * side;
+        const pz = bcz + fwd[1] * camAlong + broad[1] * camOut * side;
+        const gy = ctx.terrain.heightAt(px, pz);
+        cam.position.set(px, gy + camLift, pz);
+        const ax = bcx + fwd[0] * aimAlong + broad[0] * aimOut * side;
+        const az = bcz + fwd[1] * aimAlong + broad[1] * aimOut * side;
+        cam.lookAt(ax, ctx.terrain.heightAt(ax, az) + aimY, az);
+        cam.updateMatrixWorld(true);
+      }, { side, camAlong, camOut, camLift, aimAlong, aimOut, aimY, fwd, broad, bcx, bcz });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-skyfall-${name}.png`), timeout: 60000 });
+      console.log(`[skyfall-shot] saved scen-skyfall-${name}.png`);
+    };
+    // Stand beside the fore flank near the mouth, look ALONG the plating toward
+    // the bow (the user's "standing next to the hull looking along it" view).
+    await flankShot('flank-graze', 1, 26, 7, 1.7, 4, 4.5, 1.4);
+    // Tight face-on-ish flank, grazing down the mid plating (see any skin cull).
+    await flankShot('flank-close', -1, 16, 6.5, 1.6, 20, 4.8, 1.2);
+    // Low near the belly/keel looking up + along the flank (underside read).
+    await flankShot('flank-low', 1, 20, 9, 0.35, 8, 5.5, 2.6);
+    // MOUTH GRAZE — stand just outboard of the fracture mouth (along≈mouth) at
+    // deck-lip height and look ACROSS the opening plane at the wall sandwich, so a
+    // see-through slot between the hull skins + interior wall, or a paper-thin
+    // exposed edge, is unmissable (the entrance-gap diagnostic).
+    await flankShot('mouth-graze', 1, 31.5, 5.5, 0.9, 29.5, 2.6, 0.9);
+    await flankShot('mouth-graze2', -1, 31.5, 5.5, 0.9, 29.5, 2.6, 0.9);
+    // M7-S2 — interior reads (player-eye, from the builder's probe waypoints).
+    const probe = await page.evaluate(() => {
+      let p = null;
+      window.__game.ctx.three.scene.traverse((o) => { if (o.userData?.skyfallProbe) p = o.userData.skyfallProbe; });
+      return p ? { waypoints: p.waypoints } : null;
+    });
+    if (probe) {
+      const wpByName = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+      const interiorShot = async (name, fromW, toW) => {
+        await page.evaluate(({ f, t }) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera;
+          ctx.flags.paused = true;
+          cam.position.set(f.x, f.y + 1.6, f.z);
+          cam.lookAt(t.x, t.y + 1.2, t.z);
+          cam.updateMatrixWorld(true);
+        }, { f: fromW, t: toW });
+        await page.waitForTimeout(350);
+        await page.screenshot({ path: join(OUT, `scen-skyfall-${name}.png`), timeout: 60000 });
+        console.log(`[skyfall-shot] saved scen-skyfall-${name}.png`);
+      };
+      await interiorShot('int-mouth', wpByName.outside, wpByName.hold);     // standing outside, looking in
+      await interiorShot('int-hold', wpByName.hold, wpByName.door2);        // hold → the mid doorway
+      await interiorShot('int-mid', wpByName.mid, wpByName.door1);          // mid bay → the cabin doorway
+      await interiorShot('int-cabin', wpByName.cabin, wpByName.mid);        // cabin, looking back aft
+      // bow-ward look at the cabin console + bow wall (the S6 focal point) —
+      // the bow is DECREASING local z = the −fwd world direction from the cabin.
+      await interiorShot('int-cabin-fwd', wpByName.cabin, { x: wpByName.cabin.x - fwd[0] * 4, y: wpByName.cabin.y, z: wpByName.cabin.z - fwd[1] * 4 });
+      // HEAD-ON read of the mid-bay PORT wall (the ripped-open machine-room
+      // signature): stand toward the starboard side of the mid bay, look at the
+      // torn panel + exposed conduit/wire loom. local +X = broad, +Z = fwd.
+      {
+        const mid = wpByName.mid;
+        const atLocal = (lx, lz, ly) => ({ x: mid.x + broad[0] * lx + fwd[0] * (lz - 16), y: mid.y + ly, z: mid.z + broad[1] * lx + fwd[1] * (lz - 16) });
+        await page.evaluate(({ f, t }) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera;
+          ctx.flags.paused = true;
+          cam.position.set(f.x, f.y, f.z);
+          cam.lookAt(t.x, t.y, t.z);
+          cam.updateMatrixWorld(true);
+        }, { f: atLocal(2.2, 16.8, 1.5), t: atLocal(-3.0, 14.4, 1.3) });
+        await page.waitForTimeout(350);
+        await page.screenshot({ path: join(OUT, 'scen-skyfall-int-mid-wall.png'), timeout: 60000 });
+        console.log('[skyfall-shot] saved scen-skyfall-int-mid-wall.png');
+      }
+    }
+  },
+
+  // M7-S2 — the Skyfall WALK PROBE (rule 9, real motion): stream to the
+  // nearest skyfall freighter, then WALK the interior — outside → mouth →
+  // hold → doorway → mid → doorway → cabin → back out → re-enter — in small
+  // stepped moves with physics settling, asserting at every waypoint that a
+  // castDown hits the DECK collider (terrain sits within ~0.4m of the deck,
+  // so collider IDENTITY is the fall-through proof), that the capsule wasn't
+  // ejected (doorway/sill fit), and that ceiling + both walls answer rays.
+  'skyfall-walk': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; ctx.vultures.list.length = 0;
+      ctx.weather.intensity = 0; g.setTime(0.40);
+      // TINY CANVAS (2026-07-13 probe-infra): a physics/collision probe needs
+      // NO pixels — shrink the render target so swiftshader fill cost is ~nil
+      // (this is the CPU-heat lever for walk probes). 64² still ticks rAF.
+      ctx.three.renderer.setSize(64, 64, false);
+    });
+    const skyT = await page.evaluate(() => {
+      const g = window.__game;
+      for (let r = 1; r <= 10; r++) {
+        for (let cx = -r * 16; cx <= r * 16; cx += 4) {
+          for (let cz = -r * 16; cz <= r * 16; cz += 4) {
+            for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++) {
+              const d = g.chunkDescribe(cx + dx, cz + dz);
+              if (d.landmark.present && d.landmark.kind === 'skyfall_freighter') {
+                return { x: d.landmark.x, z: d.landmark.z };
+              }
+            }
+          }
+        }
+      }
+      return null;
+    });
+    if (!skyT) throw new Error('skyfall-walk: no skyfall freighter in the scan window');
+    // FAST: single-teleport stream + poll-until-built (was a multi-hop walk).
+    const streamed = await streamToSite(page, skyT.x, skyT.z, { park: 30 });
+    console.log(`[skyfall-walk] streamed in ${streamed.frames} frames (built=${streamed.built})`);
+    const r = await page.evaluate(async (t) => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      const body = ctx.player.body.body;
+      // Fetch the builder's probe data.
+      let probe = null;
+      ctx.three.scene.traverse((o) => { if (o.userData?.skyfallProbe) probe = o.userData.skyfallProbe; });
+      if (!probe) return { fails: ['no skyfallProbe userData (wreck not built?)'] };
+      const wps = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+      const fails = [];
+      const CAP = 1.05;   // capsule-center height above feet used for placement
+      // Place at a waypoint (drop-in), settle under gravity/KCC.
+      const placeAt = async (w) => {
+        body.setTranslation({ x: w.x, y: w.y + CAP + 0.25, z: w.z }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        await frames(45);
+      };
+      // Walk from the current position to a waypoint in 0.5m steps at the
+      // CURRENT settled height — collisions (lip, sills, jambs) resolve per
+      // step; a blocked path shows up as failure to arrive.
+      const walkTo = async (w) => {
+        for (let i = 0; i < 200; i++) {
+          const p = body.translation();
+          const dx = w.x - p.x, dz = w.z - p.z;
+          const d = Math.hypot(dx, dz);
+          if (d < 0.35) break;
+          const s = Math.min(0.5, d);
+          body.setTranslation({ x: p.x + (dx / d) * s, y: p.y + 0.12, z: p.z + (dz / d) * s }, true);
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          await frames(6);
+        }
+        await frames(30);
+      };
+      const arrived = (w, name) => {
+        const p = body.translation();
+        const d = Math.hypot(w.x - p.x, w.z - p.z);
+        if (d > 0.8) fails.push(`${name}: did not arrive (blocked ${d.toFixed(2)}m short)`);
+        return d <= 0.8;
+      };
+      const floorSet = new Set(probe.floorHandles ?? [probe.deckHandle]);
+      const onDeck = (name, w) => {
+        const p = body.translation();
+        const hit = g.castDown(p.x, p.z, p.y, true);   // exclude the player capsule
+        if (!hit) { fails.push(`${name}: castDown hit NOTHING`); return; }
+        if (floorSet.has(hit.colliderHandle)) return;
+        // Terrain AT-or-slightly-above the deck line = sand ingress in the
+        // buried end (walkable, shin-deep max — legit wreck language).
+        // Terrain BELOW the deck line = the capsule fell through. The bound
+        // also fails waist-deep ingress (an unwalkable compartment).
+        if (hit.hitY >= w.y - 0.05 && hit.hitY <= w.y + 0.5) return;
+        fails.push(`${name}: on collider ${hit.colliderHandle} (deck=${probe.deckHandle} shape=${hit.shape}) hitY=${hit.hitY.toFixed(2)} py=${p.y.toFixed(2)} deckY=${w ? w.y.toFixed(2) : '?'} (FALL-THROUGH or deep ingress)`);
+      };
+      // ── The walk ──
+      await placeAt(wps.outside);                          // on the sand off the mouth
+      await walkTo(wps.mouth);                             // ENTER through the fracture
+      if (arrived(wps.mouth, 'enter-mouth')) onDeck('enter-mouth', wps.mouth);
+      await walkTo(wps.hold); if (arrived(wps.hold, 'hold')) onDeck('hold', wps.hold);
+      await walkTo(wps.door2); if (arrived(wps.door2, 'door2 (mid↔hold doorway)')) onDeck('door2', wps.door2);
+      await walkTo(wps.mid); if (arrived(wps.mid, 'mid')) onDeck('mid', wps.mid);
+      await walkTo(wps.door1); if (arrived(wps.door1, 'door1 (cabin↔mid doorway)')) onDeck('door1', wps.door1);
+      await walkTo(wps.cabin); if (arrived(wps.cabin, 'cabin')) onDeck('cabin', wps.cabin);
+      // Exit the full length + off the ship, then RE-ENTER to the hold.
+      await walkTo(wps.mouth); if (arrived(wps.mouth, 'exit-mouth')) onDeck('exit-mouth', wps.mouth);
+      await walkTo(wps.outside);
+      {
+        const p = body.translation();
+        if (Math.hypot(wps.outside.x - p.x, wps.outside.z - p.z) > 0.8) fails.push('exit: did not get back OUT of the mouth');
+      }
+      await walkTo(wps.hold); if (arrived(wps.hold, 're-enter hold')) onDeck('re-enter hold', wps.hold);
+      // Ceiling presence: the capsule settled UNDER the roof everywhere it
+      // stood — prove clearance is bounded (not open sky) by the deck-relative
+      // ceiling value the builder exported: place mid, check headroom via a
+      // high drop (a capsule dropped from +5 must still settle ON the deck —
+      // the roof blocks a re-placement THROUGH it from above).
+      body.setTranslation({ x: wps.mid.x, y: wps.mid.y + 6.0, z: wps.mid.z }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      await frames(50);
+      {
+        const p = body.translation();
+        const hit = g.castDown(p.x, p.z, p.y, true);
+        if (hit && hit.colliderHandle === probe.deckHandle) {
+          fails.push('roof: a capsule dropped from ABOVE the hull landed on the interior deck (hole in the roof colliders)');
+        }
+      }
+      return { fails, wps: probe.waypoints.length };
+    }, skyT);
+    const pass = r.fails.length === 0;
+    console.log(`SKYFALL-WALK pass=${pass ? 1 : 0} waypoints=${r.wps ?? 0} fails=${r.fails.length}`);
+    console.log(`[skyfall-walk] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('skyfall-walk GATE FAILED');
   },
 
   // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/
@@ -5609,6 +6611,245 @@ const SCENARIOS = {
     console.log(`[leviathan-reveal] ${JSON.stringify(r)}`);
   },
 
+  // LEVIATHAN INTERIOR (2026-07-15) — exterior + breach-MOUTH (head-on + grazing) +
+  // interior player-eye reads for the now-enterable colossal wreck. The leviathan is
+  // a FIXED hand-placed monument at getLeviathanLandmarkPos() (built at boot when the
+  // intro feature is on — the default), so NO descriptor scan / stream: enterLive has
+  // already built it. Find it by name, read its world pose + bbox + the builder's
+  // leviathanProbe waypoints, and shoot. Prints a DIAGNOSTIC (terrain profile down the
+  // hull axis + world Y of the deck) so the interior fit can be tuned.
+  //   Run: node scripts/rig-shot.mjs --scenario=leviathan-shot --port=57xx
+  'leviathan-shot': async (page) => {
+    const info = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0;
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      g.setTime(0.40);                                 // mid-morning raking front light
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1280, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1280 / 720; cam.updateProjectionMatrix(); }
+      const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+      if (!lev) return { found: false };
+      lev.updateMatrixWorld(true);
+      const V = cam.position.constructor;
+      const cx = lev.position.x, cz = lev.position.z, yaw = lev.rotation.y;
+      // World-space bbox from the meshes (localToWorld each geo box corner).
+      let minY = 1e9, maxY = -1e9;
+      lev.traverse((o) => {
+        if (o.isMesh && o.geometry) {
+          o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox;
+          for (const yy of [b.min.y, b.max.y]) { const w = new V(0, yy, 0); o.localToWorld(w); minY = Math.min(minY, w.y); maxY = Math.max(maxY, w.y); }
+        }
+      });
+      // Terrain profile down the hull axis (fwd = local +Z under the yaw).
+      const fwd = [Math.sin(yaw), Math.cos(yaw)];
+      const prof = [];
+      for (let z = 12; z >= -48; z -= 6) prof.push([z, +ctx.terrain.heightAt(cx + fwd[0] * z, cz + fwd[1] * z).toFixed(2)]);
+      let probe = null;
+      lev.traverse((o) => { if (o.userData?.leviathanProbe) probe = o.userData.leviathanProbe; });
+      return { found: true, cx: +cx.toFixed(1), cz: +cz.toFixed(1), yaw: +yaw.toFixed(3), gy: +ctx.terrain.heightAt(cx, cz).toFixed(2), minY: +minY.toFixed(2), maxY: +maxY.toFixed(2), prof, probe: probe ? { waypoints: probe.waypoints, ceilY: probe.ceilY, wallX: probe.wallX } : null };
+    });
+    if (!info.found) { console.log('[leviathan-shot] leviathanLandmark not in scene (intro feature off?)'); return; }
+    console.log(`[leviathan-shot] DIAG ${JSON.stringify({ cx: info.cx, cz: info.cz, yaw: info.yaw, gy: info.gy, minY: info.minY, maxY: info.maxY, prof: info.prof })}`);
+    // The interior lights are proximity-gated on the PLAYER body (a fixed monument
+    // can't hold always-on lights). Teleport the player INTO the wreck + tick a few
+    // frames UNPAUSED so updateLeviathanLandmark claims the pool lights before we
+    // pause + shoot (else the interior renders dark).
+    await page.evaluate(async ({ cx, cz }) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+      ctx.player.body.body.setTranslation({ x: cx, y: ctx.terrain.heightAt(cx, cz) + 2, z: cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let i = 0; i < 24; i++) await raf();
+    }, { cx: info.cx, cz: info.cz });
+    const yaw = info.yaw;
+    const fwd = [Math.sin(yaw), Math.cos(yaw)];
+    const broad = [Math.cos(yaw), -Math.sin(yaw)];
+    const shot = async (name, camDir, along, dist, lift, aimAlong, aimY, side = 1) => {
+      await page.evaluate(({ camDir, along, dist, lift, aimAlong, aimY, side, fwd, broad, cx: bcx, cz: bcz }) => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+        const ax = bcx + fwd[0] * aimAlong, az = bcz + fwd[1] * aimAlong;
+        const px = ax + (broad[0] * camDir[0] + fwd[0] * camDir[1]) * dist * side;
+        const pz = az + (broad[1] * camDir[0] + fwd[1] * camDir[1]) * dist * side;
+        const gy = ctx.terrain.heightAt(px, pz);
+        cam.position.set(px, gy + lift, pz);
+        cam.lookAt(ax, ctx.terrain.heightAt(ax, az) + aimY, az);
+        cam.updateMatrixWorld(true);
+      }, { camDir, along, dist, lift, aimAlong, aimY, side, fwd, broad, cx: info.cx, cz: info.cz });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+      console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+    };
+    // Exterior: full broadside length (aim mid aft-mass), a 3/4 approach.
+    await shot('long', [1, 0], -20, 96, 10, -20, 8);
+    await shot('approach', [0.8, 0.7], 4, 60, 6, -14, 6);
+    // ── THE BREACH (2026-07-16). These used to aim at the amidships FRACTURE (local
+    //    z≈+8) and were a FALSE PASS: the reared bow's 21m bore encloses that face, so
+    //    a camera placed 15m "outside" it was in fact standing INSIDE the bow's bore
+    //    shooting the interior through a hole no player could reach. Framing an
+    //    unreachable opening from an unreachable viewpoint is how the sealed build got
+    //    signed off. The entrance is now the STARBOARD breach at local (≈+10.9, -0.5),
+    //    so these shots are posed in the wreck's LOCAL frame against real coordinates,
+    //    from real player standing positions on the sand/ramp.
+    const localShot = async (name, cam, aim) => {
+      await page.evaluate(({ cam, aim }) => {
+        const ctx = window.__game.ctx; const c = ctx.three.camera; ctx.flags.paused = true;
+        const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+        const V = c.position.constructor;
+        const cw = lev.localToWorld(new V(cam[0], cam[1], cam[2]));
+        const aw = lev.localToWorld(new V(aim[0], aim[1], aim[2]));
+        c.position.copy(cw); c.lookAt(aw); c.updateMatrixWorld(true);
+      }, { cam, aim });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+      console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+    };
+    // A camera STOOD ON THE REAL SAND at a local (x,z) — eye height above whatever the
+    // dune actually does there, not a hand-guessed local y. The breach shots below were
+    // written for the z=-0.5 breach and kept their old aim after it moved to z=-3.6, so
+    // they were framing 3m of blank plating beside the door; and their hand-set local y
+    // put the camera under the dune once the drift was rebuilt from the real terrain.
+    // Both are the same D165 failure — a harness that shoots a viewpoint the player
+    // can't occupy is testing a different scene than the one that ships.
+    const BZ = -3.6;                                   // I_BREACH_Z (leviathanLandmark.ts)
+    const groundShot = async (name, camXZ, aim, eye = 1.6) => {
+      await page.evaluate(({ camXZ, aim, eye }) => {
+        const ctx = window.__game.ctx; const c = ctx.three.camera; ctx.flags.paused = true;
+        const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+        const V = c.position.constructor;
+        const cw = lev.localToWorld(new V(camXZ[0], 0, camXZ[1]));
+        const aw = lev.localToWorld(new V(aim[0], aim[1], aim[2]));
+        c.position.set(cw.x, ctx.terrain.heightAt(cw.x, cw.z) + eye, cw.z);
+        c.lookAt(aw); c.updateMatrixWorld(true);
+      }, { camXZ, aim, eye });
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+      console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+    };
+    // Head-on into the tear from the open sand, at eye height — the REAL approach read.
+    await groundShot('breach-head', [26, BZ], [9, 5.4, BZ]);
+    // Standing OUTSIDE on the drift crest at the sill, looking straight INTO the hold.
+    // Local y = the drift's own crest here (I_DECK_Y + 0.08 − 1.5·RAMP_TAN) + eye.
+    await localShot('breach-into-hold', [12.6, 3.21 + 1.6, BZ], [-2, 5.0, BZ]);
+    // GRAZING both ways across the opening — proves the 0.9m cut cross-section reads
+    // as a thick welded rim with NO bright gap/slot between the skins.
+    await groundShot('breach-graze-fwd', [13.5, BZ + 9.5], [10.4, 5.2, BZ + 1.5], 4.6);
+    await groundShot('breach-graze-aft', [13.5, BZ - 9.5], [10.4, 5.2, BZ - 0.5], 4.6);
+    // The DECOY: the reared bow's root, which used to read as an arched way in.
+    await localShot('bow-root-decoy', [16, 1.5, 16], [4, 8, 7]);
+    // Interior player-eye reads from the builder's probe waypoints.
+    if (info.probe) {
+      const wps = Object.fromEntries(info.probe.waypoints.map((w) => [w.name, w]));
+      const interiorShot = async (name, f, t) => {
+        await page.evaluate(({ f, t }) => {
+          const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+          cam.position.set(f.x, f.y + 1.6, f.z);
+          cam.lookAt(t.x, t.y + 1.3, t.z);
+          cam.updateMatrixWorld(true);
+        }, { f, t });
+        await page.waitForTimeout(350);
+        await page.screenshot({ path: join(OUT, `scen-leviathan-${name}.png`), timeout: 60000 });
+        console.log(`[leviathan-shot] saved scen-leviathan-${name}.png`);
+      };
+      const order = info.probe.waypoints.map((w) => w.name);
+      for (let i = 0; i < order.length - 1; i++) await interiorShot(`int-${order[i]}`, wps[order[i]], wps[order[i + 1]]);
+      // A look back toward the mouth from the deepest interior waypoint (the daylight read).
+      const last = wps[order[order.length - 1]];
+      await interiorShot('int-back', last, wps[order[0]]);
+      // The AFT crew station / story focal — from the aft waypoint look at the
+      // console + end wall (−fwd), where the salvage panels + flight-recorder sit.
+      const aftW = wps.aft;
+      await interiorShot('int-console', aftW, { x: aftW.x - fwd[0] * 6, y: aftW.y, z: aftW.z - fwd[1] * 6 });
+    } else {
+      console.log('[leviathan-shot] no leviathanProbe userData yet (interior not built) — exterior shots only');
+    }
+  },
+
+  // LEVIATHAN WALK PROBE (rule 9, real motion) — mirrors skyfall-walk for the fixed
+  // leviathan monument. Walk outside → mouth → each interior waypoint → back out →
+  // re-enter, asserting at every waypoint that a castDown hits a FLOOR collider (or
+  // shin-deep sand ingress), the capsule wasn't ejected (doorway/sill fit), and the
+  // roof caps a drop from above. No stream (the monument is always in the scene).
+  'leviathan-walk': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.40);
+      ctx.three.renderer.setSize(64, 64, false);   // physics probe: no pixels needed
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      const body = ctx.player.body.body;
+      let probe = null;
+      ctx.three.scene.traverse((o) => { if (o.userData?.leviathanProbe) probe = o.userData.leviathanProbe; });
+      if (!probe) return { fails: ['no leviathanProbe userData (interior not built?)'] };
+      const wps = Object.fromEntries(probe.waypoints.map((w) => [w.name, w]));
+      const order = probe.waypoints.map((w) => w.name);
+      const fails = [];
+      const CAP = 1.05;
+      const placeAt = async (w) => { body.setTranslation({ x: w.x, y: w.y + CAP + 0.25, z: w.z }, true); body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(45); };
+      // Teleport-march along the path, RIDING the surface under each step.
+      //
+      // This used to grant a flat +0.12m of lift per 0.5m step and leave the rest to
+      // the solver — i.e. it could only follow ground shallower than ~13°. That was
+      // invisible while every leviathan/skyfall surface was a flat deck, but the
+      // moment the entrance gained a sand ramp the probe buried the capsule in it and
+      // then reported "FALL-THROUGH" at every waypoint — on a wreck whose deck was
+      // fine. It was conflating "can't climb" with "no floor", which is not what this
+      // gate is for: it exists to prove a floor is THERE and the fit is right.
+      // castDown-following makes it measure that honestly. The 1.4m look-up cap keeps
+      // it from scaling a wall. Whether the ramp FEELS good to climb is a motion
+      // question a teleport probe cannot answer — that is for the human walk-test.
+      const CAPSULE_FOOT = 1.05;
+      const walkTo = async (w) => {
+        for (let i = 0; i < 240; i++) {
+          const p = body.translation(); const dx = w.x - p.x, dz = w.z - p.z; const d = Math.hypot(dx, dz);
+          if (d < 0.35) break; const s = Math.min(0.5, d);
+          const nx = p.x + (dx / d) * s, nz = p.z + (dz / d) * s;
+          const surf = g.castDown(nx, nz, p.y + 1.4, true);
+          const ny = surf ? Math.max(surf.hitY + CAPSULE_FOOT + 0.05, p.y - 1.5) : p.y + 0.12;
+          body.setTranslation({ x: nx, y: ny, z: nz }, true);
+          body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(6);
+        }
+        await frames(30);
+      };
+      const arrived = (w, name) => { const p = body.translation(); const d = Math.hypot(w.x - p.x, w.z - p.z); if (d > 0.9) fails.push(`${name}: did not arrive (blocked ${d.toFixed(2)}m short)`); return d <= 0.9; };
+      const floorSet = new Set(probe.floorHandles ?? [probe.deckHandle]);
+      const onDeck = (name, w) => {
+        const p = body.translation(); const hit = g.castDown(p.x, p.z, p.y, true);
+        if (!hit) { fails.push(`${name}: castDown hit NOTHING`); return; }
+        if (floorSet.has(hit.colliderHandle)) return;
+        if (hit.hitY >= w.y - 0.05 && hit.hitY <= w.y + 0.5) return;
+        fails.push(`${name}: on collider ${hit.colliderHandle} (deck=${probe.deckHandle}) hitY=${hit.hitY.toFixed(2)} deckY=${w.y.toFixed(2)} (FALL-THROUGH or deep ingress)`);
+      };
+      // Walk the full ordered path in + back out + re-enter.
+      await placeAt(wps[order[0]]);
+      for (let i = 1; i < order.length; i++) { await walkTo(wps[order[i]]); if (arrived(wps[order[i]], order[i])) onDeck(order[i], wps[order[i]]); }
+      // Back out to the first waypoint (exit), then re-enter to the 3rd (a hold-ish).
+      for (let i = order.length - 2; i >= 0; i--) { await walkTo(wps[order[i]]); }
+      { const p = body.translation(); if (Math.hypot(wps[order[0]].x - p.x, wps[order[0]].z - p.z) > 1.0) fails.push('exit: did not get back OUT of the mouth'); }
+      const reI = Math.min(2, order.length - 1);
+      await walkTo(wps[order[reI]]); if (arrived(wps[order[reI]], `re-enter ${order[reI]}`)) onDeck(`re-enter ${order[reI]}`, wps[order[reI]]);
+      // Roof check: a capsule dropped from +6 above a mid waypoint must NOT land on the deck.
+      const midW = wps[order[Math.floor(order.length / 2)]];
+      body.setTranslation({ x: midW.x, y: midW.y + 6.0, z: midW.z }, true); body.setLinvel({ x: 0, y: 0, z: 0 }, true); await frames(50);
+      { const p = body.translation(); const hit = g.castDown(p.x, p.z, p.y, true); if (hit && hit.colliderHandle === probe.deckHandle) fails.push('roof: a capsule dropped from ABOVE landed on the interior deck (hole in the roof colliders)'); }
+      return { fails, wps: probe.waypoints.length };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`LEVIATHAN-WALK pass=${pass ? 1 : 0} waypoints=${r.wps ?? 0} fails=${r.fails.length}`);
+    console.log(`[leviathan-walk] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('leviathan-walk GATE FAILED');
+  },
+
   // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
   // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
   // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt
@@ -7894,56 +9135,217 @@ const SCENARIOS = {
   // storm LOOK (the signature atmosphere moment — 3 dust layers + fog + sun/ambient
   // dimming + the storm vignette). No storm-render scenario existed; this is the
   // reusable enabler for atmosphere iteration. Eye-level horizontal view into the wall.
+  // Sandstorm overhaul (review 2026-07-14). Three shots that judge the storm from the
+  // real player view against a spawned wreck (the occlusion test object):
+  //   approach — the dust WALL on the horizon with the wreck clearly visible (light haze)
+  //   mid      — the wall advancing, thick driven dust, wreck fogging out
+  //   peak     — the whiteout: player inside the wall core; NO distant outline may survive
+  // `--shot=approach|mid|peak|all` (default all). The wall travels +Z; the player stands
+  // north of the wreck looking -Z toward the incoming front. Intensity is WALL-DERIVED
+  // (updateWeather recomputes it each tick from the wall geometry), so we place the wall,
+  // let the sim tick, then pause + frame.
   'storm': async (page) => {
-    await page.evaluate(() => {
+    const shot = String(argv.shot || 'all');
+    const shots = shot === 'all' ? ['approach', 'mid', 'peak'] : [shot];
+    // Spawn ONE procgen wreck as the occlusion target; find its world center.
+    const wreck = await page.evaluate(() => {
       const ctx = window.__game.ctx;
-      window.__game.setTime(0.42);                 // mid-morning: lit but warm
+      window.__game.setTime(0.34);                 // bright midday for a legible daytime brownout
+      // review 2026-07-16 — was 1.35: the harness graded the storm at an exposure the game
+      // never ships (scene.ts sets 1.05). That matters more than it looks here — the sky dome
+      // is toneMapped:false while fogged geometry is tone-mapped, so exposure moves ONLY the
+      // fogged half of the image and the sky/ground match was being judged against a
+      // brightness the player never sees. Grade what ships.
+      ctx.three.renderer.toneMappingExposure = 1.05;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
-      ctx.player.inShelter = false;                // ensure perceivedIntensity isn't dampened
-      ctx.three.renderer.setSize(900, 600, false);
-      const cam = ctx.three.camera;
-      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 600; cam.updateProjectionMatrix(); }
-      // Force a peak storm centered on the player (player inside the wall core → intensity 1).
-      const w = ctx.weather;
-      const tr = ctx.player.body.body.translation();
-      w.state = 'storm';
-      w.intensity = 1.0;
-      w.perceivedIntensity = 1.0;
-      w.currentStormDuration = 1e6;                // don't let it settle during the shot
-      w.stateTimer = 0;
-      w.wall.active = true;
-      w.wall.posX = tr.x; w.wall.posZ = tr.z;
-      w.wall.dirX = 1; w.wall.dirZ = 0;
-      w.wall.width = 400; w.wall.age = 0; w.wall.approaching = false;
+      ctx.player.inShelter = false;
+      window.__game.spawnProcgenWreckRig('freighter', 4242);
+      let mw = null;
+      ctx.three.scene.traverse((o) => { if (!mw && o.name === 'procgenWreckRig') mw = o; });
+      if (!mw) return null;
+      mw.updateMatrixWorld(true);
+      const box = new (ctx.three.camera.position.constructor)(); void box;
+      let minX = 1e9, minZ = 1e9, maxX = -1e9, maxZ = -1e9, maxY = -1e9;
+      mw.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox;
+        const V = ctx.three.camera.position.constructor;
+        for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) {
+          const p = new V(cx, cy, cz); o.localToWorld(p);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+          maxY = Math.max(maxY, p.y);
+        }
+      });
+      ctx.flags.paused = false;
+      return { cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, topY: maxY };
     });
-    // Run the LIVE loop ~2.4s so the 3 dust layers populate, drift, + ramp to full
-    // opacity (opacity keys off perceivedIntensity, recomputed by the shelter pass).
-    await page.waitForTimeout(2400);
-    const r = await page.evaluate(() => {
-      const ctx = window.__game.ctx;
-      const w = ctx.weather;
-      w.intensity = 1.0; w.perceivedIntensity = 1.0;   // re-pin peak
-      const tr = ctx.player.body.body.translation();
-      const cam = ctx.three.camera;
-      ctx.flags.paused = true;
-      // Eye-level horizontal view into the storm.
-      cam.position.set(tr.x, tr.y + 1.6, tr.z);
-      cam.lookAt(tr.x + 30, tr.y + 1.6, tr.z + 4);
-      cam.updateMatrixWorld(true);
-      ctx.three.renderer.render(ctx.three.scene, cam);   // guarantee the repositioned view paints
-      const fog = ctx.three.scene.fog;
-      return {
-        intensity: +w.intensity.toFixed(2), pi: +w.perceivedIntensity.toFixed(2),
-        fogDensity: fog ? +fog.density.toFixed(4) : null,
-        vis: [w.layers.near.particles.visible, w.layers.mid.particles.visible, w.layers.far.particles.visible],
-        op: [+w.layers.near.mat.opacity.toFixed(2), +w.layers.mid.mat.opacity.toFixed(2), +w.layers.far.mat.opacity.toFixed(2)],
-      };
-    });
-    await page.waitForTimeout(120);
-    await page.screenshot({ path: join(OUT, 'scen-storm.png'), fullPage: false });
-    console.log(`[storm] ${JSON.stringify(r)}`);
+    if (!wreck) { console.log('[storm] FAILED to spawn wreck'); return; }
+    console.log(`[storm] wreck @ (${wreck.cx.toFixed(0)}, ${wreck.cz.toFixed(0)})`);
+
+    const CFG = {
+      // leadingEdgeDist = how far ahead of the player the wall's front sits (m).
+      approach: { edge: 340, wreckDist: 46 },
+      mid:      { edge: 165, wreckDist: 46 },
+      peak:     { edge: 0,   wreckDist: 46 },
+    };
+
+    for (const sh of shots) {
+      const cfg = CFG[sh];
+      if (!cfg) { console.log(`[storm] unknown shot ${sh}`); continue; }
+      await page.evaluate(({ sh, cfg, wreck }) => {
+        const ctx = window.__game.ctx;
+        ctx.flags.paused = false;
+        const w = ctx.weather;
+        const cam = ctx.three.camera;
+        ctx.three.renderer.setSize(1200, 680, false);
+        if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 680; cam.updateProjectionMatrix(); }
+        // Player stands `wreckDist` north (+Z) of the wreck, looking -Z toward the front.
+        const px = wreck.cx, pz = wreck.cz + cfg.wreckDist;
+        const gy = ctx.terrain.heightAt(px, pz);
+        ctx.player.body.body.setTranslation({ x: px, y: gy + 1.6, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.inShelter = false;
+        // Configure the wall: travels +Z; front at player - dir*edge (i.e. -Z of player).
+        w.state = 'storm';
+        w.currentStormDuration = 1e6;
+        w.stateTimer = 0;
+        w.wall.active = true;
+        w.wall.dirX = 0; w.wall.dirZ = 1; w.wall.age = 0; w.wall.approaching = true;
+        if (sh === 'peak') {
+          // Player inside a wide core → intensity 1 (whiteout).
+          w.wall.width = 400;
+          w.wall.posX = px; w.wall.posZ = pz;
+        } else {
+          w.wall.width = 140;
+          // leading edge at pz - edge ; center = edge - dir*width along +Z ⇒ posZ = (pz - edge) - width.
+          w.wall.posX = px;
+          w.wall.posZ = (pz - cfg.edge) - w.wall.width;
+        }
+      }, { sh, cfg, wreck });
+      // Tick live so fog + intensity + dust layers + the dust wall all settle.
+      await page.waitForTimeout(2200);
+      // review 2026-07-15 — the approach shot renders from a YAW SWEEP (pan the camera
+      // left/centre/right from a FIXED position) so we can confirm the wall reads as a
+      // flat WORLD-fixed advancing front and does NOT spin/re-yaw with the view. Other
+      // shots stay single-view.
+      const yaws = sh === 'approach' ? [{ tag: 'L', d: -34 }, { tag: '', d: 0 }, { tag: 'R', d: 34 }] : [{ tag: '', d: 0 }];
+      for (const yv of yaws) {
+        const r = await page.evaluate(({ sh, wreck, cfg, yawDeg }) => {
+          const ctx = window.__game.ctx;
+          const w = ctx.weather;
+          const cam = ctx.three.camera;
+          const px = wreck.cx, pz = wreck.cz + cfg.wreckDist;
+          const gy = ctx.terrain.heightAt(px, pz);
+          ctx.flags.paused = true;
+          // Eye at 1.7m, looking -Z toward the wreck top / incoming wall, slightly up so the
+          // towering front reads.
+          cam.position.set(px, gy + 1.7, pz);
+          const aimY = gy + Math.max(4, Math.min(16, (wreck.topY - gy) * 0.5));
+          cam.lookAt(wreck.cx, aimY, wreck.cz);
+          // Pan the VIEW about world-Y by yawDeg (the wall must not follow it).
+          if (yawDeg) cam.rotateOnWorldAxis(new (ctx.time.sunDir.constructor)(0, 1, 0), yawDeg * Math.PI / 180);
+          cam.updateMatrixWorld(true);
+          ctx.three.renderer.render(ctx.three.scene, cam);
+          const fog = ctx.three.scene.fog;
+          const dw = w.dustWall;
+
+          // ── review 2026-07-16 — SILHOUETTE GATE (the reviewer's exact complaint:
+          //    "i can still see the outline of distant wrecks ... a yellow silhouette
+          //    against the sky no matter how far away it is").
+          //    A silhouette REQUIRES a value edge, so we measure one directly off the
+          //    framebuffer: sky above the horizon vs the fogged ground below it. At peak
+          //    they must converge — if they differ, EVERY distant object reads as a cutout.
+          //    Root cause this gate exists to catch: the sky dome is a raw ShaderMaterial
+          //    (three injects no <colorspace_fragment>, so it writes LINEAR bytes) while
+          //    fogged geometry is sRGB-encoded — the same hex rendered 69 RGB units apart.
+          //    Code inspection CANNOT see this; only pixels can. ──
+          let silhouette = null;
+          if (sh === 'peak') {
+            const gl = ctx.three.renderer.getContext();
+            const BW = gl.drawingBufferWidth, BH = gl.drawingBufferHeight;
+            const buf = new Uint8Array(BW * BH * 4);
+            gl.readPixels(0, 0, BW, BH, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+            const patch = (cx, cyTop) => {   // readPixels is bottom-left origin
+              let rr = 0, gg = 0, bb = 0, n = 0;
+              for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+                const x = Math.max(0, Math.min(BW - 1, cx + dx));
+                const y = Math.max(0, Math.min(BH - 1, BH - 1 - (cyTop + dy)));
+                const i = (y * BW + x) * 4;
+                rr += buf[i]; gg += buf[i + 1]; bb += buf[i + 2]; n++;
+              }
+              return [Math.round(rr / n), Math.round(gg / n), Math.round(bb / n)];
+            };
+            // Sample RELATIVE TO THE HORIZON, not to the frame. Fixed frame fractions are
+            // wrong: the peak camera aims up, so a "0.82" row lands on terrain ~3m from the
+            // player's boots — near-field, barely fogged, and inside the storm vignette. That
+            // measures the vignette, not the whiteout. Project a point at eye height far down
+            // the view axis to get the true horizon row, then straddle it: the ground sample
+            // must sit just below it (≳40m out ⇒ fully fogged at density 0.18), not at the feet.
+            const V = ctx.time.sunDir.constructor;
+            const fwd = new V();
+            cam.getWorldDirection(fwd);
+            const far = new V(
+              cam.position.x + fwd.x * 4000,
+              cam.position.y,                 // eye height ⇒ the true horizon
+              cam.position.z + fwd.z * 4000,
+            );
+            const ndc = far.clone().project(cam);
+            const horizonY = Math.round((-ndc.y * 0.5 + 0.5) * BH);
+            const midX = Math.round(BW / 2);
+            const skyY2 = Math.max(3, horizonY - 90);
+            const gndY2 = Math.min(BH - 4, horizonY + 22);
+            const skyRGB = patch(midX, skyY2);   // well above the horizon
+            const gndRGB = patch(midX, gndY2);   // fogged distant ground, just below it
+            const delta = Math.max(
+              Math.abs(skyRGB[0] - gndRGB[0]),
+              Math.abs(skyRGB[1] - gndRGB[1]),
+              Math.abs(skyRGB[2] - gndRGB[2]),
+            );
+            silhouette = { skyRGB, gndRGB, delta, horizonY, skyY: skyY2, gndY: gndY2, pass: delta <= 6 };
+          }
+          return {
+            shot: sh, yawDeg,
+            silhouette,
+            intensity: +w.intensity.toFixed(3),
+            pi: +w.perceivedIntensity.toFixed(3),
+            fogDensity: fog ? +fog.density.toFixed(4) : null,
+            fogColor: fog ? '#' + fog.color.getHexString() : null,
+            dustWallVisible: dw ? dw.group.visible : null,
+            dustWallYaw: dw ? +dw.group.rotation.y.toFixed(4) : null,
+            dustWallOp: dw && dw.shells[0] ? +dw.shells[0].mat.uniforms.uOpacity.value.toFixed(3) : null,
+            layerOp: [
+              +w.layers.near.mat.opacity.toFixed(2),
+              +w.layers.mid.mat.opacity.toFixed(2),
+              +w.layers.far.mat.opacity.toFixed(2),
+              +w.layers.streak.mat.opacity.toFixed(2),
+            ],
+          };
+        }, { sh, wreck, cfg, yawDeg: yv.d });
+        await page.waitForTimeout(120);
+        await page.screenshot({ path: join(OUT, `scen-storm-${sh}${yv.tag ? '-yaw' + yv.tag : ''}.png`), fullPage: false });
+        console.log(`[storm] ${JSON.stringify(r)}`);
+        // review 2026-07-16 — the peak whiteout is now a hard PASS/FAIL, not a vibe check.
+        if (r.silhouette) {
+          const s = r.silhouette;
+          console.log(
+            `[storm] SILHOUETTE GATE ${s.pass ? 'PASS' : 'FAIL'} — ` +
+            `sky=(${s.skyRGB}) ground=(${s.gndRGB}) delta=${s.delta} (must be <= 6)`,
+          );
+          if (!s.pass) {
+            console.log(
+              '[storm] FAIL: sky and fogged ground render different values at peak, so every ' +
+              'distant object silhouettes against the sky. Check the sky-dome colour-space ' +
+              'encode (sky.ts _stormDustSky) vs the fog colour — a raw ShaderMaterial gets no ' +
+              '<colorspace_fragment>, so the same hex renders ~69 RGB units apart.',
+            );
+            process.exitCode = 1;
+          }
+        }
+      }
+    }
   },
 
   // Smoke-plume (C21): deploy a lit fire + let its smoke-signal column build, then
@@ -9871,9 +11273,18 @@ async function main() {
   console.log(`[rig-shot] starting dev server on ${PORT}…`);
   const dev = await startDev();
   console.log(`[rig-shot] dev up; launching chromium…`);
-  const browser = await chromium.launch({
-    args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
-  });
+  // GL backend (2026-07-13 probe-infra): swiftshader is SOFTWARE rendering —
+  // it pins every CPU core (the machine-heat complaint). RIG_GL=angle switches
+  // to the platform GPU via ANGLE/D3D11 on Windows (headless=new exposes it
+  // when a real GPU is present) — far cooler + faster for SHOT scenarios.
+  // Content gates (determinism/streaming/walk) are pixel-independent, so the
+  // backend can't change their result; only screenshots differ, and those are
+  // A/B-validated before adoption. Falls back to swiftshader on any doubt.
+  const glMode = process.env.RIG_GL || 'angle';   // DEFAULT GPU (2026-07-13): validated identical digest + correct renders, ~10× faster, CPU-cool. RIG_GL=swiftshader forces the old software path.
+  const glArgs = glMode === 'angle'
+    ? ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']
+    : ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
+  const browser = await chromium.launch({ args: glArgs });
   try {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1100 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();

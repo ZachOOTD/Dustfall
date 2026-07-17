@@ -13,7 +13,7 @@ import { Tuning } from '../config/tuning.ts';
 
 // Cycle 8 (ACAQ) — 'wreck_yard' is a rare DESTINATION biome, not a noise region:
 // a single distance-override disc around a seed-derived anchor far from spawn.
-export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard';
+export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard' | 'bone_field';
 
 export interface BiomeSampler {
   biomeAt: (x: number, z: number) => BiomeId;
@@ -22,6 +22,15 @@ export interface BiomeSampler {
   /** Wreck-yard region strength 0..1 (1 in the core, smooth-fading to 0 at the
    *  radius edge). Drives terrain ground-tint + flatten blends. Cycle 8. */
   wreckYardAt: (x: number, z: number) => number;
+  /** bone_field region strength 0..1 (a rare far-field titan-graveyard zone:
+   *  bleached bone-white ground + half-buried bone scatter). Drives the terrain
+   *  ground-tint + gentle flatten, and gates the chunk-streamed bone scatter. */
+  boneFieldAt: (x: number, z: number) => number;
+  /** The nearest bone_field region ANCHOR (field centre) to (x, z), or null if
+   *  no bone field is within the 3×3 region neighborhood. RNG-FREE (only reads
+   *  the memoized regionalBoneAnchor) → determinism untouched. Used to place the
+   *  colossal worm-skeleton hero at the field centre. */
+  boneFieldAnchor: (x: number, z: number) => { x: number; z: number } | null;
   /** The seed-derived wreck-yard region center (the rare destination). */
   wreckYardAnchor: { x: number; z: number };
   /** Wreck-yard region radius (m). */
@@ -135,6 +144,11 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
   // terrain ring (corner radius ≈1697m) + all boot placement never sample
   // a regional yard — the origin world bakes byte-identically. ──
   const regionSeed = Math.floor(rand() * 0x100000000) >>> 0;
+  // bone_field — its OWN region seed, drawn IMMEDIATELY AFTER the wreck-yard
+  // region seed and BEFORE any other rand() use. This is the LAST rand() draw
+  // in the sampler, so every earlier anchor (incl. the wreck-yard region seed
+  // above) stays byte-identical — the chunks determinism gate is the tripwire.
+  const boneRegionSeed = Math.floor(rand() * 0x100000000) >>> 0;
   const REGION_M = Tuning.CHUNK_REGION_CHUNKS * Tuning.CHUNK_SIZE;
   const regionMix = (rx: number, rz: number): number => {
     let h = regionSeed >>> 0;
@@ -195,15 +209,93 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return best;
   };
 
+  // ── bone_field — a rare far-field TITAN GRAVEYARD zone: bleached bone-white
+  //    ground + half-buried bone scatter. Mirrors the wreck-yard regional
+  //    anchor pattern exactly, but with its OWN appended seed (boneRegionSeed,
+  //    so the yard stays byte-identical) and NO origin anchor (purely far-
+  //    field). Anchors keep BONE_FIELD_REGION_MIN_DIST from origin so the
+  //    initial terrain ring + all boot placement never sample a bone field —
+  //    the origin world bakes identically. ──
+  const boneRadius = Tuning.BONE_FIELD_RADIUS;
+  const boneMix = (rx: number, rz: number): number => {
+    let h = boneRegionSeed >>> 0;
+    h = Math.imul(h ^ (rx | 0), 0x85ebca6b) >>> 0;
+    h = ((h << 13) | (h >>> 19)) >>> 0;
+    h = Math.imul(h ^ (rz | 0), 0xc2b2ae35) >>> 0;
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x45d9f3b) >>> 0;
+    h ^= h >>> 15;
+    return h >>> 0;
+  };
+  const _regionBone = new Map<string, { x: number; z: number } | null>();
+  const regionalBoneAnchor = (rx: number, rz: number): { x: number; z: number } | null => {
+    const k = `${rx},${rz}`;
+    const memo = _regionBone.get(k);
+    if (memo !== undefined) return memo;
+    const h = boneMix(rx, rz);
+    const roll = (h & 0xffff) / 0x10000;
+    let out: { x: number; z: number } | null = null;
+    if (roll < Tuning.BONE_FIELD_REGION_CHANCE) {
+      const u = ((h >>> 16) & 0xff) / 256;
+      const v = ((h >>> 24) & 0xff) / 256;
+      const margin = boneRadius;
+      const ax = rx * REGION_M + margin + u * (REGION_M - 2 * margin);
+      const az = rz * REGION_M + margin + v * (REGION_M - 2 * margin);
+      if (ax * ax + az * az >= Tuning.BONE_FIELD_REGION_MIN_DIST * Tuning.BONE_FIELD_REGION_MIN_DIST) {
+        out = { x: ax, z: az };
+      }
+    }
+    _regionBone.set(k, out);
+    return out;
+  };
+  const boneFalloff = (d: number): number => {
+    if (d >= boneRadius) return 0;
+    if (d <= boneRadius * 0.6) return 1;
+    const t = (boneRadius - d) / (boneRadius * 0.4);
+    return t * t * (3 - 2 * t);
+  };
+  const boneFieldAtFull = (x: number, z: number): number => {
+    let best = 0;
+    const rx0 = Math.floor(x / REGION_M);
+    const rz0 = Math.floor(z / REGION_M);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) {
+      for (let rz = rz0 - 1; rz <= rz0 + 1; rz++) {
+        const a = regionalBoneAnchor(rx, rz);
+        if (!a) continue;
+        const dx = x - a.x, dz = z - a.z;
+        const f = boneFalloff(Math.sqrt(dx * dx + dz * dz));
+        if (f > best) { best = f; if (best >= 1) return 1; }
+      }
+    }
+    return best;
+  };
+
+  // RNG-FREE — only reads the memoized regionalBoneAnchor (no rand draws), so
+  // determinism is untouched. Returns the nearest bone_field anchor (field
+  // centre) in the 3×3 region neighborhood of (x, z), or null.
+  const boneFieldAnchor = (x: number, z: number): { x: number; z: number } | null => {
+    let best: { x: number; z: number } | null = null, bestD = Infinity;
+    const rx0 = Math.floor(x / REGION_M), rz0 = Math.floor(z / REGION_M);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++)
+      for (let rz = rz0 - 1; rz <= rz0 + 1; rz++) {
+        const a = regionalBoneAnchor(rx, rz);
+        if (!a) continue;
+        const dx = x - a.x, dz = z - a.z, d = dx * dx + dz * dz;
+        if (d < bestD) { bestD = d; best = a; }
+      }
+    return best;
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
     if (wreckYardAtFull(x, z) > 0.5) return 'wreck_yard';
+    if (boneFieldAtFull(x, z) > 0.5) return 'bone_field';
     const n = rawAt(x, z);
     if (n < Tuning.BIOME_THRESHOLD_ROCKY) return 'rocky';
     if (n > Tuning.BIOME_THRESHOLD_SALT) return 'salt';
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
+  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, boneFieldAt: boneFieldAtFull, boneFieldAnchor, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

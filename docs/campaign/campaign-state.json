@@ -1,103 +1,321 @@
 {
-  "campaign": "Infinite Sands (infinite procgen)",
+  "campaign": "Sharpen & Deepen",
   "status": "completed",
-  "started": "2026-07-10",
-  "branch": "campaign/2026-07-10-procgen",
-  "cycles_completed": 7,
-  "current_tier": "LADDER COMPLETE (S1-S6+S5 shipped) — awaiting human merge review",
+  "started": "2026-07-09",
+  "branch": "campaign/2026-07-12-skyfall",
+  "cycles_completed": 24,
+  "current_tier": "LADDER COMPLETE (M7-R..M12 all shipped, cycles 14-24) \u2014 awaiting the human morning review + merge",
   "awaiting_approval": false,
-  "stop_reasons": ["until-met"],
+  "stop_reasons": [
+    "until-met"
+  ],
   "self_author": "propose",
   "checkpoint": "none",
   "verify_cmd": "npm run verify:all",
-  "smoke_gate": ["smoke-intro", "smoke-pod-tutorial", "pickup-take-sweep", "survival-probe", "diurnal-probe"],
+  "smoke_gate": [
+    "smoke-intro",
+    "smoke-pod-tutorial",
+    "pickup-take-sweep",
+    "survival-probe",
+    "diurnal-probe"
+  ],
   "visual_gate": "auto",
   "until": "ladder-complete",
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
-  "ceiling": { "max_cycles": 50, "total": 10000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1300000 },
+  "ceiling": {
+    "max_cycles": 50,
+    "total": 8750000,
+    "per_cycle": null,
+    "unit": "tokens"
+  },
+  "spend": {
+    "total": 7250000
+  },
   "ladder": [
-    { "id": "S1", "name": "ChunkManager spike + determinism/streaming probes", "kind": "auto", "status": "shipped", "cycle": 1 },
-    { "id": "S2", "name": "POI streaming (per-chunk placement + full teardown)", "kind": "auto", "status": "shipped", "cycle": 2 },
-    { "id": "S3", "name": "Scatter + creature active-ring streaming", "kind": "auto", "status": "shipped", "cycle": 3 },
-    { "id": "S4", "name": "Distributed rare landmarks + per-region biomes", "kind": "auto", "status": "shipped", "cycle": 4 },
-    { "id": "S6", "name": "Perf: frame-budgeted generation + cross-chunk perf probe", "kind": "auto", "status": "shipped", "cycle": 5 },
-    { "id": "S5", "name": "Save: per-chunk diffs (SAVE_VERSION bump)", "kind": "save-critical", "status": "shipped", "cycle": 7, "pause_before": "build", "approved": "2026-07-11 in-session (recommendations accepted)" }
+    {
+      "id": "M1",
+      "name": "Perf + housekeeping",
+      "kind": "auto",
+      "status": "shipped"
+    },
+    {
+      "id": "M2",
+      "name": "Survival curve (flagged)",
+      "kind": "auto+evidence",
+      "status": "shipped-preexisting (verify-only done; FEEL walk-test at end review)"
+    },
+    {
+      "id": "M3",
+      "name": "Survival depth (C31 occluder decouple + water-scarcity)",
+      "kind": "auto",
+      "status": "shipped"
+    },
+    {
+      "id": "M4",
+      "name": "Ambient life beds",
+      "kind": "auto",
+      "status": "shipped"
+    },
+    {
+      "id": "M5",
+      "name": "Living world (diurnal-cycle)",
+      "kind": "auto",
+      "status": "shipped"
+    },
+    {
+      "id": "M6",
+      "name": "POI breadth (new archetypes)",
+      "kind": "gate-verified",
+      "status": "COMPLETE (3/3: relay_mast + buried_pipeline + cargo_crawler)"
+    },
+    {
+      "id": "M7",
+      "name": "Skyfall enterable hero wreck",
+      "kind": "feel-critical",
+      "status": "COMPLETE (S1-S6). Walk-tested 2026-07-13; refinement fixes queued as M7-R.",
+      "pause_before": "hero-detail"
+    },
+    {
+      "id": "M7-R",
+      "name": "Skyfall refinement (real hull thickness / floating-model audit / 100% collision / more interior detail / cockpit glass / captain-log story)",
+      "kind": "gate-verified+feel",
+      "status": "COMPLETE (cycles 14-17): thickness+collision, floating-audit+detail, glass+cabin-light, captain-log story"
+    },
+    {
+      "id": "M8",
+      "name": "Far-field vultures (aerial life for the infinite world; region-rolled placement rework, D294)",
+      "kind": "gate-verified",
+      "status": "COMPLETE (cycle 18, D305): streamed circling vultures, no body leak, 6 wheeling in the far field"
+    },
+    {
+      "id": "M9",
+      "name": "New POI archetypes (2-3 new far-field destination types)",
+      "kind": "gate-verified",
+      "status": "COMPLETE (cycles 19-21): refinery_stack + hab_dome + transit_car"
+    },
+    {
+      "id": "M10",
+      "name": "More story vignettes (wordless environmental storytelling tableaus)",
+      "kind": "gate-verified",
+      "status": "COMPLETE (cycle 22): 3 new no-body vignettes (cold camp, stripped, cache) + 4 props"
+    },
+    {
+      "id": "M11",
+      "name": "Retire legacy tube-wrecks (ship->socket migration, D227/D249)",
+      "kind": "gate-verified",
+      "status": "COMPLETE (cycle 23, D306): ship retired from the roulette; 0/278 far-field tubes"
+    },
+    {
+      "id": "M12",
+      "name": "New far-field biome (ground/palette/scatter/hazards)",
+      "kind": "gate-verified",
+      "status": "COMPLETE (cycle 24, D307): ash_barren scorched-flats biome (regional-anchored, dark ground + industrial POI mix)"
+    }
   ],
-  "sanctioned_pauses": ["save-version-bump (S5, pause BEFORE building)"],
-  "locked_constraints": ["determinism-law", "no-unload-leaks-rule9", "intro-unchanged", "no-save-change-before-S5-pause", "keep-banked-perf", "master-untouched", "skyfall-campaign-parked-readonly"],
+  "sanctioned_pauses": [
+    "skyfall-pre-detail",
+    "save-version-bump"
+  ],
+  "locked_constraints": [
+    "no-endgame",
+    "no-tone-change",
+    "additive-save-only",
+    "no-new-pillars",
+    "models-need-thickness"
+  ],
   "cycles": [
     {
       "n": 1,
-      "date": "2026-07-11",
-      "focus": "S1 ChunkManager spike: streaming terrain tile ring + content ChunkManager + determinism/streaming gates",
-      "outcome": "shipped",
-      "tier": "S1",
-      "spend_this_cycle": 250000,
-      "commit": "e82d9a7",
-      "d_entries": ["D288", "D289", "D290", "D291"]
+      "date": "2026-07-09",
+      "focus": "M1 perf+housekeeping (+M2 verify-only discovery)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 600000,
+      "verify": "verify:all PASS \u00b7 smoke-intro PASS \u00b7 smoke-pod-tutorial PASS \u00b7 NEW pickup-take-sweep PASS \u00b7 survival-probe PASS (guarded)"
     },
     {
       "n": 2,
-      "date": "2026-07-11",
-      "focus": "S2 POI streaming: descriptor-rolled wrecks beyond the origin exclusion, save-transient, full teardown",
-      "outcome": "shipped",
-      "tier": "S2",
-      "spend_this_cycle": 180000,
-      "commit": "ad49dc0",
-      "d_entries": ["D292", "D293"]
+      "date": "2026-07-09",
+      "focus": "M3 survival depth (occluder decouple + shade-thirst relief)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 300000,
+      "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS (bands identical; heat-shade survives; occluders 51)"
     },
     {
       "n": 3,
-      "date": "2026-07-11",
-      "focus": "S3 scatter + ambient life: rocks + wordless scenes + chunk-keyed prey clusters (vultures deferred)",
-      "outcome": "shipped",
-      "tier": "S3",
-      "spend_this_cycle": 170000,
-      "commit": "deadc77",
-      "d_entries": ["D294"]
+      "date": "2026-07-09",
+      "focus": "M4 ambient life beds (procedural day/night sources)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS \u00b7 NEW ambient-beds PASS"
     },
     {
       "n": 4,
-      "date": "2026-07-11",
-      "focus": "S4 distributed landmarks (colossal_ribcage + wreck_knot, region grid) + regional wreck-yard biome anchors",
-      "outcome": "shipped",
-      "tier": "S4",
-      "spend_this_cycle": 200000,
-      "commit": "9b3ba92",
-      "d_entries": ["D295"],
-      "note": "interrupted mid-cycle by the machine-slowdown investigation (framework-wide reap-orphans fix, gamedev-framework@e78c1ca); resumed + closed after"
+      "date": "2026-07-09",
+      "focus": "M5 diurnal-cycle (lizard/shrew/vulture activity binding)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify:all PASS \u00b7 smokes PASS \u00b7 take-sweep PASS \u00b7 survival-probe PASS \u00b7 ambient-beds PASS \u00b7 NEW diurnal-probe PASS"
     },
     {
       "n": 5,
-      "date": "2026-07-11",
-      "focus": "S6 hitch-free generation: sliced tile builds + deferred landmark pieces + the permanent chunk-perf gate",
-      "outcome": "shipped",
-      "tier": "S6",
-      "spend_this_cycle": 190000,
-      "commit": "5f57a5d",
-      "d_entries": ["D296"]
+      "date": "2026-07-09",
+      "focus": "M6 A1 - relay_mast archetype (POI breadth)",
+      "outcome": "SHIPPED (partial - 1 of 2-3 archetypes)",
+      "spend_estimate": 500000,
+      "verify": "verify:all PASS (placement 5-seed + colliders 45) - all 6 rig gates PASS - visual gate PASS (routine bar)"
     },
     {
       "n": 6,
-      "date": "2026-07-11",
-      "focus": "S5 save schema PLAN (per-chunk diffs, v16->17) — the sanctioned pause; NO build",
-      "outcome": "proposed",
-      "tier": "S5",
-      "spend_this_cycle": 40000,
-      "commit": "fe56a99",
-      "d_entries": []
+      "date": "2026-07-09",
+      "focus": "M6 A2 - buried_pipeline archetype (POI breadth)",
+      "outcome": "SHIPPED (M6 DoD met at 2 archetypes)",
+      "spend_estimate": 550000,
+      "verify": "verify:all PASS (placement 5-seed + colliders 50) - all 6 rig gates PASS - visual gate PASS (routine bar, 1 rework round)"
     },
     {
       "n": 7,
-      "date": "2026-07-11",
-      "focus": "S5 build (approved): chunkDiffs v17 — far-field persistence; + the D297 speeder hotfix earlier in-session",
-      "outcome": "shipped",
-      "tier": "S5",
-      "spend_this_cycle": 270000,
-      "commit": "a77048a",
-      "d_entries": ["D297", "D298"]
+      "date": "2026-07-09",
+      "focus": "M6 A3 - cargo_crawler archetype (M6 complete, 3 archetypes)",
+      "outcome": "SHIPPED (M6 COMPLETE)",
+      "spend_estimate": 600000,
+      "verify": "verify:all PASS (placement 5-seed + colliders 55) - all 6 rig gates PASS - visual gate PASS (routine bar, 1 rework round)"
+    },
+    {
+      "n": 8,
+      "date": "2026-07-09",
+      "focus": "M7 Skyfall feature-slice (plan-review pause)",
+      "outcome": "PAUSED (plan-review)",
+      "spend_estimate": 150000,
+      "verify": "n/a (plan-only cycle; no code changed)"
+    },
+    {
+      "n": 9,
+      "date": "2026-07-12",
+      "focus": "M7 S1 - research + exterior blockout (skyfall_freighter S4 landmark kind)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 350000,
+      "verify": "verify:all PASS (placement/colliders/chunks) - 5 smokes PASS - 4-round real-view silhouette iteration + 2nd-seed check - mid-cycle steering applied (mounds removed, gates re-run green)"
+    },
+    {
+      "n": 10,
+      "date": "2026-07-13",
+      "focus": "M7 S2 enterable interior + colliders + skyfall-walk gate; probe infra (GPU default + fast streaming)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 350000,
+      "verify": "verify:all PASS (placement/colliders/chunks incl NEW skyfall-walk leg) - 5 smokes PASS - interior renders correct - 2 probe-caught bugs fixed - probe rig ~10x faster (D301)"
+    },
+    {
+      "n": 11,
+      "date": "2026-07-13",
+      "focus": "M7 S3 exterior hero detail (weathering/plating/containers/greebles + livery)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc clean - skyfall-walk PASS (interior undisturbed) - verify-chunks PASS - 6-round hero iteration + seed-808 check"
+    },
+    {
+      "n": 12,
+      "date": "2026-07-13",
+      "focus": "M7 S4-S5 interior hero dressing (intro-ship detail, wrecked style) + lighting",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc clean - skyfall-walk PASS (furniture off lane) - verify-chunks PASS (digest unchanged 65f211f8) - 7-round hero iteration"
+    },
+    {
+      "n": 13,
+      "date": "2026-07-13",
+      "focus": "M7 S6 integration: interior salvage loot + crash-log journal (streamed-persistent) \u2014 LADDER COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 300000,
+      "verify": "verify:all PASS - smokes PASS - numeric loot probe (2 sky panels, journal 6->7->6 clean teardown, salvage persists) - skyfall-walk PASS - digest unchanged"
+    },
+    {
+      "n": 14,
+      "date": "2026-07-13",
+      "focus": "M7-R part 1: Skyfall real hull thickness (kill paper-thin double-sided) + 100% exterior collision (dorsal containers)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 300000,
+      "verify": "verify tsc clean - verify-chunks (det 8/8, no-leak, perf ok) - skyfall-walk PASS - 3-round thickness iteration + seed-808; D304 + CLAUDE.md rule 7 generalized"
+    },
+    {
+      "n": 15,
+      "date": "2026-07-13",
+      "focus": "M7-R part 2: Skyfall interior floating-model audit (8 floaters grounded flush) + more interior detail",
+      "outcome": "SHIPPED",
+      "spend_estimate": 200000,
+      "verify": "verify tsc - skyfall-walk PASS - verify-chunks (det 8/8, no-leak, perf ok) - 2-round + seed-808"
+    },
+    {
+      "n": 16,
+      "date": "2026-07-13",
+      "focus": "M7-R part 3: Skyfall broken cockpit glass (shattered canopy) + reversible cabin-visibility fill",
+      "outcome": "SHIPPED",
+      "spend_estimate": 200000,
+      "verify": "verify tsc - skyfall-walk PASS - verify-chunks (det 8/8, no-leak, perf ok) - 3-round glass + 2-round cabin + seed-808"
+    },
+    {
+      "n": 17,
+      "date": "2026-07-13",
+      "focus": "M7-R part 4 (final): Skyfall captain-log story (crew ejected in drop pods) \u2014 M7-R COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 150000,
+      "verify": "verify:all PASS (placement/colliders/chunks) - skyfall-walk PASS - tsc clean; new generateSkyfallLog wired"
+    },
+    {
+      "n": 18,
+      "date": "2026-07-13",
+      "focus": "M8 far-field vultures (streamed circling birds \u2014 solves D294)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify:all PASS + 5 smokes - verify:chunks no body leak (332->332) - numeric: 6 circling vultures at altitude - D305"
+    },
+    {
+      "n": 19,
+      "date": "2026-07-13",
+      "focus": "M9 archetype 1/3: refinery_stack (fuel-refinery/cracking-tower ruin POI)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc - verify:colliders 0 fails (7/7) - verify:placement 0 fails (5 seeds) - verify-chunks no leak (335->335) - 3-round + 4-seed"
+    },
+    {
+      "n": 20,
+      "date": "2026-07-13",
+      "focus": "M9 archetype 2/3: hab_dome (collapsed habitat-dome cluster POI)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc - verify:colliders 0 fails (65 audits) - verify:placement 0 fails (5 seeds) - verify-chunks no leak (336->336) - 3-round"
+    },
+    {
+      "n": 21,
+      "date": "2026-07-13",
+      "focus": "M9 archetype 3/3: transit_car (half-buried rail car) \u2014 M9 COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 250000,
+      "verify": "verify tsc - verify:placement 0 fails - verify:colliders covered - verify-chunks no leak - 4-round"
+    },
+    {
+      "n": 22,
+      "date": "2026-07-13",
+      "focus": "M10 story vignettes (3 new no-body wordless tableaus + 4 props)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 150000,
+      "verify": "verify:all PASS (placement/colliders/chunks) - 2 new vignettes confirmed reading in-world"
+    },
+    {
+      "n": 23,
+      "date": "2026-07-13",
+      "focus": "M11 retire legacy tube-wreck (ship removed from ARCH_WEIGHTS + fallback retargeted)",
+      "outcome": "SHIPPED",
+      "spend_estimate": 150000,
+      "verify": "verify:all PASS - numeric histogram: ship 0/278 far-field POIs, varied spread - D306"
+    },
+    {
+      "n": 24,
+      "date": "2026-07-13",
+      "focus": "M12 the ash-barren biome (regional scorched-flats zone) \u2014 QUEUE COMPLETE",
+      "outcome": "SHIPPED",
+      "spend_estimate": 350000,
+      "verify": "verify:all PASS - numeric: ash_barren zone found + biomeAt confirmed - shot: distinct dark ground - D307"
     }
   ]
 }

@@ -24,7 +24,7 @@ const PORT = Number(argv.port || 5191);
 const LOOK = argv.look || 'deck';
 const W = 900, H = 900;
 
-const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: (process.env.RIG_GL === 'swiftshader' ? ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] : ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']) });
 const bctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 const page = await bctx.newPage();
 page.on('console', (m) => { const t = m.text(); if (t.startsWith('[parity]')) console.log(t); });

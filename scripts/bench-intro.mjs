@@ -104,7 +104,7 @@ async function main() {
   console.log(`[bench-intro] starting dev server on ${PORT}…`);
   const dev = await startDev();
   console.log('[bench-intro] dev up; launching chromium (swiftshader)…');
-  const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ args: (process.env.RIG_GL === 'swiftshader' ? ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] : ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']) });
   try {
     const bctx = await browser.newContext({ viewport: { width: 640, height: 480 }, deviceScaleFactor: 1 });
     const page = await bctx.newPage();

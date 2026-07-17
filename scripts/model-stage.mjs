@@ -633,7 +633,7 @@ async function main() {
   const dev = await startDev();
   console.log(`[model-stage] dev up; launching chromium…`);
   const browser = await chromium.launch({
-    args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
+    args: (process.env.RIG_GL === 'swiftshader' ? ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] : ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']),
   });
   let exitCode = 0;
   try {

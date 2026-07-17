@@ -59,9 +59,11 @@ const STORM_PENALTY_INTENSITY_THRESHOLD = Tuning.STORM_PENALTY_INTENSITY_THRESHO
 const STORM_PENALTY_MAX_WALK_SLOWDOWN = Tuning.STORM_PENALTY_MAX_WALK_SLOWDOWN;    // fraction of walk speed shaved at full intensity (→ 0.7x)
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
-// Sprint lockout hysteresis (user 2026-07-09): true once stamina bottoms out; forces
-// walking until stamina recharges to STAMINA_SPRINT_RELOCK. Transient (resets on reload).
-let _sprintLocked = false;
+// B6 (review 2026-07-15): sprint is now a TOGGLE (tap Left/Right Shift on/off) and
+// INFINITE (no stamina gate/drain). `_sprintToggled` is the latched sprint mode;
+// `_prevSprintKey` gives the key-down edge. Both transient (reset on reload).
+let _sprintToggled = false;
+let _prevSprintKey = false;
 // ACE Tier 4A — step-count driven footstep cadence. Pre-ACE: _stepAccum
 // (distance accumulator in controller.ts) and rig.stepCount (gait-phase
 // counter in playerRig.ts) ran on independent timers — visually a
@@ -155,18 +157,18 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
         : 1;
   }
   const sprintBlockedByStorm = stormPenaltyT > 0; // ACL — any storm penalty clamps to walk
-  // Sprint LOCKOUT hysteresis: bottoming out latches _sprintLocked (forced walk) until
-  // stamina recharges to STAMINA_SPRINT_RELOCK — no walk/sprint stutter at empty.
-  if (ctx.stats.stamina <= Tuning.STAMINA_SPRINT_THRESHOLD) _sprintLocked = true;
-  else if (ctx.stats.stamina >= Tuning.STAMINA_SPRINT_RELOCK) _sprintLocked = false;
+  // B6 — TOGGLE sprint on the Shift key-DOWN edge (was hold-to-sprint), and INFINITE
+  // (no stamina gate / lockout). Sprint mode still yields to crouch / tow / storm and
+  // needs some thirst + actual movement.
+  const sprintKeyDown = !!(keys['ShiftLeft'] || keys['ShiftRight']);
+  if (sprintKeyDown && !_prevSprintKey) _sprintToggled = !_sprintToggled;
+  _prevSprintKey = sprintKeyDown;
   const sprinting =
+    _sprintToggled &&
     !ctx.player.crouching &&
     !sprintBlockedByTow &&
     !sprintBlockedByStorm &&
-    !_sprintLocked &&
-    (keys['ShiftLeft'] || keys['ShiftRight']) &&
     ctx.stats.thirst > 0.02 &&
-    ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&
     moving;
   let speed = Tuning.WALK_SPEED;
   if (sprinting) speed *= Tuning.SPRINT_MULTIPLIER;
@@ -208,16 +210,14 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
     speed *= 1 - STORM_PENALTY_MAX_WALK_SLOWDOWN * stormPenaltyT;
   }
 
-  // Stamina: drains while sprinting; recovers otherwise. JJ-2 — gated
-  // by DEBUG_UNLIMITED_STAMINA for testing (pins stamina at 1.0 so the
-  // sprint gate at line ~62 always passes). QQ — towing a sled on foot
-  // multiplies sprint drain by STAMINA_TOW_FACTOR.
+  // B6 — sprint is now INFINITE, so it no longer drains stamina. The stamina STAT is
+  // kept for TOW effort (and future melee): towing a sled on foot drains it; otherwise
+  // it recovers. (Sprint still costs THIRST via THIRST_SPRINT_FACTOR — see updateStats.)
+  // NOTE for review: stamina no longer gates movement; its final role is a design call.
   if (Tuning.DEBUG_UNLIMITED_STAMINA) {
     ctx.stats.stamina = 1;
-  } else if (sprinting) {
-    let drain = Tuning.STAMINA_DRAIN_SPRINT;
-    if (isTowingOnFoot(ctx)) drain *= Tuning.STAMINA_TOW_FACTOR;
-    ctx.stats.stamina = Math.max(0, ctx.stats.stamina - drain * dt);
+  } else if (isTowingOnFoot(ctx)) {
+    ctx.stats.stamina = Math.max(0, ctx.stats.stamina - Tuning.STAMINA_DRAIN_SPRINT * Tuning.STAMINA_TOW_FACTOR * dt);
   } else {
     ctx.stats.stamina = Math.min(1, ctx.stats.stamina + Tuning.STAMINA_RECOVER_PER_SEC * dt);
   }

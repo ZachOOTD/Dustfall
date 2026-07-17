@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 const argv = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? true]; }));
 const PORT = Number(argv.port || 5173), TAG = argv.tag || 'floor';
 
-const browser = await chromium.launch({ args: ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: (process.env.RIG_GL === 'swiftshader' ? ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] : ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']) });
 const page = await (await browser.newContext({ viewport: { width: 1100, height: 1100 } })).newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });

@@ -103,6 +103,16 @@ export const Tuning = {
   WIND_CUTOFF_STORM: 5200,           // Hz — a storm opens the wind to full-spectrum roar
   WIND_BODY_MASTER: 0.0,             // MUTED for now (user 2026-07-07: desert wind too loud/distracting). Was 0.5 — restore to bring the wind bed back.
   WIND_WHISTLE_MASTER: 0.0,          // MUTED for now (was 0.16) — the lonely band-pass moan; part of the desert-wind mute
+  // Sandstorm WIND ROAR (review 2026-07-14 — "hear it coming"). The calm-weather
+  // wind stays muted (above), but a storm brings a rising, gusting wind that swells
+  // as the dust wall approaches (gain ∝ perceivedIntensity) and peaks as it engulfs
+  // you. Three layers over the shared noise: a deep moving-air HOWL, the body ROAR,
+  // and a high driven-sand WHISTLE. Levels are FEEL — the attended walk-test balances.
+  STORM_WIND_BODY_MASTER: 0.34,      // body roar level at peak storm (lowpass, mood-cutoff)
+  STORM_WIND_HOWL_MASTER: 0.30,      // deep low howl level at peak (a separate low lowpass — the mass of moving air)
+  STORM_WIND_HOWL_CUTOFF: 230,       // Hz — howl lowpass cutoff (sub-low roar under the body hiss)
+  STORM_WIND_WHISTLE_MASTER: 0.15,   // high driven-sand whistle level at peak (bandpass moan)
+  STORM_WIND_GUST_DEPTH: 0.45,       // 0..1 — how deep the gusts dip the wind gain (LFO-driven surging)
   DEHYDRATION_DAMAGE: 1 / 120,       // ~2 min health drain once thirst hits 0 (was 1/30 = 30s) — a recoverable spiral, not a cliff
   HEATSTROKE_DAMAGE: 1 / 150,        // ~2.5 min once temp ≥ 1 (was 1/25 = 25s)
   // M6 ② (C38) — health REGEN when fully provisioned: the forgiving keystone. A player
@@ -298,7 +308,17 @@ export const Tuning = {
   // density), storm peak chokes visibility to ~30m. Density follows
   // an eased curve from CLEAR→STORM as weather.intensity ramps.
   FOG_DENSITY_CLEAR: 0.0018,  // EE — tightened so 1km+ remains visible in the larger world
-  FOG_DENSITY_STORM: 0.055,
+  FOG_DENSITY_STORM: 0.18,    // review 2026-07-14/15 — a real BROWNOUT WHITEOUT at peak. Was 0.055 (~50m vis: distant wrecks/terrain still ghosted). 0.18 collapses useful visibility to ~8m so even the far TERRAIN horizon fogs out; FogExp2 = exp(-(density·dist)²), so ~25m+ is gone.
+  STORM_FOG_RAMP_HI: 0.6,     // review 2026-07-15 (TOTAL whiteout) — intensity at which the fog reaches FULL storm density. <1 so visibility collapses EARLIER in the ramp (denser well before peak), killing distant outlines before the wall engulfs you.
+  // review 2026-07-14/15 — storm fog/sky tinting. At peak the fog + the sky dome BOTH
+  // collapse to the SAME luminous dust-brown so the horizon has no value edge (no far
+  // outline). The LERP values (>1) saturate the blend to a FULL 1.0 just before peak;
+  // clamped in lighting.ts / sky.ts.
+  STORM_FOG_DUST_HEX: 0xa5743f,   // luminous mid dust-brown the fog collapses toward at peak (daytime brownout glow)
+  STORM_SKY_DUST_HEX: 0xa5743f,   // dust the sky pulls toward — MATCHES the FOG dust hex so the ground-fog and sky are the same brown at the horizon → the far terrain outline fully dissolves (near-zero visibility, no visible far edge)
+  STORM_FOG_LERP: 1.12,           // fraction toward STORM_FOG_DUST_HEX (clamped ≤1) — saturates to full dust colour ~0.9 intensity so the fogged distance EXACTLY matches the flattened sky
+  STORM_BG_LERP: 1.12,            // fraction toward STORM_SKY_DUST_HEX (clamped ≤1)
+  STORM_SKY_FLATTEN: 1.12,        // review 2026-07-15 — sky-dome flatten: horizon + zenith both lerp to the fog dust hue; >1 (clamped ≤1) reaches a FULL flat dome ~0.9 intensity so no ground/sky value edge remains for silhouettes
   WORLD_RADIUS: 900,  // EE — soft visibility cap; was 280 for the 800m world
 
   // World chunks (Session EE — world rework #1). The terrain is a
@@ -350,8 +370,8 @@ export const Tuning = {
   // that ground (streamed POIs begin where S1 left bare dunes). The edge
   // margin keeps a chunk's POI off its border so two neighbors can't
   // place wrecks a few meters apart across a seam.
-  CHUNK_POI_CHANCE: 0.07,
-  CHUNK_POI_ORIGIN_EXCLUSION_M: 1250,
+  CHUNK_POI_CHANCE: 0.048,          // review 2026-07-15 — space wrecks/POIs out more (was 0.07); uniform start+far
+  CHUNK_POI_ORIGIN_EXCLUSION_M: 1600,   // review — a larger sparse starting zone (was 1250)
   CHUNK_POI_EDGE_MARGIN_M: 25,
   // Infinite Sands S3 — streamed scatter + ambient life (all beyond the
   // same origin exclusion; the boot field is untouched).
@@ -371,12 +391,32 @@ export const Tuning = {
   // LANDMARK_CHANCE 0.3 → a destination within ~1.5-2km of anywhere.
   CHUNK_REGION_CHUNKS: 16,
   CHUNK_LANDMARK_CHANCE: 0.3,
+  // M7 Skyfall — the enterable hero freighter's share of landmark-region
+  // kind rolls (FEATURES.skyfall on): ~1/3 of landmark regions → one
+  // Skyfall every ~5-6 regions (~a 4-6km ride between encounters).
+  SKYFALL_KIND_SHARE: 0.34,
   // Regional wreck-yard anchors (the far-field destination biome): rolled
   // per region at low probability; anchors keep MIN_DIST from the origin so
   // the initial ±1200m terrain ring (corner |v|≈1697m) + all boot placement
   // bakes byte-identically (the placement gate is the tripwire).
   WRECK_YARD_REGION_CHANCE: 0.08,
   WRECK_YARD_REGION_MIN_DIST: 2200,
+  // bone_field — a titan graveyard: pale sun-bleached leviathan bones half-
+  // buried in the sand (replaces the reverted ash_barren, which failed for
+  // being too subtle — a mere dark tint, no props). The POP is TWO things:
+  // (a) a bold bleached bone-white ground that contrasts hard with the warm-
+  // tan desert, and (b) real half-buried bone SCATTER props strewn across the
+  // zone. Rare regional anchor with its OWN appended region seed (the wreck-
+  // yard stays byte-identical); NO origin anchor (far-field only).
+  BONE_FIELD_REGION_CHANCE: 0.05,
+  BONE_FIELD_REGION_MIN_DIST: 2600,
+  BONE_FIELD_RADIUS: 150,
+  BONE_FIELD_HEIGHT_SCALE: 0.12,       // a gentle flatten — a settled graveyard basin
+  // Bone SCATTER density per bone_field chunk (deterministic; fixed draw
+  // budget). Candidates rolled per chunk; kept only where biomeAt is
+  // bone_field, so a central zone chunk keeps most (strewn), an edge chunk few.
+  BONE_SCATTER_CANDIDATES: 24,
+  BONE_SCATTER_RIBCAGE_SHARE: 0.28,    // ~1/4 are collidered ribcages; the rest cheap MERGED bits (near-free density)
   // Infinite Sands parity (D299) — the far field carries EVERYTHING the
   // origin has. Densities calibrated to the boot spawners' landed counts
   // over the boot area (then nudged up where the origin's read comes from
@@ -392,6 +432,9 @@ export const Tuning = {
   CHUNK_CACTUS_PATCH_MAX: 4,
   CHUNK_ROAM_LIZARD_CHANCE: 0.15,
   CHUNK_ROAM_SHREW_CHANCE: 0.15,
+  // M8 — a rare circling vulture per chunk (aerial life for the far field).
+  // Low: a "look up, there's one wheeling" moment, not everywhere. Any biome.
+  CHUNK_VULTURE_CHANCE: 0.06,
   // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
   // ring caused a visible "second terrain" floating above the chunks in dune
   // valleys; fog at the chunk-band edge serves as the visible horizon now.)
@@ -494,12 +537,22 @@ export const Tuning = {
   // Storm visuals (Session BB-4)
   // Near/mid/far dust layer particle counts. Mid keeps the old 2500;
   // near + far stack to give parallax depth.
-  STORM_DUST_NEAR_COUNT: 800,
-  STORM_DUST_MID_COUNT: 2500,
-  STORM_DUST_FAR_COUNT: 600,
+  // review 2026-07-14 — DENSER dust (thick driven air, not sparse dots). Counts
+  // bumped; Points are one draw call each, so this stays cheap + fog-aware.
+  STORM_DUST_NEAR_COUNT: 1500,   // was 800
+  STORM_DUST_MID_COUNT: 3600,    // was 2500
+  STORM_DUST_FAR_COUNT: 900,     // was 600
   STORM_DUST_NEAR_SPREAD: 30,
   STORM_DUST_MID_SPREAD: 90,
   STORM_DUST_FAR_SPREAD: 200,
+  // review 2026-07-14 — STREAK layer: fast, elongated (wind-aligned) motes that
+  // read as sand DRIVEN past you. A separate near-field layer with a horizontally
+  // stretched sprite + high wind bias.
+  STORM_DUST_STREAK_COUNT: 1600,
+  STORM_DUST_STREAK_SPREAD: 42,
+  STORM_DUST_STREAK_OPACITY: 0.5,
+  STORM_STREAK_RAMP_LO: 0.25,    // storm intensity at which streaks start
+  STORM_STREAK_RAMP_HI: 0.7,     // full streaks
   // Layer-staggered opacity ramps so dust appears far-first then closes
   // in. Each pair = [intensity at which layer starts, intensity at full].
   STORM_NEAR_RAMP_LO: 0.15,
@@ -507,8 +560,8 @@ export const Tuning = {
   STORM_FAR_RAMP_LO: 0.0,
   STORM_FAR_RAMP_HI: 0.35,
   // Peak opacity per layer.
-  STORM_DUST_NEAR_OPACITY: 0.55,
-  STORM_DUST_MID_OPACITY: 0.55,
+  STORM_DUST_NEAR_OPACITY: 0.62,   // review 2026-07-14 — thicker near air (was 0.55)
+  STORM_DUST_MID_OPACITY: 0.62,    // review 2026-07-14 — (was 0.55)
   STORM_DUST_FAR_OPACITY: 0.30,    // C20 — thinned so the far/sky layer dissolves into the fog haze instead of dotting the dark sky with specks
   // Terrain darkening at peak storm. Sun intensity × (1 - STORM_SUN_DIM),
   // ambient × (1 - STORM_AMBIENT_DIM). Sun loses more than ambient (sun
@@ -812,7 +865,11 @@ export const Tuning = {
   WORM_CROSSING_WAVE_AMP: 18,        // m — lateral body undulation (a clear serpentine S)
   WORM_CROSSING_UNDULATE_SPEED: 1.1, // body-wave rate
   WORM_CROSSING_CREST: 6.5,          // m — dorsal crest height above the sand (a massive proud back)
-  WORM_CROSSING_BURY: 1.5,           // m — base sink (the body is mostly under the sand)
+  WORM_CROSSING_BURY: 2.5,           // m — base sink. Review 2026-07-15: was 1.5 — the humps rode
+                                     // proud and read as FLOATING ON TOP of the sand. 2.5 drops the
+                                     // hump centres ~1m so the lower body sits UNDER the terrain and
+                                     // the dorsal crest breaks the surface (rides THROUGH the dunes).
+                                     // (3.5 over-sank it — the ridge nearly vanished at range.)
   PLANET_DISTANCE: 420,
   PLANET_SIZE: 14,
   // Fixed direction: low on the eastern horizon (azimuth ~+X, elev ~0.18)
@@ -1804,6 +1861,58 @@ export const Tuning = {
   STORM_WALL_DEPART_FALLOFF: 300,  // ramp distance (u) over which intensity falls as the wall departs
   STORM_WALL_RETIRE_DIST: 260,     // signed distance past the player at which the wall is spent (ends storm early)
   STORM_WALL_WIND_BIAS: 5.5,       // extra wind (u/s) along wall dir at full intensity for mid dust layer (far x1.4, near x0.6)
+  // review 2026-07-16 — the heading was a full random 0..2π, so the front usually armed
+  // off-screen and the player only ever caught it tracking ACROSS their view — never the
+  // "it's coming for me" read. The storm now arms within ±this many degrees of head-on
+  // (the front approaches FROM the direction the player is currently facing). A modest
+  // spread, NOT a hard lock: the wall still arrives off-axis and still crosses obliquely,
+  // it just starts inside/near the field of view so the approach is legible.
+  STORM_WALL_HEADING_BIAS_DEG: 55, // ± spread (deg) around head-on when arming a storm wall
+
+  // review 2026-07-14/15 — the visible approaching DUSTWALL (Dune/Mad-Max front). A tall
+  // wall of billowing dust rendered at the storm wall's leading edge that ADVANCES along
+  // the fixed wind heading (never re-yaws to the player → no spin) then hands off to the
+  // whiteout fog as it engulfs. Opacity ramps by the leading edge's distance ahead of the
+  // player. review 2026-07-15 — geometry is now a WIDE, near-FLAT front (decoupled width
+  // + a gentle quadratic bow, replacing the circular arc) so it spans the WHOLE horizon
+  // as a Dune advancing wall and never reads as a wrapping cylinder.
+  STORM_DUSTWALL_WIDTH: 1500,      // world u across — very wide so the front spans horizon-to-horizon at approach distance (~340m ⇒ well beyond the FOV → reads as an infinite advancing wall)
+  STORM_DUSTWALL_BOW: 0.09,        // flank recession as a fraction of width (0 = dead flat). 0.09·1500 ≈ 135m of gentle depth at the far flanks — a whisper of girth, no cylinder wrap
+  STORM_DUSTWALL_HEIGHT: 340,      // ground-to-high-sky height (world u) — towering, but leaves a strip of storm sky above the boiling crest at approach distance
+  STORM_DUSTWALL_SEG_W: 48,        // horizontal segments (billow detail across)
+  STORM_DUSTWALL_SEG_H: 20,        // vertical segments
+  STORM_DUSTWALL_FADE_FAR: 700,    // leading-edge dist (m) at which the wall starts fading IN on the horizon
+  STORM_DUSTWALL_FADE_FULL: 420,   // dist (m) at which the wall is at full opacity (looming)
+  // review 2026-07-16 — THE WALL NOW WASHES OVER YOU. Was NEAR:120 / GONE:30 — the front
+  // dissolved 30m IN FRONT of the player and handed off to fog, so the moment of
+  // engulfment never rendered: you watched a wall dissolve ahead of you while the storm
+  // "arrived" by fog density alone. With no approach event to read, the only motion left
+  // to perceive was the front's lateral drift → "it slides sideways and never hits me".
+  // Now opacity holds FULL right through the crossing (FADE_NEAR = 0, i.e. the wall is at
+  // full strength the instant its plane reaches the camera — it screen-fills and engulfs)
+  // and only dissolves once the front is BEHIND the player (negative = metres past), where
+  // it is out of view anyway and the whiteout fog has taken over.
+  STORM_DUSTWALL_FADE_NEAR: 0,     // dist (m) at which fade-out BEGINS — 0 = full opacity all the way to the camera
+  STORM_DUSTWALL_FADE_GONE: -90,   // dist (m) at which it's fully hidden — NEGATIVE = 90m PAST the player (fades out behind you)
+  STORM_DUSTWALL_MAX_OPACITY: 0.97,
+  // review 2026-07-16 — these are rendered by a raw ShaderMaterial with NO linear→sRGB
+  // output encode (see the colour-space note in sky.ts), so they were being written as raw
+  // linear bytes: 0x4d3120 → (23,10,3) ≈ BLACK. That is why this constant kept getting
+  // "brightened" (0x4d3120 → 0x6b4526) to fight a darkness that was a colour-space bug, not
+  // a colour choice. dustWall.ts now pre-encodes both, so these hexes finally render as the
+  // ochre they name.
+  // Review 2026-07-16 — RE-TUNED for the colour-space fix. These were hand-brightened
+  // over several passes to fight a bug: dustWall is a RAW ShaderMaterial, so three never
+  // injected the linear→sRGB encode and the uniforms rendered DARK (0x6b4526 arrived as
+  // ~(37,16,5), 0xe0b483 as ~(190,116,58)). encodeForRawShader() now fixes that — but the
+  // old constants then double-counted and the wall went pale/washed-out. These values are
+  // the OLD EFFECTIVE RENDER (the rich-ochre haboob that was actually approved): bright
+  // ochre crests that also sit close to the storm fog (165,116,63) so engulfment hands off
+  // without a flash, over near-black undersides for the billow contrast.
+  STORM_DUSTWALL_COLOR_LO: 0x2e1608,  // shadowed billow undersides — near-black (the contrast that sells the boil)
+  STORM_DUSTWALL_COLOR_HI: 0xbe743a,  // sun-lit billow crests — rich ochre, ~= the storm fog hue so the wall dissolves INTO the whiteout
+  STORM_DUSTWALL_SCROLL: 0.04,        // vertical churn scroll speed (uv/sec)
+  STORM_DUSTWALL_LIFT: 0.02,          // Y drop of the wall base below ground so it seats without a floating gap
   // ACW E (#146/#134) — storm wind pushes loose bodies + in-storm sensory.
   STORM_WIND_PUSH_ACCEL: 4.5,      // u/s² wind accel on loose bodies (dropped pickups, parked speeder, slack sled) at full world intensity
   STORM_CAM_SWAY_AMP: 0.022,       // rad — peak camera sway (pitch/roll) buffeting at full perceivedIntensity

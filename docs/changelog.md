@@ -3,6 +3,129 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "Sharpen & Deepen" cycle 24 — 2026-07-13 — M12: the ash-barren biome — **THE +4M OVERNIGHT QUEUE IS COMPLETE** ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) green; a numeric probe found an ash_barren zone (biomeAt confirmed) + a shot showed the dark scorched ground reading distinct. **Campaign `completed` (until-met: ladder-complete), UNDER the 8.75M budget cap.**
+
+- **NEW biome `ash_barren`** — a rare regional-anchored scorched-flats zone (dark charred ground + cinder mottle + a low flatten + an industrial/derelict POI mix), mirroring the wreck-yard regional-anchor pattern (own appended seed → yard byte-identical; far-field only, ≥2600m from origin). Distinct from the light salt/dune/rocky desert. D307. Residual: the dark read could be pushed more dramatic (polish — flagged for review).
+
+**🏁 THE WHOLE M7-R→M12 QUEUE IS DONE** (cycles 14-24, one overnight): M7-R Skyfall refinement (6 walk-test fixes) · M8 far-field vultures · M9 3 new POI archetypes (refinery/dome/rail-car) · M10 3 new story vignettes · M11 legacy tube-wreck retirement · M12 the ash-barren biome. All gate-green, one revertible commit each, ~2.6M spent (5 more added since the pre-overnight 4.75M). Awaiting Zach's morning walk-test + merge review.
+
+## Campaign "Sharpen & Deepen" cycle 23 — 2026-07-13 — M11: retire the legacy tube-wreck (no far-field wreck is a tube) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) green; a numeric far-field histogram (278 POIs) confirms `ship` = 0 + a varied spread.
+
+- **Legacy tube-wreck RETIRED from the world-gen roulette (D306)** — the D227/D249 strategy's endpoint (they twice rejected the risky ship→socket rewrite; this finishes it the low-risk way). `ship` removed from all `ARCH_WEIGHTS` rows (its weight folded into the socket `derelict`, guaranteed non-linear), and `pickArchetype`'s end-fallback retargeted `ship`→`derelict`. So `pickArchetype` can NEVER return the tube — no streamed far-field wreck reads as a plain tube, by construction. Confirmed numerically: 0/278 far-field POIs are `ship`; derelict (~20%) is the common non-tube wreck, 13 other archetypes fill the variety. `ship` stays valid only for the hand-placed flagship (a curated detailed hero). Config-only, gate-safe. M11 COMPLETE.
+
+## Campaign "Sharpen & Deepen" cycle 22 — 2026-07-13 — M10: more story vignettes (wordless environmental storytelling) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) green; 2 of the 3 new vignettes confirmed reading their story in-world (cold-camp, stripped).
+
+- **3 NEW no-body "what was left behind" vignettes** in `wordlessScenes.ts` (the ARCHETYPES rotation 2→5): **cold camp** (an unrolled bedroll + a spent fire + a dropped canteen — someone slept here and walked on), **stripped** (a half-sunk wheel + a torn hull panel + a dropped tool + scrap — a broke-down vehicle cannibalised), **the cache** (crates, one open + rifled, scrap spilling + a canteen — a sorted haul, abandoned). The crew is GONE, implied by what remains (GDD "the world tells you what happened by what's left") — variety vs the 2 existing single-skeleton vignettes. + 4 new simple props (bedroll, crate, stripped-wheel, tool), all shared-material + real thickness (rule 7), no sand mounds, decoration-only (no colliders — gates unaffected). Deterministic (dedicated rng); stream via the scene roll + the boot set. M10 COMPLETE.
+
+## Campaign "Sharpen & Deepen" cycle 21 — 2026-07-13 — M9 archetype 3/3: `transit_car` — **M9 COMPLETE** ✓ all gates
+
+`verified` — verify tsc clean, verify:placement (0 fails, 5 seeds), verify:colliders (transit_car covered, 0 fails), verify-chunks (det stable, no leak, perf ok); 4-round real-view iteration.
+
+- **NEW POI archetype `transit_car`** — a half-buried derailed rail car / coupled 2-segment train: boxy car bodies on BOGIE trucks (paired flanged wheels, 8/car), knuckle couplers + end sills, a passenger window strip + a sliding cargo door (salvage face), roof ribs/vents + running board, ladder + grab rails; the rear car jackknifed + sunk. Clear RAIL tells, distinct from cargo_crawler (tracked). Solid box-body colliders (crawler precedent); `warm` bucket, `sandMound:false` (steering), real thickness (rule 7). Fully wired + added to the hardcoded collider-audit list.
+- **🏁 M9 COMPLETE** — 3 new far-field POI archetypes across cycles 19-21: `refinery_stack` (industrial cracking-tower ruin), `hab_dome` (collapsed habitat domes), `transit_car` (derailed rail car). The infinite world has three new destination types. Next: M10 story vignettes.
+
+## Campaign "Sharpen & Deepen" cycle 20 — 2026-07-13 — M9 archetype 2/3: `hab_dome` (new far-field POI) ✓ all gates
+
+`verified` — verify tsc clean, verify:colliders (65 audits, 0 fails), verify:placement (0 fails, 5 seeds), verify-chunks (det stable, streaming no leak 336→336, perf ok); 3-round real-view iteration.
+
+- **NEW POI archetype `hab_dome`** — a collapsed habitat-dome cluster: two ribbed geodesic dome shells (torn breach showing the interior, meridian ribs + latitude hoops + a darker inner liner for wall thickness), a connecting corridor tube + an external airlock module (salvage panel), portholes, a leaning dead-comms mast. A distinct ROUNDED silhouette (the only domed one) + a melancholy human-habitation read. Hollow shells `auditExempt` with real arc-segment wall colliders (breach = a real gap); `bucket:cool`, `sandMound:false` (steering), real thickness (rule 7). Fully wired (poiComponents/poiArchetypes/ARCH_WEIGHTS); streams via the POI roll. M9 is 2/3.
+
+## Campaign "Sharpen & Deepen" cycle 19 — 2026-07-13 — M9 archetype 1/3: `refinery_stack` (new far-field POI) ✓ all gates
+
+`verified` — verify tsc clean, verify:colliders (60 audits, 0 fails; refinery_stack 7/7 covered/seed), verify:placement (0 bury fails, 5 seeds), verify-chunks (det stable, streaming no leak 335→335, perf ok); 3-round real-view iteration across seeds 1/42/1337/7.
+
+- **NEW POI archetype `refinery_stack`** — a fuel-refinery / cracking-tower ruin: a tall banded distillation column (leaning, walkway platforms + ladder), a spherical pressure tank + a conical-roof storage drum, a pipe manifold + overhead transfer line, a flare stack, a valve/control skid (salvage panel). A heavy VERTICAL industrial silhouette, distinct from relay_mast (thin) + cargo_crawler (low). Fully wired: `refineryStack` component (poiComponents.ts), `assembleRefineryStack` + `ARCHETYPES.refinery_stack` + `ARCH_WEIGHTS` (poiArchetypes.ts) — streams via the existing POI roll. `sandMound:false` (user steering), grounded by seatSink; real thickness (rule 7), 7/7 colliders (rule 9). M9 is 1/3 archetypes.
+
+## Campaign "Sharpen & Deepen" cycle 18 — 2026-07-13 — M8: far-field vultures (aerial life for the infinite world) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + 5 smokes green; verify:chunks streaming NO body leak (332→332); a numeric probe found 6 circling vultures wheeling at altitude in the far field. Solves the D294 deferred problem.
+
+- **Streamed circling vultures** — the infinite world now has aerial life. The vulture FSM's `circling` state is self-contained (a persistent `carcass` point → wheels indefinitely, never touches the boot perch pool), so streamed far-field vultures spawn as PURE CIRCLERS over a chunk point — sidestepping the perch-coupling that deferred D294. NEW `spawnCirclingVultureAt` + `removeVultureFromWorld` (idempotent teardown) in `vulture.ts`; wired into `chunkManager` like the D299 roaming prey (a `roamVultures` roll, `CHUNK_VULTURE_CHANCE = 0.06`, any biome outside origin, streamed load-spawn + unload-teardown, transient). `huntCooldown = Infinity` keeps them pure ambient wheelers (clean teardown). D305.
+
+## Campaign "Sharpen & Deepen" cycle 17 — 2026-07-13 — M7-R part 4 (FINAL): Skyfall captain's-log story — **M7-R COMPLETE** ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + skyfall-walk PASS; tsc clean. The final Skyfall walk-test fix; **all 6 of Zach's fixes are now done.**
+
+- **Captain's-log story** (user: "captains log... crew is ejecting in the drop pods, a little story") — NEW `generateSkyfallLog(seed)` in `crashLog.ts` replaces the generic `generateCrashLog(...,'freighter')` on the wreck's bow-console journal. A bespoke 5-entry log: LOG OPEN → FAULT (she's going down) → EVAC ORDER (the captain orders all hands to the DROP PODS, watches them light + fall away west) → ALONE AT THE HELM (the captain rides her down to land clean, off the crew) → RECORDER ENDS (the captain's final line). Long-Dark/Dune restraint, no bodies — the empty pods fell west, the wreck is what's left; the drop-pod evac echoes the player's own crashed pod ("the world tells you what happened by what's left"). Reuses the freighter ship/cargo/cause flavor + bespoke captains; deterministic per seed. Text-only, no save-schema change.
+
+**🏁 M7-R (Skyfall refinement) COMPLETE** — the 6 walk-test fixes across cycles 14-17: real hull thickness (paper-thin fix) + 100% exterior collision (c14) · interior floating-audit + more detail (c15) · broken cockpit glass + cabin-visibility lift (c16) · captain's-log story (c17). Next: the M8-M12 world-deepening queue (M8 far-field vultures first).
+
+## Campaign "Sharpen & Deepen" cycle 16 — 2026-07-13 — M7-R part 3: Skyfall broken cockpit glass + cabin-visibility lift ✓ all gates
+
+`verified` — verify tsc clean, skyfall-walk PASS, verify-chunks (det 8/8 both seeds, no-leak, perf untripped); 3-round glass iteration + 2-round cabin + seed-808.
+
+- **Broken cockpit glass (the headline)** — the old flat dark window band is now a proper SHATTERED cockpit windscreen across the bridge castle: a raked canopy with a solid `_frameMat` mullion grid (8 cells), per-cell intact-cracked / blown-out state (fixed 8-draw `rand` budget), a punch-through impact break (bent mullion + torn header lip), sill + fallen deck shards. 3 new module-singleton materials (`_cockpitGlass` transparent / `_glassCrack` / `_glassShard`); transparent panes stay unmerged for correct depth sort. Reads as a real shattered canopy (confirmed head-on + seed-808).
+- **Cabin-visibility lift (reversible)** — one warm scoped fill (`SKYFALL_CABIN_FILL = 1.05`, range 8.5) so the cabin detail + loot + journal are legible; the aft mid-bay stays dark so the "power's out / sun through the tear" mood is preserved. **Flagged in-code for the moody-vs-lit call**: set `SKYFALL_CABIN_FILL = 0` for the darker cabin (0.78 is a subtler middle).
+- Cycles 14-15 work + all colliders + skyfallProbe untouched (walk gate green). Remaining M7-R: the captain's-log story (final cycle).
+
+## Campaign "Sharpen & Deepen" cycle 15 — 2026-07-13 — M7-R part 2: Skyfall interior floating-model audit + more detail ✓ all gates
+
+`verified` — verify tsc clean, skyfall-walk PASS (detail off the lane), verify-chunks (det 8/8 both seeds, no-leak, perf untripped); 2-round real-view iteration + seed-808.
+
+- **Floating-model audit (the specific complaint)** — 8 floaters found + grounded FLUSH: mid-bay console bank (was 0.4m off the deck + 0.1m off the wall → floor-standing w/ kick-plinth, collider matched), bow console desk (0.1m float → on deck), bow instrument stacks ×2 (0.4m float → on deck), a datapad buried in the desk → on top, high conduit runs (4cm off wall → flush + standoff clamps), hazard placard (5cm→10cm, flush), cargo crates + seat pedestals (2.5-4cm floats → deck contact). Exact-geometry grounding, not eyeball tuning.
+- **More interior detail** — a lived-in wrecked-freighter density pass, all wall-hugging/ceiling + off-lane + no colliders + shared materials (2 new: `_paperMat`/`_rubberMat`): HOLD (breaker cabinet, coiled hose, jerry-can + drum, manifest sheet), MID BAY (equipment/generator rack, gauge cluster, ceiling duct, coolant puddle, dropped wrench), CABIN (wall shelf w/ mug+manuals, med-box, pinned manifests, hanging jacket, boot + ration tin, stowage bin). Deterministic (zero `rand()` consumed).
+- Exterior (cycle 14 thickness) + interior colliders + skyfallProbe untouched (walk gate green). **Flagged (3rd time): the CABIN reads very dark → the new cabin detail + loot + journal are flush but barely visible.** Next cycle folds in a small reversible visibility lift alongside the broken cockpit glass. Remaining M7-R: glass, captain's-log.
+
+## Campaign "Sharpen & Deepen" cycle 14 — 2026-07-13 — M7-R part 1: Skyfall REAL HULL THICKNESS + 100% exterior collision ✓ all gates
+
+`verified` — verify tsc clean, verify-chunks (determinism 8/8 both seeds, streaming no-leak, perf untripped), skyfall-walk PASS; 3-round real-view thickness iteration + seed-808 check. First fix of the M7-R walk-test batch.
+
+- **Real hull thickness (the headline fix)** — the paper-thin double-sided read is gone: `HULL_THICK` 0.35→0.7 + a torn cut-plate `fractureRim()` so both fracture mouths read as a thick, solid, torn-steel cross-section (inner+outer skin + rim). `_voidMat` DoubleSide→FrontSide. Bonus: the thicker inner skin now meets the wall collider (closed a latent invisible-wall gap). Zero extra verts.
+- **Generalized to a standing rule** (CLAUDE.md rule 7): models get real thickness, no paper-thin zero-thickness double-sided shells; verify from grazing/fracture angles.
+- **100% exterior collision (rule 9)** — 6 NEW dorsal-cargo-container colliders (the confirmed walk-through gap) + bridge collider extended; full exterior sweep. All new bodies tear down cleanly (streaming gate green). D304.
+- Interior untouched (walk gate green). Remaining M7-R (queued, not punted): floating-model audit, more interior detail, broken cockpit glass, captain’s-log story. Flagged for the walk-test: can you stand on the containers; the i=5 container cantilevers past the mouth.
+
+## Campaign "Sharpen & Deepen" cycle 13 — 2026-07-13 — M7 Skyfall S6: interior loot + crash-log journal — **the M7 LADDER IS COMPLETE** ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + smokes green; a numeric probe confirms loot registration + clean journal teardown (6→7→6) + salvage persistence (stripped `sky/0` stays stripped across unload→revisit); skyfall-walk PASS (loot off the walk lane); determinism digest unchanged (65f211f8).
+
+- **Salvage loot** — 2 pry-open salvage panels on the cabin walls (the `addAccessPanel` + `registerSalvageable` wrapper-Group idiom from crashedHull), riding the same transient/`tagSalvage('sky')`/`applySalvageDiff` chain as the wreck_knot → they PERSIST across save/reload like all streamed salvage (S5).
+- **The pilot's crash-log journal** on the bow console (`placeJournal` + `generateCrashLog(seed,'freighter')`) — the story payoff for reaching the bow. NEW `LoadedChunk.journals` + `unloadChunk` splice tears it out of `ctx.journals` on unload (per-call materials disposed via chunkGeo/chunkMat tags).
+- Loot is **position-seeded** (independent of the main rand) so it's purely additive to determinism. **Occluder registration dropped** (D303) — the registry has no removal path, so a streamed landmark would leak; backlogged as a removable variant.
+- **The M7 Skyfall ladder (S1 blockout → S2 enterable → S3 exterior hero → S4-S5 interior hero → S6 loot) is COMPLETE.** The enterable hero freighter is a rare far-field destination with a detailed wrecked interior, real salvage, and a story. Owed: the human post-blockout walk-test (feel/scale/lighting — deferred to the morning review).
+
+## Campaign "Sharpen & Deepen" cycle 12 — 2026-07-13 — M7 Skyfall S4-S5: INTERIOR hero dressing to intro-ship detail (wrecked style) + lighting ✓ all gates
+
+`verified` — verify (tsc) + skyfall-walk (furniture off the walk lane) + verify-chunks all green; determinism digest UNCHANGED (65f211f8 — the interior layout consumes zero rand, deterministic from hull dims); perf landmark-piece 4.7ms (≪120ms tripwire). 7-round real-view hero iteration.
+
+- **The steering's headline requirement met** — the interior now reads at intro-ship detail density, in the wrecked style. **HOLD** (at the breach): tie-down rails/cleats, lashed + spilled cargo crates with corner castings, torn net, sand drifted in from the mouth. **MID BAY**: a dead console bank, ripped-open wall panels with a red/copper wire loom spilling out, ceiling cable runs (some hanging), floor hatch, pipe/valve. **CABIN** (bow): 2 stripped crew seats, a dead-MFD bow crew console, wall lockers, personal effects (mug/helmet/datapads).
+- **Wall-panelling pass** (the biggest gap vs the intro ship): seam rails + skirting + frame straps + high conduit runs full-length both walls, plus wall props (hazard placard, fire-bottle bracket, junction box) — the flat hull-skin walls now read as a plated, framed, cabled compartment.
+- **Lighting** — "power's out, sun leaks in through the tear": warm daylight floods the hold from the breach and falls off bow-ward into failing red emergency strips + a cool bounce fill. Dark-but-legible.
+- 14 new module-singleton materials, 8 wall-hugging furniture colliders (all clear of the walk lane — gate green). `skyfall-shot` gained 2 interior cameras (int-cabin-fwd, int-mid-wall). Bow console top + bow wall left bare as the S6 journal/salvage focal point.
+
+## Campaign "Sharpen & Deepen" cycle 11 — 2026-07-13 — M7 Skyfall S3: EXTERIOR hero detail (reads as a real crashed cargo hauler) ✓ all gates
+
+`verified` — verify (tsc) + skyfall-walk (interior/colliders undisturbed) + verify-chunks all green; 6-round real-view hero iteration + seed-808 generality check. The exterior clears the HERO bar at distance and up close.
+
+- **Weathering de-snowed** — the S1 pale chalk-veil + cool bare-metal flecks read as white speckle ("snow on a rusty ship"); replaced by `_skyfallWeather` (chalk off, warm brown flecks, rust-orange oxidation, seam-pooled drip rust, ochre deck dust). Reads grime/rust, not frost.
+- **Plated hull** — rubbing/chine strakes, per-flank frame straps, deck-edge bulwark coaming (all ≥12cm proud, rule 7). **Container detail** — corrugation ribs, ISO corner castings, end-door recesses, faded hazard stripes, crushed/breached crash boxes. **Freighter greebles** — bridge sensor array + whip antenna + comms dish, exhaust funnel, boarding ladder, flank pipe runs, intake vents, bow hull-number plate, deck cleats, nozzle throat rings, engine radiator fins.
+- **Multicoloured container livery** (faded blue/red-oxide/tan via the same `createRustedHullMaterial` GLSL → one shared program, uniform-only difference) — the biggest "screenshot quality" jump; reads as a real cargo hauler, not a monotone brown hull.
+- Fixed a real bug the snap shot exposed (flank pipes rotated the wrong axis, poking straight out past the bow). All streamed-landmark constraints held: deterministic, module-singleton materials, decoration greebles carry no colliders, existing collider set + interior untouched (walk gate green), perf gate untripped.
+
+## Campaign "Sharpen & Deepen" cycle 10 — 2026-07-13 — M7 Skyfall S2: the freighter is ENTERABLE + a ~10× faster/cooler probe rig ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks incl. the NEW skyfall-walk leg) + all 5 smokes green; the enterable interior renders correctly at greybox (int-mouth/hold/mid/cabin reads). Two probe-caught bugs fixed. FEEL walk-test deferred to the human (charter pause #1).
+
+- **Probe infra (D301)** — user reported dev felt slow + CPU pinned. GPU headless is now the DEFAULT rig-shot backend (`--use-angle=d3d11`, was swiftshader software render that pinned every core); `streamToSite()` single-teleport streaming replaces the multi-hop walk. Content digests byte-identical; renders correct + cleaner. **skyfall-shot 8min→26s, verify:chunks ~15min→2m41s, full suite ~30min→6min, CPU cores freed.** `RIG_GL=swiftshader` is the fallback.
+- **The interior (D302)** — the S1 fore hull opens into a walkable greybox: deck, 3 compartments (hold/mid/cabin), 2 bulkheads with doorways (jamb + lintel + 10cm anti-leak sills), bow-closure wall, mouth skirt, dim emergency lights, former rings framing the walk-in. The S1 solid hull collider is replaced by an exact walkable set (deck/walls/roof/bow/bulkheads/skirt; the fracture mouth is open = the entry).
+- **Probe-caught fixes**: the stern collider was embedded in the fracture mouth (aftDist measured from the hull middle); the hull FLOATED over sloped sites — pose is now slope-conformed (deck-line fit to bow→mouth grade + interior samples; lip anchored 0.12-0.18m above local grade; ≤0.3m sand ingress at the buried end).
+- **NEW permanent `skyfall-walk` gate** (verify:chunks leg 4): stream in, WALK all 3 compartments + both doorways + exit + re-enter, castDown collider-IDENTITY fall-through asserts (capsule-excluded ray) + a roof-drop test. Green seeds 1337/808/7. Next: the ⏸ human walk-test, then S3-S5 hero detail.
+
+## Campaign "Sharpen & Deepen" cycle 9 — 2026-07-12 — M7 Skyfall S1: the freighter EXISTS in the far field (exterior blockout) ✓ all gates
+
+`verified` — verify:all (placement/colliders/chunks) + all 5 smokes green; 4-round real-view silhouette iteration + a second-seed generality check; visual proof scen-skyfall-{long,approach,broadside,close,snap}.png. Campaign resumed post-merge on branch `campaign/2026-07-12-skyfall` (plan approved with changes: S4 far-field slot / ~30m+ heavy freighter / FEATURES.skyfall).
+
+- **`skyfall_freighter` is a live S4 landmark kind** — 34% of landmark regions (flag-gated single-draw roll; `VITE_SKYFALL=0` restores the pre-M7 50/50 exactly); one deferred-thunk build (~20ms), full teardown, no body leaks (D300).
+- **NEW `src/world/skyfallWreck.ts`** — ~46m crashed heavy freighter blockout: long boxy loft (L:H≈5:1), spaced dorsal container row + crane gantry, fore-starboard bridge tower + mast, engine block + triple nozzles, snapped stern with dark-baffled torn mouths + exposed formers, spilled containers, deep keel bury. Research-grounded (`docs/research/crashed-freighter-silhouettes.md`).
+- **Steering fold-ins (mid-cycle)**: sand mounds REMOVED + retired for Skyfall (read as geometric piles; bury carries the no-float read); S2+ interior bar = INTRO-SHIP detail in the wrecked art style; stale headless shells reaped (+ lesson: never `npm run reap` while a probe is live — it killed a re-shoot's browser and left stale PNGs).
+- NEW fast `skyfall-shot` rig scenario (5 player-eye angles, ~1min) — reusable for S2-S5. Next: S2 enterable interior + the real-motion walk probe, then the ⏸ human walk-test pause.
+
 ## Post-campaign D299 — 2026-07-12 — ORIGIN PARITY: streamed chunks spawn the full boot content set — the far field no longer feels empty ✓ all gates
 
 `verified` — verify:chunks green (determinism ×2 seeds + cross-seed, streaming incl. the NEW dressing legs, perf tripwires), full suite + smokes green, vista shots show the inhabited far field. Playtest driver: Zach reported generated terrain "pretty much empty" vs the starting area.

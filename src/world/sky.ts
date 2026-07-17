@@ -152,6 +152,37 @@ const _cloudDarkBase = new THREE.Color(Tuning.CLOUD_DARK_HEX);
 // ACAB — ominous storm-cloud colors (gathering dark dust-clouds before a storm).
 const _stormCloudCol = new THREE.Color(0x6a4c3c);
 const _stormCloudDark = new THREE.Color(0x2c2017);
+// review 2026-07-16 — STORM SILHOUETTE FIX (the "yellow cutout against the sky" bug).
+//
+// THE COLOUR-SPACE TRAP. The sky dome is a RAW ShaderMaterial with a hand-written
+// fragment shader. three.js only injects `<colorspace_fragment>` (the linear→sRGB output
+// encode) into its OWN material shaders — a custom ShaderMaterial gets NOTHING, so the
+// dome writes its uniform's LINEAR value straight to the (non-sRGB) drawing buffer.
+// Meanwhile FOGGED geometry takes a completely different path: three uploads `fogColor`
+// already sRGB-encoded (`WebGLMaterials.refreshFogUniforms` → `getUnlitUniformColorSpace`)
+// and `<fog_fragment>` runs AFTER `<colorspace_fragment>`, so a fully-fogged surface
+// renders the fog hex's sRGB bytes verbatim (and is NOT tone-mapped — fog is mixed after
+// `<tonemapping_fragment>` too).
+//
+// Net: the same hex renders ~69 RGB units apart. STORM_FOG_DUST_HEX #a5743f =
+//   fogged geometry → (165,116,63)   [sRGB bytes]
+//   sky dome        → ( 96, 45,13)   [linear·255 — much darker/more saturated]
+// The earlier STORM_SKY_FLATTEN pass assigned the SAME hex to both and assumed that made
+// them match. Measured: it did not. That 69-unit gap IS the hard horizon line, and it is
+// why every distant wreck — fully fogged to (165,116,63) — read as a bright TAN CUTOUT
+// against a dark sky at any distance, exactly as reported.
+//
+// FIX: pre-encode the dust colour for the dome. We stuff the dust hue's *sRGB components*
+// into the uniform's *linear* slot, so the un-encoded dome writes the very bytes the
+// sRGB-encoded fog writes. Only the storm branch uses this (blend weight `flat` is 0 when
+// clear), so the normal sky is byte-identical — the whole rest of the game's sky palette is
+// art-tuned around the un-encoded dome and must NOT be disturbed.
+const _stormDustSky = (() => {
+  const src = new THREE.Color(Tuning.STORM_FOG_DUST_HEX);
+  const srgb = { r: 0, g: 0, b: 0 };
+  src.getRGB(srgb, THREE.SRGBColorSpace);      // working(linear) → sRGB components
+  return new THREE.Color().setRGB(srgb.r, srgb.g, srgb.b, THREE.LinearSRGBColorSpace);
+})();
 const _sunPos = new THREE.Vector3();
 const _moonDir = new THREE.Vector3();
 const _moonPos = new THREE.Vector3();
@@ -1099,9 +1130,32 @@ export function updateSky(ctx: GameContext, dt: number): void {
   // at peak intensity. This is what makes the sky look "blocked by dust"
   // rather than a clear sky behind a wall of fog.
   const storm = ctx.weather.intensity;
+  // review 2026-07-16 — hoisted: `flat` is now ALSO the kill-ramp for the sun glow + the
+  // residual cloud layer below. A dome that is uniform in base colour but still carries a
+  // sun halo or dark cloud mottling is NOT featureless — those are exactly the value
+  // gradients a distant outline reads against. At peak the dome must be one flat slab.
+  const flat = Math.min(1, storm * Tuning.STORM_SKY_FLATTEN);
   if (storm > 0.001) {
-    _horizonColor.lerp(new THREE.Color(0x6e3a22), storm * 0.95);
-    _topColor.lerp(new THREE.Color(0x4a2614), storm * 0.95);
+    // review 2026-07-14 — a LUMINOUS daytime brownout, not a near-black murk. The
+    // horizon glows dust-ochre and the zenith stays a lit mid dust-brown.
+    //
+    // review 2026-07-15 (TOTAL whiteout) — SKY-DOME HORIZON FLATTEN. The persistent
+    // far-horizon LINE was the sky dome rendering a different value at the zenith than
+    // at the horizon (and than the fog), so a value edge remained for distant
+    // silhouettes to read against. Fix: as the storm peaks, drive BOTH the horizon AND
+    // the zenith to the SAME single dust colour (STORM_FOG_DUST_HEX — the exact hue the
+    // fog collapses to), and ramp the blend to a FULL 1.0 (STORM_SKY_FLATTEN saturates
+    // it just before peak). The dome then becomes a uniform slab of the fog colour: the
+    // far terrain (fogged to that same colour) and the sky share one value → no ground/
+    // sky edge, so no far outline can read. Early/low storm keeps the gradient (a
+    // legible daytime brownout with the wreck still clear).
+    // review 2026-07-16 — the flatten target is the PRE-ENCODED dust colour (_stormDustSky,
+    // see the note at its definition): the dome writes linear bytes un-encoded, so feeding it
+    // the raw hex rendered it 69 RGB units DARKER than the fog and left the hard horizon +
+    // tan wreck cutouts. Pre-encoding makes the dome and the fogged distance converge to the
+    // SAME rendered value at peak → nothing to silhouette against.
+    _horizonColor.lerp(_stormDustSky, flat);
+    _topColor.lerp(_stormDustSky, flat);
   }
 
   // Push uniforms.
@@ -1109,7 +1163,11 @@ export function updateSky(ctx: GameContext, dt: number): void {
   bundle.sphereMat.uniforms.uHorizonColor.value.copy(_horizonColor);
   bundle.sphereMat.uniforms.uSunDir.value.copy(ctx.time.sunDir);
   bundle.sphereMat.uniforms.uSunColor.value.copy(_sunColor);
-  bundle.sphereMat.uniforms.uSunGlow.value = (0.4 + dayMix * 0.6) * (1 - storm * 0.92);
+  // review 2026-07-16 — the sun halo is killed on the `flat` ramp (was `storm*0.92`, which
+  // left 8% of a sun-tinted glow burning a bright patch into the "flat" peak dome — a value
+  // gradient for outlines to read against). At full flatten the dome carries NO halo.
+  bundle.sphereMat.uniforms.uSunGlow.value =
+    (0.4 + dayMix * 0.6) * (1 - Math.max(storm * 0.92, flat));
 
   // ACAB (Cycle 6) — cloud uniforms. Drift via elapsed time; cloudiness from
   // the weather model (storms already overwrite the sky tint above, so we ease
@@ -1119,7 +1177,10 @@ export function updateSky(ctx: GameContext, dt: number): void {
   const sphU = bundle.sphereMat.uniforms;
   sphU.uTime.value = ctx.time.elapsed;
   const cloudiness = ctx.weather.cloudiness ?? 0;
-  sphU.uCloudiness.value = cloudiness * (1 - storm * 0.85);
+  // review 2026-07-16 — clouds are killed on the `flat` ramp too (was `storm*0.85`, leaving
+  // 15% of a DARK storm-cloud layer mottling the peak dome). The dome must be one flat slab
+  // at peak or the mottling is itself a value edge — the exact thing we are removing.
+  sphU.uCloudiness.value = cloudiness * (1 - Math.max(storm * 0.85, flat));
   const cloudLit = 0.16 + dayMix * 0.84;                 // night floor 0.16 → 1 at noon
   _cloudCol.copy(_cloudColBase).multiplyScalar(cloudLit);
   _cloudDark.copy(_cloudDarkBase).multiplyScalar(cloudLit);

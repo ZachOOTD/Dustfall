@@ -96,7 +96,7 @@ export function fuselageProfile(
  *  flat keel/bottom, hard bottom chines, vertical sides, a flat dorsal DECK,
  *  top chines. Points go CCW. Lofting this reads as a real hull (flat deck for
  *  the bridge, flat sides for panel lines, hard chine line) — not a dome. */
-const SHIP_SECTION: ReadonlyArray<readonly [number, number]> = [
+export const SHIP_SECTION: ReadonlyArray<readonly [number, number]> = [
   [-0.60, -1.00], [0.60, -1.00],   // flat keel
   [0.90, -0.78],                    // bottom chine
   [1.00, -0.30], [1.00, 0.45],      // vertical side
@@ -109,50 +109,225 @@ const SHIP_SECTION: ReadonlyArray<readonly [number, number]> = [
 
 export interface LoftStation { z: number; halfW: number; halfH: number; cy?: number }
 
+/** A GENUINE walk-in hole cut through a lofted hull's thick wall (2026-07-16 —
+ *  the leviathan entrance). Defined as a local-frame box on ONE flank: every skin
+ *  cell whose OUTER quad centroid falls inside it is removed from BOTH skins, and
+ *  the resulting hole boundary is welded outer-skin↔inner-skin with rim bands, so
+ *  the opening reads as the hull's own thick CUT CROSS-SECTION and the solid stays
+ *  topologically closed (no boundary loop ⇒ nothing for the open-end detector to
+ *  mistake for a defect, and no thin/paper edge at any grazing angle).
+ *
+ *  Do NOT fake this with a recessed "void decal" — per
+ *  `shared-memory/procedural-mesh-authoring.md`, a decal hole only reads at hero
+ *  scale on already-broken geometry, and it gives the player nothing to walk
+ *  through. If you need a real opening, build it INTO the loft. This does that.
+ *
+ *  The loft is resampled around the cut (`zStep` in z, `secSteps` along the section
+ *  edges on the cut's flank) so the hole lands on a crisp rectangle instead of the
+ *  hull's native 8-16m station spacing. Only the cut's neighbourhood is refined, so
+ *  the triangle cost is a few thousand, not six figures. */
+export interface HullCut {
+  /** Which flank the hole is on: +1 = starboard (+x), -1 = port. */
+  xSign: 1 | -1;
+  /** The cut's BOUNDS. These always define the resample band + the declared opening;
+   *  they are also the cut shape itself unless `contains` overrides it. */
+  yMin: number; yMax: number; zMin: number; zMax: number;
+  /** Optional RAGGED outline, evaluated at each skin cell's outer centroid. A plain
+   *  box cut reads as a garage door stamped into the plating; a real tear has a torn
+   *  edge. Must stay inside the bounds above (the caller's interior lining is cut to
+   *  the bounds plus a margin, and geometry outside them will not be removed). */
+  contains?: (x: number, y: number, z: number) => boolean;
+  /** Station spacing used inside [zMin-2, zMax+2]. Default 0.45. */
+  zStep?: number;
+  /** Subdivisions per section edge on the cut's flank. Default 8. */
+  secSteps?: number;
+}
+
 /** Loft the ship-hull cross-section along +Z through a list of stations (each a
  *  half-width/half-height + optional vertical centre), building a FACETED hull
  *  with a flat dorsal deck, hard chines, and flat sides. Open ends (for fracture
  *  faces / transom). Outward normals → FrontSide shows the outside, the interior
  *  shows through from inside the bay. */
-export function makeLoftedHull(stations: LoftStation[], material: THREE.Material, thickness = 0): THREE.Mesh {
-  const N = SHIP_SECTION.length;
+/** `solidInner`: close each torn END with a CLOSED 3cm-proud rim LIP whose front
+ *  face is wound OUTWARD, so a sightline into the breach mouth hits a solid front
+ *  cut plate (not the culled BACK of the single inner skin — the legacy rim cap
+ *  faced inward, a see-through the DoubleSide legacy callers masked). The lip is
+ *  welded to the outer/inner rings by bridge bands (no open boundary loop), reads
+ *  as the thick cut cross-section of a snapped hull plate, and doesn't z-fight
+ *  (it's a genuinely proud surface, not a coincident copy). Used by the FrontSide
+ *  Skyfall hull; DoubleSide legacy callers leave it off. Requires `thickness > 0`.
+ *
+ *  `cut` (optional): punch a real walk-in hole through the thick wall — see HullCut.
+ *  When omitted the output is byte-identical to before (same stations, same section,
+ *  same vertex order), so every legacy caller is untouched. */
+export function makeLoftedHull(stations: LoftStation[], material: THREE.Material, thickness = 0, solidInner = false, cut?: HullCut): THREE.Mesh {
+  // ── Resample ONLY when cutting: a crisp rectangular hole needs a finer grid than
+  //    the hull's native 8-16m stations / 12-point section, but refining the whole
+  //    hull would cost six figures of triangles. Both resamples are piecewise-linear
+  //    through the ORIGINAL knots, so the lofted surface is unchanged — only its
+  //    tessellation is denser near the cut.
+  const st: LoftStation[] = (() => {
+    if (!cut) return stations;
+    const step = cut.zStep ?? 0.45;
+    const lo = cut.zMin - 2, hi = cut.zMax + 2;
+    const at = (z: number): LoftStation => {
+      let a = stations[0], b = stations[stations.length - 1];
+      for (let i = 0; i < stations.length - 1; i++) if (z >= stations[i].z && z <= stations[i + 1].z) { a = stations[i]; b = stations[i + 1]; }
+      const t = b.z === a.z ? 0 : (z - a.z) / (b.z - a.z);
+      return { z, halfW: a.halfW + (b.halfW - a.halfW) * t, halfH: a.halfH + (b.halfH - a.halfH) * t, cy: (a.cy ?? 0) + ((b.cy ?? 0) - (a.cy ?? 0)) * t };
+    };
+    const zs = new Set<number>(stations.map((s) => s.z));
+    for (let z = lo; z <= hi + 1e-6; z += step) if (z > stations[0].z && z < stations[stations.length - 1].z) zs.add(+z.toFixed(4));
+    return [...zs].sort((a, b) => a - b).map((z) => (stations.find((s) => s.z === z) ?? at(z)));
+  })();
+  const SEC: ReadonlyArray<readonly [number, number]> = (() => {
+    if (!cut) return SHIP_SECTION;
+    const steps = cut.secSteps ?? 8;
+    const out: [number, number][] = [];
+    for (let k = 0; k < SHIP_SECTION.length; k++) {
+      const a = SHIP_SECTION[k], b = SHIP_SECTION[(k + 1) % SHIP_SECTION.length];
+      out.push([a[0], a[1]]);
+      // Only refine edges on the cut's flank — the far side keeps its native facets.
+      const n = Math.sign(a[0] + b[0]) === cut.xSign ? steps : 1;
+      for (let s = 1; s < n; s++) out.push([a[0] + (b[0] - a[0]) * (s / n), a[1] + (b[1] - a[1]) * (s / n)]);
+    }
+    return out;
+  })();
+  const N = SEC.length;
   const ringOf = (s: LoftStation, inset: number): THREE.Vector3[] =>
-    SHIP_SECTION.map(([x, y]) => new THREE.Vector3(
+    SEC.map(([x, y]) => new THREE.Vector3(
       x * Math.max(0.05, s.halfW - inset), (s.cy ?? 0) + y * Math.max(0.05, s.halfH - inset), s.z));
   const pos: number[] = [];
   const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
-  const loft = (rings: THREE.Vector3[][], inward: boolean) => {
+  /** Is skin cell (i,k) removed by the cut? Judged on the OUTER quad's centroid, so
+   *  outer + inner skin drop the SAME cells and the wall stays a wall. */
+  const cellCut = (outerRings: THREE.Vector3[][], i: number, k: number): boolean => {
+    if (!cut) return false;
+    const k2 = (k + 1) % N;
+    const A = outerRings[i], B = outerRings[i + 1];
+    const cx = (A[k].x + A[k2].x + B[k].x + B[k2].x) / 4;
+    const cy = (A[k].y + A[k2].y + B[k].y + B[k2].y) / 4;
+    const cz = (A[k].z + A[k2].z + B[k].z + B[k2].z) / 4;
+    if (Math.sign(cx) !== cut.xSign || cy <= cut.yMin || cy >= cut.yMax || cz <= cut.zMin || cz >= cut.zMax) return false;
+    return cut.contains ? cut.contains(cx, cy, cz) : true;
+  };
+  const loft = (rings: THREE.Vector3[][], inward: boolean, outerRings?: THREE.Vector3[][]) => {
     for (let i = 0; i < rings.length - 1; i++) {
       const A = rings[i], B = rings[i + 1];
       for (let k = 0; k < N; k++) {
+        if (outerRings && cellCut(outerRings, i, k)) continue;   // this cell is the hole
         const k2 = (k + 1) % N;
-        // Quad wound for OUTWARD normals (CCW section + +Z loft); reversed for the inner skin.
-        if (!inward) { push(A[k]); push(B[k]); push(B[k2]); push(A[k]); push(B[k2]); push(A[k2]); }
+        // Quad wound for OUTWARD normals on the OUTER skin (CCW section + +Z loft);
+        // reversed (inward-facing) for the INNER skin. M7-R BUGFIX: the two
+        // branches were SWAPPED — the outer skin was wound inward-facing and the
+        // inner skin outward-facing, so under a FrontSide material the outer skin
+        // culled from outside and the inner skin culled from inside (the Skyfall
+        // "wall visible from the wrong side / see-through hull" report). The
+        // legacy callers (megaWreck/procgen/leviathan) hid this by forcing the
+        // hull material DoubleSide; Skyfall's hull is FrontSide, so it showed.
+        // Cross-check: on the +x flank, the OUTER branch's face normal is +x
+        // (outward) with this winding. Positions are unchanged → DoubleSide
+        // callers + hullCollide trimeshes are byte-identical.
+        if (inward) { push(A[k]); push(B[k]); push(B[k2]); push(A[k]); push(B[k2]); push(A[k2]); }
         else { push(A[k]); push(B[k2]); push(B[k]); push(A[k]); push(A[k2]); push(B[k2]); }
       }
     }
   };
-  const outer = stations.map((s) => ringOf(s, 0));
-  loft(outer, false);
+  const outer = st.map((s) => ringOf(s, 0));
+  loft(outer, false, outer);
   // Optional WALL THICKNESS — a second inner skin + rim caps at the two open ends, so the
   // hull reads as thick plating (not a paper edge) where it's torn open (fracture, bow tip,
   // transom). Also makes the collision trimesh a solid wall (no thin-surface tunnelling).
   if (thickness > 0) {
-    const inner = stations.map((s) => ringOf(s, thickness));
-    loft(inner, true);
-    for (const idx of [0, stations.length - 1]) {
+    const inner = st.map((s) => ringOf(s, thickness));
+    loft(inner, true, outer);
+    // ── CUT RIM BANDS — weld the hole's outer-skin edge to its inner-skin edge all
+    //    the way round, so the opening is the hull's own THICK cut cross-section and
+    //    the solid keeps zero boundary edges. Without this the hole would be a
+    //    paper-thin rip showing a bright slot between the two skins at any grazing
+    //    angle (the exact "small gap at the rim" the review reported).
+    if (cut) {
+      const isCut = (i: number, k: number) => i >= 0 && i < st.length - 1 && cellCut(outer, i, ((k % N) + N) % N);
+      for (let i = 0; i < st.length - 1; i++) {
+        for (let k = 0; k < N; k++) {
+          if (!isCut(i, k)) continue;
+          const k2 = (k + 1) % N;
+          // The four grid edges of this cell, each paired with the neighbour across
+          // it. A neighbour that is NOT cut (or is off the ends of the loft, where
+          // the end caps already close things) means this edge is on the hole rim.
+          const rims: [THREE.Vector3, THREE.Vector3, THREE.Vector3, THREE.Vector3, boolean][] = [
+            [outer[i][k], outer[i + 1][k], inner[i + 1][k], inner[i][k], !isCut(i, k - 1)],          // -k side
+            [outer[i][k2], outer[i + 1][k2], inner[i + 1][k2], inner[i][k2], !isCut(i, k + 1)],      // +k side
+            [outer[i][k], outer[i][k2], inner[i][k2], inner[i][k], !isCut(i - 1, k)],                // -z side
+            [outer[i + 1][k], outer[i + 1][k2], inner[i + 1][k2], inner[i + 1][k], !isCut(i + 1, k)], // +z side
+          ];
+          const cellMid = new THREE.Vector3(
+            (outer[i][k].x + outer[i][k2].x + outer[i + 1][k].x + outer[i + 1][k2].x) / 4,
+            (outer[i][k].y + outer[i][k2].y + outer[i + 1][k].y + outer[i + 1][k2].y) / 4,
+            (outer[i][k].z + outer[i][k2].z + outer[i + 1][k].z + outer[i + 1][k2].z) / 4);
+          for (const [a, b, c, d, onRim] of rims) {
+            if (!onRim) continue;
+            // Wind so the rim faces INTO the hole (toward the removed cell), else the
+            // cut edge reads as a back-face through the opening.
+            const n = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(d, a));
+            const mid = new THREE.Vector3().addVectors(a, c).multiplyScalar(0.5);
+            const flip = n.dot(new THREE.Vector3().subVectors(cellMid, mid)) < 0;
+            if (flip) { push(a); push(c); push(b); push(a); push(d); push(c); }
+            else { push(a); push(b); push(c); push(a); push(c); push(d); }
+          }
+        }
+      }
+    }
+    for (const idx of [0, st.length - 1]) {
       const O = outer[idx], I = inner[idx], endFlip = idx === 0;
       for (let k = 0; k < N; k++) {
         const k2 = (k + 1) % N;
         if (endFlip) { push(O[k]); push(I[k2]); push(I[k]); push(O[k]); push(O[k2]); push(I[k2]); }
         else { push(O[k]); push(I[k]); push(I[k2]); push(O[k]); push(I[k2]); push(O[k2]); }
       }
+      // solidInner: a CLOSED 3cm proud LIP on the torn end — a real thick cut-edge
+      // cross-section (what a snapped heavy-hull plate looks like) whose FRONT face
+      // is wound OUTWARD (+z at the mouth / -z at the bow), so from OUTSIDE it reads
+      // a solid front plate and OCCLUDES the single-skin interior behind the mouth
+      // (the see-through back-face at the breach — review-2026-07-16). Welded to the
+      // O/I rings via outer+inner bridge bands → NO open boundary loop. The legacy
+      // DoubleSide callers omit it (solidInner off).
+      if (solidInner) {
+        const dz = endFlip ? -0.03 : 0.03;
+        const Op = O.map((v) => new THREE.Vector3(v.x, v.y, v.z + dz));
+        const Ip = I.map((v) => new THREE.Vector3(v.x, v.y, v.z + dz));
+        for (let k = 0; k < N; k++) {
+          const k2 = (k + 1) % N;
+          // proud front annulus — faces the end's outward-z (the visible cut face)
+          if (endFlip) { push(Op[k]); push(Ip[k]); push(Ip[k2]); push(Op[k]); push(Ip[k2]); push(Op[k2]); }
+          else { push(Op[k]); push(Ip[k2]); push(Ip[k]); push(Op[k]); push(Op[k2]); push(Ip[k2]); }
+          // outer bridge band O→Op (radially outward face)
+          push(O[k]); push(Op[k2]); push(Op[k]); push(O[k]); push(O[k2]); push(Op[k2]);
+          // inner bridge band I→Ip (radially inward face)
+          push(I[k]); push(Ip[k]); push(Ip[k2]); push(I[k]); push(Ip[k2]); push(I[k2]);
+        }
+      }
     }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.computeVertexNormals();
-  return new THREE.Mesh(geo, material);
+  const mesh = new THREE.Mesh(geo, material);
+  if (cut) {
+    // DECLARE the hole so verify:solid's open-end detector cannot mistake the front
+    // door for a defect, and so its walk-in probe aims at the real entrance rather
+    // than a builder-supplied waypoint. Mesh-LOCAL; the harness applies matrixWorld.
+    // (This is the "capture the anchor DURING generation" rule from
+    // shared-memory/procedural-mesh-authoring.md — after mergeStaticByMaterial the
+    // cut's geometry is unrecoverable, but userData survives on the bucket.)
+    const zMid = (cut.zMin + cut.zMax) / 2;
+    const sMid = st.reduce((best, s) => (Math.abs(s.z - zMid) < Math.abs(best.z - zMid) ? s : best), st[0]);
+    mesh.userData.intendedOpening = {
+      center: { x: cut.xSign * (sMid.halfW - thickness / 2), y: (cut.yMin + cut.yMax) / 2, z: zMid },
+      radius: Math.max(cut.yMax - cut.yMin, cut.zMax - cut.zMin),
+    };
+  }
+  return mesh;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

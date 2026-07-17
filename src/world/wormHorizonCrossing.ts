@@ -36,7 +36,15 @@ let _c: Crossing | null = null;
 // sun-catching facets read as crystalline rock + only ~20 lum below the sand). MeshBasic
 // = no light response → no bright facets, a clean dark shape that pops vs the warm sand
 // at ANY distance (fog:false so it doesn't haze away at the in-play 430-850m range).
-const HIDE = new THREE.MeshBasicMaterial({ color: 0x231b11, fog: false, toneMapped: false });
+// Review 2026-07-16: MeshBasic is UNLIT, so its colour was a hard constant that had no
+// idea the sun had set — the day-tuned lighter brown read as a jarring pale blob at
+// night while the whole landscape went dark (the same lighting-invariant-constant class
+// as the bone emissive glow). Fix: KEEP it flat/unlit (no sun-catching facets, the C36
+// reason) but LERP the colour between a night + day tone from sunHeight each frame, so
+// the silhouette tracks the landscape's light level and blends at both ends.
+const HIDE_DAY = new THREE.Color(0x8c7c64);    // reviewer-approved daytime dusty brown
+const HIDE_NIGHT = new THREE.Color(0x2e2822);  // dark brown-grey: still a readable shape vs moonlit sand, never a pale blob
+const HIDE = new THREE.MeshBasicMaterial({ color: HIDE_DAY.clone(), fog: false, toneMapped: false });
 
 /** Build the (hidden) dorsal-ridge humps once, at boot. */
 export function initWormHorizonCrossing(scene: THREE.Scene): void {
@@ -123,6 +131,16 @@ export function updateWormHorizonCrossing(ctx: GameContext, terrain: Terrain, dt
     const hx = c.start.x + c.dir.x * headDist, hz = c.start.z + c.dir.z * headDist;
     playWormRoarAttenuated(Math.hypot(hx - tr.x, hz - tr.z));
     c.roared = true;
+  }
+  // Day/night silhouette tone (review 2026-07-16). The material is UNLIT, so nothing
+  // else darkens it when the sun goes down — drive it from sunHeight here. Same curve as
+  // the bone-emissive fix: gone-to-night just below the horizon, full day once the sun is
+  // meaningfully up. Keeps a flat facet-free silhouette that blends at BOTH ends.
+  {
+    const sy = ctx.time.sunHeight;
+    const u = Math.min(1, Math.max(0, (sy - -0.05) / (0.25 - -0.05)));
+    const daylight = u * u * (3 - 2 * u);
+    HIDE.color.lerpColors(HIDE_NIGHT, HIDE_DAY, daylight);
   }
   // Surface envelope: rise over the first 15%, hold, sink over the last 15%.
   const surfaceEnv = Math.min(1, Math.min(t / 0.15, (1 - t) / 0.15));
