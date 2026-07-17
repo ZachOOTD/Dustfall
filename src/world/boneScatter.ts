@@ -212,8 +212,9 @@ function buildSpine(rand: Rng): THREE.Group {
 }
 
 // ── A loose VERTEBRA chunk (1-2) half-sunk and tumbled — a single fat centrum drum
-//    with its girdle ridge, a neural-spine blade, and transverse processes, lying at
-//    a settled tumble angle. Reads as one big real bone piece, not a ring. ──
+//    with its girdle ridge, a low weathered neural-spine NUB, and small transverse
+//    process nubs, lying at a settled tumble angle. Reads as one big real bone piece,
+//    a low half-buried vertebra — NOT a tall cone spike. ──
 function buildVertebra(rand: Rng): THREE.Group {
   const g = new THREE.Group();
   const cnt = 1 + Math.floor(rand() * 2);        // 1-2 chunks
@@ -236,15 +237,24 @@ function buildVertebra(rand: Rng): THREE.Group {
     const ring = bone(new THREE.TorusGeometry(r * 0.86, r * 0.2, 8, 14));
     ring.rotation.y = Math.PI / 2;
     vg.add(ring);
-    // Tall dorsal neural spine — a clear bony fin, the vertebra's read at a glance.
-    const blade = bone(new THREE.ConeGeometry(r * 0.44, r * 2.5, 6));
-    blade.position.y = r * 1.55;
-    blade.rotation.x = (rand() - 0.5) * 0.2;
-    vg.add(blade);
+    // Weathered neural-spine NUB — a low rounded knob, NOT a tall fin. The old build
+    // put a ConeGeometry(r*0.44, r*2.5) blade here → a sharp 2-3m cone SPIKE rising
+    // from the drum (Zach's walk-test: "kill the big-spike scatter bone"). Capped to a
+    // modest weathered bump (≤ ~0.4m), reusing the hero's rounded-bone vocabulary
+    // (the buildLongBone epiphysis is an icosahedron too) so the vertebra reads as a
+    // low half-buried centrum, never a spike. The drum + endplates + girdle carry the
+    // "this is a vertebra" read on their own.
+    const nubH = Math.min(0.4, r * 0.5);
+    const knob = bone(new THREE.IcosahedronGeometry(nubH * 0.8, 0));
+    knob.position.y = r * 0.9 + nubH * 0.2;
+    knob.scale.set(1.1, 0.75, 1.0);
+    knob.rotation.set(rand() * Math.PI, rand() * Math.PI, (rand() - 0.5) * 0.3);
+    vg.add(knob);
+    // Transverse processes: two SMALL lateral nubs (were r*1.4 sideways cone spikes).
     for (const s of [-1, 1] as const) {
-      const tp = bone(new THREE.ConeGeometry(r * 0.3, r * 1.4, 5));
-      tp.rotation.z = s * Math.PI * 0.42;
-      tp.position.set(0, r * 0.35, s * r * 0.95);
+      const tp = bone(new THREE.IcosahedronGeometry(Math.min(0.3, r * 0.32), 0));
+      tp.scale.set(0.9, 0.7, 0.9);
+      tp.position.set(0, r * 0.3, s * r * 0.92);
       vg.add(tp);
     }
     // Settled tumble — a fallen vertebra lists, but not enough to bury the fin.

@@ -128,6 +128,23 @@ if (!lm) {
   rows.push(`leviathan-walk: ${lm[2]} waypoints walked (enter/exit/re-enter + both doorways), ${lm[3]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
+// ── 6. The colossal RIBCAGE climb gate (bone_field hero — Zach's walk-test: "full
+//      collision on the top, i want to be able to climb it"). Builds the ribcage via
+//      the REAL code path + colliders, then proves the collision is a WALKABLE surface
+//      (rest-on-top castDown at crest + rib samples, a sphere CLIMB march from the sand
+//      up the spine to the crown, a TRAVERSE march out along a rib) — the march is the
+//      proof (teleported waypoints lie). Not chunk-streamed, but the same real-motion
+//      collision proof. ──
+const cm = runParsed('ribcage-climb', 1337, 5499, /RIBCAGE-CLIMB pass=(\d) bodies=(\d+) crest=(\d+)pts ribs=(\d+) crestRest=(\S+) ribRest=(\S+) climb=(\S+) traverse=(\S+) fails=(\d+)/, 420000);
+if (!cm) {
+  allPass = false;
+  rows.push('ribcage-climb: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
+} else {
+  const ok = cm[1] === '1';
+  if (!ok) allPass = false;
+  rows.push(`ribcage-climb: ${cm[2]} colliders, crest ${cm[3]}pts / ${cm[4]} ribs, crestRest=${cm[5]}, ribRest=${cm[6]}, climb=${cm[7]}, traverse=${cm[8]}, ${cm[9]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass

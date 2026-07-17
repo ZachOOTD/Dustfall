@@ -7045,6 +7045,320 @@ const SCENARIOS = {
     if (!pass) throw new Error('leviathan-walk GATE FAILED');
   },
 
+  // ── ribcage-climb — the CLIMBABLE-SKELETON gate (Zach's walk-test: "the massive
+  //    skeleton needs full collision on the top, i want to be able to climb it").
+  //    Builds the colossal ribcage through the REAL code path (makeGiantRibcage +
+  //    conform + applyColliders) on real terrain ~80m off the player, steps physics
+  //    so the Rapier QueryPipeline sees the new colliders, then proves the collision
+  //    is a walkable surface, not a set of teleport-lie waypoints:
+  //      (A) REST-ON-TOP  — castDown from just above each crest / rib-top sample must
+  //          hit the BONE surface (hitY ≈ sample, well above the sand): a player
+  //          standing there rests ON the bone, no fall-through.
+  //      (B) CLIMB MARCH  — sweep a player-radius sphere from the open SAND up the
+  //          spine crest to the crown, riding the floor each 0.45m step with a ~50°
+  //          step-up limit (0.55m) and ZERO collider overlap. This is the real proof
+  //          a climb path onto the skeleton EXISTS (a gap drops the sphere to sand →
+  //          never reaches the crown; an invisible wall → overlap). The march is the
+  //          proof; the rest checks alone are not (teleported waypoints lie).
+  //      (C) TRAVERSE MARCH — from the crest OUT along a mid-span rib's top to its
+  //          tip, sphere never overlapping + staying on bone: you can walk ALONG it.
+  //    Prints RIBCAGE-CLIMB pass=… for verify:chunks. Also drops marker spheres on the
+  //    proven surface + shoots a framed shot as the "standing on the spine" evidence.
+  //    Run: node scripts/rig-shot.mjs --scenario=ribcage-climb --port=5210
+  'ribcage-climb': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.5);
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const RAPIER = g.RAPIER;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      // dynImport — eval-import first, <script type=module> shim fallback (mirrors
+      // verify-solid: the ribcage builder is not on a game hook, so import it).
+      const dynImport = async (url) => {
+        try { return await (0, eval)(`import(${JSON.stringify(url)})`); }
+        catch (e) {
+          if (e && /module|import/i.test(String(e.message)) === false) throw e;
+          return await new Promise((resx, rej) => {
+            const key = '__si_' + Math.random().toString(36).slice(2);
+            const s = document.createElement('script'); s.type = 'module';
+            s.textContent = `import * as m from ${JSON.stringify(url)}; window[${JSON.stringify(key)}]=m; window.dispatchEvent(new Event(${JSON.stringify(key)}));`;
+            const t = setTimeout(() => { cleanup(); rej(new Error('import timeout ' + url)); }, 20000);
+            const onEvt = () => { const m = window[key]; cleanup(); resx(m); };
+            function cleanup() { clearTimeout(t); window.removeEventListener(key, onEvt); s.remove(); delete window[key]; }
+            window.addEventListener(key, onEvt);
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const mod = await dynImport('/src/world/giantRibcage.ts');
+      const rng = await dynImport('/src/core/rng.ts');
+      const bp = ctx.player.body.body.translation();
+      const bx = bp.x + 80, bz = bp.z + 6;
+      const gy = ctx.terrain.heightAt(bx, bz);
+      const rc = mod.makeGiantRibcage(rng.makeRng(0x8a17ce), {
+        name: 'giantRibcageClimb',
+        conform: { groundAt: (a, b) => ctx.terrain.heightAt(a, b), originX: bx, originZ: bz, yaw: 0, baseY: gy },
+      });
+      rc.group.position.set(bx, gy, bz);
+      rc.group.rotation.y = 0;
+      ctx.three.scene.add(rc.group);
+      const bodiesAdded = rc.applyColliders(ctx.physics.world, new THREE.Vector3(bx, gy, bz), 0);
+      rc.group.updateMatrixWorld(true);
+      const bodyCount = bodiesAdded.length;
+      const probe = rc.group.userData.ribcageProbe;
+      if (!probe || !probe.crest || !probe.crest.length) return { fails: ['no ribcageProbe.crest — collider descriptors missing'], colliders: 0, bodyCount };
+      // STEP physics so the QueryPipeline sees the new colliders (castRay /
+      // intersectionWithShape are vacuous until world.step() — the CLAUDE.md gate lesson).
+      ctx.flags.paused = false;
+      await frames(24);
+      const toW = (p) => { const v = rc.group.localToWorld(new THREE.Vector3(p.x, p.y, p.z)); return { x: v.x, y: v.y, z: v.z }; };
+      const crest = probe.crest.map(toW);
+      const ribRests = probe.ribRests.map(toW);
+      const ribTrav = (probe.ribTraverse || []).map(toW);
+      const fails = [];
+      const excludeBody = ctx.player.body.body;
+      const R = 0.35;                     // Tuning.PLAYER_CAPSULE_RADIUS
+      // Overlap-test ball: slightly UNDER the player radius. A ball centered R above a
+      // castDown point on a TILTED floor (a ramp) grazes the slope face — a false wall.
+      // A real wall (a collider standing UP in the path, taller than the step-up limit)
+      // penetrates far deeper. The under-size ball ignores the graze but still catches
+      // the wall (verify-solid's walkin uses full R because its decks are FLAT).
+      const ball = new RAPIER.Ball(0.27);
+      const OLIFT = 0.20;                  // overlap-ball centre lift above the floor point
+      const IDQ = { x: 0, y: 0, z: 0, w: 1 };
+      const markers = [];                 // world points proven "on bone" (for the evidence shot)
+
+      // (A) REST-ON-TOP — castDown must land on the bone surface, above the sand.
+      const restCheck = (label, pts, sampleN) => {
+        const step = Math.max(1, Math.floor(pts.length / sampleN));
+        let tested = 0, onBone = 0;
+        for (let i = 0; i < pts.length; i += step) {
+          const p = pts[i];
+          const sand = ctx.terrain.heightAt(p.x, p.z);
+          if (p.y - sand < 0.9) continue;                    // barely above sand — nothing to prove
+          tested++;
+          const hit = g.castDown(p.x, p.z, p.y + 0.6, true);
+          if (hit && Math.abs(hit.hitY - p.y) <= 0.75 && hit.hitY - sand > 0.6) {
+            onBone++; markers.push({ x: p.x, y: hit.hitY, z: p.z });
+          } else {
+            fails.push(`${label}[${i}] NOT on bone: hitY=${hit ? hit.hitY.toFixed(2) : 'none'} expected~${p.y.toFixed(2)} sand=${sand.toFixed(2)}`);
+          }
+        }
+        return { tested, onBone };
+      };
+      const crestRest = restCheck('crest', crest, 10);
+      const ribRest = restCheck('rib', ribRests, 8);
+
+      // Sphere-march along a plan polyline, riding the floor each step (castDown) with
+      // a ~50° step-UP limit; records peak floor + first collider overlap.
+      const STEP = 0.45, STEP_UP = 0.55, LIFT = 0.15;
+      const march = (pts) => {
+        let y = pts[0].y; let peak = -Infinity; let overlap = null; let minAboveSand = Infinity; let onBoneSteps = 0, totalSteps = 0;
+        for (let seg = 0; seg < pts.length - 1; seg++) {
+          const a = pts[seg], b = pts[seg + 1];
+          const len = Math.hypot(b.x - a.x, b.z - a.z);
+          const n = Math.max(1, Math.ceil(len / STEP));
+          for (let s = 1; s <= n; s++) {
+            const t = s / n;
+            const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
+            const sand = ctx.terrain.heightAt(px, pz);
+            const hit = g.castDown(px, pz, y + STEP_UP, true);
+            const floor = Math.max(hit ? hit.hitY : -Infinity, sand);
+            y = floor + R + LIFT;
+            peak = Math.max(peak, floor);
+            totalSteps++;
+            if (floor - sand > 0.4) { onBoneSteps++; minAboveSand = Math.min(minAboveSand, floor - sand); }
+            const c = ctx.physics.world.intersectionWithShape({ x: px, y: floor + R + OLIFT, z: pz }, IDQ, ball, undefined, undefined, undefined, excludeBody);
+            if (c !== null && c !== undefined && !overlap) overlap = { x: +px.toFixed(1), y: +y.toFixed(1), z: +pz.toFixed(1), seg };
+          }
+        }
+        return { peak, endY: y, overlap, onBoneSteps, totalSteps };
+      };
+
+      // (B) CLIMB MARCH — from open sand outboard of the low ridge end, up to the crown.
+      let crownIdx = 0; for (let i = 1; i < crest.length; i++) if (crest[i].y > crest[crownIdx].y) crownIdx = i;
+      const crown = crest[crownIdx];
+      // start on the SAND a few m outboard of the near (lower-x) ridge end.
+      const nearEnd = crest[0];
+      const sandStart = { x: nearEnd.x - 5, z: nearEnd.z, y: 0 };
+      sandStart.y = ctx.terrain.heightAt(sandStart.x, sandStart.z) + R + 0.2;
+      const crownSand = ctx.terrain.heightAt(crown.x, crown.z);
+      const climb = march([sandStart, { x: crown.x, y: crown.y, z: crown.z }]);
+      const climbedTo = climb.peak - crownSand;                 // how high above the local sand the sphere got
+      const crownAbove = crown.y - crownSand;
+      const climbOk = !climb.overlap && climb.peak >= crown.y - 1.0;
+      if (climb.overlap) fails.push(`climb: collider OVERLAP at ${JSON.stringify(climb.overlap)} (invisible wall on the ramp)`);
+      if (climb.peak < crown.y - 1.0) fails.push(`climb: reached floor y=${climb.peak.toFixed(2)} (crown ${crown.y.toFixed(2)}, sand ${crownSand.toFixed(2)}) — could not climb onto/up the spine`);
+      if (climbOk) markers.push({ x: crown.x, y: climb.peak, z: crown.z });
+
+      // (C) TRAVERSE MARCH — from the crest OUT along a mid-span rib to its tip.
+      let travOk = true; let trav = null;
+      if (ribTrav.length >= 3) {
+        trav = march(ribTrav);
+        travOk = !trav.overlap && trav.onBoneSteps >= Math.floor(trav.totalSteps * 0.5);
+        if (trav.overlap) fails.push(`traverse: collider OVERLAP at ${JSON.stringify(trav.overlap)} (invisible wall on the rib)`);
+        if (trav.onBoneSteps < Math.floor(trav.totalSteps * 0.5)) fails.push(`traverse: only ${trav.onBoneSteps}/${trav.totalSteps} steps on bone — rib collision has gaps`);
+      }
+
+      // Stash the evidence-shot framing on window for the second evaluate.
+      window.__ribClimb = { crown, crest, markers, cx: bx, cz: bz, gy, length: rc.length };
+      ctx.flags.paused = true;
+      return {
+        fails, colliders: probe.crest.length, bodyCount,
+        crestRest, ribRest,
+        climb: { climbedTo: +climbedTo.toFixed(2), crownAbove: +crownAbove.toFixed(2), peak: +climb.peak.toFixed(2), overlap: !!climb.overlap, ok: climbOk },
+        traverse: trav ? { onBone: `${trav.onBoneSteps}/${trav.totalSteps}`, overlap: !!trav.overlap, ok: travOk } : null,
+        ribCount: ribRests.length, crestCount: crest.length,
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`RIBCAGE-CLIMB pass=${pass ? 1 : 0} bodies=${r.bodyCount ?? 0} crest=${r.crestCount ?? 0}pts ribs=${r.ribCount ?? 0} crestRest=${r.crestRest ? r.crestRest.onBone + '/' + r.crestRest.tested : 'n/a'} ribRest=${r.ribRest ? r.ribRest.onBone + '/' + r.ribRest.tested : 'n/a'} climb=${r.climb ? (r.climb.ok ? 'UP' : 'FAIL') + '(' + r.climb.climbedTo + '/' + r.climb.crownAbove + 'm)' : 'n/a'} traverse=${r.traverse ? (r.traverse.ok ? 'OK' : 'FAIL') + '(' + r.traverse.onBone + ')' : 'n/a'} fails=${r.fails.length}`);
+    if (r.fails.length) console.log('[ribcage-climb] ' + JSON.stringify(r.fails.slice(0, 8)));
+    // Evidence shot — drop bright marker spheres on the PROVEN surface + frame the cage.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const info = window.__ribClimb; if (!info) return;
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+      const mg = new THREE.Group(); mg.name = 'climbMarkers';
+      for (const m of info.markers) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 10), mat);
+        s.position.set(m.x, m.y + 0.35, m.z);   // sit the sphere ON the surface it proved
+        mg.add(s);
+      }
+      ctx.three.scene.add(mg);
+      // Frame a 3/4 view of the whole cage from off one flank, above eye level.
+      const cam = ctx.three.camera;
+      const c = info.crown; const L = info.length;
+      cam.position.set(c.x - L * 0.55, c.y + 10, c.z + L * 0.5);
+      cam.lookAt(c.x, c.y - 1, c.z);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(450);
+    await page.screenshot({ path: join(OUT, 'scen-ribcage-climb-evidence.png'), timeout: 60000 });
+    console.log('[ribcage-climb] saved scen-ribcage-climb-evidence.png');
+    // A second angle: down the crest from the near ridge end (the climb ramp).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; const info = window.__ribClimb; if (!info) return;
+      const cam = ctx.three.camera; const end = info.crest[0]; const c = info.crown;
+      cam.position.set(end.x - 8, ctx.terrain.heightAt(end.x - 8, end.z) + 2.0, end.z + 4);
+      cam.lookAt(c.x, c.y, c.z);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-ribcage-climb-ramp.png'), timeout: 60000 });
+    console.log('[ribcage-climb] saved scen-ribcage-climb-ramp.png');
+    if (!pass) throw new Error('ribcage-climb GATE FAILED');
+  },
+
+  // ── bone-scatter — the strewn bone-bit GALLERY (bone_field scatter vocabulary).
+  //    Builds every BoneBitKind across several seeds in a grid on real terrain +
+  //    shoots them, and NUMERICALLY guards the `vertebra` kind against the tall cone
+  //    SPIKE Zach flagged in his walk-test ("kill the big-spike scatter bone"): asserts
+  //    no vertebra bit's local bbox rises taller than SPIKE_MAX above its base — a
+  //    modest weathered nub, never a 2-3m sharp cone.
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-scatter --port=5214
+  'bone-scatter': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.5);
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const dynImport = async (url) => {
+        try { return await (0, eval)(`import(${JSON.stringify(url)})`); }
+        catch (e) {
+          if (e && /module|import/i.test(String(e.message)) === false) throw e;
+          return await new Promise((resx, rej) => {
+            const key = '__si_' + Math.random().toString(36).slice(2);
+            const s = document.createElement('script'); s.type = 'module';
+            s.textContent = `import * as m from ${JSON.stringify(url)}; window[${JSON.stringify(key)}]=m; window.dispatchEvent(new Event(${JSON.stringify(key)}));`;
+            const t = setTimeout(() => { cleanup(); rej(new Error('import timeout ' + url)); }, 20000);
+            const onEvt = () => { const m = window[key]; cleanup(); resx(m); };
+            function cleanup() { clearTimeout(t); window.removeEventListener(key, onEvt); s.remove(); delete window[key]; }
+            window.addEventListener(key, onEvt);
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const scat = await dynImport('/src/world/boneScatter.ts');
+      const rngm = await dynImport('/src/core/rng.ts');
+      const bp = ctx.player.body.body.translation();
+      const ox = bp.x + 26, oz = bp.z + 8;
+      const kinds = scat.BONE_BIT_KINDS;
+      const SEEDS = 6;
+      const root = new THREE.Group(); root.name = 'boneScatterGallery';
+      const tallest = {};                     // per-kind max local bbox height (informational)
+      const cones = {};                       // per-kind ConeGeometry mesh count
+      for (let ki = 0; ki < kinds.length; ki++) {
+        const kind = kinds[ki];
+        for (let si = 0; si < SEEDS; si++) {
+          const bit = scat.buildBoneBit(kind, rngm.makeRng(0x51c0 + ki * 131 + si * 17));
+          bit.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.type === 'ConeGeometry') cones[kind] = (cones[kind] || 0) + 1; });
+          const box = new THREE.Box3().setFromObject(bit);
+          tallest[kind] = Math.max(tallest[kind] || 0, box.max.y - box.min.y);
+          const wx = ox + si * 3.4, wz = oz + ki * 3.4;
+          bit.position.set(wx, ctx.terrain.heightAt(wx, wz) - box.min.y + 0.02, wz);
+          root.add(bit);
+        }
+      }
+      ctx.three.scene.add(root);
+      root.updateMatrixWorld(true);
+      window.__scatGallery = { ox, oz, kinds, cols: SEEDS };
+      // The SPIKE fix guard: the vertebra kind must contain ZERO ConeGeometry — the
+      // sharp cone-blade spike Zach flagged is removed (its drum/endplates/girdle read
+      // carries the vertebra on its own). Cones on the `spine` kind (its small neural
+      // spines) are APPROVED and not guarded here.
+      const vertCones = cones['vertebra'] || 0;
+      const fails = [];
+      if (vertCones > 0) fails.push(`vertebra still has ${vertCones} ConeGeometry mesh(es) across ${SEEDS} seeds — a cone spike remains`);
+      return { fails, tallest: Object.fromEntries(Object.entries(tallest).map(([k, v]) => [k, +v.toFixed(2)])), cones, vertCones };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`BONE-SCATTER pass=${pass ? 1 : 0} vertebraCones=${r.vertCones} cones=${JSON.stringify(r.cones)} heights=${JSON.stringify(r.tallest)} fails=${r.fails.length}`);
+    if (r.fails.length) console.log('[bone-scatter] ' + JSON.stringify(r.fails));
+    // Shoot the gallery: a low 3/4 angle across the grid (catches any tall spike on the
+    // horizon) + a top-down-ish read.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const info = window.__scatGallery; if (!info) return;
+      ctx.flags.paused = true;                          // freeze so the follow-cam tick can't overwrite our frame
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const cam = ctx.three.camera;
+      const midX = info.ox + (info.cols - 1) * 3.4 * 0.5, midZ = info.oz + 2 * 3.4;
+      cam.position.set(midX - 4, ctx.terrain.heightAt(midX - 4, midZ - 11) + 3.0, midZ - 11);
+      cam.lookAt(midX, ctx.terrain.heightAt(midX, midZ) + 0.4, midZ);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(450);
+    await page.screenshot({ path: join(OUT, 'scen-bone-scatter-gallery.png'), timeout: 60000 });
+    console.log('[bone-scatter] saved scen-bone-scatter-gallery.png');
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const info = window.__scatGallery; if (!info) return;
+      ctx.flags.paused = true;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const cam = ctx.three.camera;
+      const midX = info.ox + (info.cols - 1) * 3.4 * 0.5, midZ = info.oz + 2 * 3.4;
+      cam.position.set(midX, ctx.terrain.heightAt(midX, midZ) + 13, midZ + 0.5);
+      cam.lookAt(midX, ctx.terrain.heightAt(midX, midZ), midZ);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-bone-scatter-top.png'), timeout: 60000 });
+    console.log('[bone-scatter] saved scen-bone-scatter-top.png');
+    if (!pass) throw new Error('bone-scatter GATE FAILED');
+  },
+
   // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
   // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
   // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt
