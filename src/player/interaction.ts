@@ -41,6 +41,11 @@ import {
   conditionAdjective,
   type SalvageCondition,
 } from '../world/salvage.ts';
+import {
+  COMPONENT_LOOT,
+  COMPONENT_LOOT_CORRODED,
+  COMPONENT_LOOT_PRISTINE_BONUS,
+} from '../config/lootRegistry.ts';
 import { getItemDef } from '../inventory/items.ts';
 import {
   playPickup,
@@ -1367,38 +1372,11 @@ function pryDurationMultiplier(c: SalvageCondition): number {
   }
 }
 
-const COMPONENT_LOOT: Record<string, { id: ItemId; count?: number }> = {
-  red_wire:     { id: 'rope' },
-  yellow_wire:  { id: 'cloth', count: 2 },
-  chip:         { id: 'scrap_bullet' },
-  fuse:         { id: 'scrap_bullet' },
-  scrap_chunk:  { id: 'scrap', count: 2 },
-  cloth_scrap:  { id: 'cloth', count: 2 },
-  bandage_pack: { id: 'bandage' },
-};
-
-/** AAT — corroded variant of COMPONENT_LOOT. Rusted panels yield
- *  degraded items: wires → cloth (the insulation rotted off), chips
- *  → scrap (silicon disintegrated), bandages → cloth (the gauze
- *  weathered). Reads as "this stuff has been sitting too long." */
-const COMPONENT_LOOT_CORRODED: Record<string, { id: ItemId; count?: number }> = {
-  red_wire:     { id: 'cloth' },               // rope → cloth (degraded)
-  yellow_wire:  { id: 'cloth' },               // cloth×2 → cloth×1 (less)
-  chip:         { id: 'scrap' },               // bullet → scrap (silicon shot)
-  fuse:         { id: 'scrap' },               // bullet → scrap
-  scrap_chunk:  { id: 'scrap' },               // scrap×2 → scrap×1
-  cloth_scrap:  { id: 'cloth' },               // cloth×2 → cloth×1
-  bandage_pack: { id: 'cloth' },               // bandage → cloth (gauze rotted)
-};
-
-/** AAT — pristine bonus loot. Last component on a pristine panel
- *  upgrades to a premium roll: rare scrap_bullet bundles, or even
- *  a hero-tier weapon spawn. Player learns "pristine panels are
- *  worth the longer pry." Applied only to the LAST extract from a
- *  pristine panel (when salvageRemaining = 1 after decrement = 0). */
-const COMPONENT_LOOT_PRISTINE_BONUS: { id: ItemId; count?: number } = {
-  id: 'scrap_bullet', count: 3,                // mostly ammo bundles
-};
+// Scavenger's Economy build 1 — the component (panel) loot maps now live in the
+// unified loot registry (config/lootRegistry.ts): COMPONENT_LOOT (standard),
+// COMPONENT_LOOT_CORRODED (degraded), COMPONENT_LOOT_PRISTINE_BONUS (last-extract
+// premium). Imported at the top of this module; the extraction logic below is
+// unchanged (deterministic per-component-kind lookup, not a roll).
 
 /** AAR + AAS — extract one component from an already-open panel.
  *  Hides the next un-extracted component mesh, looks up its loot via

@@ -961,22 +961,10 @@ export const Tuning = {
   // (legacy LANDMARK_COUNT removed in GG — was never read; hero landmark
   // count now lives below in HERO_LANDMARK_COUNT_MIN/MAX.)
 
-  // AAL — loot container drop balance (was hardcoded in lootContainers.ts:38).
-  // entries-per-container: random 1..max. Drop bucket boundaries: bandage <
-  // BANDAGE, cloth < CLOTH, scrap < SCRAP, canteen < CANTEEN, else machete.
-  // Tune to shift player progression pacing (more healing vs. more crafting
-  // material vs. more weapons).
-  LOOT_CONTAINER_ENTRIES_MIN: 1,
-  LOOT_CONTAINER_ENTRIES_MAX: 3,
-  LOOT_CONTAINER_BANDAGE_THRESHOLD: 0.25,   // 0..0.25 → bandage (25%)
-  LOOT_CONTAINER_CLOTH_THRESHOLD: 0.55,     // 0.25..0.55 → cloth (30%)
-  LOOT_CONTAINER_SCRAP_THRESHOLD: 0.75,     // 0.55..0.75 → scrap (20%)
-  LOOT_CONTAINER_CANTEEN_THRESHOLD: 0.92,   // 0.75..0.92 → canteen (17%)
-  // remaining 0.92..1.0 → machete (8% rare drop)
-  LOOT_CONTAINER_CLOTH_COUNT_MAX: 2,        // 1 + rand() * this
-  LOOT_CONTAINER_SCRAP_COUNT_MAX: 3,        // 1 + rand() * this
-  LOOT_CONTAINER_CANTEEN_FILL_MIN: 0.3,     // 0.3..0.8 fill level on loot canteens
-  LOOT_CONTAINER_CANTEEN_FILL_RANGE: 0.5,
+  // AAL — loot container drop balance RELOCATED (Scavenger's Economy build 1) to
+  // the unified loot registry: src/config/lootRegistry.ts → CONTAINER_CONFIG +
+  // CONTAINER_LOOT. All loot tables now live in one data-driven home; tune the
+  // container drop pacing there.
 
   // Scatter — world rework #2 (Session GG). All bounds + counts rescaled
   // for the 2400m world; chunk bounds are [-1200, +1200] so 1100m radial
