@@ -4,6 +4,27 @@ Newest cycle at top. Prior campaign ("Sharpen & Deepen", 24 cycles, COMPLETE + S
 2026-07-17) archived at `campaign-log-sharpen-deepen-DONE.md` /
 `campaign-state-sharpen-deepen-DONE.json`.
 
+## Cycles 5-8 — the economy BUILD (2026-07-18, attended) — SHIPPED
+- Zach approved interactively with revisions: no new craftable outputs; final materials
+  metal_pipe/machine_part/wiring/battery (metal + casing rejected as scrap-adjacent; fuel →
+  battery for sci-fi coherence); cactus_pulp confirmed dead → grant paths removed.
+- Build 1 (34f4aca): ONE loot registry + the verify:loot 1000-roll digest gate. Loot-preserving
+  proven (all digests match baseline; chunk digests byte-identical). Found a 4th hidden loot
+  system (container thresholds in tuning.ts); COMPONENT_LOOT lived in interaction.ts.
+- Build 2 (e571d82): the 4 materials exist (icons, distinct pickup meshes, viewmodels) and drop
+  by POI identity (panels + containers + red_wire component + per-archetype ground scatter on an
+  independent rng — descriptor digests UNCHANGED). cactus_pulp deprecated not removed (save.ts
+  restores ids unvalidated). material-probe PASS.
+- Build 3 (310dbbe): 3 new recipes for existing loot-only items (pipe_staff / scrap_gun /
+  worm_lure w/ anyOf raw-meat input) + 7 updated recipes; discovery announce + material source
+  hints on cards. craft-unlock probe PASS incl. rejecting flashlight's OLD recipe.
+- Build 4: analytic balance table (battery scarcest by design — gates flashlight/lantern/lure);
+  `economy-walktest-2026-07-18.md` written (5 feel questions + carried-over items).
+- Execution per the model split: Opus subagents built 1-3; Fable (main loop) planned, verified
+  each build independently (gates re-run + screenshots eyeballed), and did build 4.
+- Spend: ~1.6M this stretch (campaign total ~2.6M / 6M; cycles 5-8 of 16).
+- **Campaign COMPLETE pending Zach's walk-test + ship call. Push still held.**
+
 ## Cycle 4 — economy proposal (2026-07-18) — PROPOSED → PAUSED (milestone-review)
 - Planned: synthesize the research + current code into a decision-ready economy proposal, then
   pause. Written by the main loop (Fable) per the model-split steering.
