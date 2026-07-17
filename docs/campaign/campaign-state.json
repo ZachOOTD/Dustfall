@@ -1,12 +1,12 @@
 {
   "campaign": "Scavenger's Economy (setup)",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-17",
   "branch": "campaign/2026-07-17-economy",
-  "cycles_completed": 3,
-  "current_tier": "queue:economy-proposal",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 4,
+  "current_tier": "PAUSED:awaiting-economy-approval",
+  "awaiting_approval": true,
+  "stop_reasons": ["milestone-review"],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 16, "total": 6000000, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 900000 },
+  "spend": { "total": 1000000 },
   "queue": [
     { "id": "#28", "unit": "Skyfall stern seam", "kind": "fix", "overnight_safe": true },
     { "id": "#29", "unit": "Boneyard scatter overhaul", "kind": "hero-visual", "overnight_safe": true, "iterate": "5-8 rounds + day/night check" },
@@ -25,6 +25,7 @@
   "cycles": [
     { "n": 1, "date": "2026-07-17", "focus": "#28 Skyfall stern seam", "outcome": "SHIPPED", "spend": 400000, "commit": "009ccca", "note": "solidInner bridge-band winding fix at the endFlip end; winding-only, determinism byte-identical" },
     { "n": 2, "date": "2026-07-17", "focus": "#29 boneyard scatter overhaul", "outcome": "SHIPPED", "spend": 350000, "commit": "e90344b", "note": "5-type real-bone vocabulary sharing the hero material+fracture pipeline; night-glow class fixed via the shared registry; steering processed (Fable plan / Opus execute)" },
-    { "n": 3, "date": "2026-07-17", "focus": "research swarm (4 digests)", "outcome": "SHIPPED", "spend": 150000, "commit": "2c58916", "note": "crafting/multiplayer/character/cave digests to docs/research/ — decision support, no code changes" }
+    { "n": 3, "date": "2026-07-17", "focus": "research swarm (4 digests)", "outcome": "SHIPPED", "spend": 150000, "commit": "2c58916", "note": "crafting/multiplayer/character/cave digests to docs/research/ — decision support, no code changes" },
+    { "n": 4, "date": "2026-07-18", "focus": "economy proposal + pause", "outcome": "PROPOSED", "spend": 100000, "commit": "(this)", "note": "economy-proposal.md written (4 materials, drop matrix, 8 recipes, unification plan, Q1-Q6 w/ defaults); morning summary; PAUSED milestone-review" }
   ]
 }

@@ -4,6 +4,21 @@ Newest cycle at top. Prior campaign ("Sharpen & Deepen", 24 cycles, COMPLETE + S
 2026-07-17) archived at `campaign-log-sharpen-deepen-DONE.md` /
 `campaign-state-sharpen-deepen-DONE.json`.
 
+## Cycle 4 — economy proposal (2026-07-18) — PROPOSED → PAUSED (milestone-review)
+- Planned: synthesize the research + current code into a decision-ready economy proposal, then
+  pause. Written by the main loop (Fable) per the model-split steering.
+- Shipped: `docs/campaign/economy-proposal.md` — 4 new materials (metal/wiring/fuel/casing;
+  chemical deferred), a per-POI drop matrix, 8 NEW recipes (the existing 20 untouched — changing
+  them would silently rebalance the released tutorial arc), the 3-loot-systems→1-registry
+  unification plan (loot-preserving, 1000-roll digest gate), UX improvements, Q1-Q6 each with a
+  default, and the 5-cycle build ladder. Plus `morning-summary-2026-07-18.md`.
+- **NO ItemIds baked, NO loot tables changed** (the hard rule for this run — held).
+- Verify: docs-only; tsc clean.
+- Spend: ~0.1M (campaign total ~1.0M / 6M; cycle 4/16).
+- **PAUSED**: status paused, awaiting_approval true, stop_reasons ["milestone-review"]. The loop
+  is stopped. Zach: read the proposal → `/campaign-approve` (answers to Q1-Q6 optional; defaults
+  apply) → restart `/loop /campaign-cycle` for the build ladder.
+
 ## Cycle 3 — research swarm (2026-07-17) — SHIPPED
 - Planned: 4 read-only research digests (the sanctioned parallel exception).
 - Shipped: `docs/research/crafting-improvements.md` (taxonomy survey + a recommended leaner 4-5
