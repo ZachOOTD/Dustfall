@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 3,
-  "current_tier": "ladder:5-sled-core",
+  "cycles_completed": 4,
+  "current_tier": "ladder:6-sled-dune-feel",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "none",
@@ -21,7 +21,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 700000
+    "total": 1150000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -49,6 +49,14 @@
       "outcome": "SHIPPED",
       "spend": 250000,
       "note": "aErgMask crack suppression; 7-round vista iteration; PAUSED checkpoint 1"
+    },
+    {
+      "n": 4,
+      "date": "2026-07-18",
+      "focus": "sled ride core",
+      "outcome": "SHIPPED",
+      "spend": 450000,
+      "note": "kinematic seat-pin, approach 1 of 2 worked; sled-ride probe all phases; flag OFF, digests unchanged"
     }
   ]
 }
