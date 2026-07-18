@@ -102,6 +102,12 @@ export interface GameContext {
      *  frame. Set by systems that teleport the player (mount/dismount,
      *  save/load restore) so the camera doesn't lerp across the warp. */
     cameraSnapNextFrame: boolean;
+    /** Deep-Desert cycle 5 (D257, behind FEATURES.rideableSled) — the id of the
+     *  sled the player is currently riding, or null. When non-null, updatePlayer
+     *  is gated off (like speeder.mounted) and updateSleds pins the capsule to the
+     *  sled's rider seat + drives the camera each frame. Transient (never saved) —
+     *  a save mid-ride reloads standing (the capsule sits at the seat). */
+    ridingSledId: number | null;
   };
   pickups: {
     list: Pickup[];

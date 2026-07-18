@@ -67,6 +67,7 @@ import { isJournalPanelOpen } from '../ui/journalPanel.ts';
 import { findJournalById, type JournalKind } from '../world/journal.ts';   // ACBE (D1) — crash black-box per-instance content
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 import { Tuning } from '../config/tuning.ts';
+import { FEATURES } from '../config/features.ts';   // Deep-Desert cycle 5 (D257) — rideableSled prompt gate
 
 const RAYCAST_DISTANCE = 2.5;
 const _ray = new THREE.Raycaster();
@@ -1013,6 +1014,20 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         if (ctx.input.mousePressed.has(0)) {
           attachLockerToSled(ctx, sled);
         }
+        return;
+      }
+
+      // Deep-Desert cycle 5 (D257, behind FEATURES.rideableSled) — the deck's
+      // primary E action becomes RIDE (E is polled + consumed in updateSleds's
+      // mount path, which runs earlier this tick). Show a ride prompt instead of
+      // the cargo prompt so the [E] chip reads true. OFF path unchanged.
+      if (FEATURES.rideableSled && ctx.player.ridingSledId === null) {
+        ctx.inventory.hover = {
+          type: 'open_sled',
+          distance: info.distance,
+          promptNoun: 'sled',
+          verb: 'ride',
+        };
         return;
       }
 

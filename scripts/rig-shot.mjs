@@ -75,6 +75,11 @@ const POSES = {
 // hidden-preview path can't satisfy, D146), set up a situation, and capture a
 // STRIP of frames over wall-clock time. Output: verification/scen-<name>-fNN.png.
 const SCENARIO = argv.scenario || '';
+// Deep-Desert cycle 5 (D257) — the sled-ride probe must run with the rideable-sled
+// feature forced ON. Vite exposes VITE_-prefixed env vars from process.env at
+// dev-server start; the spawned `npm run dev` inherits process.env, so setting it
+// here (before startDev) flips FEATURES.rideableSled true for THIS probe only.
+if (SCENARIO === 'sled-ride') process.env.VITE_RIDEABLE_SLED = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -148,6 +153,212 @@ async function captureStrip(page, name, perFrame) {
 }
 
 const SCENARIOS = {
+  // ── sled-ride (Deep-Desert cycle 5, D257) ──────────────────────────────────
+  // Proves the rideable-sled CORE (flag forced ON via VITE_RIDEABLE_SLED=1, set
+  // above). Spawns a sled on a real origin-world slope, MOUNTS via the real code
+  // path (E + look + range), then asserts over stepped frames:
+  //   (a) mounted → capsule pinned to the seat (dist < 0.1m each frame)
+  //   (b) on a slope the sled accelerates downhill + its path follows the gradient
+  //   (c) on flat it decelerates to rest
+  //   (d) JUMP dismount → player standing beside the sled on terrain, KCC restored
+  //   (e) re-mount works
+  // Also screenshots the mounted mid-slide (3P). Numbers are printed per phase.
+  'sled-ride': async (page) => {
+    // ── PHASE A — find a slope, spawn a sled, mount via the real path, measure pin.
+    const a = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = true;
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Search a coarse ring grid for the STEEPEST moderate slope (not a cliff) —
+      // a steeper face gives a clearer accel + descent read for phase B.
+      let slope = null;
+      for (let r = 24; r <= 500; r += 6) {
+        for (let deg = 0; deg < 360; deg += 12) {
+          const x = Math.cos(deg * Math.PI / 180) * r;
+          const z = Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.12 && m < 0.6 && (!slope || m > slope.m)) slope = { x, z, m };
+        }
+      }
+      if (!slope) return { error: 'no slope near origin' };
+      const sn = ctx.terrain.normalAt(slope.x, slope.z);
+      const shm = Math.hypot(sn.x, sn.z);
+      const downX = sn.x / shm, downZ = sn.z / shm;   // terrain normal XZ points downhill
+      const yaw = Math.atan2(-downX, -downZ);          // bow (local -Z) faces downhill
+      const { id } = window.__game.spawnSled(slope.x, slope.z, yaw);
+      window.__sr = { id, slope, downX, downZ };
+      const find = () => ctx.sleds.list.find((s) => s.id === id);
+      let sled = find();
+      sled._slideVx = 0; sled._slideVz = 0;
+      await step(2);
+      // Stand up-slope of the sled, within mount range, camera on it; press E.
+      const pbx = slope.x - downX * 2.4, pbz = slope.z - downZ * 2.4;
+      const pby = ctx.terrain.heightAt(pbx, pbz) + 1.0;
+      ctx.player.body.body.setTranslation({ x: pbx, y: pby, z: pbz }, true);
+      sled = find();
+      const cam = ctx.three.camera;
+      cam.position.set(pbx, pby + 0.85, pbz);
+      cam.lookAt(sled.pos.x, sled.pos.y + 0.2, sled.pos.z);
+      cam.updateMatrixWorld(true);
+      await step(1);
+      ctx.input.pressed.add('KeyE');
+      await step(2);
+      const mountedOk = ctx.player.ridingSledId === id;
+      // Pin distance (capsule XZ vs sled center) over 6 frames WHILE sliding.
+      const pin = [];
+      for (let i = 0; i < 6; i++) {
+        await step(1);
+        sled = find();
+        const p = ctx.player.body.body.translation();
+        pin.push(+Math.hypot(p.x - sled.pos.x, p.z - sled.pos.z).toFixed(3));
+      }
+      sled = find();
+      const p = ctx.player.body.body.translation();
+      const capBottomOverDeck = +((p.y - (ctx.player.body.halfHeight + ctx.player.body.radius)) - sled.pos.y).toFixed(3);
+      return {
+        slopeX: +slope.x.toFixed(0), slopeZ: +slope.z.toFixed(0), slopeMag: +slope.m.toFixed(3),
+        mountedOk, pin, capBottomOverDeck,
+      };
+    });
+    if (a.error) { console.log('[sled-ride] ABORT: ' + a.error); return; }
+    const pinMax = Math.max(...a.pin);
+    console.log(`[sled-ride] PHASE A (mount + pin): slope@(${a.slopeX},${a.slopeZ}) normHoriz=${a.slopeMag} mounted=${a.mountedOk} pinDist(m)=${JSON.stringify(a.pin)} maxPin=${pinMax.toFixed(3)} capsuleBottomOverDeck(m)=${a.capBottomOverDeck} => ${a.mountedOk && pinMax < 0.1 ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE B — slope slide (no input): accel downhill + path follows gradient.
+    const b = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sr = window.__sr;
+      const find = () => ctx.sleds.list.find((s) => s.id === sr.id);
+      let sled = find();
+      const startX = sled.pos.x, startZ = sled.pos.z, startY = sled.pos.y;
+      let px = startX, pz = startZ;
+      const disp = [], ys = [];
+      for (let i = 0; i < 42; i++) {
+        await raf();
+        sled = find();
+        disp.push(+Math.hypot(sled.pos.x - px, sled.pos.z - pz).toFixed(4));
+        ys.push(+sled.pos.y.toFixed(2));
+        px = sled.pos.x; pz = sled.pos.z;
+      }
+      sled = find();
+      const pathX = sled.pos.x - startX, pathZ = sled.pos.z - startZ;
+      const pathLen = Math.hypot(pathX, pathZ);
+      const pathDot = pathLen > 1e-4 ? +((pathX * sr.downX + pathZ * sr.downZ) / pathLen).toFixed(3) : 0;
+      const descended = +(startY - sled.pos.y).toFixed(2);
+      const early = disp.slice(1, 6).reduce((s, v) => s + v, 0) / 5;
+      const late = disp.slice(30, 40).reduce((s, v) => s + v, 0) / 10;
+      return { disp, ys, pathDot, descended, early: +early.toFixed(4), late: +late.toFixed(4) };
+    });
+    const accelerated = b.late > b.early;
+    const bPass = accelerated && b.pathDot > 0.7 && b.descended > 0.2;
+    console.log(`[sled-ride] PHASE B (slope slide): per-frame disp early=${b.early} late=${b.late} accelerated=${accelerated} pathDot(vs downhill)=${b.pathDot} descended(m)=${b.descended} => ${bPass ? 'PASS' : 'FAIL'}`);
+
+    // Screenshot the mounted mid-slide (the 3P chase cam frames it; the loop keeps
+    // ticking so the sled is actively descending when the shot lands).
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(OUT, 'scen-sled-ride-midslide.png'), timeout: 60000 });
+    console.log('[sled-ride] screenshot saved: scen-sled-ride-midslide.png');
+
+    // ── PHASE C — flat decel: teleport the ridden sled to a flat spot, give it an
+    //    initial slide, run frames, assert it decelerates to rest.
+    const c = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sr = window.__sr;
+      const find = () => ctx.sleds.list.find((s) => s.id === sr.id);
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Find the flattest point in a wide grid.
+      let flat = null, flatM = 1;
+      for (let r = 0; r <= 600; r += 15) {
+        for (let deg = 0; deg < 360; deg += 15) {
+          const x = Math.cos(deg * Math.PI / 180) * r;
+          const z = Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m < flatM) { flatM = m; flat = { x, z }; }
+          if (r === 0) break;
+        }
+      }
+      let sled = find();
+      // Seed body Y = groundY + SLED_HALF_EXTENTS_Y (0.02) + SLED_GROUND_CLEARANCE
+      // (0.06); the ride branch re-derives it each frame anyway.
+      const gy = ctx.terrain.heightAt(flat.x, flat.z) + 0.08;
+      sled.body.setTranslation({ x: flat.x, y: gy, z: flat.z }, true);
+      sled.pos.set(flat.x, gy, flat.z);
+      sled._slideVx = 5; sled._slideVz = 0;   // kick it moving across the flat
+      await step(1);
+      const speeds = [];
+      let px = find().pos.x, pz = find().pos.z;
+      for (let i = 0; i < 180; i++) {
+        await raf();
+        sled = find();
+        const d = Math.hypot(sled.pos.x - px, sled.pos.z - pz);
+        if (i % 18 === 0) speeds.push(+(d / (1 / 60)).toFixed(2));   // approx m/s samples
+        px = sled.pos.x; pz = sled.pos.z;
+      }
+      const restSpeed = +(Math.hypot(find()._slideVx ?? 0, find()._slideVz ?? 0)).toFixed(3);
+      return { flatM: +flatM.toFixed(3), speeds, restSpeed };
+    });
+    console.log(`[sled-ride] PHASE C (flat decel): flatNormHoriz=${c.flatM} m/s samples=${JSON.stringify(c.speeds)} restSlideSpeed(m/s)=${c.restSpeed} => ${c.restSpeed < 0.2 ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE D — JUMP dismount: player standing beside the sled on terrain, KCC back.
+    const d = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sr = window.__sr;
+      ctx.input.pressed.add('Space');
+      await step(2);
+      const dismounted = ctx.player.ridingSledId === null;
+      // let the KCC settle the capsule on terrain a few frames
+      await step(6);
+      const p = ctx.player.body.body.translation();
+      const gy = ctx.terrain.heightAt(p.x, p.z);
+      const capBottom = p.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const standGap = +(capBottom - gy).toFixed(3);   // ~0 = standing on terrain
+      const onGround = ctx.player.onGround === true;
+      const sled = ctx.sleds.list.find((s) => s.id === sr.id);
+      const besideDist = sled ? +Math.hypot(p.x - sled.pos.x, p.z - sled.pos.z).toFixed(2) : -1;
+      return { dismounted, standGap, onGround, besideDist };
+    });
+    console.log(`[sled-ride] PHASE D (jump dismount): dismounted=${d.dismounted} onGround=${d.onGround} standGap(m)=${d.standGap} besideSled(m)=${d.besideDist} => ${d.dismounted && d.onGround && Math.abs(d.standGap) < 0.15 ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE E — re-mount: stand by the sled, look, press E again.
+    const e = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sr = window.__sr;
+      const sled = ctx.sleds.list.find((s) => s.id === sr.id);
+      const pbx = sled.pos.x + 2.0, pbz = sled.pos.z;
+      const pby = ctx.terrain.heightAt(pbx, pbz) + 1.0;
+      ctx.player.body.body.setTranslation({ x: pbx, y: pby, z: pbz }, true);
+      const cam = ctx.three.camera;
+      cam.position.set(pbx, pby + 0.85, pbz);
+      cam.lookAt(sled.pos.x, sled.pos.y + 0.2, sled.pos.z);
+      cam.updateMatrixWorld(true);
+      await step(1);
+      ctx.input.pressed.add('KeyE');
+      await step(2);
+      const remounted = ctx.player.ridingSledId === sr.id;
+      const p = ctx.player.body.body.translation();
+      const pin = +Math.hypot(p.x - sled.pos.x, p.z - sled.pos.z).toFixed(3);
+      return { remounted, pin };
+    });
+    console.log(`[sled-ride] PHASE E (re-mount): remounted=${e.remounted} pinDist(m)=${e.pin} => ${e.remounted && e.pin < 0.1 ? 'PASS' : 'FAIL'}`);
+
+    const allPass = a.mountedOk && Math.max(...a.pin) < 0.1
+      && bPass
+      && c.restSpeed < 0.2
+      && d.dismounted && d.onGround && Math.abs(d.standGap) < 0.15
+      && e.remounted && e.pin < 0.1;
+    console.log(`[sled-ride] RESULT: ${allPass ? 'ALL PHASES PASS' : 'FAILURE — see phases above'}`);
+  },
+
   // Prompt-3P (ACW F #149): place the player near a ground pickup, aim the 3P
   // camera at it so the eye-ray hovers it, tick live, then verify the prompt was
   // re-pinned to the object's projected screen position (inline left set to a px

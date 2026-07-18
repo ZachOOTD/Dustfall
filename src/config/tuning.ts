@@ -1828,6 +1828,38 @@ export const Tuning = {
   // natural "swing behind" feel.
   SLED_YAW_LERP: 0.07,
   NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
+
+  // ────────────────────────────────────────────────────────────────
+  // RIDEABLE SLED (D257, cycle 5 — behind FEATURES.rideableSled, default OFF).
+  // The ride re-uses the SPEEDER's proven seat-teleport pattern ("Option C"):
+  // while riding, updatePlayer is gated off (like speeder.mounted) and the
+  // kinematic capsule is pinned to a sled rider-seat each frame — bypassing
+  // the KCC slope/contact fights that killed D125. The sled is a SURFACE
+  // slider (not a hoverer): it slides downhill under gravity along the terrain
+  // gradient, has ground friction that brings it to rest on flat/uphill,
+  // carries momentum, and follows the sand. Steering is WEAK (a gravity sled,
+  // not a kart). All values are CORE placeholders — feel tuning is cycle 6.
+  // ────────────────────────────────────────────────────────────────
+  SLED_RIDE_SLOPE_THRESHOLD: 0.02,           // min terrain-normal horizontal mag before gravity slides the ridden sled (matches the free-slide threshold)
+  SLED_RIDE_GRAVITY_GAIN: 4.5,               // downhill accel factor: accel = 9.81 × slopeHorizMag × this. Higher than the empty-sled free-slide gain (2.5) — a ridden sled + rider commits down a dune eagerly.
+  SLED_RIDE_FRICTION: 0.28,                   // Coulomb kinetic-friction coefficient (decel = 9.81 × this). Brings the sled to rest on flat / gentle uphill; low enough that steep dunes still accelerate it.
+  SLED_RIDE_LINEAR_DAMP: 0.6,                 // exp air/sand drag per second on top of Coulomb friction — caps terminal velocity on long steep runs
+  SLED_RIDE_MAX_SPEED: 12,                    // m/s hard clamp on the ridden sled's slide speed
+  SLED_RIDE_PADDLE_ACCEL: 3.0,               // W — forward push accel (m/s²) on flat; a slow paddle, not a throttle
+  SLED_RIDE_PADDLE_MAX_SPEED: 3.5,           // W stops adding push once the along-heading speed reaches this (paddling is for creeping across flats, not racing)
+  SLED_RIDE_BRAKE_DECEL: 9.0,                // S — drag-brake decel (m/s²) opposing current motion
+  SLED_RIDE_STEER_RATE: 1.1,                 // A/D — max yaw rate (rad/s) at speed; scaled by speedFactor so a stopped sled barely turns
+  SLED_RIDE_STEER_SPEED_REF: 6.0,            // m/s at which steering reaches full authority (speedFactor = min(1, speed/this))
+  SLED_RIDE_STEER_GRIP: 0.08,                // fraction of velocity redirected toward the new heading per frame when steering — WEAK (a sled carves gently, it doesn't snap)
+  SLED_RIDE_YAW_TRACK_LERP: 0.06,            // when coasting with no steer input, the bow gently lerps to face travel direction by this fraction/frame
+  SLED_RIDE_SEAT_X: 0,                        // rider capsule offset in sled-local X (0 = centered laterally)
+  SLED_RIDE_SEAT_Z: 0,                        // rider capsule offset in sled-local Z (0 = centered fore/aft on the 2.2m deck)
+  SLED_RIDE_SEAT_Y: 0.86,                     // rider capsule CENTER height above the deck plane = halfHeight (0.5) + radius (0.35) + ~1cm so the capsule bottom rests on the deck
+  SLED_RIDE_MOUNT_RANGE: 3.5,                // E-mount reach (m) — player body to sled center (mirrors SPEEDER_MOUNT_RANGE)
+  SLED_RIDE_MOUNT_LOOK_DOT: 0.4,             // camera-forward · dir-to-sled must clear this to mount (mirrors SPEEDER_MOUNT_LOOK_DOT, a touch looser since the deck is low)
+  SLED_RIDE_DISMOUNT_OFFSET: 1.6,            // m to the right of the sled heading where the player is placed on dismount
+  SLED_RIDE_3P_CAM_BACK: 4.5,                // 3P chase distance behind the camera-forward while riding
+  SLED_RIDE_3P_CAM_ABOVE: 1.2,               // 3P chase height above the rider seat while riding
   STAMINA_TOW_FACTOR: 1.5,                   // sprint+tow on foot drains stamina × this. ABJ: 2.0→1.5 (sprint duration when towing 3s→4s; reads less punishing for short tow runs while still discouraging long sled hauls at sprint)
 
   // ────────────────────────────────────────────────────────────────

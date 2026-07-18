@@ -45,10 +45,13 @@ export const FEATURES = {
    *  delta-based ride). ON = the experimental ride via the SPEEDER's proven seat-teleport
    *  pattern ("Option C" per D125 — while riding, gate `updatePlayer` like `speeder.mounted`
    *  + teleport the capsule to a sled rider-seat each frame in `updateSleds`, bypassing the
-   *  KCC slope/contact issues that killed the old attempts). Landed INERT here by the C53
-   *  spike (gate-and-wait); the ⑪-build wires it + the user walk-tests the ride feel before any
-   *  flip (riding FEEL is the exact D125 failure mode — headless can't judge it). */
-  rideableSled: false,
+   *  KCC slope/contact issues that killed the old attempts). CORE ride mechanic WIRED in the
+   *  Deep-Desert cycle-5 build: mount/dismount + gravity-slide ride physics in updateSleds, the
+   *  capsule pinned to the rider seat each frame, updatePlayer gated like speeder.mounted. Default
+   *  OFF — `VITE_RIDEABLE_SLED=1` forces it ON for the sled-ride probe + the user's walk-test
+   *  (riding FEEL is the exact D125 failure mode — headless can't judge it; adoption is
+   *  walk-test-gated). Feel tuning (SLED_RIDE_* values) is cycle 6. */
+  rideableSled: import.meta.env?.VITE_RIDEABLE_SLED === '1',
 
   /** M10 ⑮ (C58) — repairable speeder (the "craftable hover-bike" = ONE vehicle, two states).
    *  OFF = the speeder spawns WORKING + rideable (the proven flow; current game unchanged).

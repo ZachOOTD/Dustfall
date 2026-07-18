@@ -500,6 +500,7 @@ const ctx: GameContext = {
     viewModel: null,
     rig: null,                       // ABO A3 — built post-context construction
     cameraSnapNextFrame: true,       // ABP Tier 3 — first frame is a "teleport"
+    ridingSledId: null,              // Deep-Desert cycle 5 (D257) — rideable-sled ride state (behind FEATURES.rideableSled)
   },
   pickups: { list: pickupList },
   inventory: createInventory(),
