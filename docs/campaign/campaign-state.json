@@ -1,14 +1,12 @@
 {
   "campaign": "The Deep Desert",
-  "status": "paused",
+  "status": "active",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
   "cycles_completed": 3,
-  "current_tier": "PAUSED:checkpoint-1-dune-blockout",
-  "awaiting_approval": true,
-  "stop_reasons": [
-    "milestone-review"
-  ],
+  "current_tier": "ladder:5-sled-core",
+  "awaiting_approval": false,
+  "stop_reasons": [],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
