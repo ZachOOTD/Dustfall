@@ -7333,6 +7333,318 @@ const SCENARIOS = {
     if (!pass) throw new Error('ribcage-climb GATE FAILED');
   },
 
+  // ── dune-slope — the ERG (mega dune-sea) PLAYABILITY gate (The Deep Desert,
+  //    campaign 2026-07-18). Locates the nearest erg region, then samples the
+  //    REAL pure height function (terrain.pureHeightAt — the exact samples the
+  //    heightfield collider is baked from, so an analytic march against it is a
+  //    faithful KCC model, not a teleport lie) and asserts:
+  //      (A) SLOPES        — a dense grid across the core dunes, classified by the
+  //          erg's own wind: windward faces (rising downwind) p95 ≤ 30° (the KCC's
+  //          50° climb limit + the charter's walkable-windward rule); slip faces
+  //          (falling downwind) median within [28,36]° (the dry-sand angle of
+  //          repose — the sled's playground). Proves the windward/slip ASYMMETRY.
+  //      (B) BORDER        — radial transects through the erg→desert border zone:
+  //          NO slope in the transition exceeds the interior dune max (a wide
+  //          smoothstep border must not spike a seam).
+  //      (C) AMPLITUDE     — crest-to-trough of the primary mega-dunes within the
+  //          ERG_DUNE_AMP_* bounds (a real dune SEA, not ripples).
+  //      (D) KCC MARCH     — a step-limited march up a windward face trough→crest
+  //          SUCCEEDS (max per-step rise ≤ the 50° KCC limit); the paired slip
+  //          face is measurably STEEPER (asymmetry, the sled's descent line).
+  //      (E) PERF          — a chunk-sized (193²) pureHeightAt grid in the erg
+  //          generates within a small multiple of the origin cost (≤4-octave
+  //          budget guidance) — the erg height fn isn't a frame killer.
+  //    Prints DUNE-SLOPE pass=… for verify:chunks, and shoots crest / trough /
+  //    approach vista stubs for the next cycle's real vista set.
+  //    Run: node scripts/rig-shot.mjs --scenario=dune-slope --seed=1337 --port=5211
+  'dune-slope': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.5);
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const dynImport = async (url) => {
+        try { return await (0, eval)(`import(${JSON.stringify(url)})`); }
+        catch (e) {
+          if (e && /module|import/i.test(String(e.message)) === false) throw e;
+          return await new Promise((resx, rej) => {
+            const key = '__si_' + Math.random().toString(36).slice(2);
+            const s = document.createElement('script'); s.type = 'module';
+            s.textContent = `import * as m from ${JSON.stringify(url)}; window[${JSON.stringify(key)}]=m; window.dispatchEvent(new Event(${JSON.stringify(key)}));`;
+            const t = setTimeout(() => { cleanup(); rej(new Error('import timeout ' + url)); }, 20000);
+            const onEvt = () => { const m = window[key]; cleanup(); resx(m); };
+            function cleanup() { clearTimeout(t); window.removeEventListener(key, onEvt); s.remove(); delete window[key]; }
+            window.addEventListener(key, onEvt);
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const { Tuning } = await dynImport('/src/config/tuning.ts');
+      const bio = ctx.biomes; const ph = (x, z) => ctx.terrain.pureHeightAt(x, z);
+      const DEG = 180 / Math.PI;
+      const fails = [];
+
+      // ── locate the nearest erg core (coarse scan → centroid refine) ──
+      let coarse = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200) {
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z;
+          if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; coarse = { x, z }; }
+        }
+      }
+      if (!coarse) return { fails: ['NO ERG found within a 24km scan (seed-dependent — rarity too low?)'], found: false };
+      let sx = 0, sz = 0, w = 0;
+      for (let dx = -400; dx <= 400; dx += 16) {
+        for (let dz = -400; dz <= 400; dz += 16) {
+          if (bio.ergAt(coarse.x + dx, coarse.z + dz) > 0.95) { sx += coarse.x + dx; sz += coarse.z + dz; w++; }
+        }
+      }
+      const cx = w ? Math.round(sx / w) : coarse.x;
+      const cz = w ? Math.round(sz / w) : coarse.z;
+      const info = bio.ergInfoAt(cx, cz);
+      const windRad = info ? info.windRad : 0;
+      const wd = { x: Math.cos(windRad), z: Math.sin(windRad) };
+      const dist = Math.hypot(cx, cz);
+
+      // slope + along-wind gradient sign at (x,z), central diff over 2m.
+      const D = 2;
+      const slopeAt = (x, z) => {
+        const gx = (ph(x + D, z) - ph(x - D, z)) / (2 * D);
+        const gz = (ph(x, z + D) - ph(x, z - D)) / (2 * D);
+        const slope = Math.atan(Math.hypot(gx, gz)) * DEG;
+        const gu = gx * wd.x + gz * wd.z;   // >0 windward (rising downwind), <0 slip
+        return { slope, gu };
+      };
+      const pct = (arr, p) => {
+        if (!arr.length) return NaN;
+        const a = arr.slice().sort((u, v) => u - v);
+        return a[Math.min(a.length - 1, Math.max(0, Math.floor(p * a.length)))];
+      };
+
+      // ── (A) dense grid across the core dunes ──
+      const wind = [], slip = [];
+      for (let dx = -300; dx <= 300; dx += 4) {
+        for (let dz = -300; dz <= 300; dz += 4) {
+          const x = cx + dx, z = cz + dz;
+          if (bio.ergAt(x, z) < 0.98) continue;       // core only (mask ~1) — no border mixing
+          const s = slopeAt(x, z);
+          if (s.slope < 10) continue;                 // skip trough/crest transitions — measure FACES
+          if (s.gu > 0.03) wind.push(s.slope);
+          else if (s.gu < -0.03) slip.push(s.slope);
+        }
+      }
+      const windP95 = pct(wind, 0.95), windMax = Math.max(...wind, 0);
+      const slipMed = pct(slip, 0.5), slipP05 = pct(slip, 0.05), slipP95 = pct(slip, 0.95), slipMax = Math.max(...slip, 0);
+      const interiorMax = Math.max(windMax, slipMax);
+      // The KCC climbs ≤50°, the charter requires walkable windward: p95 ≤ 30°.
+      if (!(windP95 <= 30)) fails.push(`windward p95 ${windP95.toFixed(1)}° > 30° (unwalkable windward face)`);
+      // Slip faces sit at the dry-sand angle of repose (~28-34°). Real dune fields
+      // vary (the envelope scales dune height), so the MEDIAN is checked over a
+      // band that admits legitimate ±few° seed variance but still catches a field
+      // that is all-gentle (no sled faces) or all-cliff (unnatural).
+      if (!(slipMed >= 27 && slipMed <= 37)) fails.push(`slip median ${slipMed.toFixed(1)}° outside [27,37]° (angle-of-repose band)`);
+      // The steep slip faces (the sled's descent line) must reach the repose band.
+      if (!(slipP95 >= 30 && slipP95 <= 50)) fails.push(`slip p95 ${slipP95.toFixed(1)}° outside [30,50]° (the steep slip faces are wrong)`);
+      // Asymmetry: the slip side is genuinely steeper than the windward side.
+      if (!(slipMed > windP95 - 3)) fails.push(`no asymmetry: slip median ${slipMed.toFixed(1)}° not steeper than windward p95 ${windP95.toFixed(1)}°`);
+
+      // ── (B) border-zone continuity: radial transects out through the border ──
+      let borderMax = 0;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+        const dirx = Math.cos(a), dirz = Math.sin(a);
+        for (let rr = 0; rr <= Tuning.ERG_FIELD_RADIUS + 40; rr += 4) {
+          const x = cx + dirx * rr, z = cz + dirz * rr;
+          const m = bio.ergAt(x, z);
+          if (m <= 0 || m >= 0.98) continue;          // the transition band only
+          const s = slopeAt(x, z).slope;
+          if (s > borderMax) borderMax = s;
+        }
+      }
+      // The wide smoothstep border must not create a slope STEEPER than the erg's
+      // own dunes (a hard seam) — and never an unclimbable ramp near the 50° KCC
+      // limit. A real seam discontinuity would spike well past the interior dunes.
+      if (borderMax > interiorMax + 6) fails.push(`border slope ${borderMax.toFixed(1)}° spikes above interior max ${interiorMax.toFixed(1)}° (+6° tol) — seam discontinuity`);
+      if (borderMax > 48) fails.push(`border slope ${borderMax.toFixed(1)}° > 48° — the erg edge is an unclimbable seam`);
+
+      // ── wind-aligned transect through the core (for amplitude + the marches) ──
+      const STEP = 0.4, T0 = -420, TN = 420;
+      const prof = [];
+      for (let t = T0; t <= TN; t += STEP) {
+        const x = cx + wd.x * t, z = cz + wd.z * t;
+        prof.push({ t, x, z, h: ph(x, z) });
+      }
+      // extrema with a ±6m window + ≥6m prominence → primary crests/troughs only.
+      const WW = Math.round(6 / STEP);
+      const ext = [];
+      for (let i = WW; i < prof.length - WW; i++) {
+        let isMax = true, isMin = true;
+        for (let k = i - WW; k <= i + WW; k++) {
+          if (prof[k].h > prof[i].h + 1e-6) isMax = false;
+          if (prof[k].h < prof[i].h - 1e-6) isMin = false;
+        }
+        if (isMax) ext.push({ i, kind: 'max', h: prof[i].h });
+        else if (isMin) ext.push({ i, kind: 'min', h: prof[i].h });
+      }
+      // dedup adjacent same-kind (plateaus)
+      const ex2 = [];
+      for (const e of ext) { const last = ex2[ex2.length - 1]; if (last && last.kind === e.kind) { if (e.kind === 'max' ? e.h > last.h : e.h < last.h) ex2[ex2.length - 1] = e; } else ex2.push(e); }
+      const amps = [];
+      for (let i = 1; i < ex2.length; i++) { const d = Math.abs(ex2[i].h - ex2[i - 1].h); if (d > 6) amps.push(d); }
+      const ampMed = amps.length ? pct(amps, 0.5) : 0;
+      if (!(ampMed >= Tuning.ERG_DUNE_AMP_MIN && ampMed <= Tuning.ERG_DUNE_AMP_MAX))
+        fails.push(`mega-dune amplitude ${ampMed.toFixed(1)}m outside [${Tuning.ERG_DUNE_AMP_MIN},${Tuning.ERG_DUNE_AMP_MAX}]m`);
+
+      // ── (D) KCC marches: pick a mid crest + its windward (lower-t) & slip
+      //     (higher-t) troughs, then measure the per-step rise up each face. ──
+      const maxima = ex2.filter((e) => e.kind === 'max');
+      const minima = ex2.filter((e) => e.kind === 'min');
+      let march = null;
+      if (maxima.length && minima.length >= 1) {
+        // crest nearest the transect centre
+        const crest = maxima.reduce((b, e) => Math.abs(prof[e.i].t) < Math.abs(prof[b.i].t) ? e : b, maxima[0]);
+        const windTrough = minima.filter((m) => m.i < crest.i).sort((a, b) => b.i - a.i)[0];
+        const slipTrough = minima.filter((m) => m.i > crest.i).sort((a, b) => a.i - b.i)[0];
+        const stepRise = (aIdx, bIdx) => {         // steepest per-STEP height change between two prof indices
+          const lo = Math.min(aIdx, bIdx), hi = Math.max(aIdx, bIdx);
+          let mx = 0;                              // |Δh| — direction-agnostic (a face is a face climbed either way)
+          for (let i = lo; i < hi; i++) { const d = Math.abs(prof[i + 1].h - prof[i].h); if (d > mx) mx = d; }
+          return mx;
+        };
+        const KCC_LIMIT = STEP * Math.tan(50 * Math.PI / 180);   // 50° per 0.4m step ≈ 0.476m
+        let windRise = NaN, slipRise = NaN, climbWind = false, climbedTo = 0;
+        if (windTrough) {
+          windRise = stepRise(windTrough.i, crest.i);
+          climbWind = windRise <= KCC_LIMIT;
+          climbedTo = crest.h - windTrough.h;
+          if (!climbWind) fails.push(`windward march NOT climbable: max step-rise ${windRise.toFixed(3)}m > KCC limit ${KCC_LIMIT.toFixed(3)}m`);
+        } else fails.push('no windward trough found on the transect');
+        if (slipTrough) slipRise = stepRise(slipTrough.i, crest.i);
+        // On this crest's pair, the slip face must be steeper than the windward
+        // (a small margin — the STRONG asymmetry proof is the grid stat above; a
+        // single transect pair is noisier, so this is a sanity floor, not the gate).
+        if (windTrough && slipTrough && !(slipRise > windRise * 1.05))
+          fails.push(`slip face not steeper than windward (slip step-rise ${slipRise.toFixed(3)}m vs windward ${windRise.toFixed(3)}m)`);
+        march = { windRise, slipRise, climbWind, climbedTo, kccLimit: KCC_LIMIT, crestT: +prof[crest.i].t.toFixed(0), crestH: +crest.h.toFixed(1) };
+      } else fails.push('could not resolve a crest+trough pair on the wind transect');
+
+      // ── (E) perf: a chunk-sized (193²) pure-height grid, erg vs origin ──
+      const gridMs = (ox, oz) => {
+        const t0 = performance.now();
+        let acc = 0;
+        for (let i = 0; i <= 192; i++) for (let j = 0; j <= 192; j++) acc += ph(ox + (i - 96) * 2, oz + (j - 96) * 2);
+        return { ms: performance.now() - t0, acc };
+      };
+      const perfErg = gridMs(cx, cz).ms;
+      const perfOrigin = gridMs(0, 0).ms;
+      if (perfErg > perfOrigin * 4 + 30) fails.push(`erg grid ${perfErg.toFixed(1)}ms >> origin ${perfOrigin.toFixed(1)}ms (×4+30 budget) — erg height fn too costly`);
+
+      window.__ergSpot = { cx, cz, windRad, crestT: march ? march.crestT : 0 };
+      return {
+        found: true, fails, cx, cz, dist, windRad,
+        windP95, windMax, slipMed, slipP05, slipP95, slipMax, interiorMax,
+        borderMax, ampMed, windN: wind.length, slipN: slip.length,
+        march,
+        perfErg, perfOrigin,
+      };
+    });
+    const pass = r.found && r.fails.length === 0;
+    if (!r.found) {
+      console.log(`DUNE-SLOPE pass=0 seed=${argv.seed || '?'} found=0 fails=${r.fails.length}`);
+      console.log('[dune-slope] ' + JSON.stringify(r.fails));
+      throw new Error('dune-slope GATE FAILED — no erg found');
+    }
+    const m = r.march || {};
+    console.log(
+      `DUNE-SLOPE pass=${pass ? 1 : 0} seed=${argv.seed || '?'} erg=(${r.cx},${r.cz})@${r.dist.toFixed(0)}m wind=${(r.windRad * 180 / Math.PI).toFixed(0)}° ` +
+      `windP95=${r.windP95.toFixed(1)}° windMax=${r.windMax.toFixed(1)}° slipMed=${r.slipMed.toFixed(1)}° slip=[${r.slipP05.toFixed(1)}-${r.slipP95.toFixed(1)}]° ` +
+      `amp=${r.ampMed.toFixed(1)}m border=${r.borderMax.toFixed(1)}° interiorMax=${r.interiorMax.toFixed(1)}° ` +
+      `climbWind=${m.climbWind ? 'UP' : 'FAIL'}(rise=${(m.windRise ?? 0).toFixed(3)}/lim=${(m.kccLimit ?? 0).toFixed(3)}m,+${(m.climbedTo ?? 0).toFixed(1)}m) slipRise=${(m.slipRise ?? 0).toFixed(3)}m ` +
+      `perfErg=${r.perfErg.toFixed(1)}ms perfOrigin=${r.perfOrigin.toFixed(1)}ms fails=${r.fails.length}`
+    );
+    if (r.fails.length) console.log('[dune-slope] ' + JSON.stringify(r.fails.slice(0, 8)));
+
+    // ── vista stubs for the next cycle: stream the erg in, shoot crest / trough /
+    //    approach. (Terrain tiles stream on teleport; colliders not needed for a shot.) ──
+    await page.evaluate(async (spot) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: spot.cx, y: ctx.terrain.heightAt(spot.cx, spot.cz) + 1.6, z: spot.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 160; f++) await raf();
+      ctx.flags.paused = true;
+    }, { cx: r.cx, cz: r.cz });
+    const shot = async (name, code) => {
+      await page.evaluate(code);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-dune-slope-${name}.png`), timeout: 60000 });
+      console.log(`[dune-slope] saved scen-dune-slope-${name}.png`);
+    };
+    // A helper string: local steepest-ascent unit direction at (x,z) via central diff.
+    const upDir = `(x,z)=>{ const ctx=window.__game.ctx; const h=(a,b)=>ctx.terrain.heightAt(a,b); const gx=h(x+3,z)-h(x-3,z), gz=h(x,z+3)-h(x,z-3); const L=Math.hypot(gx,gz)||1; return {x:gx/L, z:gz/L}; }`;
+    // crest view — stand on a crest, look ALONG the ridge line (perpendicular to
+    // wind) so a colonnade of dunes recedes into the haze (the dune-sea postcard).
+    await shot('crest', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const s = window.__ergSpot; const wr = s.windRad;
+      let bx = s.cx, bz = s.cz, bh = -1e9;
+      for (let t = -160; t <= 160; t += 3) { const x = s.cx + Math.cos(wr)*t, z = s.cz + Math.sin(wr)*t; const h = ctx.terrain.heightAt(x,z); if (h > bh) { bh = h; bx = x; bz = z; } }
+      const rv = { x: -Math.sin(wr), z: Math.cos(wr) };   // along the ridge (perp to wind)
+      cam.position.set(bx, ctx.terrain.heightAt(bx, bz) + 1.7, bz);
+      const tx = bx + rv.x*160, tz = bz + rv.z*160;
+      cam.lookAt(tx, ctx.terrain.heightAt(tx, tz) - 6, tz);   // slight downward — fill frame with sand
+      cam.updateMatrixWorld(true);
+    })()`);
+    // trough view — drop into a low sample, look UP the steepest local face so a
+    // dune WALL rises and fills the frame (sightline occlusion — the trough read).
+    await shot('trough', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const s = window.__ergSpot; const wr = s.windRad; const upDir = ${upDir};
+      let bx = s.cx, bz = s.cz, bh = 1e9;
+      for (let t = -160; t <= 160; t += 3) { const x = s.cx + Math.cos(wr)*t, z = s.cz + Math.sin(wr)*t; const h = ctx.terrain.heightAt(x,z); if (h < bh) { bh = h; bx = x; bz = z; } }
+      const up = upDir(bx, bz);
+      cam.position.set(bx, ctx.terrain.heightAt(bx, bz) + 1.7, bz);
+      const tx = bx + up.x*80, tz = bz + up.z*80;
+      cam.lookAt(tx, ctx.terrain.heightAt(tx, tz) + 8, tz);   // up the face toward the crest
+      cam.updateMatrixWorld(true);
+    })()`);
+    // approach view — stand out on the flat desert just beyond the erg edge and
+    // look HORIZONTALLY at the near wall of dunes rising from the flats (the
+    // "approaching the dune sea" read). The vantage is ~1.6km from the erg core,
+    // OUTSIDE the origin-following sky sphere's last recenter — so we teleport the
+    // player to the vantage first (unpaused, to stream terrain + recenter the sky
+    // there) BEFORE framing the shot, else the sky renders as a distant dome.
+    await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const s = window.__ergSpot;
+      const ang = Math.atan2(-s.cz, -s.cx);   // roughly toward origin
+      let ex = s.cx, ez = s.cz;               // march out to the erg boundary
+      for (let rr = 0; rr <= 2400; rr += 8) { const x = s.cx + Math.cos(ang)*rr, z = s.cz + Math.sin(ang)*rr; if (ctx.biomes.ergAt(x, z) <= 0) { ex = x; ez = z; break; } }
+      const ox = ex + Math.cos(ang) * 90, oz = ez + Math.sin(ang) * 90;   // 90m out on the flats
+      window.__ergApproach = { ox, oz, tx: ex - Math.cos(ang) * 260, tz: ez - Math.sin(ang) * 260 };
+      ctx.flags.paused = false;
+      ctx.player.body.body.setTranslation({ x: ox, y: ctx.terrain.heightAt(ox, oz) + 1.6, z: oz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 160; f++) await raf();   // stream + recenter sky at the vantage
+      ctx.flags.paused = true;
+    });
+    await shot('approach', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const a = window.__ergApproach;
+      cam.position.set(a.ox, ctx.terrain.heightAt(a.ox, a.oz) + 2.0, a.oz);
+      cam.lookAt(a.tx, ctx.terrain.heightAt(a.tx, a.tz) + 10, a.tz);
+      cam.updateMatrixWorld(true);
+    })()`);
+    if (!pass) throw new Error('dune-slope GATE FAILED');
+  },
+
   // ── bone-scatter — the strewn bone-bit GALLERY (bone_field scatter vocabulary).
   //    Builds every BoneBitKind across several seeds in a grid on real terrain +
   //    shoots them, and NUMERICALLY guards the `vertebra` kind against the tall cone

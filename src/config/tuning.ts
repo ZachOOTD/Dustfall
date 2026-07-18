@@ -719,6 +719,44 @@ export const Tuning = {
   DUNE_ASYMMETRY_AMOUNT: 26.0,         // organic u-warp (m); curves ridges
   DUNE_WARP_SCALE: 420,                // wavelength of the warp noise channel
 
+  // ── The Deep Desert (campaign 2026-07-18) — the MEGA DUNE-SEA (erg).
+  //    A rare regional biome (regional-anchor pattern, like bone_field) of
+  //    Sahara-scale dunes: sightline occlusion in the troughs, long views only
+  //    from crests. Its heightfield (terrain.sampleErgHeight) superposes an
+  //    asymmetric primary mega-dune (windward gentle / slip steep), a low-freq
+  //    draa undulation, and a fine ripple overlay, then blends into the
+  //    surrounding desert over a wide border zone. All shape math is PURE
+  //    (same x,z,seed → same height). Playability (research digest table): the
+  //    KCC climbs ≤50°, so windward faces MUST stay ≤~30°; slip faces sit at the
+  //    dry-sand angle of repose (~28-36°) — the sled's playground (cycle 5+).
+  //    The dune-slope probe (verify:chunks) asserts these numerically.
+  // Region grid: erg uses its OWN, LARGER region cell so a single erg spans
+  // multiple km (a dune SEA, not one glance). ERG_REGION_CHUNKS × CHUNK_SIZE
+  // (32 × 112 = 3584m) per cell; the anchor is kept a full radius inside its
+  // cell so adjacent ergs never overlap (a 3×3 neighborhood scan suffices).
+  ERG_REGION_CHUNKS: 32,               // 3584m region cell (vs 16 for wreck/bone)
+  ERG_REGION_CHANCE: 0.14,             // per-region presence — rare but findable (~bone_field rarity)
+  ERG_REGION_MIN_DIST: 3400,           // anchors ≥ this from origin; erg edge stays clear of the 1697m boot ring (3400−1500=1900m)
+  ERG_FIELD_RADIUS: 1500,              // erg influence radius (m) — diameter 3km core + border
+  ERG_CORE_FRAC: 0.38,                 // inner fraction at full erg mask; core→edge is a WIDE smoothstep border (~930m) so the mask gradient can't spike a seam slope
+  // Erg heightfield shape (sampleErgHeight). Tuned against the dune-slope probe.
+  ERG_DUNE_WAVELENGTH: 300,            // primary mega-dune spacing (m) — 150-300 per the playability table
+  ERG_DUNE_HEIGHT: 64,                 // primary mega-dune peak height (m) — 40-70 target (× envelope → ~40-64m crest-to-trough)
+  ERG_WINDWARD_FRAC: 0.75,             // along-wind fraction spent on the GENTLE windward rise (rest = steep slip face)
+  ERG_ANISO_RATIO: 0.34,              // <1 = ridges elongate perpendicular to the erg's wind
+  ERG_WARP_SCALE: 620,                 // wavelength of the along-wind warp channel (meanders the ridges) — LOW-freq so it curves ridges without injecting steep cross-slopes
+  ERG_ASYMMETRY_AMOUNT: 36,            // organic u-warp (m); gently curves the mega ridges (kept modest so it doesn't blur the windward/slip asymmetry)
+  ERG_RIDGE_ENV_SCALE: 900,            // perpendicular envelope wavelength — breaks infinite walls into finite dunes
+  ERG_RIDGE_ENV_MIN: 0.62,             // min height factor of the envelope (troughs between dune segments never flatten fully) — higher floor tightens the slip-slope spread across the field
+  ERG_RIDGE_ENV_MAX: 0.9,              // max height factor — caps the TALLEST dunes so their windward stays ≤30° and slip faces don't go cliff-vertical
+  ERG_MEGA_WAVELENGTH: 1150,           // low-freq draa undulation (large-scale rise/fall)
+  ERG_MEGA_HEIGHT: 16,                 // draa undulation amplitude (m)
+  ERG_MEDIUM_WAVELENGTH: 68,           // fine wind-ripple overlay wavelength
+  ERG_MEDIUM_HEIGHT: 2.6,              // fine ripple amplitude (kept small — ripples must not spike face slopes)
+  ERG_DUNE_AMP_MIN: 34,                // probe bound: primary crest-to-trough amplitude ≥ this
+  ERG_DUNE_AMP_MAX: 80,                // probe bound: primary crest-to-trough amplitude ≤ this
+  ERG_POI_CHANCE_MULT: 0.15,           // erg is near-EMPTY by design — POI roll = base × this (troughs get sparse dressing later, cycle 4)
+
   // Biomes (Session P; GG — rescaled for 2400m world)
   BIOME_NOISE_FREQ: 1 / 900,           // GG — 1/220 → 1/900; vast biome regions (~2.67 per 2400m axis)
   BIOME_THRESHOLD_ROCKY: -0.22,        // noise < this → rocky

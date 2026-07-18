@@ -340,6 +340,11 @@ export function createChunkManager(
     // theirs from the roll). Same archetype weights (the graveyard mix).
     const poiChance = biome === 'wreck_yard'
       ? Tuning.CHUNK_POI_CHANCE * 6
+      // The Deep Desert — the erg is near-EMPTY by design: heavily reduced POI
+      // roll (troughs get their sparse dressing in a later cycle). A lone wreck
+      // half-buried in the sand sea is a discovery, not clutter.
+      : biome === 'erg'
+      ? Tuning.CHUNK_POI_CHANCE * Tuning.ERG_POI_CHANCE_MULT
       : Tuning.CHUNK_POI_CHANCE;
     const present = outsideOrigin && roll < poiChance;
     const poi: ChunkPoiDesc = { present, x: px, z: pz, biome, archetype, renderSeed };
@@ -489,13 +494,15 @@ export function createChunkManager(
     const rlRoll = roamRand();
     const rlx = cx * SIZE + roamRand() * SIZE;
     const rlz = cz * SIZE + roamRand() * SIZE;
-    if (outsideOrigin && rlRoll < Tuning.CHUNK_ROAM_LIZARD_CHANCE && biomes.biomeAt(rlx, rlz) !== 'salt') {
+    // The erg is treated like salt for ambient life — a hushed, near-empty dune
+    // sea (the biome soundscape hush comes in a later cycle). No roaming prey.
+    if (outsideOrigin && rlRoll < Tuning.CHUNK_ROAM_LIZARD_CHANCE && biomes.biomeAt(rlx, rlz) !== 'salt' && biomes.biomeAt(rlx, rlz) !== 'erg') {
       fauna.roamLizards = [{ x: rlx, z: rlz }];
     } else fauna.roamLizards = [];
     const rsRoll = roamRand();
     const rsx = cx * SIZE + roamRand() * SIZE;
     const rsz = cz * SIZE + roamRand() * SIZE;
-    if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt') {
+    if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt' && biomes.biomeAt(rsx, rsz) !== 'erg') {
       fauna.roamShrews = [{ x: rsx, z: rsz }];
     } else fauna.roamShrews = [];
     // M8 — a rare CIRCLING vulture wheeling over this chunk (aerial life for the
