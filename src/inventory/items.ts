@@ -29,6 +29,7 @@ import { createGlassMaterial, type GlassMaterialOpts } from '../world/glassMater
 import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../world/branchMesh.ts';  // ACAA — shared branch model + shared color (item + world pickups)
 import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model (item + world pickups)
 import { buildRelicCoreMesh } from '../world/relicMesh.ts';  // ACAQ — shared relic-core model (item + world pickups)
+import { buildMetalPipeMesh, buildMachinePartMesh, buildWiringMesh, buildBatteryMesh } from '../world/materialMesh.ts';  // Scavenger's Economy — shared salvage-material models (item + world pickups)
 
 // ACT — viewmodel material wrappers. EVERY item mesh is rendered as a
 // VIEWMODEL: it's added to the main scene and tracks the camera (FP copy) or
@@ -357,6 +358,111 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const s = svg();
       s.appendChild(svgEl('polygon', { points: '5,8 9,4 16,5 20,10 18,17 12,20 6,16' }));
       s.appendChild(svgEl('line', { x1: '9', y1: '10', x2: '14', y2: '14', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
+  // ── Scavenger's Economy (build 2) — the four salvage MATERIALS. Crafting
+  //    materials only (build 3 wires them into existing-item recipes); onUse is a
+  //    craft-hint no-op like cloth. Distinct silhouettes via shared materialMesh
+  //    builders (matches the world pickups scattered at POIs). Drop per the
+  //    per-POI identity matrix (config/lootRegistry.ts). ──
+  metal_pipe: {
+    id: 'metal_pipe',
+    name: 'METAL PIPE',
+    glyph: '⌷',
+    description: 'a length of salvaged tube',
+    stackable: true,
+    maxStack: 6,
+    onUse(_ctx, _slot) {
+      return { consumed: false, message: 'press C to craft' };
+    },
+    makeViewModel() {
+      const mat = vmMetal(0x8a8278, { wornScale: 10.0, scratchStrength: 0.07, rustLevel: 0.5 });
+      const bandMat = vmMetal(0x6a4a34, { wornScale: 8.0, rustLevel: 0.8 });
+      return buildMetalPipeMesh(mat, bandMat);
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '8', y: '3', width: '8', height: '18', rx: '3.6' }));
+      s.appendChild(svgEl('ellipse', { cx: '12', cy: '4.5', rx: '3', ry: '1.4' }));
+      return s;
+    },
+  },
+
+  machine_part: {
+    id: 'machine_part',
+    name: 'MACHINE PART',
+    glyph: '⚙',
+    description: 'gears and springs pulled from a dead machine',
+    stackable: true,
+    maxStack: 8,
+    onUse(_ctx, _slot) {
+      return { consumed: false, message: 'press C to craft' };
+    },
+    makeViewModel() {
+      const mat = vmMetal(0x5a564e, { wornScale: 8.0, scratchStrength: 0.08, rustLevel: 0.55 });
+      const accentMat = vmMetal(0x8c8478, { wornScale: 5.0, rustLevel: 0.3 });
+      return buildMachinePartMesh(mat, accentMat);
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('circle', { cx: '12', cy: '12', r: '5' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '12', r: '1.6' }));
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const x1 = 12 + Math.cos(a) * 5, y1 = 12 + Math.sin(a) * 5;
+        const x2 = 12 + Math.cos(a) * 7.2, y2 = 12 + Math.sin(a) * 7.2;
+        s.appendChild(svgEl('line', { x1: x1.toFixed(1), y1: y1.toFixed(1), x2: x2.toFixed(1), y2: y2.toFixed(1) }));
+      }
+      return s;
+    },
+  },
+
+  wiring: {
+    id: 'wiring',
+    name: 'WIRING',
+    glyph: '∿',
+    description: 'a coil of stripped cabling',
+    stackable: true,
+    maxStack: 8,
+    onUse(_ctx, _slot) {
+      return { consumed: false, message: 'press C to craft' };
+    },
+    makeViewModel() {
+      const mat = vmMetal(0x7a5230, { wornScale: 9.0, scratchStrength: 0.05, rustLevel: 0.35 });
+      const accentMat = vmMetal(0x3a3630, { wornScale: 6.0, rustLevel: 0.4 });
+      return buildWiringMesh(mat, accentMat);
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('circle', { cx: '11', cy: '12', r: '6' }));
+      s.appendChild(svgEl('circle', { cx: '13', cy: '11', r: '3.4' }));
+      s.appendChild(svgEl('line', { x1: '17', y1: '13', x2: '21', y2: '15' }));
+      return s;
+    },
+  },
+
+  battery: {
+    id: 'battery',
+    name: 'BATTERY',
+    glyph: '▮',
+    description: 'a small power cell. still holds a charge',
+    stackable: true,
+    maxStack: 8,
+    onUse(_ctx, _slot) {
+      return { consumed: false, message: 'press C to craft' };
+    },
+    makeViewModel() {
+      const mat = vmMetal(0x3a4a44, { wornScale: 7.0, scratchStrength: 0.05, rustLevel: 0.3 });
+      const accentMat = vmMetal(0x9a8a52, { wornScale: 5.0, rustLevel: 0.2 });
+      return buildBatteryMesh(mat, accentMat);
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '8', y: '6', width: '8', height: '15', rx: '1.2' }));
+      s.appendChild(svgEl('rect', { x: '10.5', y: '3.5', width: '3', height: '2.5' }));
+      s.appendChild(svgEl('line', { x1: '9.5', y1: '13', x2: '14.5', y2: '13', 'stroke-width': '1' }));
       return s;
     },
   },
@@ -1447,6 +1553,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
 
   // ─── Food items (new in Session F) ────────────────────────────────────────
 
+  // DEPRECATED-UNOBTAINABLE (Scavenger's Economy build 2): no grant path spawns
+  // this anymore (only alien cacti spawn → alien_fruit; the harvest else-branch,
+  // cook map, dev grant + tutorial hint were removed). Kept ONLY so an old save
+  // holding cactus_pulp still resolves getItemDef() on load (save.ts does not
+  // validate itemIds). Same for cooked_cactus_pulp below.
   cactus_pulp: {
     id: 'cactus_pulp',
     name: 'CACTUS PULP',

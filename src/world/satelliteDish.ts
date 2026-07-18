@@ -907,32 +907,17 @@ export function placeSatelliteDish(
   group.updateMatrixWorld(true);
   attachAabbCollider(world, dishPivot);
 
-  // Sand mounds — added as direct scene children AFTER the dish group
-  // is placed, so each mound's Y is terrain-snapped independently.
-  // This avoids the "mound floats" problem the rotated group caused
-  // (when the dish group pitched 15-30°, mounds on the up-side floated
-  // 1m above ground, mounds on the down-side sank 1m below). Each
-  // mound now lives in its own scene position derived from the dish
-  // POI's world XZ + a random outward offset, with Y sampled at that
-  // exact spot.
+  // Exterior sand mounds REMOVED (Zach 2026-07-17: standalone sand cones read
+  // weird + conflict with the terrain — the same call the wreck pipelines dropped
+  // in 2026-06-18). The 5 rand() draws per mound are PRESERVED (meshes discarded)
+  // so the POI's seeded layout stays byte-identical and the chunk/merge digests
+  // don't move. The INTERIOR sand pile (baseGroup, above) stays — it's dressing
+  // inside the enclosed base, not a pile on the open dune.
   for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2 + rand() * 0.35;
-    const r = BASE_W * 0.55 + rand() * 2.0;
-    const moundX = pos.x + Math.cos(a) * r;
-    const moundZ = pos.z + Math.sin(a) * r;
-    const moundY = terrain.heightAt(moundX, moundZ);
-    const mound = new THREE.Mesh(
-      new THREE.ConeGeometry(1.2 + rand() * 0.7, 0.7 + rand() * 0.5, 6),
-      _sandPileMat,
-    );
-    // Mound sits with its BASE on the terrain (cone origin at center,
-    // height/2 below origin is the tip-bottom; ConeGeometry has the
-    // apex at +Y and the base at -Y by default).
-    mound.position.set(moundX, moundY - 0.15, moundZ);
-    mound.rotation.y = rand() * Math.PI * 2;
-    mound.castShadow = true;
-    mound.receiveShadow = true;
-    scene.add(mound);
+    rand();          // former mound angle-jitter
+    rand();          // former radial offset
+    rand(); rand();  // former ConeGeometry radius + height
+    rand();          // former mound yaw
   }
 
   // (Wrapping sand burial dune removed — read as a fake-looking sphere

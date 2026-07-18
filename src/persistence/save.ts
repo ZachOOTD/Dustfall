@@ -116,12 +116,28 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // behavior). Also v17: `player.pos` is captured via the speeder-aware
 // getPlayerPos (saving while MOUNTED used to record the parked capsule at
 // (0,-2000,0) — D297).
-export const SAVE_VERSION = 17;
+// Walk-test rebalance (2026-07-17) — v18 is a WORLD-LAYOUT version bump, not an
+// additive schema change. The boot POI density was rebalanced (procgen POIs +
+// flagships + clusters re-sampled AREA-UNIFORM, procgen count 22→18, radii +
+// CHUNK_POI_CHANCE + origin-exclusion retuned) to make the origin and far field
+// read at a uniform density. That perturbs the deterministic boot RNG stream, so
+// every seeded-world id (pickups, salvageables, lizards/shrews/vultures, cacti,
+// far-field chunk diffs) shifts vs a pre-18 save. Reconciling old ids against the
+// new world would MIS-MAP (silent world-state corruption). So a pre-18 save loads
+// the NEW world PRISTINE — all seeded scatter/creatures/wrecks/far-field reset to
+// full — while the PLAYER carries over intact: pose, stats, inventory, known
+// recipes, collected-item ledger, dropped physical items, time survived, weather.
+// Net for a pre-18 player: "the desert was rebalanced; loose salvage respawned,
+// but your character and gear are exactly as you left them." No corruption.
+export const SAVE_VERSION = 18;
+/** Saves at or below this version predate the 2026-07-17 boot-density rebalance;
+ *  their seeded-world reconciliation is skipped (load the new world pristine). */
+const WORLD_LAYOUT_REBALANCE_VERSION = 18;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -772,6 +788,16 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     };
   }
 
+  // Walk-test rebalance (2026-07-17) — a save from BEFORE the boot-density
+  // rebalance was baked against a different deterministic boot layout, so its
+  // seeded-world ids (pickups / salvageables / lizards / shrews / vultures /
+  // cacti / far-field chunk diffs) no longer map onto the current world.
+  // Reconciling them would mis-map (silent world-state corruption). For a
+  // pre-rebalance save we therefore SKIP every seeded-world reconcile and let
+  // the freshly-built world stand pristine; the player (pose/stats/inventory/
+  // recipes/dropped items/time/weather, restored below) carries over intact.
+  const worldRebalanced = save.version < WORLD_LAYOUT_REBALANCE_VERSION;
+
   // ── Player body + camera ──
   ctx.player.body.body.setTranslation(save.player.pos, true);
   // ABR P2 — snap 3P camera (no lerp from default boot position to
@@ -864,11 +890,15 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   //    save's survivor set. Captures both "taken since boot" (id is a
   //    seeded id missing from survivors) and "dropped since save"
   //    (id is greater than any seeded id and not in survivors). ──
-  const survivorSet = new Set(save.pickupSurvivors);
-  // Slice because despawnPickup mutates ctx.pickups.list while we iterate.
-  for (const p of ctx.pickups.list.slice()) {
-    if (!survivorSet.has(p.id)) {
-      despawnPickup(ctx, p);
+  // Rebalance migration: skip survivor culling for a pre-18 save (its ids no
+  // longer map) → the new world's seeded scatter loads pristine (all present).
+  if (!worldRebalanced) {
+    const survivorSet = new Set(save.pickupSurvivors);
+    // Slice because despawnPickup mutates ctx.pickups.list while we iterate.
+    for (const p of ctx.pickups.list.slice()) {
+      if (!survivorSet.has(p.id)) {
+        despawnPickup(ctx, p);
+      }
     }
   }
 
@@ -924,6 +954,10 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   //    0 right after a load), so the player gets a fresh DAY_LENGTH_SECONDS
   //    wait before the fruit reappears — they don't get a free
   //    instant-regrow by saving and reloading. ──
+  // Rebalance migration (pre-18): the boot scatterRand stream that places cacti +
+  // creatures was perturbed, so saved ids no longer map — skip all of these
+  // seeded-world reconciles and let the fresh boot population stand pristine.
+  if (!worldRebalanced) {
   for (const saved of save.cacti) {
     if (!saved.harvested) continue;
     const cactus = ctx.cacti.list.find((c) => c.id === saved.id);
@@ -1006,6 +1040,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       // perched / flee → leave as the boot-spawned perched bird (re-derives).
     }
   }
+  } // end if (!worldRebalanced) — seeded cacti/creature reconciles
 
   // ── ACL — Storm wall (v14+): restore the sweeping sandstorm-wall state
   //    verbatim onto ctx.weather.wall (plain data; no re-derivation needed).
@@ -1035,29 +1070,36 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
 
   // ── S5 (v17): hand the streamed far field its per-chunk diffs. Chunks
   //    stream in AFTER this restore (ticks resume post-handoff) and apply
-  //    their diff on load. Pre-v17 saves: absent → empty map. ──
-  ctx.chunks.loadDiffs(save.chunkDiffs);
+  //    their diff on load. Pre-v17 saves: absent → empty map. Rebalance
+  //    migration (pre-18): the origin-exclusion + chunk chance changed, so a
+  //    pre-18 diff can no longer be trusted to align — load the far field
+  //    pristine (undefined → empty map), consistent with the origin reset. ──
+  ctx.chunks.loadDiffs(worldRebalanced ? undefined : save.chunkDiffs);
 
-  // ── Salvageables: patch remaining + apply dim if stripped. ──
-  for (const saved of save.salvageables) {
-    const s = ctx.salvageables.list.find((x) => x.id === saved.id);
-    if (!s) continue;
-    s.salvageRemaining = saved.salvageRemaining;
-    if (saved.stripped) markSalvageStripped(s);
-    // ACAX — re-hide the components that were gone at save time (extracted +
-    // condition-surplus) so the visible set matches salvageRemaining on reload.
-    if (saved.extractedIndices) {
-      const comps = (s.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
-      for (const idx of saved.extractedIndices) { if (comps[idx]) comps[idx].visible = false; }
+  // ── Salvageables + loot containers: seeded-world state keyed by boot id.
+  //    Rebalance migration skips them for a pre-18 save (ids no longer map →
+  //    wrecks/containers load full/unstripped). ──
+  if (!worldRebalanced) {
+    for (const saved of save.salvageables) {
+      const s = ctx.salvageables.list.find((x) => x.id === saved.id);
+      if (!s) continue;
+      s.salvageRemaining = saved.salvageRemaining;
+      if (saved.stripped) markSalvageStripped(s);
+      // ACAX — re-hide the components that were gone at save time (extracted +
+      // condition-surplus) so the visible set matches salvageRemaining on reload.
+      if (saved.extractedIndices) {
+        const comps = (s.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+        for (const idx of saved.extractedIndices) { if (comps[idx]) comps[idx].visible = false; }
+      }
     }
-  }
 
-  // ── Loot containers ──
-  for (const saved of save.lootContainers) {
-    const c = ctx.lootContainers.list.find((x) => x.id === saved.id);
-    if (!c) continue;
-    c.opened = saved.opened;
-    c.contents = saved.contents.map((e) => ({ ...e }));
+    // ── Loot containers ──
+    for (const saved of save.lootContainers) {
+      const c = ctx.lootContainers.list.find((x) => x.id === saved.id);
+      if (!c) continue;
+      c.opened = saved.opened;
+      c.contents = saved.contents.map((e) => ({ ...e }));
+    }
   }
   ctx.lootContainers.open = null;
 

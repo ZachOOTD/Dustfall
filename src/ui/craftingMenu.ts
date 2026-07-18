@@ -28,7 +28,12 @@ import {
   recipeCardState,
   CATEGORY_ORDER,
   CATEGORY_LABEL,
+  MATERIAL_SOURCE,
+  inputIds,
+  inputTypeCollected,
+  inputHeld,
   type Recipe,
+  type RecipeInput,
 } from '../inventory/recipeDiscovery.ts';
 import { playCraft, playUiClick, playUiHover } from '../audio/audio.ts';
 import { resumeFromPause } from './menus.ts';
@@ -96,9 +101,40 @@ function bagTotals(): Map<ItemId, number> {
 
 function canCraftRecipe(r: Recipe, totals: Map<ItemId, number>): boolean {
   for (const inp of r.inputs) {
-    if ((totals.get(inp.id) ?? 0) < inp.count) return false;
+    if (inputHeld(inp, totals) < inp.count) return false;
   }
   return true;
+}
+
+/** The id whose icon represents this input — for an anyOf pool, prefer one the
+ *  player actually holds (so the chip shows the meat they have), else the
+ *  representative `id`. */
+function displayIdOf(inp: RecipeInput, totals: Map<ItemId, number>): ItemId {
+  if (!inp.anyOf) return inp.id;
+  for (const id of inp.anyOf) if ((totals.get(id) ?? 0) > 0) return id;
+  return inp.id;
+}
+
+/** The display name for an input — the anyOf `label` override ("raw meat") or
+ *  the represented item's own name. */
+function inputName(inp: RecipeInput, totals: Map<ItemId, number>): string {
+  if (inp.label) return inp.label;
+  return getItemDef(displayIdOf(inp, totals)).name.toLowerCase();
+}
+
+/** Consume `inp.count` from the player's bag, drawing across the anyOf pool
+ *  (in order) so a generic "raw meat" input eats whatever raw meat is held.
+ *  `totals` is the pre-craft snapshot used to know how much of each id exists. */
+function consumeInput(inp: RecipeInput, totals: Map<ItemId, number>): void {
+  let remaining = inp.count;
+  for (const id of inputIds(inp)) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, totals.get(id) ?? 0);
+    if (take > 0) {
+      removeItems(_ctx!.inventory, id, take);
+      remaining -= take;
+    }
+  }
 }
 
 /** Effective card state — dev mode reveals everything as unlocked so a
@@ -190,13 +226,13 @@ function buildCard(r: Recipe, totals: Map<ItemId, number>): HTMLButtonElement {
     chips.className = 'craft-card-chips';
     const collected = _ctx!.inventory.collectedItemTypes;
     for (const inp of r.inputs) {
-      const known = state === 'unlocked' || collected.has(inp.id);
+      const known = state === 'unlocked' || inputTypeCollected(inp, collected);
       const chip = document.createElement('div');
       chip.className = 'craft-card-chip';
       if (known) {
-        const short = state === 'unlocked' && (totals.get(inp.id) ?? 0) < inp.count;
+        const short = state === 'unlocked' && inputHeld(inp, totals) < inp.count;
         if (short) chip.classList.add('short');
-        chip.appendChild(makeItemIcon(inp.id));
+        chip.appendChild(makeItemIcon(displayIdOf(inp, totals)));
       } else {
         const q = document.createElement('span');
         q.className = 'craft-card-chip-q';
@@ -237,18 +273,18 @@ function renderDetail(): void {
   const ings = document.createElement('div');
   ings.className = 'craft-detail-ings';
   for (const inp of r.inputs) {
-    const known = state === 'unlocked' || collected.has(inp.id);
+    const known = state === 'unlocked' || inputTypeCollected(inp, collected);
     const ing = document.createElement('div');
     ing.className = 'craft-detail-ing';
     if (known) {
-      ing.appendChild(makeItemIcon(inp.id));
+      ing.appendChild(makeItemIcon(displayIdOf(inp, totals)));
       const label = document.createElement('div');
-      const have = totals.get(inp.id) ?? 0;
+      const have = inputHeld(inp, totals);
       const ok = have >= inp.count;
       label.className = 'craft-detail-ing-label' + (state === 'unlocked' && !ok ? ' missing' : '');
       label.textContent = state === 'unlocked'
-        ? `${have}/${inp.count} ${getItemDef(inp.id).name.toLowerCase()}`
-        : getItemDef(inp.id).name.toLowerCase();
+        ? `${have}/${inp.count} ${inputName(inp, totals)}`
+        : inputName(inp, totals);
       ing.appendChild(label);
     } else {
       ing.appendChild(makeUnknownIcon());
@@ -277,6 +313,39 @@ function renderDetail(): void {
   out.appendChild(outName);
   flow.appendChild(out);
   _detailEl.appendChild(flow);
+
+  // Source hints — for each MISSING material (unlocked recipe, short in bag),
+  // a diegetic "where it lives" line so the card teaches the drop matrix.
+  // Keyed by the input's representative id (anyOf pools reuse it). DOM rule:
+  // createElement + textContent only, no innerHTML concat.
+  if (state === 'unlocked') {
+    const missing: { name: string; src: string }[] = [];
+    for (const inp of r.inputs) {
+      if (inputHeld(inp, totals) >= inp.count) continue;
+      const src = MATERIAL_SOURCE[inp.id];
+      if (src) missing.push({ name: inputName(inp, totals), src });
+    }
+    if (missing.length > 0) {
+      const srcBox = document.createElement('div');
+      srcBox.className = 'craft-detail-sources';
+      for (const m of missing) {
+        const line = document.createElement('div');
+        line.className = 'craft-detail-source';
+        const nm = document.createElement('span');
+        nm.className = 'craft-detail-source-name';
+        nm.textContent = m.name;
+        const sep = document.createElement('span');
+        sep.textContent = ' — ';
+        const tx = document.createElement('span');
+        tx.textContent = m.src;
+        line.appendChild(nm);
+        line.appendChild(sep);
+        line.appendChild(tx);
+        srcBox.appendChild(line);
+      }
+      _detailEl.appendChild(srcBox);
+    }
+  }
 
   // Flavor / tease line.
   const desc = document.createElement('div');
@@ -323,7 +392,7 @@ function performCraft(r: Recipe): void {
   const totals = bagTotals();
   if (!canCraftRecipe(r, totals)) return;   // gated by the disabled button, but re-check
 
-  for (const inp of r.inputs) removeItems(ctx.inventory, inp.id, inp.count);
+  for (const inp of r.inputs) consumeInput(inp, totals);
 
   const dropped = addOutputWithOverflow(ctx, r);
   playCraft();
@@ -410,6 +479,23 @@ export function closeCraftingMenu(): void {
 
 export function isCraftingMenuOpen(): boolean {
   return _open;
+}
+
+/** DEV/TEST-only — craft a recipe by its numeric id through the REAL craft
+ *  path (canCraft gate → anyOf-aware input consumption → output with overflow
+ *  drop), bypassing the DOM selection. Returns whether it crafted + the output
+ *  id, for the craft-unlock rig-shot gate to assert consumption + yield.
+ *  NON-dev semantics: it respects material cost (no free craft). Requires the
+ *  menu to have been constructed (createCraftingMenu, done at boot). */
+export function craftById(id: number): { crafted: boolean; output: ItemId | null } {
+  if (!_ctx) return { crafted: false, output: null };
+  const r = RECIPES.find((x) => x.id === id);
+  if (!r) return { crafted: false, output: null };
+  const totals = bagTotals();
+  if (!canCraftRecipe(r, totals)) return { crafted: false, output: null };
+  for (const inp of r.inputs) consumeInput(inp, totals);
+  addOutputWithOverflow(_ctx, r);
+  return { crafted: true, output: r.output.id };
 }
 
 // Canonical recipe list re-export for any other code that enumerates.

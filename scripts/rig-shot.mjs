@@ -1447,6 +1447,137 @@ const SCENARIOS = {
     console.log(`[drop-test] ${allOk ? 'PASS' : 'FAIL'} ${JSON.stringify(after)}`);
   },
 
+  // Scavenger's Economy (build 2) — MATERIAL PICKUP + ICON probe. Spawns the four
+  // new salvage-material WORLD pickups (spawnMaterialTest → the streamed-scatter
+  // path) in a row in front of the player, asserts each builds a non-degenerate
+  // mesh + carries the right itemId (what E-take grants), takes them via the real
+  // acquire path (giveItem = addItem) so the ItemId lands in inventory, and puts
+  // the four in the (cleared) hotbar so their makeIcon glyphs render for a
+  // screenshot. Screenshots the game view (ground pickups + hotbar icons).
+  'material-probe': async (page) => {
+    const IDS = ['metal_pipe', 'machine_part', 'wiring', 'battery'];
+    const r = await page.evaluate((IDS) => {
+      const g = window.__game; g.enterGame(true);
+      const ctx = g.ctx;
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.toneMappingExposure = 1.15;
+      ctx.flags.paused = false;
+      // Clear the dev loadout so the 4 materials land in the 4 hotbar slots (icons).
+      for (const s of ctx.inventory.slots) { s.item = null; s.count = 0; s.meta = undefined; }
+      for (const s of ctx.inventory.backpack) { s.item = null; s.count = 0; s.meta = undefined; }
+      const world = {};
+      let off = -2.1;
+      for (const id of IDS) {
+        const pid = g.spawnMaterialTest(id, off); off += 1.4;
+        const p = ctx.pickups.list.find((pp) => pp.id === pid);
+        const geo = p && p.mesh && p.mesh.geometry;
+        let sz = null;
+        if (geo) { geo.computeBoundingBox(); const b = geo.boundingBox; sz = { x: +(b.max.x - b.min.x).toFixed(3), y: +(b.max.y - b.min.y).toFixed(3), z: +(b.max.z - b.min.z).toFixed(3) }; }
+        world[id] = {
+          spawned: !!p,
+          itemIdMatches: !!p && p.itemId === id,          // what E-take would grant
+          meshNonZero: !!sz && sz.x > 0.02 && sz.y > 0.02 && sz.z > 0.02,
+          sz,
+        };
+      }
+      // Take path: the four via the REAL acquire path (giveItem = addItem, exactly
+      // what interaction.ts calls on E), landing them in the cleared hotbar.
+      for (const id of IDS) g.giveItem(id, 1);
+      const inv = {};
+      for (const id of IDS) {
+        inv[id] = ctx.inventory.slots.concat(ctx.inventory.backpack)
+          .filter((s) => s.item === id).reduce((a, s) => a + s.count, 0);
+      }
+      // Icons: after giveItem, the hotbar DOM re-renders makeIcon SVGs into its
+      // slots. Count the rendered <svg> nodes in the hotbar (>0 = icons render).
+      const hotbarSvgs = document.querySelectorAll('#hotbar svg').length;
+      return { world, inv, hotbarSvgs };
+    }, IDS);
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: join(OUT, 'scen-material-probe.png'), fullPage: false, timeout: 60000 });
+    const worldOk = IDS.every((id) => r.world[id].spawned && r.world[id].itemIdMatches && r.world[id].meshNonZero);
+    const takeOk = IDS.every((id) => r.inv[id] === 1);
+    const pass = worldOk && takeOk;
+    console.log(`[material-probe] ${pass ? 'PASS' : 'FAIL'} (world=${worldOk} take=${takeOk}) ${JSON.stringify(r)}`);
+  },
+
+  // WALK-TEST FIX (2026-07-17) — ORIGIN-WORLD ground-scatter gate. Proves the fresh
+  // boot world (not the streamed far field) has IDENTITY MATERIAL pickups on the
+  // ground around wrecks/POIs, not just scrap. Buckets every material pickup by its
+  // nearest salvageable (attributed to that wreck's archetype, or kind:* for the
+  // generic hulls), prints per-POI-type counts, and PASSES when ≥3 distinct POI
+  // types carry materials INCLUDING at least one GENERIC wreck (a kind:* / generic
+  // hull) — the "every wreck teaches materials exist" contract. Then frames the
+  // richest origin wreck so the ground materials are visible in a screenshot.
+  'material-scatter': async (page) => {
+    const MATS = ['metal_pipe', 'machine_part', 'wiring', 'battery'];
+    const GENERIC_ARCH = ['derelict', 'hollow_husk', 'enterable_wreck', 'crash_husk', 'ship'];
+    const r = await page.evaluate(({ MATS, GENERIC_ARCH }) => {
+      const g = window.__game; const ctx = g.ctx;
+      const matSet = new Set(MATS);
+      // Archetype from a salvageable mesh's ancestry (poiAssembler stamps
+      // group.userData.poiArchetype; legacy/anchor/hero wrecks have none).
+      const archOf = (obj) => { for (let o = obj; o; o = o.parent) { const a = o.userData && o.userData.poiArchetype; if (typeof a === 'string') return a; } return null; };
+      // Bucket label per wreck: archetype id, else kind:<salvageKind>. Filter
+      // TRANSIENT (chunk-streamed) salvageables so this measures the BOOT origin
+      // world exactly — not far-field content streamed in once the player entered.
+      const salv = ctx.salvageables.list.filter((s) => !s.transient).map((s) => {
+        const a = archOf(s.mesh);
+        const label = a || ('kind:' + s.kind);
+        const generic = !a || GENERIC_ARCH.indexOf(a) >= 0 || label.indexOf('kind:') === 0;
+        return { x: s.pos.x, z: s.pos.z, label, generic };
+      });
+      const perType = {};   // label -> {metal_pipe,machine_part,wiring,battery,total,generic}
+      let orphan = 0;       // materials with no salvageable within radius
+      let best = null;      // richest wreck (most nearby materials) for the shot
+      const nearby = new Map();
+      const RADIUS = 22;    // ≥ the massive scrap-ring max; nearest wins on overlap
+      for (const p of ctx.pickups.list) {
+        if (!matSet.has(p.itemId) || p.transient) continue;   // boot materials only (not streamed)
+        let bi = -1, bd = RADIUS * RADIUS;
+        for (let i = 0; i < salv.length; i++) {
+          const dx = p.pos.x - salv[i].x, dz = p.pos.z - salv[i].z;
+          const d = dx * dx + dz * dz;
+          if (d < bd) { bd = d; bi = i; }
+        }
+        if (bi < 0) { orphan++; continue; }
+        const s = salv[bi];
+        const b = perType[s.label] || (perType[s.label] = { metal_pipe: 0, machine_part: 0, wiring: 0, battery: 0, total: 0, generic: s.generic });
+        b[p.itemId]++; b.total++;
+        nearby.set(bi, (nearby.get(bi) || 0) + 1);
+      }
+      for (const [i, n] of nearby) if (!best || n > best.n) best = { i, n, x: salv[i].x, z: salv[i].z, label: salv[i].label };
+      // Frame the richest wreck: camera up-and-back, looking down at the ground ring.
+      if (best) {
+        ctx.weather.intensity = 0; g.setTime(0.42);
+        ctx.three.renderer.toneMappingExposure = 1.15;
+        ctx.flags.paused = true;
+        const gy = ctx.terrain.heightAt(best.x, best.z);
+        const cam = ctx.three.camera;
+        cam.position.set(best.x + 6, gy + 4.2, best.z + 6);
+        cam.lookAt(best.x, gy + 0.1, best.z);
+        cam.updateMatrixWorld(true);
+      }
+      const totalMats = ctx.pickups.list.filter((p) => matSet.has(p.itemId) && !p.transient).length;
+      const typesWithMats = Object.keys(perType).length;
+      const genericTypes = Object.keys(perType).filter((k) => perType[k].generic);
+      return { perType, orphan, totalMats, typesWithMats, genericTypes, best };
+    }, { MATS, GENERIC_ARCH });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(OUT, 'scen-material-scatter.png'), fullPage: false, timeout: 60000 });
+    // Per-type table.
+    const rows = Object.entries(r.perType).sort((a, b) => b[1].total - a[1].total);
+    console.log(`[material-scatter] ${r.totalMats} material pickups in the origin world across ${r.typesWithMats} POI types (orphan=${r.orphan}):`);
+    for (const [label, b] of rows) {
+      console.log(`  ${label.padEnd(18)} total=${String(b.total).padStart(3)} ${b.generic ? '[generic]' : '[specialty]'}  pipe=${b.metal_pipe} part=${b.machine_part} wiring=${b.wiring} batt=${b.battery}`);
+    }
+    const enough = r.typesWithMats >= 3;
+    const hasGeneric = r.genericTypes.length > 0;
+    const pass = enough && hasGeneric && r.totalMats > 0;
+    console.log(`[material-scatter] ${pass ? 'PASS' : 'FAIL'} — ≥3 POI types with materials: ${enough} (${r.typesWithMats}); includes a generic wreck: ${hasGeneric} (${r.genericTypes.join(',') || 'none'})`);
+    if (r.best) console.log(`[material-scatter] shot framed on richest wreck "${r.best.label}" (${r.best.n} materials nearby) → verification/scen-material-scatter.png`);
+  },
+
   // Crafting rework — PICKUP-GATED discovery gate (replaces the old craft-chooser
   //   gate). A recipe unlocks once ALL its ingredient TYPES have been collected
   //   (any means — pickup/craft/loot, all via addItem). Runs NON-dev (enterGame(false),
@@ -1475,7 +1606,10 @@ const SCENARIOS = {
       out.afterCloth = { machete: g.craftCardState(MACHETE) };
       g.giveItem('branch', 1);
       out.afterBranch = { fire: g.craftCardState(FIRE), signal: g.craftCardState(SIGNAL) };
-      out.sledBefore = g.craftCardState(SLED);           // warm — scrap+branch collected, no rope
+      // Scavenger's Economy (build 3) — sled_kit now also needs metal_pipe. Give it
+      // FIRST so the chain still proves "the CRAFTED rope is what flips warm→unlocked".
+      g.giveItem('metal_pipe', 1);
+      out.sledBefore = g.craftCardState(SLED);           // warm — pipe+scrap+branch collected, no rope
       g.giveItem('rope', 1);                             // simulate crafting a rope
       out.sledAfter = g.craftCardState(SLED);            // unlocked — crafted-ingredient chain
       return out;
@@ -1490,8 +1624,146 @@ const SCENARIOS = {
       && s.afterBranch.signal.state === 'unlocked' && s.afterBranch.signal.discovered;
     const chain = s.sledBefore && s.sledBefore.state === 'warm'
       && s.sledAfter && s.sledAfter.state === 'unlocked' && s.sledAfter.discovered;
-    const pass = coldStart && warmScrap && unlockedCloth && collision && chain;
-    console.log(`[craft-unlock] ${pass ? 'PASS' : 'FAIL'} (cold=${coldStart} warm=${warmScrap} unlocked=${unlockedCloth} collision=${collision} chain=${chain}) ${JSON.stringify(r)}`);
+
+    // ── Scavenger's Economy (build 3) — new/updated recipe craft gate. Proves:
+    //   • the 3 NEW recipes (pipe_staff 21, scrap_gun 22, worm_lure 23) unlock on
+    //     collecting their inputs, craft through the REAL craft path, CONSUME the
+    //     right inputs, and YIELD the output.
+    //   • worm_lure's "raw meat" input is ANY-OF (raw_shrew_meat satisfies it).
+    //   • flashlight (5) now requires battery+wiring+scrap — the OLD scrap×2+cloth
+    //     must NOT unlock or craft it.
+    const eco = await page.evaluate(async () => {
+      const g = window.__game;
+      const inv = g.ctx.inventory;
+      const count = (id) => {
+        let n = 0;
+        for (const s of [...inv.slots, ...inv.backpack]) {
+          if (s.item === id && s.count > 0 && !s.meta) n += s.count;
+        }
+        return n;
+      };
+      const reset = () => { inv.discoveredRecipes.length = 0; inv.collectedItemTypes.clear();
+        for (const s of [...inv.slots, ...inv.backpack]) { s.item = null; s.count = 0; s.meta = undefined; } };
+      const PIPE = 21, GUN = 22, LURE = 23, FLASH = 5;
+      const out = {};
+
+      // — NEW recipes: grant the full material spread + rope/cloth/scrap. —
+      reset();
+      for (const [id, n] of [['metal_pipe',2],['machine_part',1],['wiring',1],['battery',1],
+                             ['scrap',2],['cloth',1],['rope',1],['raw_shrew_meat',1]]) g.giveItem(id, n);
+      out.states = { pipe: g.craftCardState(PIPE), gun: g.craftCardState(GUN), lure: g.craftCardState(LURE) };
+
+      // pipe_staff — consumes metal_pipe+cloth+rope, yields pipe_staff.
+      const pipeBefore = { pipe: count('metal_pipe'), cloth: count('cloth'), rope: count('rope'), out: count('pipe_staff') };
+      out.pipeCraft = await g.craft(PIPE);
+      out.pipeAfter = { pipe: count('metal_pipe'), cloth: count('cloth'), rope: count('rope'), out: count('pipe_staff'), before: pipeBefore };
+
+      // scrap_gun — consumes metal_pipe+machine_part+scrap, yields scrap_gun.
+      const gunBefore = { pipe: count('metal_pipe'), mp: count('machine_part'), scrap: count('scrap'), out: count('scrap_gun') };
+      out.gunCraft = await g.craft(GUN);
+      out.gunAfter = { pipe: count('metal_pipe'), mp: count('machine_part'), scrap: count('scrap'), out: count('scrap_gun'), before: gunBefore };
+
+      // worm_lure — consumes battery+wiring+ANY raw meat (raw_shrew_meat here), yields worm_lure.
+      const lureBefore = { batt: count('battery'), wire: count('wiring'), shrew: count('raw_shrew_meat'), out: count('worm_lure') };
+      out.lureCraft = await g.craft(LURE);
+      out.lureAfter = { batt: count('battery'), wire: count('wiring'), shrew: count('raw_shrew_meat'), out: count('worm_lure'), before: lureBefore };
+
+      // — flashlight negative: OLD recipe (scrap×2 + cloth) must NOT make it. —
+      reset();
+      g.giveItem('scrap', 2); g.giveItem('cloth', 1);
+      out.flashOld = { state: g.craftCardState(FLASH), craft: await g.craft(FLASH) };
+      // — flashlight positive: battery+wiring+scrap DOES. —
+      reset();
+      g.giveItem('battery', 1); g.giveItem('wiring', 1); g.giveItem('scrap', 1);
+      const flBefore = { batt: count('battery'), wire: count('wiring'), scrap: count('scrap'), out: count('flashlight') };
+      out.flashNewState = g.craftCardState(FLASH);
+      out.flashNewCraft = await g.craft(FLASH);
+      out.flashNewAfter = { batt: count('battery'), wire: count('wiring'), scrap: count('scrap'), out: count('flashlight'), before: flBefore };
+      return out;
+    });
+
+    const e = eco || {};
+    const newUnlocked = e.states
+      && e.states.pipe.state === 'unlocked' && e.states.pipe.discovered
+      && e.states.gun.state === 'unlocked' && e.states.gun.discovered
+      && e.states.lure.state === 'unlocked' && e.states.lure.discovered;
+    const pipeOk = e.pipeCraft && e.pipeCraft.crafted && e.pipeCraft.output === 'pipe_staff'
+      && e.pipeAfter.out === 1 && e.pipeAfter.pipe === e.pipeAfter.before.pipe - 1
+      && e.pipeAfter.cloth === e.pipeAfter.before.cloth - 1 && e.pipeAfter.rope === e.pipeAfter.before.rope - 1;
+    const gunOk = e.gunCraft && e.gunCraft.crafted && e.gunCraft.output === 'scrap_gun'
+      && e.gunAfter.out === 1 && e.gunAfter.pipe === e.gunAfter.before.pipe - 1
+      && e.gunAfter.mp === e.gunAfter.before.mp - 1 && e.gunAfter.scrap === e.gunAfter.before.scrap - 1;
+    const lureOk = e.lureCraft && e.lureCraft.crafted && e.lureCraft.output === 'worm_lure'
+      && e.lureAfter.out === 1 && e.lureAfter.batt === e.lureAfter.before.batt - 1
+      && e.lureAfter.wire === e.lureAfter.before.wire - 1 && e.lureAfter.shrew === e.lureAfter.before.shrew - 1;
+    const flashNeg = e.flashOld && e.flashOld.state.state !== 'unlocked' && !e.flashOld.craft.crafted;
+    const flashPos = e.flashNewState && e.flashNewState.state === 'unlocked'
+      && e.flashNewCraft && e.flashNewCraft.crafted && e.flashNewCraft.output === 'flashlight'
+      && e.flashNewAfter.out === 1 && e.flashNewAfter.batt === 0 && e.flashNewAfter.wire === 0 && e.flashNewAfter.scrap === 0;
+
+    const pass = coldStart && warmScrap && unlockedCloth && collision && chain
+      && newUnlocked && pipeOk && gunOk && lureOk && flashNeg && flashPos;
+    console.log(`[craft-unlock] ${pass ? 'PASS' : 'FAIL'} (cold=${coldStart} warm=${warmScrap} unlocked=${unlockedCloth} collision=${collision} chain=${chain} newUnlocked=${newUnlocked} pipe=${pipeOk} gun=${gunOk} lure=${lureOk} flashNeg=${flashNeg} flashPos=${flashPos}) ${JSON.stringify(r)} ECO=${JSON.stringify(eco)}`);
+  },
+
+  // Scavenger's Economy (build 3) — SCREENSHOT the crafting panel with the new
+  // cards visible + a source-hint line for a missing material. Enters NON-dev
+  // (real card states), collects every material type so the new recipes unlock,
+  // then EMPTIES battery from the bag so flashlight reads unlocked-but-short →
+  // its detail footer shows the "battery — found in pods, habs and relays" hint.
+  //   node scripts/rig-shot.mjs --scenario=craft-panel --port=5263
+  'craft-panel': async (page) => {
+    await page.evaluate(async () => {
+      const g = window.__game;
+      g.enterGame(false);                 // NON-dev: real card states
+      const ctx = g.ctx;
+      ctx.input.controls.isLocked = false;
+      ctx.flags.paused = false;
+      g.setTime(0.42);
+      ctx.three.renderer.setSize(1000, 1300, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 1300; cam.updateProjectionMatrix(); }
+      // Deterministic clean slate (a CONTINUE loadout can otherwise pre-fill the
+      // bag): empty every slot + the discovery ledgers before granting exactly
+      // what we want on screen.
+      const inv = ctx.inventory;
+      inv.discoveredRecipes.length = 0; inv.collectedItemTypes.clear();
+      for (const s of [...inv.slots, ...inv.backpack]) { s.item = null; s.count = 0; s.meta = undefined; }
+      // Collect every material TYPE so the new + updated recipes all unlock, and
+      // leave enough in the bag that pipe_staff is fully craftable (green).
+      for (const [id, n] of [['metal_pipe',2],['machine_part',1],['wiring',1],['battery',1],
+                             ['scrap',3],['cloth',2],['branch',2],['rope',1],['raw_lizard_meat',1]]) {
+        g.giveItem(id, n);
+      }
+      // Drop battery OUT of the bag (its TYPE stays collected) so battery-bearing
+      // recipes read unlocked-but-short → the source hint renders. Zero the slots
+      // directly (no in-page import — Vite dynamic-import module isolation).
+      for (const s of [...inv.slots, ...inv.backpack]) {
+        if (s.item === 'battery') { s.item = null; s.count = 0; s.meta = undefined; }
+      }
+      await g.openCrafting();
+    });
+    await page.waitForTimeout(400);
+    // Select the worm-lure card (a NEW recipe, short on battery) so the detail
+    // footer + its source-hint line render for the shot.
+    const sel = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('.craft-card')];
+      const names = cards.map((c) => c.querySelector('.craft-card-name')?.textContent || '');
+      const idx = names.findIndex((n) => n.startsWith('worm-lure'));
+      if (idx >= 0) cards[idx].click();
+      return { count: cards.length, names, picked: idx };
+    });
+    console.log('[craft-panel] ' + JSON.stringify(sel));
+    await page.waitForTimeout(300);
+    const diag = await page.evaluate(() => {
+      const selCard = document.querySelector('.craft-card.selected .craft-card-name')?.textContent || '(none)';
+      const detail = (document.querySelector('.craft-detail')?.textContent || '').slice(0, 240);
+      const el = document.querySelector('.craft-detail-sources');
+      return { selCard, detail, src: el ? el.textContent : '(no source block)' };
+    });
+    console.log('[craft-panel] diag = ' + JSON.stringify(diag));
+    await page.screenshot({ path: join(OUT, 'scen-craft-panel.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-craft-panel.png');
   },
 
   // M6 ② (C38) — survival-rebalance gate. Drives the REAL updateStats deterministically
@@ -6850,6 +7122,320 @@ const SCENARIOS = {
     if (!pass) throw new Error('leviathan-walk GATE FAILED');
   },
 
+  // ── ribcage-climb — the CLIMBABLE-SKELETON gate (Zach's walk-test: "the massive
+  //    skeleton needs full collision on the top, i want to be able to climb it").
+  //    Builds the colossal ribcage through the REAL code path (makeGiantRibcage +
+  //    conform + applyColliders) on real terrain ~80m off the player, steps physics
+  //    so the Rapier QueryPipeline sees the new colliders, then proves the collision
+  //    is a walkable surface, not a set of teleport-lie waypoints:
+  //      (A) REST-ON-TOP  — castDown from just above each crest / rib-top sample must
+  //          hit the BONE surface (hitY ≈ sample, well above the sand): a player
+  //          standing there rests ON the bone, no fall-through.
+  //      (B) CLIMB MARCH  — sweep a player-radius sphere from the open SAND up the
+  //          spine crest to the crown, riding the floor each 0.45m step with a ~50°
+  //          step-up limit (0.55m) and ZERO collider overlap. This is the real proof
+  //          a climb path onto the skeleton EXISTS (a gap drops the sphere to sand →
+  //          never reaches the crown; an invisible wall → overlap). The march is the
+  //          proof; the rest checks alone are not (teleported waypoints lie).
+  //      (C) TRAVERSE MARCH — from the crest OUT along a mid-span rib's top to its
+  //          tip, sphere never overlapping + staying on bone: you can walk ALONG it.
+  //    Prints RIBCAGE-CLIMB pass=… for verify:chunks. Also drops marker spheres on the
+  //    proven surface + shoots a framed shot as the "standing on the spine" evidence.
+  //    Run: node scripts/rig-shot.mjs --scenario=ribcage-climb --port=5210
+  'ribcage-climb': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.5);
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const RAPIER = g.RAPIER;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      // dynImport — eval-import first, <script type=module> shim fallback (mirrors
+      // verify-solid: the ribcage builder is not on a game hook, so import it).
+      const dynImport = async (url) => {
+        try { return await (0, eval)(`import(${JSON.stringify(url)})`); }
+        catch (e) {
+          if (e && /module|import/i.test(String(e.message)) === false) throw e;
+          return await new Promise((resx, rej) => {
+            const key = '__si_' + Math.random().toString(36).slice(2);
+            const s = document.createElement('script'); s.type = 'module';
+            s.textContent = `import * as m from ${JSON.stringify(url)}; window[${JSON.stringify(key)}]=m; window.dispatchEvent(new Event(${JSON.stringify(key)}));`;
+            const t = setTimeout(() => { cleanup(); rej(new Error('import timeout ' + url)); }, 20000);
+            const onEvt = () => { const m = window[key]; cleanup(); resx(m); };
+            function cleanup() { clearTimeout(t); window.removeEventListener(key, onEvt); s.remove(); delete window[key]; }
+            window.addEventListener(key, onEvt);
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const mod = await dynImport('/src/world/giantRibcage.ts');
+      const rng = await dynImport('/src/core/rng.ts');
+      const bp = ctx.player.body.body.translation();
+      const bx = bp.x + 80, bz = bp.z + 6;
+      const gy = ctx.terrain.heightAt(bx, bz);
+      const rc = mod.makeGiantRibcage(rng.makeRng(0x8a17ce), {
+        name: 'giantRibcageClimb',
+        conform: { groundAt: (a, b) => ctx.terrain.heightAt(a, b), originX: bx, originZ: bz, yaw: 0, baseY: gy },
+      });
+      rc.group.position.set(bx, gy, bz);
+      rc.group.rotation.y = 0;
+      ctx.three.scene.add(rc.group);
+      const bodiesAdded = rc.applyColliders(ctx.physics.world, new THREE.Vector3(bx, gy, bz), 0);
+      rc.group.updateMatrixWorld(true);
+      const bodyCount = bodiesAdded.length;
+      const probe = rc.group.userData.ribcageProbe;
+      if (!probe || !probe.crest || !probe.crest.length) return { fails: ['no ribcageProbe.crest — collider descriptors missing'], colliders: 0, bodyCount };
+      // STEP physics so the QueryPipeline sees the new colliders (castRay /
+      // intersectionWithShape are vacuous until world.step() — the CLAUDE.md gate lesson).
+      ctx.flags.paused = false;
+      await frames(24);
+      const toW = (p) => { const v = rc.group.localToWorld(new THREE.Vector3(p.x, p.y, p.z)); return { x: v.x, y: v.y, z: v.z }; };
+      const crest = probe.crest.map(toW);
+      const ribRests = probe.ribRests.map(toW);
+      const ribTrav = (probe.ribTraverse || []).map(toW);
+      const fails = [];
+      const excludeBody = ctx.player.body.body;
+      const R = 0.35;                     // Tuning.PLAYER_CAPSULE_RADIUS
+      // Overlap-test ball: slightly UNDER the player radius. A ball centered R above a
+      // castDown point on a TILTED floor (a ramp) grazes the slope face — a false wall.
+      // A real wall (a collider standing UP in the path, taller than the step-up limit)
+      // penetrates far deeper. The under-size ball ignores the graze but still catches
+      // the wall (verify-solid's walkin uses full R because its decks are FLAT).
+      const ball = new RAPIER.Ball(0.27);
+      const OLIFT = 0.20;                  // overlap-ball centre lift above the floor point
+      const IDQ = { x: 0, y: 0, z: 0, w: 1 };
+      const markers = [];                 // world points proven "on bone" (for the evidence shot)
+
+      // (A) REST-ON-TOP — castDown must land on the bone surface, above the sand.
+      const restCheck = (label, pts, sampleN) => {
+        const step = Math.max(1, Math.floor(pts.length / sampleN));
+        let tested = 0, onBone = 0;
+        for (let i = 0; i < pts.length; i += step) {
+          const p = pts[i];
+          const sand = ctx.terrain.heightAt(p.x, p.z);
+          if (p.y - sand < 0.9) continue;                    // barely above sand — nothing to prove
+          tested++;
+          const hit = g.castDown(p.x, p.z, p.y + 0.6, true);
+          if (hit && Math.abs(hit.hitY - p.y) <= 0.75 && hit.hitY - sand > 0.6) {
+            onBone++; markers.push({ x: p.x, y: hit.hitY, z: p.z });
+          } else {
+            fails.push(`${label}[${i}] NOT on bone: hitY=${hit ? hit.hitY.toFixed(2) : 'none'} expected~${p.y.toFixed(2)} sand=${sand.toFixed(2)}`);
+          }
+        }
+        return { tested, onBone };
+      };
+      const crestRest = restCheck('crest', crest, 10);
+      const ribRest = restCheck('rib', ribRests, 8);
+
+      // Sphere-march along a plan polyline, riding the floor each step (castDown) with
+      // a ~50° step-UP limit; records peak floor + first collider overlap.
+      const STEP = 0.45, STEP_UP = 0.55, LIFT = 0.15;
+      const march = (pts) => {
+        let y = pts[0].y; let peak = -Infinity; let overlap = null; let minAboveSand = Infinity; let onBoneSteps = 0, totalSteps = 0;
+        for (let seg = 0; seg < pts.length - 1; seg++) {
+          const a = pts[seg], b = pts[seg + 1];
+          const len = Math.hypot(b.x - a.x, b.z - a.z);
+          const n = Math.max(1, Math.ceil(len / STEP));
+          for (let s = 1; s <= n; s++) {
+            const t = s / n;
+            const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
+            const sand = ctx.terrain.heightAt(px, pz);
+            const hit = g.castDown(px, pz, y + STEP_UP, true);
+            const floor = Math.max(hit ? hit.hitY : -Infinity, sand);
+            y = floor + R + LIFT;
+            peak = Math.max(peak, floor);
+            totalSteps++;
+            if (floor - sand > 0.4) { onBoneSteps++; minAboveSand = Math.min(minAboveSand, floor - sand); }
+            const c = ctx.physics.world.intersectionWithShape({ x: px, y: floor + R + OLIFT, z: pz }, IDQ, ball, undefined, undefined, undefined, excludeBody);
+            if (c !== null && c !== undefined && !overlap) overlap = { x: +px.toFixed(1), y: +y.toFixed(1), z: +pz.toFixed(1), seg };
+          }
+        }
+        return { peak, endY: y, overlap, onBoneSteps, totalSteps };
+      };
+
+      // (B) CLIMB MARCH — from open sand outboard of the low ridge end, up to the crown.
+      let crownIdx = 0; for (let i = 1; i < crest.length; i++) if (crest[i].y > crest[crownIdx].y) crownIdx = i;
+      const crown = crest[crownIdx];
+      // start on the SAND a few m outboard of the near (lower-x) ridge end.
+      const nearEnd = crest[0];
+      const sandStart = { x: nearEnd.x - 5, z: nearEnd.z, y: 0 };
+      sandStart.y = ctx.terrain.heightAt(sandStart.x, sandStart.z) + R + 0.2;
+      const crownSand = ctx.terrain.heightAt(crown.x, crown.z);
+      const climb = march([sandStart, { x: crown.x, y: crown.y, z: crown.z }]);
+      const climbedTo = climb.peak - crownSand;                 // how high above the local sand the sphere got
+      const crownAbove = crown.y - crownSand;
+      const climbOk = !climb.overlap && climb.peak >= crown.y - 1.0;
+      if (climb.overlap) fails.push(`climb: collider OVERLAP at ${JSON.stringify(climb.overlap)} (invisible wall on the ramp)`);
+      if (climb.peak < crown.y - 1.0) fails.push(`climb: reached floor y=${climb.peak.toFixed(2)} (crown ${crown.y.toFixed(2)}, sand ${crownSand.toFixed(2)}) — could not climb onto/up the spine`);
+      if (climbOk) markers.push({ x: crown.x, y: climb.peak, z: crown.z });
+
+      // (C) TRAVERSE MARCH — from the crest OUT along a mid-span rib to its tip.
+      let travOk = true; let trav = null;
+      if (ribTrav.length >= 3) {
+        trav = march(ribTrav);
+        travOk = !trav.overlap && trav.onBoneSteps >= Math.floor(trav.totalSteps * 0.5);
+        if (trav.overlap) fails.push(`traverse: collider OVERLAP at ${JSON.stringify(trav.overlap)} (invisible wall on the rib)`);
+        if (trav.onBoneSteps < Math.floor(trav.totalSteps * 0.5)) fails.push(`traverse: only ${trav.onBoneSteps}/${trav.totalSteps} steps on bone — rib collision has gaps`);
+      }
+
+      // Stash the evidence-shot framing on window for the second evaluate.
+      window.__ribClimb = { crown, crest, markers, cx: bx, cz: bz, gy, length: rc.length };
+      ctx.flags.paused = true;
+      return {
+        fails, colliders: probe.crest.length, bodyCount,
+        crestRest, ribRest,
+        climb: { climbedTo: +climbedTo.toFixed(2), crownAbove: +crownAbove.toFixed(2), peak: +climb.peak.toFixed(2), overlap: !!climb.overlap, ok: climbOk },
+        traverse: trav ? { onBone: `${trav.onBoneSteps}/${trav.totalSteps}`, overlap: !!trav.overlap, ok: travOk } : null,
+        ribCount: ribRests.length, crestCount: crest.length,
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`RIBCAGE-CLIMB pass=${pass ? 1 : 0} bodies=${r.bodyCount ?? 0} crest=${r.crestCount ?? 0}pts ribs=${r.ribCount ?? 0} crestRest=${r.crestRest ? r.crestRest.onBone + '/' + r.crestRest.tested : 'n/a'} ribRest=${r.ribRest ? r.ribRest.onBone + '/' + r.ribRest.tested : 'n/a'} climb=${r.climb ? (r.climb.ok ? 'UP' : 'FAIL') + '(' + r.climb.climbedTo + '/' + r.climb.crownAbove + 'm)' : 'n/a'} traverse=${r.traverse ? (r.traverse.ok ? 'OK' : 'FAIL') + '(' + r.traverse.onBone + ')' : 'n/a'} fails=${r.fails.length}`);
+    if (r.fails.length) console.log('[ribcage-climb] ' + JSON.stringify(r.fails.slice(0, 8)));
+    // Evidence shot — drop bright marker spheres on the PROVEN surface + frame the cage.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const info = window.__ribClimb; if (!info) return;
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+      const mg = new THREE.Group(); mg.name = 'climbMarkers';
+      for (const m of info.markers) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 10), mat);
+        s.position.set(m.x, m.y + 0.35, m.z);   // sit the sphere ON the surface it proved
+        mg.add(s);
+      }
+      ctx.three.scene.add(mg);
+      // Frame a 3/4 view of the whole cage from off one flank, above eye level.
+      const cam = ctx.three.camera;
+      const c = info.crown; const L = info.length;
+      cam.position.set(c.x - L * 0.55, c.y + 10, c.z + L * 0.5);
+      cam.lookAt(c.x, c.y - 1, c.z);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(450);
+    await page.screenshot({ path: join(OUT, 'scen-ribcage-climb-evidence.png'), timeout: 60000 });
+    console.log('[ribcage-climb] saved scen-ribcage-climb-evidence.png');
+    // A second angle: down the crest from the near ridge end (the climb ramp).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; const info = window.__ribClimb; if (!info) return;
+      const cam = ctx.three.camera; const end = info.crest[0]; const c = info.crown;
+      cam.position.set(end.x - 8, ctx.terrain.heightAt(end.x - 8, end.z) + 2.0, end.z + 4);
+      cam.lookAt(c.x, c.y, c.z);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-ribcage-climb-ramp.png'), timeout: 60000 });
+    console.log('[ribcage-climb] saved scen-ribcage-climb-ramp.png');
+    if (!pass) throw new Error('ribcage-climb GATE FAILED');
+  },
+
+  // ── bone-scatter — the strewn bone-bit GALLERY (bone_field scatter vocabulary).
+  //    Builds every BoneBitKind across several seeds in a grid on real terrain +
+  //    shoots them, and NUMERICALLY guards the `vertebra` kind against the tall cone
+  //    SPIKE Zach flagged in his walk-test ("kill the big-spike scatter bone"): asserts
+  //    no vertebra bit's local bbox rises taller than SPIKE_MAX above its base — a
+  //    modest weathered nub, never a 2-3m sharp cone.
+  //    Run: node scripts/rig-shot.mjs --scenario=bone-scatter --port=5214
+  'bone-scatter': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.5);
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const dynImport = async (url) => {
+        try { return await (0, eval)(`import(${JSON.stringify(url)})`); }
+        catch (e) {
+          if (e && /module|import/i.test(String(e.message)) === false) throw e;
+          return await new Promise((resx, rej) => {
+            const key = '__si_' + Math.random().toString(36).slice(2);
+            const s = document.createElement('script'); s.type = 'module';
+            s.textContent = `import * as m from ${JSON.stringify(url)}; window[${JSON.stringify(key)}]=m; window.dispatchEvent(new Event(${JSON.stringify(key)}));`;
+            const t = setTimeout(() => { cleanup(); rej(new Error('import timeout ' + url)); }, 20000);
+            const onEvt = () => { const m = window[key]; cleanup(); resx(m); };
+            function cleanup() { clearTimeout(t); window.removeEventListener(key, onEvt); s.remove(); delete window[key]; }
+            window.addEventListener(key, onEvt);
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const scat = await dynImport('/src/world/boneScatter.ts');
+      const rngm = await dynImport('/src/core/rng.ts');
+      const bp = ctx.player.body.body.translation();
+      const ox = bp.x + 26, oz = bp.z + 8;
+      const kinds = scat.BONE_BIT_KINDS;
+      const SEEDS = 6;
+      const root = new THREE.Group(); root.name = 'boneScatterGallery';
+      const tallest = {};                     // per-kind max local bbox height (informational)
+      const cones = {};                       // per-kind ConeGeometry mesh count
+      for (let ki = 0; ki < kinds.length; ki++) {
+        const kind = kinds[ki];
+        for (let si = 0; si < SEEDS; si++) {
+          const bit = scat.buildBoneBit(kind, rngm.makeRng(0x51c0 + ki * 131 + si * 17));
+          bit.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.type === 'ConeGeometry') cones[kind] = (cones[kind] || 0) + 1; });
+          const box = new THREE.Box3().setFromObject(bit);
+          tallest[kind] = Math.max(tallest[kind] || 0, box.max.y - box.min.y);
+          const wx = ox + si * 3.4, wz = oz + ki * 3.4;
+          bit.position.set(wx, ctx.terrain.heightAt(wx, wz) - box.min.y + 0.02, wz);
+          root.add(bit);
+        }
+      }
+      ctx.three.scene.add(root);
+      root.updateMatrixWorld(true);
+      window.__scatGallery = { ox, oz, kinds, cols: SEEDS };
+      // The SPIKE fix guard: the vertebra kind must contain ZERO ConeGeometry — the
+      // sharp cone-blade spike Zach flagged is removed (its drum/endplates/girdle read
+      // carries the vertebra on its own). Cones on the `spine` kind (its small neural
+      // spines) are APPROVED and not guarded here.
+      const vertCones = cones['vertebra'] || 0;
+      const fails = [];
+      if (vertCones > 0) fails.push(`vertebra still has ${vertCones} ConeGeometry mesh(es) across ${SEEDS} seeds — a cone spike remains`);
+      return { fails, tallest: Object.fromEntries(Object.entries(tallest).map(([k, v]) => [k, +v.toFixed(2)])), cones, vertCones };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`BONE-SCATTER pass=${pass ? 1 : 0} vertebraCones=${r.vertCones} cones=${JSON.stringify(r.cones)} heights=${JSON.stringify(r.tallest)} fails=${r.fails.length}`);
+    if (r.fails.length) console.log('[bone-scatter] ' + JSON.stringify(r.fails));
+    // Shoot the gallery: a low 3/4 angle across the grid (catches any tall spike on the
+    // horizon) + a top-down-ish read.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const info = window.__scatGallery; if (!info) return;
+      ctx.flags.paused = true;                          // freeze so the follow-cam tick can't overwrite our frame
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const cam = ctx.three.camera;
+      const midX = info.ox + (info.cols - 1) * 3.4 * 0.5, midZ = info.oz + 2 * 3.4;
+      cam.position.set(midX - 4, ctx.terrain.heightAt(midX - 4, midZ - 11) + 3.0, midZ - 11);
+      cam.lookAt(midX, ctx.terrain.heightAt(midX, midZ) + 0.4, midZ);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(450);
+    await page.screenshot({ path: join(OUT, 'scen-bone-scatter-gallery.png'), timeout: 60000 });
+    console.log('[bone-scatter] saved scen-bone-scatter-gallery.png');
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const info = window.__scatGallery; if (!info) return;
+      ctx.flags.paused = true;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const cam = ctx.three.camera;
+      const midX = info.ox + (info.cols - 1) * 3.4 * 0.5, midZ = info.oz + 2 * 3.4;
+      cam.position.set(midX, ctx.terrain.heightAt(midX, midZ) + 13, midZ + 0.5);
+      cam.lookAt(midX, ctx.terrain.heightAt(midX, midZ), midZ);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-bone-scatter-top.png'), timeout: 60000 });
+    console.log('[bone-scatter] saved scen-bone-scatter-top.png');
+    if (!pass) throw new Error('bone-scatter GATE FAILED');
+  },
+
   // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
   // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
   // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt
@@ -9346,6 +9932,236 @@ const SCENARIOS = {
         }
       }
     }
+  },
+
+  // storm-drift (review 2026-07-17) — Zach's 3rd storm round: the dust WALL must have
+  // ZERO sideways movement — "just look like it's moving forward toward the player." This
+  // probe proves it in three parts, with numbers:
+  //   A) GEOMETRY  — over N advancing frames, the wall's heading vector stays constant
+  //      (dot≈1), the group yaw is constant, a FIXED reference point on the wall face has
+  //      ~0 lateral displacement (projected onto the wall's width axis) while its forward
+  //      advance (projected onto the travel dir) is monotonic.
+  //   B) SHADER    — the FACE itself must not scroll along its width. We freeze the wall
+  //      head-on on a BLACK background (re-parent → the wall is the ONLY signal, no static
+  //      terrain/sky to bias the correlation toward 0), render two frames at uTime 0 and
+  //      6.0s WITHOUT moving the geometry, and cross-correlate the horizontal luminance
+  //      profile. The best-fit horizontal shift is the net sideways drift of the surface
+  //      pattern in px — must be ~0. A region frame-delta proves the mass IS animating
+  //      (so a 0 shift isn't a frozen frame); the vertical shift is printed as evidence the
+  //      churn moves up/in-place, not sideways.
+  //   C) SEQUENCE  — a 3-frame approach (far → near → enveloping) from ONE fixed camera for
+  //      the human: the wall grows while its features hold the SAME horizontal position.
+  // The prior rounds fixed the geometry (wind-locked yaw, linear wall, dir frozen at arm) —
+  // this probe guards A as a regression gate AND targets the real remaining source, B.
+  'storm-drift': async (page) => {
+    // ── PART A — GEOMETRY: heading constant + zero lateral group translation. ──
+    console.log('[storm-drift] PART A — geometry (heading dot, group yaw, ref-point lateral vs forward)');
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const w = ctx.weather;
+      window.__game.setTime(0.34);                 // bright midday
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1200, 680, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 680; cam.updateProjectionMatrix(); }
+      const px = 0, pz = 0;
+      const gy = ctx.terrain.heightAt(px, pz);
+      ctx.player.body.body.setTranslation({ x: px, y: gy + 1.6, z: pz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      ctx.player.inShelter = false;
+      // Storm with a wall travelling +Z toward the player at origin. speed=0 so ONLY our
+      // manual per-frame advance moves it (deterministic under the slow headless clock);
+      // updateWeather still re-seats the dust-wall group from the wall state each frame.
+      w.state = 'storm'; w.currentStormDuration = 1e6; w.stateTimer = 0; w.longStormAnnounced = true;
+      w.wall.active = true;
+      w.wall.dirX = 0; w.wall.dirZ = 1; w.wall.width = 140; w.wall.speed = 0; w.wall.age = 0; w.wall.approaching = true;
+      const edge = 500;                            // leading edge 500m south (-Z) of the player
+      w.wall.posX = px; w.wall.posZ = (pz - edge) - w.wall.width;
+    });
+    const STEP = 45;   // manual +dir advance per frame (world u) — guarantees forward motion
+    const samples = [];
+    for (let i = 0; i < 8; i++) {
+      await page.evaluate((step) => {
+        const w = window.__game.ctx.weather;
+        w.wall.posX += w.wall.dirX * step;
+        w.wall.posZ += w.wall.dirZ * step;
+      }, i === 0 ? 0 : STEP);
+      await page.waitForTimeout(150);              // let ≥1 RAF run updateWeather → updateDustWall (re-seat)
+      const s = await page.evaluate(() => {
+        const ctx = window.__game.ctx; const w = ctx.weather; const dw = w.dustWall;
+        const V = ctx.time.sunDir.constructor;
+        dw.group.updateMatrixWorld(true);
+        const ref = new V(300, 170, 0);            // FIXED flank point on the face, in LOCAL space
+        dw.group.localToWorld(ref);
+        return {
+          dirX: w.wall.dirX, dirZ: w.wall.dirZ,
+          yaw: +dw.group.rotation.y.toFixed(6),
+          rx: +ref.x.toFixed(4), rz: +ref.z.toFixed(4),
+          op: dw.shells[0] ? +dw.shells[0].mat.uniforms.uOpacity.value.toFixed(3) : 0,
+          vis: dw.group.visible,
+        };
+      });
+      samples.push(s);
+    }
+    const s0 = samples[0];
+    const dir0 = { x: s0.dirX, z: s0.dirZ };
+    const widthAxis = { x: dir0.z, z: -dir0.x };   // perpendicular to dir in XZ
+    let maxHeadingErr = 0, maxLateral = 0, forwardMonotonic = true, prevFwd = -Infinity;
+    const rows = samples.map((s) => {
+      const dot = s.dirX * dir0.x + s.dirZ * dir0.z;
+      maxHeadingErr = Math.max(maxHeadingErr, Math.abs(1 - dot));
+      const drx = s.rx - s0.rx, drz = s.rz - s0.rz;
+      const fwd = drx * dir0.x + drz * dir0.z;
+      const lat = drx * widthAxis.x + drz * widthAxis.z;
+      maxLateral = Math.max(maxLateral, Math.abs(lat));
+      if (fwd < prevFwd - 0.01) forwardMonotonic = false;
+      prevFwd = fwd;
+      return { fwd: +fwd.toFixed(3), lat: +lat.toFixed(5), dot: +dot.toFixed(6), yaw: s.yaw, op: s.op, vis: s.vis };
+    });
+    console.log('[storm-drift] geometry samples:');
+    rows.forEach((r, i) => console.log(`  f${i}: ${JSON.stringify(r)}`));
+    const yawConst = samples.every((s) => Math.abs(s.yaw - s0.yaw) < 1e-4);
+    const headingPass = maxHeadingErr < 1e-6;
+    const lateralPass = maxLateral < 0.05;         // world u — essentially zero
+    const geomPass = headingPass && yawConst && lateralPass && forwardMonotonic;
+    console.log(
+      `[storm-drift] GEOMETRY ${geomPass ? 'PASS' : 'FAIL'} — headingDotErr=${maxHeadingErr.toExponential(2)} (want <1e-6) | ` +
+      `yawConst=${yawConst} | maxLateral=${maxLateral.toFixed(5)}u (want <0.05) | forwardMonotonic=${forwardMonotonic} ` +
+      `(fwd ${rows[0].fwd}→${rows[rows.length - 1].fwd}u)`,
+    );
+    if (!geomPass) process.exitCode = 1;
+
+    // ── PART B — SHADER: the FACE must not scroll along its width axis. ──
+    console.log('[storm-drift] PART B — shader face-scroll (cross-correlate two frames at fixed geometry)');
+    const sig = await page.evaluate(() => {
+      const ctx = window.__game.ctx; const w = ctx.weather; const dw = w.dustWall;
+      const cam = ctx.three.camera; const R = ctx.three.renderer;
+      ctx.flags.paused = true;
+      R.setSize(1200, 680, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 680; cam.updateProjectionMatrix(); }
+      const H = 340;
+      // Freeze the wall head-on: local +Z (leading/face dir) → world +Z; face at z≈0.
+      dw.group.position.set(0, 0, 0);
+      dw.group.rotation.set(0, 0, 0);
+      dw.group.updateMatrixWorld(true);
+      dw.group.visible = true;
+      for (const s of dw.shells) {
+        s.mesh.visible = true;
+        s.mat.uniforms.uOpacity.value = 0.97;      // MAX — read the pattern clearly
+        s.mat.uniforms.uWind.value = 1.5;          // representative wind (the OLD code scrolled x by uTime·uWind·0.12)
+      }
+      cam.position.set(0, H * 0.45, 470);
+      cam.lookAt(0, H * 0.45, 0);
+      cam.updateMatrixWorld(true);
+      // Isolate the wall on BLACK so the ONLY varying signal is the wall itself (static
+      // terrain/sky would bias the correlation toward shift 0 and mask a real drift).
+      const Col = ctx.three.scene.fog.color.constructor;
+      const prevClear = R.getClearColor(new Col());
+      const prevAlpha = R.getClearAlpha();
+      const tmp = new (ctx.three.scene.constructor)();
+      tmp.add(dw.group);                           // re-parent the wall out of the main scene
+      R.setClearColor(0x000000, 1);
+      const gl = R.getContext();
+      const BW = gl.drawingBufferWidth, BH = gl.drawingBufferHeight;
+      const x0 = 300, x1 = 900, y0 = 200, y1 = 480;
+      function readFrame(t) {
+        for (const s of dw.shells) s.mat.uniforms.uTime.value = t;
+        R.render(tmp, cam);
+        const buf = new Uint8Array(BW * BH * 4);
+        gl.readPixels(0, 0, BW, BH, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+        return buf;
+      }
+      const lum = (buf, i) => 0.299 * buf[i] + 0.587 * buf[i + 1] + 0.114 * buf[i + 2];
+      const bufA = readFrame(0.0);
+      const bufB = readFrame(6.0);
+      const colA = [], colB = [], rowA = [], rowB = [];
+      for (let x = x0; x < x1; x++) {
+        let a = 0, b = 0;
+        for (let y = y0; y < y1; y++) { const i = (y * BW + x) * 4; a += lum(bufA, i); b += lum(bufB, i); }
+        colA.push(a / (y1 - y0)); colB.push(b / (y1 - y0));
+      }
+      for (let y = y0; y < y1; y++) {
+        let a = 0, b = 0;
+        for (let x = x0; x < x1; x++) { const i = (y * BW + x) * 4; a += lum(bufA, i); b += lum(bufB, i); }
+        rowA.push(a / (x1 - x0)); rowB.push(b / (x1 - x0));
+      }
+      let dsum = 0, dn = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const i = (y * BW + x) * 4; dsum += Math.abs(lum(bufB, i) - lum(bufA, i)); dn++;
+      }
+      // restore
+      ctx.three.scene.add(dw.group);
+      R.setClearColor(prevClear, prevAlpha);
+      return { colA, colB, rowA, rowB, meanRegionDelta: +(dsum / dn).toFixed(3) };
+    });
+    // Node-side normalized cross-correlation → best integer shift (px).
+    const bestShift = (a, b, maxShift) => {
+      const n = a.length;
+      const ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n;
+      const A = a.map((v) => v - ma), B = b.map((v) => v - mb);
+      let best = 0, bestC = -Infinity;
+      for (let s = -maxShift; s <= maxShift; s++) {
+        let num = 0, da = 0, db = 0;
+        for (let x = 0; x < n; x++) { const xb = x + s; if (xb < 0 || xb >= n) continue; num += A[x] * B[xb]; da += A[x] * A[x]; db += B[xb] * B[xb]; }
+        const c = num / (Math.sqrt(da * db) || 1);
+        if (c > bestC) { bestC = c; best = s; }
+      }
+      return { shift: best, corr: +bestC.toFixed(4) };
+    };
+    const horiz = bestShift(sig.colA, sig.colB, 40);
+    const vert = bestShift(sig.rowA, sig.rowB, 40);
+    const animates = sig.meanRegionDelta > 1.5;
+    const shaderPass = Math.abs(horiz.shift) <= 1 && animates;
+    console.log(
+      `[storm-drift] SHADER ${shaderPass ? 'PASS' : 'FAIL'} — horizShift=${horiz.shift}px (corr=${horiz.corr}, want |shift|<=1) | ` +
+      `meanFrameDelta=${sig.meanRegionDelta} (want >1.5 → the mass IS churning) | vertShift=${vert.shift}px (corr=${vert.corr}, evidence of vertical/in-place churn)`,
+    );
+    if (!shaderPass) {
+      console.log('[storm-drift] SHADER FAIL: the wall face translates along its width axis — a uTime term leaked into the .x noise coordinate in dustWall.ts FRAG.');
+      process.exitCode = 1;
+    }
+    // Human eyeball of the face (T1 frame currently on the buffer would be black — re-render lit).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+    });
+    await page.waitForTimeout(80);
+    await page.screenshot({ path: join(OUT, 'scen-stormdrift-face.png'), fullPage: false });
+    console.log('[storm-drift] saved scen-stormdrift-face.png');
+
+    // ── PART C — 3-frame approach sequence from ONE fixed camera. ──
+    console.log('[storm-drift] PART C — 3-frame approach (fixed camera; features hold azimuth as it grows)');
+    for (const [tag, approachDist] of [['1-far', 500], ['2-near', 260], ['3-envelop', 70]]) {
+      await page.evaluate((ad) => {
+        const ctx = window.__game.ctx; const w = ctx.weather;
+        ctx.flags.paused = false;
+        const px = 0, pz = 0;
+        const gy = ctx.terrain.heightAt(px, pz);
+        w.state = 'storm'; w.currentStormDuration = 1e6;
+        w.wall.active = true; w.wall.dirX = 0; w.wall.dirZ = 1; w.wall.width = 140; w.wall.speed = 0; w.wall.age = 0;
+        w.wall.posX = px; w.wall.posZ = (pz - ad) - w.wall.width;
+        ctx.player.body.body.setTranslation({ x: px, y: gy + 1.6, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.inShelter = false;
+      }, approachDist);
+      await page.waitForTimeout(600);              // let the loop re-seat the group + settle fog/opacity
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx; const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        const px = 0, pz = 0; const gy = ctx.terrain.heightAt(px, pz);
+        // IDENTICAL camera every frame (fixed pos + fixed look target) → azimuth reference.
+        cam.position.set(px, gy + 1.7, pz);
+        cam.lookAt(px, gy + 40, pz - 300);
+        cam.updateMatrixWorld(true);
+        ctx.three.renderer.render(ctx.three.scene, cam);
+      });
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-stormdrift-seq-${tag}.png`), fullPage: false });
+      console.log(`[storm-drift] saved scen-stormdrift-seq-${tag}.png (approachDist=${approachDist})`);
+    }
+    console.log('[storm-drift] done.');
   },
 
   // Smoke-plume (C21): deploy a lit fire + let its smoke-signal column build, then

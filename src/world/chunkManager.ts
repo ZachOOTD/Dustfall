@@ -48,7 +48,8 @@ import { getPlayerPos } from '../util/playerPos.ts';
 import { spawnDeadTreeAt } from './deadTree.ts';
 import { spawnWellAt, type WaterSource } from './waterSources.ts';
 import { spawnCactusAt, type Cactus } from './cactus.ts';
-import { spawnScrapAt, despawnPickup, type Pickup } from '../pickups/pickups.ts';
+import { spawnScrapAt, spawnMaterialAt, despawnPickup, type Pickup } from '../pickups/pickups.ts';
+import { scatterForArchetype } from '../config/lootRegistry.ts';   // Scavenger's Economy — per-POI identity material scatter (+ generic-wreck fallback)
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -718,6 +719,37 @@ export function createChunkManager(
           const rr = Tuning.SCRAP_RING_RADIUS_MIN + sRand() * (Tuning.SCRAP_RING_RADIUS_MAX - Tuning.SCRAP_RING_RADIUS_MIN);
           const sp = spawnScrapAt(scene, terrain, p.x + Math.cos(ang) * rr, p.z + Math.sin(ang) * rr, sRand, gameCtx.pickups.list);
           trackPickup(sp, `poi/sc${j}`);
+        }
+        // ── Scavenger's Economy (build 2): the POI's IDENTITY material scatter,
+        //    on an INDEPENDENT renderSeed-derived rng so it never perturbs the
+        //    scrap-ring / salvage-panel draw sequences (determinism stays STABLE
+        //    across runs; the digest changes only because content was added —
+        //    intended). bone_field = scrap only (boneyard identity is the bones).
+        //    WALK-TEST FIX (2026-07-17): scatterForArchetype falls generic wrecks
+        //    (derelict/hollow_husk/enterable_wreck/…) back to WRECK_GENERIC_SCATTER,
+        //    so EVERY streamed wreck now drops 1-2 materials too (not just specialty
+        //    POIs) — matching the origin-world parity added in main.ts.
+        const identity = p.biome === 'bone_field' ? undefined : scatterForArchetype(p.archetype);
+        if (identity) {
+          const mRand = makeRng((p.renderSeed ^ 0x1d70f) >>> 0);
+          let attempt = 0;   // stable per-seed content-id counter (incremented even on a skip)
+          for (const roll of identity) {
+            const copies = roll.count ?? 1;
+            for (let c = 0; c < copies; c++) {
+              const idx = attempt++;
+              if (mRand() < roll.chance) {
+                const ang = mRand() * Math.PI * 2;
+                const rr = Tuning.SCRAP_RING_RADIUS_MIN + mRand() * (Tuning.SCRAP_RING_RADIUS_MAX - Tuning.SCRAP_RING_RADIUS_MIN);
+                const mp = spawnMaterialAt(
+                  scene, terrain,
+                  p.x + Math.cos(ang) * rr, p.z + Math.sin(ang) * rr,
+                  roll.id as 'metal_pipe' | 'machine_part' | 'wiring' | 'battery',
+                  mRand, gameCtx.pickups.list,
+                );
+                trackPickup(mp, `poi/mat${idx}`);
+              }
+            }
+          }
         }
       }
       // ── S3: the wreck's fauna cluster (transient — the D292 rule).

@@ -142,6 +142,19 @@ export interface Terrain {
   pureHeightAt: (x: number, z: number) => number;
   /** Approximate normal at world (x, z) using neighboring samples. */
   normalAt: (x: number, z: number) => THREE.Vector3;
+  /** The SHARED ground material (one instance, every tile). Exposed so
+   *  terrain-conforming decor (e.g. the leviathan entrance sand drift) can
+   *  render with the EXACT same shader/lighting/fog as the ground — one
+   *  source of truth, so a re-skinned mound is indistinguishable from the
+   *  terrain it sits on. Consumers must feed it per-vertex `color` +
+   *  `aBiomeRaw` attributes (see groundSample) and must NOT route the mesh
+   *  through mergeStaticByMaterial (it strips those attributes). */
+  groundMaterial: THREE.MeshLambertMaterial;
+  /** The EXACT per-vertex ground color + biome-raw noise the tiles bake at
+   *  world (x, z) — same blend + wreck-yard/bone/pit/cave overlays fillRows
+   *  uses. Lets terrain-matching decor sample the LOCAL ground color at its
+   *  own site so it matches ITS surroundings, not a global average. */
+  groundSample: (x: number, z: number) => { color: [number, number, number]; biomeRaw: number };
   /** Infinite Sands S1 — keep the tile ring centered on (px, pz). Builds
    *  missing tiles (the player's own tile immediately, the rest budgeted
    *  one per call) and disposes tiles beyond RADIUS+1. Call per-frame. */
@@ -232,6 +245,42 @@ export function createTerrain(
     return h;
   };
 
+  // The EXACT per-vertex ground color at world (x, z) — the single source of
+  // truth for both the tile fill (fillRows) and terrain-matching decor
+  // (Terrain.groundSample). `n` is the raw biome noise at (x, z), passed in so
+  // callers that already have it don't resample. Kept bit-identical to the
+  // original inline fillRows block (a pure code-move — same ops, same order).
+  const groundColorAt = (wx2: number, wz2: number, n: number): [number, number, number] => {
+    let c = blendedBiomeColor(n);
+    const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
+    if (wyC > 0) {
+      // ACAS A3 — mottle the graveyard floor with oil pools + ash drifts
+      // (separate-phase noise) so it reads as a contaminated dead place.
+      const mot = noise(wx2 * 0.05 + 11.3, wz2 * 0.05 - 7.1);   // -1..1
+      const stain = mot < 0
+        ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
+        : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
+      c = lerp3(c, stain, wyC);
+    }
+    // bone_field — bleach the ground to bone-white with a dried-marrow
+    // mottle. A near-total overlay (0.92) so the PALE read dominates from
+    // a distance; the mottle keeps it from going flat-mineral like salt.
+    const boneC = biomes.boneFieldAt(wx2, wz2);
+    if (boneC > 0) {
+      const bmot = noise(wx2 * 0.05 + 12.3, wz2 * 0.05 - 4.1);     // -1..1 marrow/dust streaks
+      const boneStain = lerp3(BIOME_COLOR_BONE_FIELD, BIOME_COLOR_BONE_FIELD_MARROW, Math.max(0, bmot) * 0.5);
+      c = lerp3(c, boneStain, boneC * 0.96);
+    }
+    // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
+    // funnel READS as a shadowed pit even under flat overhead light.
+    const pitC = biomes.sarlaccPitAt(wx2, wz2);
+    if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
+    // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
+    const caveC = biomes.caveAt(wx2, wz2);
+    if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
+    return c;
+  };
+
   const tiles = new Map<string, Tile>();
   const meshes: THREE.Mesh[] = [];
   const tileKey = (tx: number, tz: number): string => `${tx},${tz}`;
@@ -306,33 +355,7 @@ export function createTerrain(
         b.positions[idx + 2] = localZ;
         const wx2 = b.centerX + localX, wz2 = b.centerZ + localZ;
         const n = biomes.rawAt(wx2, wz2);
-        let c = blendedBiomeColor(n);
-        const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
-        if (wyC > 0) {
-          // ACAS A3 — mottle the graveyard floor with oil pools + ash drifts
-          // (separate-phase noise) so it reads as a contaminated dead place.
-          const mot = noise(wx2 * 0.05 + 11.3, wz2 * 0.05 - 7.1);   // -1..1
-          const stain = mot < 0
-            ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
-            : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
-          c = lerp3(c, stain, wyC);
-        }
-        // bone_field — bleach the ground to bone-white with a dried-marrow
-        // mottle. A near-total overlay (0.92) so the PALE read dominates from
-        // a distance; the mottle keeps it from going flat-mineral like salt.
-        const boneC = biomes.boneFieldAt(wx2, wz2);
-        if (boneC > 0) {
-          const bmot = noise(wx2 * 0.05 + 12.3, wz2 * 0.05 - 4.1);     // -1..1 marrow/dust streaks
-          const boneStain = lerp3(BIOME_COLOR_BONE_FIELD, BIOME_COLOR_BONE_FIELD_MARROW, Math.max(0, bmot) * 0.5);
-          c = lerp3(c, boneStain, boneC * 0.96);
-        }
-        // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
-        // funnel READS as a shadowed pit even under flat overhead light.
-        const pitC = biomes.sarlaccPitAt(wx2, wz2);
-        if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
-        // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
-        const caveC = biomes.caveAt(wx2, wz2);
-        if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
+        const c = groundColorAt(wx2, wz2, n);
         b.colors[idx]     = c[0];
         b.colors[idx + 1] = c[1];
         b.colors[idx + 2] = c[2];
@@ -556,6 +579,11 @@ export function createTerrain(
     heightAt,
     pureHeightAt: computeHeightAt,
     normalAt,
+    groundMaterial: material,
+    groundSample: (x, z) => {
+      const n = biomes.rawAt(x, z);
+      return { color: groundColorAt(x, z, n), biomeRaw: n };
+    },
     recenter,
     tileKeys: () => [...tiles.keys()],
     perfStats: () => ({ ..._perf, maxStageMs: { ..._perf.maxStageMs } }),

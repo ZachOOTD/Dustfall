@@ -45,7 +45,7 @@ import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.t
 import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
-import { spawnDroppedPickup, despawnPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook; D299 — despawnPickupById probe hook
+import { spawnDroppedPickup, despawnPickup, spawnMaterialAt } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook; D299 — despawnPickupById probe hook; Scavenger's Economy — spawnMaterialTest
 import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 
@@ -318,6 +318,11 @@ interface DebugApi {
    *  player so the per-item collider SHAPE (capsule/sphere/box) can be smoke-tested.
    *  Returns the new pickup id. */
   dropTestItem: (itemId: string) => number;
+  /** Scavenger's Economy (build 2) — DEV/TEST-only: spawn a salvage-MATERIAL
+   *  world pickup (the streamed-scatter path, spawnMaterialAt / merged instanced
+   *  geometry) at an offset in front of the player. Returns the new pickup id.
+   *  Proves the world scatter mesh builds non-degenerate + is takeable. */
+  spawnMaterialTest: (itemId: string, offset?: number) => number;
   /** Crafting rework — DEV/TEST-only: add `n` (default 1) of `itemId` to the
    *  inventory via the REAL acquire path (updates the collected-type ledger +
    *  fires pickup-gated recipe unlocks), so the unlock flow can be verified. */
@@ -329,6 +334,12 @@ interface DebugApi {
   /** Crafting rework — DEV-only: open the crafting card grid (for visual
    *  verification / screenshots without driving the C-key toggle). */
   openCrafting: () => void;
+  /** Scavenger's Economy (build 3) — DEV/TEST-only: craft a recipe by id via
+   *  the REAL craft path (canCraft gate + anyOf-aware consumption + output).
+   *  Resolves to whether it crafted + the output id, for the craft-unlock gate
+   *  to assert consumption + yield. Lazy-imports craftingMenu (already loaded
+   *  at boot), so it returns a Promise. */
+  craft: (recipeId: number) => Promise<{ crafted: boolean; output: string | null }>;
   /** ACH (Cycle 2) — DEV-only: enter gameplay HEADLESS, bypassing the title
    *  button + pointer-lock. The normal handoff only clears `flags.paused` via
    *  the pointer-lock 'lock' event (input.ts), which never fires for an
@@ -1076,6 +1087,17 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.pickups.list.push(p);
       return p.id;
     },
+    spawnMaterialTest(itemId, offset = 1.2) {
+      // Scavenger's Economy (build 2) — spawn a MATERIAL world pickup via the real
+      // streamed-scatter path (spawnMaterialAt) in a line in front of the player.
+      const tr = ctx.player.body.body.translation();
+      const p = spawnMaterialAt(
+        ctx.three.scene, ctx.terrain, tr.x + offset, tr.z + 2.0,
+        itemId as 'metal_pipe' | 'machine_part' | 'wiring' | 'battery',
+        Math.random, ctx.pickups.list,
+      );
+      return p.id;
+    },
     giveItem(itemId, n = 1) {
       for (let i = 0; i < n; i++) addItem(ctx.inventory, itemId as ItemId, undefined, ctx);
     },
@@ -1089,6 +1111,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     openCrafting() {
       void import('../ui/craftingMenu.ts').then((m) => m.openCraftingMenu(ctx));
+    },
+    craft(recipeId) {
+      return import('../ui/craftingMenu.ts').then((m) => m.craftById(recipeId));
     },
     enterGame(dev) {
       if (hooks.enterGame) hooks.enterGame(dev);

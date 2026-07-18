@@ -8,6 +8,20 @@ export type ItemId =
   | 'scrap'
   | 'bandage'
   | 'machete'
+  // Scavenger's Economy (build 2, 2026-07-18) — salvage MATERIALS. Additive-only
+  // ItemIds (SAVE_VERSION untouched — new ids are additive-safe). They craft
+  // EXISTING items (build 3); no new craftable outputs. Drop per the per-POI
+  // identity matrix (docs/campaign/economy-proposal.md "APPROVED DESIGN").
+  | 'metal_pipe'
+  | 'machine_part'
+  | 'wiring'
+  | 'battery'
+  // DEPRECATED-UNOBTAINABLE (Scavenger's Economy build 2): since CC-4 only ALIEN
+  // cacti spawn (→ alien_fruit), so the pulp grant paths were removed (harvest
+  // else-branch, cook map, dev-loadout grant, tutorial hint). The ItemIds +
+  // registrations are KEPT ONLY for save load-compat — save.ts cast-restores
+  // slot itemIds with no validation, so an old save holding cactus_pulp would
+  // crash getItemDef() if the def were removed. Do NOT reuse for a grant path.
   | 'cactus_pulp'
   | 'cooked_cactus_pulp'
   | 'raw_lizard_meat'

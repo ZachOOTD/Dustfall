@@ -8,11 +8,14 @@
 import * as THREE from 'three';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
 import type { Rng } from '../core/rng.ts';
-import type { WreckKind } from './wrecks.ts';
 import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
-
-export type SalvageKind = WreckKind | 'massive' | 'escape_pod';   // ACBD — 'escape_pod' is a loot palette (medical); the wreck MODEL was removed but the palette stays
+// Scavenger's Economy build 1 — loot tables + the salvage roller now live in the
+// unified loot registry (config/lootRegistry.ts). SalvageKind is defined there
+// (the data home) and re-exported here so existing importers are unaffected.
+import type { SalvageKind } from '../config/lootRegistry.ts';
+import { rollSalvageTable } from '../config/lootRegistry.ts';
+export type { SalvageKind };   // ACBD — 'escape_pod' is a loot palette (medical); the wreck MODEL was removed but the palette stays
 
 /** AAT — per-panel condition tier. Set deterministically at
  *  registerSalvageable time from (rand + biome-at-pos). Affects pry
@@ -231,105 +234,15 @@ export function findSalvageableById(
 }
 
 // ────────────────────────────────────────────────────────────────
-// Loot tables. Weighted independent rolls — each entry is "roll
-// the dice once; if it hits, append to the loot list."
+// Loot tables + the salvage roller now live in config/lootRegistry.ts
+// (SALVAGE_TABLES + rollSalvageTable) — the single data-driven home for
+// every loot table in the game. `rollWreckLoot` stays here as the public
+// name callers use; it delegates unchanged (independent weighted rolls,
+// ≥1 item guaranteed). See lootRegistry.ts for the per-kind table content.
 // ────────────────────────────────────────────────────────────────
 
-interface LootRoll {
-  id: ItemId;
-  chance: number;
-  count?: number;
-}
-
-// Session AAB — tables rebalanced for stronger per-kind identity, so
-// players gain real exploration choice ("I need rope → fuselages /
-// cargo / massive are best" instead of strip-anything-nearby). Each
-// kind now has a clear thematic signature:
-//   engine kinds        → scrap-pure metal (cabling = occasional rope)
-//   fuselage            → cloth + bandage + rope (interior textiles + wiring)
-//   escape_pod          → medical (bandages first, cloth secondary)
-//   cargo_container     → varied lottery (scrap, cloth, branch, tent_kit chance, rope)
-//   massive             → rich mix of everything including rope
-const TABLES: Record<SalvageKind, LootRoll[]> = {
-  // Engine wrecks — pure metal. Rope drops are cabling/hoses pulled
-  // from the engine bay. Occasional scrap_bullet from ammunition stowed
-  // near the engine block.
-  engine_cluster: [
-    { id: 'scrap',         chance: 0.90, count: 2 },
-    { id: 'scrap',         chance: 0.50 },
-    { id: 'rope',          chance: 0.10 },
-    { id: 'scrap_bullet',  chance: 0.12 },   // AAL — bumped 0.05 → 0.12; ammo was scrap_bullet-recipe-dependent in practice
-  ],
-  // Fuselage — interior textiles + bulkhead cabling. The cloth/rope
-  // wreck of choice.
-  fuselage: [
-    { id: 'cloth',      chance: 0.70 },
-    { id: 'cloth',      chance: 0.30 },
-    { id: 'scrap',      chance: 0.35 },
-    { id: 'bandage',    chance: 0.25 },
-    { id: 'rope',       chance: 0.15 },
-    { id: 'flashlight', chance: 0.04 },
-  ],
-  // Escape pod — medical kit + survival gear. Bandage-heavy.
-  escape_pod: [
-    { id: 'bandage', chance: 0.80 },
-    { id: 'bandage', chance: 0.30 },
-    { id: 'cloth',   chance: 0.35 },
-    { id: 'scrap',   chance: 0.20 },
-    { id: 'branch',  chance: 0.08 },
-  ],
-  // Cargo container — varied lottery + rope (lashing material).
-  cargo_container: [
-    { id: 'scrap',    chance: 0.45 },
-    { id: 'cloth',    chance: 0.35 },
-    { id: 'bandage',  chance: 0.20 },
-    { id: 'branch',   chance: 0.25 },
-    { id: 'rope',     chance: 0.15 },
-    { id: 'tent_kit', chance: 0.04 },
-  ],
-  // Engine bell — pure scrap, occasional rope (cabling around the nozzle).
-  engine_bell: [
-    { id: 'scrap', chance: 1.00, count: 2 },
-    { id: 'scrap', chance: 0.60 },
-    { id: 'rope',  chance: 0.05 },
-  ],
-  // Massive POIs — richer rolls, includes rope. AAL — added energy_pistol
-  // (was an orphan ItemDef + combat spec that never spawned in world) +
-  // scrap_bullet on massive wrecks so ammo isn't gated on the scrap recipe
-  // pipeline alone.
-  massive: [
-    { id: 'scrap',         chance: 0.95, count: 2 },
-    { id: 'scrap',         chance: 0.75 },
-    { id: 'cloth',         chance: 0.65 },
-    { id: 'bandage',       chance: 0.45 },
-    { id: 'branch',        chance: 0.25 },
-    { id: 'rope',          chance: 0.20 },
-    { id: 'scrap_bullet',  chance: 0.15 },
-    { id: 'fire_kit',      chance: 0.05 },
-    { id: 'flashlight',    chance: 0.08 },
-    { id: 'energy_pistol', chance: 0.03 },   // rare hero-tier weapon drop
-    // ACY — amban rifle was dev-loadout-only (orphan ItemDef + combat spec).
-    // Make it the rarest hero find on massive wrecks (mirrors energy_pistol,
-    // a notch rarer — it's the top-tier marksman weapon). Ammo shares the
-    // scrap_bullet pipeline, so finding one is immediately usable.
-    { id: 'amban_rifle',   chance: 0.02 },
-    // ACAC — pulse rifle: the rarest hero find (rapid-fire energy carbine, no
-    // ammo item — its cell self-recharges, so it's immediately usable).
-    { id: 'pulse_rifle',   chance: 0.015 },
-  ],
-};
-
 export function rollWreckLoot(kind: SalvageKind, rand: Rng): LootEntry[] {
-  const table = TABLES[kind];
-  const out: LootEntry[] = [];
-  for (const r of table) {
-    if (rand() < r.chance) {
-      out.push({ id: r.id, count: r.count });
-    }
-  }
-  // Guarantee at least one item so a successful salvage never feels empty.
-  if (out.length === 0) out.push({ id: 'scrap' });
-  return out;
+  return rollSalvageTable(kind, rand);
 }
 
 /** Mark a panel's wreck as fully stripped. ACAX — this used to DIM every mesh in

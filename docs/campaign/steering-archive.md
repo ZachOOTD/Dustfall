@@ -229,3 +229,12 @@ PROCESS: plan + document first; execute overnight; extreme verification (multi-a
 ## Archived mid-cycle-9 (2026-07-12)
 don't like the sand mounds around the wreck, lets remove those and not do sand mounds anymore. also this wreck will need detailed interiors at the same detail level of the ship you start on in the intro. but needs to match the wrecked art style of the wreck. also make sure to end any stale headless shells so we don't slow things down
 (Applied: mounds removed from skyfallWreck.ts + retired for Skyfall; interior bar folded into docs/feature-skyfall.md; stale shells reaped via npm run reap.)
+
+## 2026-07-17/18 (overnight, "Scavenger's Economy (setup)" cycle 2 boundary)
+> can we make sure to use fable for the thinking and planning and opus for the execution?
+
+**Action taken:** applied from cycle 3 onward. The main loop (planning, orchestration,
+synthesis — incl. the economy proposal) runs on Fable (the session model Zach set). Execution
+subagents (code-writing modelers/fixers) now get an explicit `model: opus` override. The research
+swarm stays on the framework's cheap researcher model per the approved plan (information
+gathering, not execution).

@@ -1,0 +1,12 @@
+{
+  "salvage:cargo_container": "965c070851677a06",
+  "salvage:engine_bell": "e56f0e4758a5a445",
+  "salvage:engine_cluster": "8ed4b676bb226fe9",
+  "salvage:escape_pod": "2207ef85b41c93ed",
+  "salvage:fuselage": "228f564a7dc5b12b",
+  "salvage:massive": "747f8a2ffd7e658a",
+  "container": "7e721e3a7f321776",
+  "component:standard": "c1c9a65056bda0c9",
+  "component:corroded": "85657f6c8415b4ae",
+  "component:pristine_bonus": "f38deb943c533fe6"
+}

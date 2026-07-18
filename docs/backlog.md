@@ -10,6 +10,16 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
+### verify:solid gaps (found in the SOLID campaign)
+- `[debt]` **No gate catches inter-mesh sliver gaps / sub-1%-silhouette hairlines.** The Skyfall
+  stern crack (#28, 2026-07-17) was a bright daylight hairline along a rim, but it was <1% of the
+  silhouette so it slid under `checkBackface`'s `bleedFrac = 0.01`, and `open-end`/`seam` are
+  per-mesh topology (two closed solids with daylight between them both pass). A robust catch is a
+  rim-local daylight raycast keyed off the former-ring / `intendedOpening` anchors (so it doesn't
+  false-positive on legitimate open mouths) — needs its own selftest fixture + threshold tuning.
+  Interim: add a synthetic hairline to `--asset=selftest` and give `checkBackface` an absolute
+  back-pixel floor at grazing exterior azimuths. Deferred from #28 (non-blocking).
+
 ### Infinite Sands residuals (campaign 2026-07-10, cycles 1-6)
 - `[idea]` **Sarlacc pit ignores a mounted rider** (D297 audit). `sarlaccPit.ts` reads the raw capsule (parked at -2000 while riding) so the pit never gapes/pulls/bites at a speeder crossing it. Making it `getPlayerPos`-aware is one line for the GAPE (visual), but pull/bite would apply forces to the PARKED capsule — needs a mounted-behavior design call (bite the bike? dismount-fling? immune?). Decide at a walk-test.
 - `[polish]` **Regional wreck-yard CLUSTER read** (S4). Regional yards get the full biome treatment (ashen mottled ground, flatten, graveyard POI mix at 6× density) but not the origin yard's dense boot-style cluster (`wreckYard.ts` field of wrecks/ribcages/mounds around the anchor). If a walked regional yard reads sparse, render a knot-style cluster at the yard anchor's chunk (same pattern as the wreck_knot landmark, bigger). Knob: the ×6 in chunkManager's poiChance.

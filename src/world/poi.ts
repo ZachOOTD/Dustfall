@@ -171,7 +171,12 @@ function sampleFlagshipPositions(rand: Rng, terrain: Terrain): Array<{ x: number
   for (let k = 0; k < FLAGSHIP_KINDS.length; k++) {
     let accepted: { x: number; z: number } | null = null;
     for (let t = 0; t < maxTries; t++) {
-      const r = rMin + rand() * (rMax - rMin);
+      // Walk-test rebalance 2026-07-17 — AREA-UNIFORM within the SAME 200-800m
+      // band (rMax deliberately unchanged: AAK tightened flagships to 800m after
+      // a playtest found them landing >1km felt too far). Linear-r clumped the 6
+      // heroes toward 200-400m (the near-spawn density spike); sqrt spreads them
+      // evenly across 200-800m without pushing any past the 800m discoverable cap.
+      const r = Math.sqrt(rMin * rMin + rand() * (rMax * rMax - rMin * rMin));
       const a = rand() * Math.PI * 2;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
@@ -196,7 +201,7 @@ function sampleFlagshipPositions(rand: Rng, terrain: Terrain): Array<{ x: number
       // saturated/rough world, which is rare for 6 flagships).
       let fx = 0, fz = 0;
       for (let t = 0; t < maxTries; t++) {
-        const r = rMin + rand() * (rMax - rMin);
+        const r = Math.sqrt(rMin * rMin + rand() * (rMax * rMax - rMin * rMin));   // area-uniform (matches main loop)
         const a = rand() * Math.PI * 2;
         const x = Math.cos(a) * r;
         const z = Math.sin(a) * r;
@@ -385,7 +390,9 @@ function sampleClusterPositions(
   for (let i = 0; i < n; i++) {
     let accepted: { x: number; z: number } | null = null;
     for (let t = 0; t < maxTries; t++) {
-      const r = rMin + rand() * (rMax - rMin);
+      // Walk-test rebalance 2026-07-17 — area-uniform (matches flagship + procgen
+      // samplers); de-clumps the 3 narrative clusters off the near-spawn center.
+      const r = Math.sqrt(rMin * rMin + rand() * (rMax * rMax - rMin * rMin));
       const a = rand() * Math.PI * 2;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;

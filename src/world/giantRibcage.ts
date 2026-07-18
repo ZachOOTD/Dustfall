@@ -81,6 +81,13 @@ const _ribBone = createBoneMaterial(0xc9c5bc, {
 // the full-daylight value → the day read is unchanged.
 registerBoneEmissive(_ribBone, 0x494d52, 0.36);
 
+/** The hero ribcage's weathered-grey bone material — the canonical bone_field
+ *  treatment (registered, sun-driven emissive). Exported so the bone SCATTER
+ *  (boneScatter.ts) shares the EXACT same material object → the whole graveyard,
+ *  hero + strewn bits, reads as one treatment and the daylight registry stays a
+ *  fixed two→one module singletons. NEVER dispose it (the _treeMat rule). */
+export const heroBoneMaterial = _ribBone;
+
 const UP = new THREE.Vector3(0, 1, 0);
 
 // ── BONE GAUGE (reviewer-tuned, and the tuning has history — read it before you
@@ -152,7 +159,7 @@ function jhash(seed: number, k: number): number {
  *  snap seeded by this value; null/absent = a smooth blunt dome (the natural taper
  *  ends + the buried ends, which nobody sees split open). Stump and its fallen half
  *  are handed the SAME seed so the two faces of one snap share a shard profile. */
-interface JagSpec { start?: number | null; end?: number | null }
+export interface JagSpec { start?: number | null; end?: number | null }
 
 /** THE FRACTURE PROFILE — the shape of one snapped bone face.
  *
@@ -242,7 +249,7 @@ function jagProfile(
 //    (default) or, where `jag` marks a real break, a JAGGED SPLINTERED FRACTURE
 //    (see `emitJagCap`). Carries UVs so it MERGES into the bone bucket (one draw
 //    call). ──
-function sweptTube(
+export function sweptTube(
   pts: THREE.Vector3[], radii: number[], radial: number, wobble = 0.06,
   jag?: JagSpec,
 ): THREE.BufferGeometry {
@@ -468,6 +475,17 @@ export function makeGiantRibcage(
   const env = (t: number): number => 0.45 + 0.55 * (1 - t * t);
 
   const colliders: ColliderDesc[] = [];
+  // ── CLIMB PROBE waypoints (ribcage-local; the caller/harness transforms them to
+  //    world via the group frame). Zach's walk-test: "the massive skeleton needs
+  //    full collision on the top, i want to be able to climb it." `crest` = the
+  //    spine-top ridge you walk up + along (end→end); `ribRests` = rib-top sample
+  //    points (rest-on-top checks); `ribTraverse` = one mid-span rib's top path
+  //    (spine→tip) for the walk-out-along-a-rib proof. Harness-only — nothing in the
+  //    game reads it (same spirit as `breaks` / leviathanProbe). ──
+  const crest: { x: number; y: number; z: number }[] = [];
+  const ribRests: { x: number; y: number; z: number }[] = [];
+  let ribTraverse: { x: number; y: number; z: number }[] | null = null;
+  let ribTravScore = Infinity;
   let maxHeight = 0;
   // Every SNAP's two faces, ribcage-local — the stump's break face and the matching
   // fallen half's. Published on userData purely so the verify/rig harness can frame a
@@ -490,6 +508,27 @@ export function makeGiantRibcage(
     dir.normalize();
     const quat = new THREE.Quaternion().setFromUnitVectors(UP, dir);
     colliders.push({ center: mid, half: { x: rr, y: len * 0.5 + rr, z: rr }, quat });
+  };
+
+  // ── Box a WHOLE run [i0..i1] of a swept tube as a CHAIN of oriented boxes, ~SEG_LEN
+  //    of arc each, so the ENTIRE visible bone carries walk-on-top collision (rule 9 +
+  //    CLIMBABLE — Zach's walk-test: full top collision so you can climb the skeleton).
+  //    `radAt(idx)` is the tube radius at a point; COL_PAD is small so the collider
+  //    tracks the bone (a fat pad would float the player visibly above the surface).
+  //    Coarse (≥ ~2m/box) so the whole graveyard stays inside the physics budget. ──
+  const SEG_LEN = 2.0;
+  const COL_PAD = 0.12;
+  const boxTube = (
+    pts: THREE.Vector3[], radAt: (i: number) => number, i0: number, i1: number,
+  ): void => {
+    let a = i0;
+    while (a < i1) {
+      let b = a + 1;
+      let len = pts[b].distanceTo(pts[a]);
+      while (b < i1 && len < SEG_LEN) { b++; len += pts[b].distanceTo(pts[b - 1]); }
+      boxRun(pts, radAt(Math.floor((a + b) / 2)) + COL_PAD, a, b);
+      a = b;
+    }
   };
 
   // ── LAY A SNAPPED-OFF PIECE ON THE SAND — the reviewer's specific ask: when a rib
@@ -559,34 +598,29 @@ export function makeGiantRibcage(
     }
     group.add(boneMesh(sweptTube(spinePts, spineRadii, 12)));
 
-    // Reachable spine-END colliders — near the ends the backbone dips to ~ground
-    // and a player at the tunnel mouth could walk into it (rule 9). Box the low
-    // segments (height above ground in [−0.5, 3.2]); the crown overhead is out of
-    // reach → no collider there.
-    const _q = new THREE.Quaternion();
-    let run: number[] = [];
-    const flush = () => {
-      if (run.length >= 2) {
-        const a = run[0], b = run[run.length - 1];
-        const pa = spinePts[a], pb = spinePts[b];
-        const mid = pa.clone().add(pb).multiplyScalar(0.5);
-        const dir = new THREE.Vector3().subVectors(pb, pa);
-        const len = dir.length();
-        if (len > 0.3) {
-          dir.normalize();
-          const quat = _q.clone().setFromUnitVectors(UP, dir);
-          const rr = spineRadii[Math.floor((a + b) / 2)] + 0.3;
-          colliders.push({ center: mid, half: { x: rr, y: len * 0.5 + rr, z: rr }, quat: quat.clone() });
-        }
+    // FULL walkable BACKBONE (climbable — Zach's walk-test: "i want to be able to
+    // climb it"). Box every EMERGED segment of the spine as a chain of oriented boxes
+    // (rule 9 — the collision IS the ridge the player walks up + along). The spine
+    // dives to bury at both ends, so it surfaces at a shallow (<50°) ramp the player
+    // can actually climb onto → walk the crest to the crown. Buried segments (well
+    // below the local sand) get no collider. Crest-top waypoints are published for the
+    // climb probe as we go (only the clearly-emerged points, arch > 0.35).
+    {
+      let run: number[] = [];
+      const flush = () => {
+        if (run.length >= 2) boxTube(spinePts, (i) => spineRadii[i], run[0], run[run.length - 1]);
+        run = [];
+      };
+      for (let s = 0; s <= NS; s++) {
+        const lg = localGroundAt(spinePts[s].x, 0);
+        const above = spinePts[s].y - lg;
+        if (above > -0.6) {
+          run.push(s);
+          if (above > 0.35) crest.push({ x: spinePts[s].x, y: spinePts[s].y + spineRadii[s], z: 0 });
+        } else flush();
       }
-      run = [];
-    };
-    for (let s = 0; s <= NS; s++) {
-      const t = (s / NS) * 2 - 1;
-      const above = spineArch(t);
-      if (above > -0.5 && above < 3.2) run.push(s); else flush();
+      flush();
     }
-    flush();
   }
 
   // ── Per-station loop: vertebra ring + dorsal blade + a rib hanging down each side. ──
@@ -777,21 +811,33 @@ export function makeGiantRibcage(
       group.add(boneMesh(sweptTube(full, radii, 12, 0.06, { end: broken ? snapSeed : null })));
       maxHeight = Math.max(maxHeight, full[0].y - lgB);
 
-      // Rib LEG COLLIDERS — box the reachable lower run (ground..~4.3m up), out at
-      // the tunnel side. Above head height the rib arcs overhead (unreachable) → no
-      // collider; the centre aisle (Z≈0) stays clear so the player walks through.
-      const band: number[] = [];
-      for (let k = 0; k < full.length; k++) {
-        const yAbove = full[k].y - lgB;
-        if (yAbove > -0.6 && yAbove < 4.3) band.push(k);
-      }
-      if (band.length >= 2) {
-        const nBox = band.length >= 9 ? 2 : 1;
-        for (let s = 0; s < nBox; s++) {
-          const a = band[Math.floor((s * band.length) / nBox)];
-          const b = band[Math.min(band.length - 1, Math.floor(((s + 1) * band.length) / nBox) - 1)];
-          // rr tracks the (now thinner) tube radius → collision follows the visible rib.
-          boxRun(full, radiusAt((0.5 * (a + b)) / SAMP) + 0.25, a, b);
+      // FULL walkable RIB (climbable): box the ENTIRE emerged run of the rib arc as a
+      // chain of oriented boxes (rule 9 — collision follows the whole visible bone).
+      // A player on the spine can walk OUT along a rib, and one standing anywhere on a
+      // rib stands ON it — no fall-through, no invisible wall beside it. Steep upper
+      // sections simply won't be walkable (the 50° KCC limit) — that's physics, not a
+      // gap: the collision is CONTINUOUS along the whole bone. The centre aisle (Z≈0)
+      // between the two hanging ribs still reads open (the ribs plant out at ±footZ).
+      {
+        let i0 = -1, i1 = -1;
+        for (let k = 0; k < full.length; k++) {
+          if (full[k].y - lgB > -0.6) { if (i0 < 0) i0 = k; i1 = k; }
+        }
+        if (i0 >= 0 && i1 > i0) {
+          boxTube(full, (idx) => radii[idx], i0, i1);
+          // Rest-on-top probe sample: the mid of the emerged arc (rest checks assert a
+          // capsule dropped here settles ON the bone, not through it).
+          const mid = Math.floor((i0 + i1) / 2);
+          ribRests.push({ x: full[mid].x, y: full[mid].y + radii[mid], z: full[mid].z });
+          // Traverse probe: keep the emerged top path (spine attach → tip) of the rib
+          // NEAREST mid-span (the most prominent arch) — the harness walks a sphere OUT
+          // along it from the crest to prove you can walk ALONG onto a rib.
+          if (Math.abs(t) < ribTravScore) {
+            ribTravScore = Math.abs(t);
+            const top: { x: number; y: number; z: number }[] = [];
+            for (let k = i0; k <= i1; k++) top.push({ x: full[k].x, y: full[k].y + radii[k], z: full[k].z });
+            ribTraverse = top;
+          }
         }
       }
     }
@@ -850,6 +896,10 @@ export function makeGiantRibcage(
   group.userData.length = length;
   group.userData.maxHeight = maxHeight;
   group.userData.breaks = breaks;   // harness-only: tight fracture framing (see `breaks`)
+  // Harness-only CLIMB probe (ribcage-local waypoints; the caller transforms via the
+  // group frame). Ordered end→end along the spine so crest[0]/crest[last] are the two
+  // low emerged ridge ends (a climb-on ramp from the sand). See the `crest` decl.
+  group.userData.ribcageProbe = { crest, ribRests, ribTraverse };
   group.userData.centerLocal = new THREE.Vector3(0, maxHeight * 0.5, 0);
 
   const applyColliders = (

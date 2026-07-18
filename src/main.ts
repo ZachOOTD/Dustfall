@@ -37,7 +37,8 @@ import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
-import { spawnBranches, spawnScrapAt, spawnRelicAt, updatePickups } from './pickups/pickups.ts';
+import { spawnBranches, spawnScrapAt, spawnRelicAt, spawnMaterialAt, updatePickups } from './pickups/pickups.ts';
+import { scatterForArchetype } from './config/lootRegistry.ts';   // walk-test fix — origin-world identity material scatter
 import { updatePanelDebris } from './world/panelDebris.ts';   // ACAX — popped panel-door physics sync
 import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
@@ -298,6 +299,59 @@ for (const s of salvageables.list) {
     spawnRelicAt(three.scene, terrain, wy.x + Math.cos(a) * r, wy.z + Math.sin(a) * r, scatterRand, pickupList);
   }
 }
+// ── Scavenger's Economy walk-test fix (2026-07-17) — ORIGIN-WORLD parity for the
+//    identity-material ground scatter the chunk streamer already spawns far-field
+//    (chunkManager). Zach: "only seeing scrap at most POIs — need the other
+//    materials to show up more often on the ground around wrecks and POIs." Every
+//    boot wreck/POI drops its identity materials (specialty POIs → their RICH
+//    table; every other hull → the mixed WRECK_GENERIC_SCATTER) so the drop matrix
+//    is legible from the origin world, not just the streamed far field.
+//
+//    SAVE-SAFETY: appended AFTER every other boot pickup spawn (branches / dead-tree
+//    clusters / placePOIs / the scrap ring / relics — all above), so NOT ONE
+//    pre-existing pickup id shifts (ids are assigned in spawn order via the module
+//    _nextId counter, and pickups persist by id via save.pickupSurvivors). An
+//    EXISTING pre-fix save keeps its exact survivor mapping and simply never shows
+//    these new tail-id materials (load despawns any pickup whose id ∉ survivors —
+//    the new ids are absent from an old survivor set, so they're culled cleanly, no
+//    corruption). A FRESH game spawns + persists them normally. INDEPENDENT rng
+//    (worldSeed-derived, distinct from scatterRand) so this never perturbs the
+//    scatter stream → creature / worm / POI positions stay byte-identical per seed;
+//    only the added materials differ.
+{
+  const matRand = makeRng((worldSeed ^ 0x1d70f) >>> 0);   // matches the streamer's material-rng offset
+  // Walk up an object's ancestry for the composite-POI archetype stamp
+  // (poiAssembler sets group.userData.poiArchetype; a salvageable's mesh is a
+  // child panel of that group). Legacy/anchor/hero kind-based wrecks have none →
+  // undefined → scatterForArchetype falls them to WRECK_GENERIC_SCATTER.
+  const archetypeOf = (obj: THREE.Object3D | null): string | undefined => {
+    for (let o = obj; o; o = o.parent) {
+      const a = o.userData?.poiArchetype;
+      if (typeof a === 'string') return a;
+    }
+    return undefined;
+  };
+  for (const s of salvageables.list) {
+    const table = scatterForArchetype(archetypeOf(s.mesh));
+    const massive = s.kind === 'massive';
+    const rMin = massive ? Tuning.SCRAP_RING_RADIUS_MASSIVE_MIN : Tuning.SCRAP_RING_RADIUS_MIN;
+    const rMax = massive ? Tuning.SCRAP_RING_RADIUS_MASSIVE_MAX : Tuning.SCRAP_RING_RADIUS_MAX;
+    for (const roll of table) {
+      const copies = roll.count ?? 1;
+      for (let c = 0; c < copies; c++) {
+        if (matRand() < roll.chance) {
+          const ang = matRand() * Math.PI * 2;
+          const r = rMin + matRand() * (rMax - rMin);
+          spawnMaterialAt(
+            three.scene, terrain, s.pos.x + Math.cos(ang) * r, s.pos.z + Math.sin(ang) * r,
+            roll.id as 'metal_pipe' | 'machine_part' | 'wiring' | 'battery',
+            matRand, pickupList,
+          );
+        }
+      }
+    }
+  }
+}
 _mark('scrap');
 // ACAQ/ACAR (Cycle 8) — the Sarlacc pit: a SEPARATE dune-desert hazard at its own
 // seed-derived anchor (a sand-maw belongs in open sand, not the ship graveyard).
@@ -544,7 +598,11 @@ function applyDevLoadout(c: GameContext): void {
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'raw_worm_meat');
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'worm_lure');   // C18 — sand-worm lure (testability; craft recipe is a follow-up)
   addItem(c.inventory, 'spyglass');   // C29 — salvaged spyglass (testability; also a craft recipe below)
-  for (let i = 0; i < 2; i++) addItem(c.inventory, 'cactus_pulp');
+  // Scavenger's Economy (build 2) — new salvage materials in the dev loadout (icons/craft testability).
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'metal_pipe');
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'machine_part');
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'wiring');
+  for (let i = 0; i < 4; i++) addItem(c.inventory, 'battery');
   // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'fire_kit');

@@ -41,6 +41,11 @@ import {
   conditionAdjective,
   type SalvageCondition,
 } from '../world/salvage.ts';
+import {
+  COMPONENT_LOOT,
+  COMPONENT_LOOT_CORRODED,
+  COMPONENT_LOOT_PRISTINE_BONUS,
+} from '../config/lootRegistry.ts';
 import { getItemDef } from '../inventory/items.ts';
 import {
   playPickup,
@@ -97,7 +102,8 @@ const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
   'raw_lizard_meat': 'cooked_lizard_meat',
   'raw_shrew_meat': 'cooked_shrew_meat',
   'raw_vulture_meat': 'cooked_vulture_meat',
-  'cactus_pulp': 'cooked_cactus_pulp',
+  // Scavenger's Economy (build 2) — cactus_pulp cook mapping removed (it is
+  // unobtainable: only ALIEN cacti spawn since CC-4 → alien_fruit).
   'raw_worm_meat': 'cooked_worm_meat',
   'lizard_on_a_stick_raw': 'lizard_on_a_stick_cooked',
 };
@@ -463,10 +469,12 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       };
       if (ctx.input.pressed.has('KeyE')) {
         const got = 1 + Math.floor(Math.random() * 2); // 1-2 yields
-        const yieldId: ItemId = isAlien ? 'alien_fruit' : 'cactus_pulp';
+        // Scavenger's Economy (build 2) — only ALIEN cacti spawn (CC-4), so the
+        // harvest always yields alien_fruit; the dead `cactus_pulp` else-branch
+        // was removed (the id is deprecated-unobtainable, kept only for load-compat).
         let added = 0;
         for (let i = 0; i < got; i++) {
-          if (addItem(ctx.inventory, yieldId, undefined, ctx) >= 0) added++;
+          if (addItem(ctx.inventory, 'alien_fruit', undefined, ctx) >= 0) added++;
         }
         if (added === 0) {
           ctx.ui.showToast('your bag is full');
@@ -474,11 +482,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
         harvestCactus(c, ctx.time.elapsed);
         playHarvest();
-        if (isAlien) {
-          ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);
-        } else {
-          ctx.ui.showToast(`you carve out ${added} piece${added > 1 ? 's' : ''} of pulp`);
-        }
+        ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);
       }
       return;
     }
@@ -1367,38 +1371,11 @@ function pryDurationMultiplier(c: SalvageCondition): number {
   }
 }
 
-const COMPONENT_LOOT: Record<string, { id: ItemId; count?: number }> = {
-  red_wire:     { id: 'rope' },
-  yellow_wire:  { id: 'cloth', count: 2 },
-  chip:         { id: 'scrap_bullet' },
-  fuse:         { id: 'scrap_bullet' },
-  scrap_chunk:  { id: 'scrap', count: 2 },
-  cloth_scrap:  { id: 'cloth', count: 2 },
-  bandage_pack: { id: 'bandage' },
-};
-
-/** AAT — corroded variant of COMPONENT_LOOT. Rusted panels yield
- *  degraded items: wires → cloth (the insulation rotted off), chips
- *  → scrap (silicon disintegrated), bandages → cloth (the gauze
- *  weathered). Reads as "this stuff has been sitting too long." */
-const COMPONENT_LOOT_CORRODED: Record<string, { id: ItemId; count?: number }> = {
-  red_wire:     { id: 'cloth' },               // rope → cloth (degraded)
-  yellow_wire:  { id: 'cloth' },               // cloth×2 → cloth×1 (less)
-  chip:         { id: 'scrap' },               // bullet → scrap (silicon shot)
-  fuse:         { id: 'scrap' },               // bullet → scrap
-  scrap_chunk:  { id: 'scrap' },               // scrap×2 → scrap×1
-  cloth_scrap:  { id: 'cloth' },               // cloth×2 → cloth×1
-  bandage_pack: { id: 'cloth' },               // bandage → cloth (gauze rotted)
-};
-
-/** AAT — pristine bonus loot. Last component on a pristine panel
- *  upgrades to a premium roll: rare scrap_bullet bundles, or even
- *  a hero-tier weapon spawn. Player learns "pristine panels are
- *  worth the longer pry." Applied only to the LAST extract from a
- *  pristine panel (when salvageRemaining = 1 after decrement = 0). */
-const COMPONENT_LOOT_PRISTINE_BONUS: { id: ItemId; count?: number } = {
-  id: 'scrap_bullet', count: 3,                // mostly ammo bundles
-};
+// Scavenger's Economy build 1 — the component (panel) loot maps now live in the
+// unified loot registry (config/lootRegistry.ts): COMPONENT_LOOT (standard),
+// COMPONENT_LOOT_CORRODED (degraded), COMPONENT_LOOT_PRISTINE_BONUS (last-extract
+// premium). Imported at the top of this module; the extraction logic below is
+// unchanged (deterministic per-component-kind lookup, not a roll).
 
 /** AAR + AAS — extract one component from an already-open panel.
  *  Hides the next un-extracted component mesh, looks up its loot via
