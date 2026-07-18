@@ -370,8 +370,16 @@ export const Tuning = {
   // that ground (streamed POIs begin where S1 left bare dunes). The edge
   // margin keeps a chunk's POI off its border so two neighbors can't
   // place wrecks a few meters apart across a seam.
-  CHUNK_POI_CHANCE: 0.048,          // review 2026-07-15 — space wrecks/POIs out more (was 0.07); uniform start+far
-  CHUNK_POI_ORIGIN_EXCLUSION_M: 1600,   // review — a larger sparse starting zone (was 1250)
+  // Walk-test rebalance 2026-07-17 — raised 0.048→0.055 so the far-field AMBIENT
+  // density (0.055/(112m)² = 4.38/km²) equals the rebalanced boot procgen ambient
+  // (18 area-uniform over the 1150m disc = 4.33/km²) — the two systems now match
+  // within ~1% (was 41% apart: origin 5.79 vs far 3.83). scripts/poi-density-probe.mjs.
+  CHUNK_POI_CHANCE: 0.055,          // was 0.048 — far field was too barren vs origin
+  // Lowered 1600→1150 to sit exactly at the boot procgen's outer edge
+  // (POI_SCATTER_RADIUS_MAX). Before, boot content ended ~1100m but streamed
+  // began at 1600m → a 500m dead ring with NEITHER system. Now streamed picks up
+  // where boot leaves off — continuous density across the seam (probe seam-check).
+  CHUNK_POI_ORIGIN_EXCLUSION_M: 1150,   // was 1600 — closed the empty origin→far-field ring
   CHUNK_POI_EDGE_MARGIN_M: 25,
   // Infinite Sands S3 — streamed scatter + ambient life (all beyond the
   // same origin exclusion; the boot field is untouched).
@@ -1015,11 +1023,18 @@ export const Tuning = {
   // rejection sampling with min-separation enforcement (Poisson-disk
   // character at this density). Vocabulary is the existing wreck kinds —
   // no new art.
-  POI_PROCGEN_COUNT: 22,               // AAI: was 15 — density bump for procgen worlds
+  // Walk-test rebalance 2026-07-17 (SAVE_VERSION 17→18) — Zach: "starting area
+  // too dense, far field too barren; they should match." The boot AMBIENT POI
+  // layer (this procgen scatter) is the direct analog of the streamed chunk POI
+  // (CHUNK_POI_CHANCE). Two coupled fixes: (a) sample AREA-UNIFORM not linear-r
+  // so the 1/r center-clump goes away (was ~19/km² at 300m → now flat ~4.4/km²);
+  // (b) trim 22→18 + extend rMax to the exclusion seam so the boot ambient
+  // density equals the far-field ambient. See scripts/poi-density-probe.mjs.
+  POI_PROCGEN_COUNT: 18,               // was 22 (AAI: was 15) — rebalance to match far-field ambient
   POI_MIN_SEPARATION: 250,             // m — rejection-sample min distance between any two POIs
   POI_MAX_PLACEMENT_TRIES: 80,         // per-target attempt budget
   POI_SCATTER_RADIUS_MIN: 120,         // m — leave room for spawn cluster + anchor POIs
-  POI_SCATTER_RADIUS_MAX: 1100,        // m — safely inside chunk band
+  POI_SCATTER_RADIUS_MAX: 1150,        // m — was 1100; extended to meet CHUNK_POI_ORIGIN_EXCLUSION_M (seamless boot→streamed handoff)
   // Session ABA — share of procgen POIs that use the new composite
   // wreck system (procgenWreck.ts) vs. the legacy hand-modeled
   // wreck-kind palette. Session ABC bumped 0.35 → 0.50 after the part

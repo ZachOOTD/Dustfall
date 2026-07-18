@@ -72,7 +72,14 @@ export function placeProcgenPOIs(
   for (let i = 0; i < target; i++) {
     let accepted: { x: number; z: number } | null = null;
     for (let t = 0; t < maxTries; t++) {
-      const r = rMin + rand() * (rMax - rMin);
+      // Walk-test rebalance 2026-07-17 — AREA-UNIFORM radius (was linear
+      // `rMin + rand()*(rMax-rMin)`, which concentrated ~1/r toward the center
+      // and read as "starting area too dense"). sqrt maps a uniform draw to a
+      // uniform-per-unit-AREA radius, so the ambient POI density is flat across
+      // the whole boot disc and equals the far-field chunk density. One rand()
+      // draw either way (stream shape unchanged). SAVE_VERSION 17→18 covers the
+      // resulting boot-layout change for pre-18 saves.
+      const r = Math.sqrt(rMin * rMin + rand() * (rMax * rMax - rMin * rMin));
       const a = rand() * Math.PI * 2;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
