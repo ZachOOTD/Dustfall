@@ -1,17 +1,17 @@
 {
-  "campaign": "Scavenger's Economy (setup)",
+  "campaign": "The Deep Desert",
   "status": "active",
-  "started": "2026-07-17",
-  "branch": "campaign/2026-07-17-economy",
-  "cycles_completed": 8,
-  "current_tier": "build:done-awaiting-walktest",
+  "started": "2026-07-18",
+  "branch": "campaign/2026-07-18-deep-desert",
+  "cycles_completed": 0,
+  "current_tier": "ladder:1-dune-research",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
   "visual_gate": "auto",
-  "until": "milestone:economy-proposal",
+  "until": "milestone:deep-desert-shipped",
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": {
@@ -21,115 +21,8 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 2600000
+    "total": 0
   },
-  "queue": [
-    {
-      "id": "#28",
-      "unit": "Skyfall stern seam",
-      "kind": "fix",
-      "overnight_safe": true
-    },
-    {
-      "id": "#29",
-      "unit": "Boneyard scatter overhaul",
-      "kind": "hero-visual",
-      "overnight_safe": true,
-      "iterate": "5-8 rounds + day/night check"
-    },
-    {
-      "id": "research",
-      "unit": "4-digest research swarm",
-      "kind": "research",
-      "overnight_safe": true,
-      "digests": [
-        "crafting-improvements",
-        "multiplayer-architecture",
-        "character-pipeline",
-        "cave-feasibility"
-      ]
-    },
-    {
-      "id": "proposal",
-      "unit": "economy-proposal.md",
-      "kind": "proposal",
-      "then": "PAUSE awaiting_approval",
-      "bake_itemids": false,
-      "change_loot_tables": false
-    }
-  ],
-  "cycles": [
-    {
-      "n": 1,
-      "date": "2026-07-17",
-      "focus": "#28 Skyfall stern seam",
-      "outcome": "SHIPPED",
-      "spend": 400000,
-      "commit": "009ccca",
-      "note": "solidInner bridge-band winding fix at the endFlip end; winding-only, determinism byte-identical"
-    },
-    {
-      "n": 2,
-      "date": "2026-07-17",
-      "focus": "#29 boneyard scatter overhaul",
-      "outcome": "SHIPPED",
-      "spend": 350000,
-      "commit": "e90344b",
-      "note": "5-type real-bone vocabulary sharing the hero material+fracture pipeline; night-glow class fixed via the shared registry; steering processed (Fable plan / Opus execute)"
-    },
-    {
-      "n": 3,
-      "date": "2026-07-17",
-      "focus": "research swarm (4 digests)",
-      "outcome": "SHIPPED",
-      "spend": 150000,
-      "commit": "2c58916",
-      "note": "crafting/multiplayer/character/cave digests to docs/research/ \u00e2\u20ac\u201d decision support, no code changes"
-    },
-    {
-      "n": 4,
-      "date": "2026-07-18",
-      "focus": "economy proposal + pause",
-      "outcome": "PROPOSED",
-      "spend": 100000,
-      "commit": "(this)",
-      "note": "economy-proposal.md written (4 materials, drop matrix, 8 recipes, unification plan, Q1-Q6 w/ defaults); morning summary; PAUSED milestone-review"
-    },
-    {
-      "n": 5,
-      "date": "2026-07-18",
-      "focus": "build 1: loot-registry unification",
-      "outcome": "SHIPPED",
-      "spend": 400000,
-      "commit": "34f4aca",
-      "note": "one registry + verify:loot digest gate; loot-preserving proven; found the 4th hidden system (tuning.ts container thresholds); COMPONENT_LOOT was in interaction.ts not wrecks.ts"
-    },
-    {
-      "n": 6,
-      "date": "2026-07-18",
-      "focus": "build 2: 4 materials + drop matrix",
-      "outcome": "SHIPPED",
-      "spend": 600000,
-      "commit": "e571d82",
-      "note": "metal_pipe/machine_part/wiring/battery + meshes/icons + identity drops + ground scatter on independent rng (descriptor digests unchanged); cactus_pulp deprecated for save-compat"
-    },
-    {
-      "n": 7,
-      "date": "2026-07-18",
-      "focus": "build 3: recipes + discovery UX",
-      "outcome": "SHIPPED",
-      "spend": 450000,
-      "commit": "310dbbe",
-      "note": "3 new (anyOf raw meat) + 7 updated recipes; source hints on cards; craft-unlock probe extended incl. old-recipe rejection"
-    },
-    {
-      "n": 8,
-      "date": "2026-07-18",
-      "focus": "build 4: balance check + walk-test guide",
-      "outcome": "SHIPPED",
-      "spend": 150000,
-      "commit": "(this)",
-      "note": "analytic yield-vs-cost table (battery scarcest by design); economy-walktest-2026-07-18.md; campaign complete pending walk-test + ship call"
-    }
-  ]
+  "charter": "docs/campaign/campaign-deep-desert.md",
+  "cycles": []
 }
