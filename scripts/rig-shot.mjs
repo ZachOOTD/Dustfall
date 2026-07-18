@@ -7645,6 +7645,205 @@ const SCENARIOS = {
     if (!pass) throw new Error('dune-slope GATE FAILED');
   },
 
+  // ── erg-vista (Deep Desert cycle 3) — the CHECKPOINT vista set Zach approves
+  //    scale/feel from. Streams the nearest erg core in at late-afternoon raking
+  //    light (dayTime 0.70), hides the HUD chrome, and shoots four well-framed
+  //    player's-eye vistas — approach / crest / trough / scale — printing the
+  //    LOCAL dune height + wavelength at each spot so numbers ship WITH pictures.
+  //    Output: verification/scen-erg-vista-<name>.png.
+  //    Run: node scripts/rig-shot.mjs --scenario=erg-vista --port=5262
+  'erg-vista': async (page) => {
+    // ── clean scene + late-afternoon raking sun + hidden HUD + big canvas ──
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0;
+      g.setTime(0.65);   // late afternoon — raking sun (~37° elev) shows dune form + keeps sand legible
+      const css = document.createElement('style');
+      css.textContent = '#hud,#hotbar,#crosshair,#dev-mode-badge,#interact-prompt,#damage-vignette,#long-storm-indicator,#shelter-indicator,#toast,#perf-hud,#crafting-menu,#dev-item-panel{display:none!important}';
+      document.head.appendChild(css);
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;   // re-enabled only for the scale shot
+      ctx.three.renderer.setSize(1600, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1600 / 900; cam.updateProjectionMatrix(); }
+    });
+
+    // ── locate the nearest erg core (coarse scan → centroid refine) ──
+    const spot = await page.evaluate(() => {
+      const bio = window.__game.ctx.biomes;
+      let coarse = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200)
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z; if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; coarse = { x, z }; }
+        }
+      if (!coarse) return null;
+      let sx = 0, sz = 0, w = 0;
+      for (let dx = -400; dx <= 400; dx += 16)
+        for (let dz = -400; dz <= 400; dz += 16)
+          if (bio.ergAt(coarse.x + dx, coarse.z + dz) > 0.95) { sx += coarse.x + dx; sz += coarse.z + dz; w++; }
+      const cx = w ? Math.round(sx / w) : coarse.x, cz = w ? Math.round(sz / w) : coarse.z;
+      const info = bio.ergInfoAt(cx, cz);
+      return { cx, cz, windRad: info ? info.windRad : 0, dist: Math.round(Math.hypot(cx, cz)) };
+    });
+    if (!spot) throw new Error('erg-vista: NO erg found within a 24km scan');
+    console.log(`[erg-vista] erg core @(${spot.cx},${spot.cz}) ${spot.dist}m from origin, wind=${(spot.windRad * 180 / Math.PI).toFixed(0)}°`);
+    await page.evaluate((s) => { window.__ergVista = s; }, spot);
+
+    // ── stream the core in (teleport past the anchor margin → ring re-anchors) ──
+    await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx; ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.6, z: s.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();   // stream the 3×3 tile ring + recenter sky
+      ctx.flags.paused = true;
+    }, spot);
+
+    // Shared in-page helpers, re-declared per shot (each page.evaluate is isolated):
+    //   duneMetrics(cx,cz,windRad) → {height, wavelength} from a ±300m wind transect.
+    const HELPERS = `
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const h = (x, z) => ctx.terrain.heightAt(x, z);
+      const duneMetrics = (px, pz, wr) => {
+        const wx = Math.cos(wr), wz = Math.sin(wr);
+        const prof = [];
+        for (let t = -300; t <= 300; t += 2) prof.push({ t, y: h(px + wx * t, pz + wz * t) });
+        const WW = 4; const ext = [];
+        for (let i = WW; i < prof.length - WW; i++) {
+          let isMax = true, isMin = true;
+          for (let k = i - WW; k <= i + WW; k++) { if (prof[k].y > prof[i].y + 1e-6) isMax = false; if (prof[k].y < prof[i].y - 1e-6) isMin = false; }
+          if (isMax) ext.push({ t: prof[i].t, y: prof[i].y, kind: 'max' });
+          else if (isMin) ext.push({ t: prof[i].t, y: prof[i].y, kind: 'min' });
+        }
+        const ded = [];
+        for (const e of ext) { const l = ded[ded.length - 1]; if (l && l.kind === e.kind) { if (e.kind === 'max' ? e.y > l.y : e.y < l.y) ded[ded.length - 1] = e; } else ded.push(e); }
+        const amps = [], spac = []; let lastMax = null;
+        for (let i = 1; i < ded.length; i++) { const d = Math.abs(ded[i].y - ded[i - 1].y); if (d > 4) amps.push(d); }
+        for (const e of ded) { if (e.kind === 'max') { if (lastMax) spac.push(Math.abs(e.t - lastMax)); lastMax = e.t; } }
+        const med = (a) => { if (!a.length) return NaN; const s = a.slice().sort((u, v) => u - v); return s[Math.floor(s.length / 2)]; };
+        return { height: med(amps), wavelength: med(spac) };
+      };
+    `;
+    const shoot = async (name, code) => {
+      const meta = await page.evaluate('(() => {' + HELPERS + code + '})()');
+      await page.waitForTimeout(450);
+      await page.screenshot({ path: join(OUT, `scen-erg-vista-${name}.png`), timeout: 60000 });
+      const hStr = Number.isFinite(meta.height) ? meta.height.toFixed(1) : '?';
+      const wStr = Number.isFinite(meta.wavelength) ? meta.wavelength.toFixed(0) : '?';
+      console.log(`[erg-vista] ${name}: dune height ~${hStr}m · wavelength ~${wStr}m  → scen-erg-vista-${name}.png  ${meta.note || ''}`);
+      return meta;
+    };
+
+    // 1) CREST — stand on the tallest local mega-dune crest, look DOWNWIND so the
+    //    slip face drops away underfoot and the sea of crests recedes to the haze.
+    await shoot('crest', `
+      const s = window.__ergVista; const wr = s.windRad; const wx = Math.cos(wr), wz = Math.sin(wr);
+      const rx = -Math.sin(wr), rz = Math.cos(wr);                 // along ridge (toward the lit horizon)
+      let bx = s.cx, bz = s.cz, by = -1e9;
+      for (let t = -200; t <= 200; t += 3) { const x = s.cx + wx * t, z = s.cz + wz * t; const y = h(x, z); if (y > by) { by = y; bx = x; bz = z; } }
+      cam.position.set(bx, h(bx, bz) + 1.7, bz);
+      // diagonal: ridge axis (lit) blended with downwind (slip face drops away underfoot)
+      let dxk = rx + wx * 0.6, dzk = rz + wz * 0.6; const dl = Math.hypot(dxk, dzk); dxk /= dl; dzk /= dl;
+      const tx = bx + dxk * 320, tz = bz + dzk * 320;
+      cam.lookAt(tx, h(tx, tz) - 7, tz);                          // gentle down-tilt: corrugated sea recedes
+      cam.updateMatrixWorld(true);
+      return duneMetrics(bx, bz, wr);
+    `);
+
+    // 2) TROUGH — drop into the lowest local interdune, look ALONG the ridge axis
+    //    (perpendicular to wind) so dune WALLS flank both sides and occlude the
+    //    horizon — the lost-in-the-dunes read.
+    await shoot('trough', `
+      const s = window.__ergVista; const wr = s.windRad; const wx = Math.cos(wr), wz = Math.sin(wr);
+      const rx = -Math.sin(wr), rz = Math.cos(wr);                 // along ridge (perp to wind)
+      let bx = s.cx, bz = s.cz, by = 1e9;
+      for (let t = -200; t <= 200; t += 3) { const x = s.cx + wx * t, z = s.cz + wz * t; const y = h(x, z); if (y < by) { by = y; bx = x; bz = z; } }
+      cam.position.set(bx, h(bx, bz) + 1.7, bz);
+      const tx = bx + rx * 160, tz = bz + rz * 160;
+      cam.lookAt(tx, h(tx, tz) + 6, tz);                           // slight up: walls rise, sky slot narrows
+      cam.updateMatrixWorld(true);
+      return duneMetrics(bx, bz, wr);
+    `);
+
+    // 3) SCALE — the player figure at a trough base with a mega-dune towering
+    //    behind (human ~1.8m against a ~45m dune = the scale read). Re-enable the
+    //    rig, face it into the dune, camera behind + above looking past it.
+    await shoot('scale', `
+      const s = window.__ergVista; const wr = s.windRad; const wx = Math.cos(wr), wz = Math.sin(wr);
+      // trough base near core, and the crest it faces (upwind, higher-ground side)
+      let bx = s.cx, bz = s.cz, by = 1e9;
+      for (let t = -200; t <= 200; t += 3) { const x = s.cx + wx * t, z = s.cz + wz * t; const y = h(x, z); if (y < by) { by = y; bx = x; bz = z; } }
+      // steepest-ascent direction at the trough (toward the near dune wall)
+      const gx = h(bx + 4, bz) - h(bx - 4, bz), gz = h(bx, bz + 4) - h(bx, bz - 4);
+      const gl = Math.hypot(gx, gz) || 1; const ux = gx / gl, uz = gz / gl;
+      // place the player body at the trough, facing up the dune
+      const py = h(bx, bz);
+      ctx.player.body.body.setTranslation({ x: bx, y: py + 1.0, z: bz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (ctx.player.rig) { ctx.player.rig.group.visible = true; ctx.player.rig.group.position.set(bx, py, bz); ctx.player.rig.group.rotation.y = Math.atan2(ux, uz); }
+      // camera behind + above the figure, looking past it up the dune face
+      cam.position.set(bx - ux * 7, py + 3.0, bz - uz * 7);
+      const tx = bx + ux * 80, tz = bz + uz * 80;
+      cam.lookAt(tx, h(tx, tz) + 14, tz);
+      cam.updateMatrixWorld(true);
+      return duneMetrics(bx, bz, wr);
+    `);
+
+    // 4) APPROACH — teleport OUT onto the flat desert beyond the erg edge (stream
+    //    + recenter the sky there), then look horizontally at the near wall of
+    //    mega-dunes rising from the flats (the "entering the erg" moment).
+    await page.evaluate(async () => {
+      const ctx = window.__game.ctx; const bio = ctx.biomes;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const s = window.__ergVista;
+      const wr = s.windRad;
+      // Front-light the wall: choose the edge azimuth pointing most toward the SUN
+      // (so looking inward at the dunes has the sun behind the camera → warm lit
+      // faces, not a shadowed lump). sunDir.xz points toward the sun.
+      const sd = ctx.time.sunDir; let sax = sd.x, saz = sd.z; const sl = Math.hypot(sax, saz) || 1; sax /= sl; saz /= sl;
+      let best = null;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 24) {
+        const dx = Math.cos(a), dz = Math.sin(a);
+        // CROSS-LIGHT the wall: outward ~perpendicular to the sun, so the inward
+        // view has the low sun off to one side → lit windward faces + shadowed
+        // slip faces = the corrugated sea reads as sand (the same oblique light
+        // that makes the crest/trough shots work). Reward perpendicular alignment.
+        const sunAlign = -Math.abs(dx * sax + dz * saz);
+        // march to the erg boundary along this azimuth
+        let ex = s.cx, ez = s.cz;
+        for (let rr = 0; rr <= 2400; rr += 8) { const x = s.cx + dx * rr, z = s.cz + dz * rr; if (bio.ergAt(x, z) <= 0) { ex = x; ez = z; break; } }
+        // tallest dune in the 500m just inside this edge (for aim framing)
+        let tall = -1e9, tx = ex, tz = ez;
+        for (let rr = -500; rr <= -60; rr += 20) { const x = ex + dx * rr, z = ez + dz * rr; const y = ctx.terrain.heightAt(x, z); if (y > tall) { tall = y; tx = x; tz = z; } }
+        // score: front-lighting dominates, a modest tall-dune bonus breaks ties
+        const score = sunAlign * 10 + tall * 0.02;
+        if (!best || score > best.score) best = { score, a, dx, dz, ex, ez, tall, tx, tz };
+      }
+      const ox = best.ex + best.dx * 180, oz = best.ez + best.dz * 180;   // 180m out — clean flats in the foreground
+      window.__ergApproach = { ox, oz, ex: best.ex, ez: best.ez, dx: best.dx, dz: best.dz, tx: best.tx, tz: best.tz, wr };
+      ctx.flags.paused = false;
+      ctx.player.body.body.setTranslation({ x: ox, y: ctx.terrain.heightAt(ox, oz) + 1.6, z: oz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      for (let f = 0; f < 200; f++) await raf();   // stream + recenter sky at the vantage
+      ctx.flags.paused = true;
+    });
+    await shoot('approach', `
+      const a = window.__ergApproach;
+      cam.position.set(a.ox, h(a.ox, a.oz) + 2.0, a.oz);
+      // look INTO the erg toward the rising interior sea (~800m inside the edge),
+      // aimed slightly up so the front-lit dune mass fills the upper-middle band
+      // and the clean flats read as the foreground you're crossing.
+      const tx = a.ex - a.dx * 650, tz = a.ez - a.dz * 650;
+      cam.lookAt(tx, h(tx, tz) + 30, tz);                         // aim up: cross-lit dune sea fills the frame
+      cam.updateMatrixWorld(true);
+      // metrics sampled well inside the dune sea
+      return duneMetrics(a.ex - a.dx * 700, a.ez - a.dz * 700, a.wr);
+    `);
+  },
+
   // ── bone-scatter — the strewn bone-bit GALLERY (bone_field scatter vocabulary).
   //    Builds every BoneBitKind across several seeds in a grid on real terrain +
   //    shoots them, and NUMERICALLY guards the `vertebra` kind against the tall cone

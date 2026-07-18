@@ -295,8 +295,11 @@ export function createTerrain(
     if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
     // The Deep Desert — override the erg toward clean wind-blown sand so the dune
     // sea reads coherent (the base biome-noise color could stray rocky/salt).
+    // FULL override at the core (ergC is the 0→1 mask, so this fades naturally
+    // through the border) — a partial override let dark rocky / pale salt base
+    // color bleed through and read as a mud/rock patch on the dunes.
     const ergC = biomes.ergAt(wx2, wz2);
-    if (ergC > 0) c = lerp3(c, BIOME_COLOR_ERG, ergC * 0.9);
+    if (ergC > 0) c = lerp3(c, BIOME_COLOR_ERG, ergC);
     return c;
   };
 
@@ -325,6 +328,13 @@ export function createTerrain(
     positions: Float32Array;
     colors: Float32Array;
     biomeRaws: Float32Array;
+    /** The Deep Desert — per-vertex erg blend mask (0 outside → 1 in the dune
+     *  sea). Baked into geometry as `aErgMask` so the shared terrain shader can
+     *  SUPPRESS the salt-crack ("cracked-hardpan") pattern + heat mirage inside
+     *  the erg (they're gated on the underlying biome noise, which still strays
+     *  into salt range under the dunes → the "mud hills" read). Pure: ergAt is
+     *  hash/noise-only, so descriptor gates + save persistence stay unaffected. */
+    ergMasks: Float32Array;
     /** Next i-row to fill; > CELLS = fill complete. */
     row: number;
     geo: THREE.BufferGeometry | null;
@@ -350,6 +360,7 @@ export function createTerrain(
       positions: new Float32Array(vertCount * 3),
       colors: new Float32Array(vertCount * 3),
       biomeRaws: new Float32Array(vertCount),
+      ergMasks: new Float32Array(vertCount),
       row: 0,
       geo: null,
     };
@@ -379,6 +390,7 @@ export function createTerrain(
         b.colors[idx + 1] = c[1];
         b.colors[idx + 2] = c[2];
         b.biomeRaws[i * stride + j] = n;
+        b.ergMasks[i * stride + j] = biomes.ergAt(wx2, wz2);
       }
     }
     b.row = end + 1;
@@ -403,6 +415,8 @@ export function createTerrain(
     geo.setAttribute('color', new THREE.BufferAttribute(b.colors, 3));
     // Custom per-vertex biome noise — read by terrainMaterial shader.
     geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(b.biomeRaws, 1));
+    // Per-vertex erg mask — the shader suppresses cracks/mirage inside it.
+    geo.setAttribute('aErgMask', new THREE.BufferAttribute(b.ergMasks, 1));
     geo.setIndex(_sharedIndices);
     geo.computeVertexNormals();
     b.geo = geo;
