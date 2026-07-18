@@ -1501,6 +1501,83 @@ const SCENARIOS = {
     console.log(`[material-probe] ${pass ? 'PASS' : 'FAIL'} (world=${worldOk} take=${takeOk}) ${JSON.stringify(r)}`);
   },
 
+  // WALK-TEST FIX (2026-07-17) — ORIGIN-WORLD ground-scatter gate. Proves the fresh
+  // boot world (not the streamed far field) has IDENTITY MATERIAL pickups on the
+  // ground around wrecks/POIs, not just scrap. Buckets every material pickup by its
+  // nearest salvageable (attributed to that wreck's archetype, or kind:* for the
+  // generic hulls), prints per-POI-type counts, and PASSES when ≥3 distinct POI
+  // types carry materials INCLUDING at least one GENERIC wreck (a kind:* / generic
+  // hull) — the "every wreck teaches materials exist" contract. Then frames the
+  // richest origin wreck so the ground materials are visible in a screenshot.
+  'material-scatter': async (page) => {
+    const MATS = ['metal_pipe', 'machine_part', 'wiring', 'battery'];
+    const GENERIC_ARCH = ['derelict', 'hollow_husk', 'enterable_wreck', 'crash_husk', 'ship'];
+    const r = await page.evaluate(({ MATS, GENERIC_ARCH }) => {
+      const g = window.__game; const ctx = g.ctx;
+      const matSet = new Set(MATS);
+      // Archetype from a salvageable mesh's ancestry (poiAssembler stamps
+      // group.userData.poiArchetype; legacy/anchor/hero wrecks have none).
+      const archOf = (obj) => { for (let o = obj; o; o = o.parent) { const a = o.userData && o.userData.poiArchetype; if (typeof a === 'string') return a; } return null; };
+      // Bucket label per wreck: archetype id, else kind:<salvageKind>. Filter
+      // TRANSIENT (chunk-streamed) salvageables so this measures the BOOT origin
+      // world exactly — not far-field content streamed in once the player entered.
+      const salv = ctx.salvageables.list.filter((s) => !s.transient).map((s) => {
+        const a = archOf(s.mesh);
+        const label = a || ('kind:' + s.kind);
+        const generic = !a || GENERIC_ARCH.indexOf(a) >= 0 || label.indexOf('kind:') === 0;
+        return { x: s.pos.x, z: s.pos.z, label, generic };
+      });
+      const perType = {};   // label -> {metal_pipe,machine_part,wiring,battery,total,generic}
+      let orphan = 0;       // materials with no salvageable within radius
+      let best = null;      // richest wreck (most nearby materials) for the shot
+      const nearby = new Map();
+      const RADIUS = 22;    // ≥ the massive scrap-ring max; nearest wins on overlap
+      for (const p of ctx.pickups.list) {
+        if (!matSet.has(p.itemId) || p.transient) continue;   // boot materials only (not streamed)
+        let bi = -1, bd = RADIUS * RADIUS;
+        for (let i = 0; i < salv.length; i++) {
+          const dx = p.pos.x - salv[i].x, dz = p.pos.z - salv[i].z;
+          const d = dx * dx + dz * dz;
+          if (d < bd) { bd = d; bi = i; }
+        }
+        if (bi < 0) { orphan++; continue; }
+        const s = salv[bi];
+        const b = perType[s.label] || (perType[s.label] = { metal_pipe: 0, machine_part: 0, wiring: 0, battery: 0, total: 0, generic: s.generic });
+        b[p.itemId]++; b.total++;
+        nearby.set(bi, (nearby.get(bi) || 0) + 1);
+      }
+      for (const [i, n] of nearby) if (!best || n > best.n) best = { i, n, x: salv[i].x, z: salv[i].z, label: salv[i].label };
+      // Frame the richest wreck: camera up-and-back, looking down at the ground ring.
+      if (best) {
+        ctx.weather.intensity = 0; g.setTime(0.42);
+        ctx.three.renderer.toneMappingExposure = 1.15;
+        ctx.flags.paused = true;
+        const gy = ctx.terrain.heightAt(best.x, best.z);
+        const cam = ctx.three.camera;
+        cam.position.set(best.x + 6, gy + 4.2, best.z + 6);
+        cam.lookAt(best.x, gy + 0.1, best.z);
+        cam.updateMatrixWorld(true);
+      }
+      const totalMats = ctx.pickups.list.filter((p) => matSet.has(p.itemId) && !p.transient).length;
+      const typesWithMats = Object.keys(perType).length;
+      const genericTypes = Object.keys(perType).filter((k) => perType[k].generic);
+      return { perType, orphan, totalMats, typesWithMats, genericTypes, best };
+    }, { MATS, GENERIC_ARCH });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(OUT, 'scen-material-scatter.png'), fullPage: false, timeout: 60000 });
+    // Per-type table.
+    const rows = Object.entries(r.perType).sort((a, b) => b[1].total - a[1].total);
+    console.log(`[material-scatter] ${r.totalMats} material pickups in the origin world across ${r.typesWithMats} POI types (orphan=${r.orphan}):`);
+    for (const [label, b] of rows) {
+      console.log(`  ${label.padEnd(18)} total=${String(b.total).padStart(3)} ${b.generic ? '[generic]' : '[specialty]'}  pipe=${b.metal_pipe} part=${b.machine_part} wiring=${b.wiring} batt=${b.battery}`);
+    }
+    const enough = r.typesWithMats >= 3;
+    const hasGeneric = r.genericTypes.length > 0;
+    const pass = enough && hasGeneric && r.totalMats > 0;
+    console.log(`[material-scatter] ${pass ? 'PASS' : 'FAIL'} — ≥3 POI types with materials: ${enough} (${r.typesWithMats}); includes a generic wreck: ${hasGeneric} (${r.genericTypes.join(',') || 'none'})`);
+    if (r.best) console.log(`[material-scatter] shot framed on richest wreck "${r.best.label}" (${r.best.n} materials nearby) → verification/scen-material-scatter.png`);
+  },
+
   // Crafting rework — PICKUP-GATED discovery gate (replaces the old craft-chooser
   //   gate). A recipe unlocks once ALL its ingredient TYPES have been collected
   //   (any means — pickup/craft/loot, all via addItem). Runs NON-dev (enterGame(false),

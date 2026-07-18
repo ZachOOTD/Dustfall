@@ -307,23 +307,52 @@ export const COMPONENT_LOOT_PRISTINE_BONUS: ComponentLoot = {
 // P = primary (high chance + count), s = secondary (lower). Matches the approved
 // matrix: pipeline→pipe P · refinery→pipe P,wiring s · transit_car→pipe P,
 // machine_part s · debris→pipe s · wrecked_tank→machine_part P · cargo_crawler→
-// machine_part P · satellite/relay_mast/hab_dome→wiring P,battery s · derelict/
-// hollow_husk/enterable_wreck→scrap-dominant + one uncommon identity pick.
+// machine_part P · satellite/relay_mast/hab_dome→wiring P,battery s.
+//
+// WALK-TEST FIX (2026-07-17, Zach: "only seeing scrap at most POIs — need the
+// other materials to show up more often on the ground around wrecks and POIs"):
+// abundance bumped so a specialty POI CLEARLY out-yields a generic wreck for its
+// identity material. Primaries → chance 0.95 count 3 (≈2.85 expected); material
+// SECONDARIES → 0.6 count 2 (≈1.2 expected). BATTERY is the deliberate exception
+// (it gates the powered recipes → stays the scarcest find): battery secondary is
+// a single 0.5 roll (≈0.5 expected). The scrap-dominant generic hulls (derelict /
+// hollow_husk / enterable_wreck / crash_husk / ship) were REMOVED from this map —
+// they now fall through to WRECK_GENERIC_SCATTER via scatterForArchetype() so
+// EVERY wreck teaches "materials exist," while these keys keep the RICH identity.
 export const POI_IDENTITY_SCATTER: Record<string, LootRoll[]> = {
-  buried_pipeline: [{ id: 'metal_pipe', chance: 0.9, count: 2 }],
-  refinery_stack:  [{ id: 'metal_pipe', chance: 0.85, count: 2 }, { id: 'wiring', chance: 0.4 }],
-  transit_car:     [{ id: 'metal_pipe', chance: 0.85, count: 2 }, { id: 'machine_part', chance: 0.4 }],
-  debris_field:    [{ id: 'metal_pipe', chance: 0.5 }],
-  debris_trail:    [{ id: 'metal_pipe', chance: 0.5 }],
-  wrecked_tank:    [{ id: 'machine_part', chance: 0.9, count: 2 }],
-  cargo_crawler:   [{ id: 'machine_part', chance: 0.9, count: 2 }],
-  well:            [{ id: 'metal_pipe', chance: 0.55 }],
-  satellite:       [{ id: 'wiring', chance: 0.9, count: 2 }, { id: 'battery', chance: 0.45 }],
-  relay_mast:      [{ id: 'wiring', chance: 0.9, count: 2 }, { id: 'battery', chance: 0.45 }],
-  hab_dome:        [{ id: 'wiring', chance: 0.9, count: 2 }, { id: 'battery', chance: 0.45 }],
-  // Scrap-dominant hulls (the scrap ring already carries their identity) get ONE
-  // uncommon identity pick so a walk-up still occasionally reveals a material.
-  derelict:        [{ id: 'machine_part', chance: 0.3 }],
-  hollow_husk:     [{ id: 'wiring', chance: 0.3 }],
-  enterable_wreck: [{ id: 'machine_part', chance: 0.3 }],
+  buried_pipeline: [{ id: 'metal_pipe', chance: 0.95, count: 3 }],
+  refinery_stack:  [{ id: 'metal_pipe', chance: 0.95, count: 3 }, { id: 'wiring', chance: 0.6, count: 2 }],
+  transit_car:     [{ id: 'metal_pipe', chance: 0.95, count: 3 }, { id: 'machine_part', chance: 0.6, count: 2 }],
+  debris_field:    [{ id: 'metal_pipe', chance: 0.6, count: 2 }],
+  debris_trail:    [{ id: 'metal_pipe', chance: 0.6, count: 2 }],
+  wrecked_tank:    [{ id: 'machine_part', chance: 0.95, count: 3 }],
+  cargo_crawler:   [{ id: 'machine_part', chance: 0.95, count: 3 }],
+  well:            [{ id: 'metal_pipe', chance: 0.6, count: 2 }],
+  satellite:       [{ id: 'wiring', chance: 0.95, count: 3 }, { id: 'battery', chance: 0.5 }],
+  relay_mast:      [{ id: 'wiring', chance: 0.95, count: 3 }, { id: 'battery', chance: 0.5 }],
+  hab_dome:        [{ id: 'wiring', chance: 0.95, count: 3 }, { id: 'battery', chance: 0.5 }],
 };
+
+// WALK-TEST FIX (2026-07-17) — the "every wreck teaches materials exist" table.
+// Any wreck WITHOUT a specialty identity (the generic hulls derelict / hollow_husk
+// / enterable_wreck / crash_husk / ship, AND every kind-based boot/hero wreck —
+// fuselage, cargo_container, engine_*, the 'massive' anchors, legacy procgen)
+// rolls this mixed table beside its scrap ring. Independent rolls → ≈1.45 expected
+// materials/wreck (pipe .5 / machine_part .4 / wiring .35 / battery .2), so a
+// walk-up to ANY wreck usually reveals 1-2 materials while a specialty POI still
+// clearly out-yields it for its identity item. Battery lowest here too (scarcest).
+export const WRECK_GENERIC_SCATTER: LootRoll[] = [
+  { id: 'metal_pipe',   chance: 0.5 },
+  { id: 'machine_part', chance: 0.4 },
+  { id: 'wiring',       chance: 0.35 },
+  { id: 'battery',      chance: 0.2 },
+];
+
+/** WALK-TEST FIX (2026-07-17) — resolve the ground-scatter table for a wreck by
+ *  its archetype id. Specialty POIs return their RICH identity table; anything
+ *  else (unknown/undefined archetype, or a generic hull) falls back to the mixed
+ *  WRECK_GENERIC_SCATTER so no wreck is scrap-only. Used by BOTH the origin-world
+ *  boot scatter (main.ts) and the far-field chunk streamer (chunkManager). */
+export function scatterForArchetype(archetype: string | undefined): LootRoll[] {
+  return (archetype && POI_IDENTITY_SCATTER[archetype]) || WRECK_GENERIC_SCATTER;
+}

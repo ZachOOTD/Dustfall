@@ -49,7 +49,7 @@ import { spawnDeadTreeAt } from './deadTree.ts';
 import { spawnWellAt, type WaterSource } from './waterSources.ts';
 import { spawnCactusAt, type Cactus } from './cactus.ts';
 import { spawnScrapAt, spawnMaterialAt, despawnPickup, type Pickup } from '../pickups/pickups.ts';
-import { POI_IDENTITY_SCATTER } from '../config/lootRegistry.ts';   // Scavenger's Economy — per-POI identity material scatter
+import { scatterForArchetype } from '../config/lootRegistry.ts';   // Scavenger's Economy — per-POI identity material scatter (+ generic-wreck fallback)
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -725,7 +725,11 @@ export function createChunkManager(
         //    scrap-ring / salvage-panel draw sequences (determinism stays STABLE
         //    across runs; the digest changes only because content was added —
         //    intended). bone_field = scrap only (boneyard identity is the bones).
-        const identity = p.biome === 'bone_field' ? undefined : POI_IDENTITY_SCATTER[p.archetype];
+        //    WALK-TEST FIX (2026-07-17): scatterForArchetype falls generic wrecks
+        //    (derelict/hollow_husk/enterable_wreck/…) back to WRECK_GENERIC_SCATTER,
+        //    so EVERY streamed wreck now drops 1-2 materials too (not just specialty
+        //    POIs) — matching the origin-world parity added in main.ts.
+        const identity = p.biome === 'bone_field' ? undefined : scatterForArchetype(p.archetype);
         if (identity) {
           const mRand = makeRng((p.renderSeed ^ 0x1d70f) >>> 0);
           let attempt = 0;   // stable per-seed content-id counter (incremented even on a skip)
