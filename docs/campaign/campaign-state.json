@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 0,
-  "current_tier": "ladder:1-dune-research",
+  "cycles_completed": 1,
+  "current_tier": "ladder:2-dune-region-core",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "none",
@@ -21,8 +21,17 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 0
+    "total": 50000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
-  "cycles": []
+  "cycles": [
+    {
+      "n": 1,
+      "date": "2026-07-18",
+      "focus": "dune synthesis research",
+      "outcome": "SHIPPED",
+      "spend": 50000,
+      "note": "heightErg recipe + playability table + region-blend purity"
+    }
+  ]
 }
