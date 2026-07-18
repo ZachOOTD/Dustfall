@@ -1,12 +1,14 @@
 {
   "campaign": "The Deep Desert",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 2,
-  "current_tier": "ladder:3-blockout-vista",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 3,
+  "current_tier": "PAUSED:checkpoint-1-dune-blockout",
+  "awaiting_approval": true,
+  "stop_reasons": [
+    "milestone-review"
+  ],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
@@ -21,7 +23,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 450000
+    "total": 700000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -41,6 +43,14 @@
       "spend": 400000,
       "commit": "(above)",
       "note": "region+heightErg+dune-slope gate; stubs show cracked texture climbing dunes -- cycle 3 fixes the read before the checkpoint"
+    },
+    {
+      "n": 3,
+      "date": "2026-07-18",
+      "focus": "erg surface read + vista set",
+      "outcome": "SHIPPED",
+      "spend": 250000,
+      "note": "aErgMask crack suppression; 7-round vista iteration; PAUSED checkpoint 1"
     }
   ]
 }
