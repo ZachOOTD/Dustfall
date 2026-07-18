@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 1,
-  "current_tier": "ladder:2-dune-region-core",
+  "cycles_completed": 2,
+  "current_tier": "ladder:3-blockout-vista",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "none",
@@ -21,7 +21,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 50000
+    "total": 450000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -32,6 +32,15 @@
       "outcome": "SHIPPED",
       "spend": 50000,
       "note": "heightErg recipe + playability table + region-blend purity"
+    },
+    {
+      "n": 2,
+      "date": "2026-07-18",
+      "focus": "erg region core",
+      "outcome": "SHIPPED",
+      "spend": 400000,
+      "commit": "(above)",
+      "note": "region+heightErg+dune-slope gate; stubs show cracked texture climbing dunes -- cycle 3 fixes the read before the checkpoint"
     }
   ]
 }
