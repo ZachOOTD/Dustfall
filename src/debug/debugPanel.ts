@@ -249,6 +249,7 @@ interface DebugApi {
   /** Review — find the nearest bone_field biome zone and warp there (the titan
    *  graveyard — pale bone scatter). Null if none within range. */
   gotoBoneField: () => { x: number; z: number } | null;
+  gotoErg: () => { x: number; z: number } | null;
   /** Dev — aim the crosshair at a wreck + call this to identify it (archetype / name /
    *  distance). The reliable way to name a specific procgen read for removal/tuning. */
   identifyWreck: () => { hit: boolean; archetype?: string; name?: string; dist?: number; userDataKeys?: string[] };
@@ -713,6 +714,16 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.player.body.body.setTranslation({ x: c.x, y, z: c.z }, true);
       ctx.player.cameraSnapNextFrame = true;
       ctx.ui.showToast?.('warped to the bone-field graveyard');
+      return { x: +c.x.toFixed(0), z: +c.z.toFixed(0) };
+    },
+    gotoErg: () => {
+      // erg regions are the rarest + farthest anchors (nearest ~5-10km by seed) — search widest.
+      const c = findBiomeCentroid(ctx.biomes, 'erg', { searchRadius: 14000, gridStep: 250 });
+      if (!c) { ctx.ui.showToast?.('no dune sea within 14km — reload for a fresh seed'); return null; }
+      const y = ctx.terrain.heightAt(c.x, c.z) + 2;
+      ctx.player.body.body.setTranslation({ x: c.x, y, z: c.z }, true);
+      ctx.player.cameraSnapNextFrame = true;
+      ctx.ui.showToast?.('warped to the dune sea');
       return { x: +c.x.toFixed(0), z: +c.z.toFixed(0) };
     },
     identifyWreck: () => {
