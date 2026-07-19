@@ -2256,6 +2256,87 @@ const SCENARIOS = {
   // ACAS B2 — drop-test: drop capsule/sphere/box pickups + tick; confirm the bodies
   // SETTLE (finite + near terrain), i.e. the per-item collider shapes don't NaN or
   // explode. The settle FEEL (natural lie vs box) still needs an attended walk-test.
+  // ── cave-spike (D254, attended 2026-07-19) ─────────────────────────────────
+  // THE question every cave architecture branches on: can the KCC capsule EXIST
+  // below the real terrain heightfield sheet and interact with it sanely? Runs
+  // against the SHIPPING collider (not a synthetic scene). Four tests from
+  // docs/research/cave-feasibility.md:
+  //   A control: standing on terrain (must be normal).
+  //   B rest-below: teleport 30m under the sheet, step 60 frames — ejected up?
+  //     fell forever? or stable (gravity-falling is "no floor", also informative)?
+  //   C walk-below: while under, drive the KCC laterally 40 frames — does
+  //     movement work at all below the sheet?
+  //   D punch-up: from 3m under, drive upward INTO the sheet (jump velocity) —
+  //     tunnel through to the surface, or blocked from below (one-sided)?
+  // Outcome map (digest): B stable + D blocked  → heightfield is two-sided-ish →
+  // chunk trimesh swap optional; B stable + D tunnels → one-sided → underground
+  // volumes are FREE (option 1/3 viable, portals unneeded); B ejected → hard
+  // one-sided ejection → portal-island (option 2).
+  'cave-spike': async (page) => {
+    const r = await page.evaluate(async () => {
+      const g = window.__game; g.enterGame(true);
+      const ctx = g.ctx; ctx.flags.paused = false;
+      const body = ctx.player.body.body;
+      const raf = () => new Promise((res) => requestAnimationFrame(res));
+      const P = (x, y, z) => body.setTranslation({ x, y, z }, true);
+      const at = () => { const t = body.translation(); return { x: +t.x.toFixed(2), y: +t.y.toFixed(2), z: +t.z.toFixed(2) }; };
+      const gy = (x, z) => ctx.terrain.heightAt(x, z);
+      const px = 40, pz = 40;                      // flat-ish spot near origin
+      const g0 = gy(px, pz);
+      // A — control on the surface.
+      P(px, g0 + 1.2, pz);
+      for (let i = 0; i < 30; i++) await raf();
+      const a = at(); const aOk = Math.abs(a.y - (g0 + 0.9)) < 1.5;
+      // B — rest 30m below the sheet.
+      P(px, g0 - 30, pz);
+      const track = [];
+      for (let i = 0; i < 60; i++) { await raf(); if (i % 10 === 0) track.push(at().y); }
+      const b = at();
+      const ejected = b.y > g0 - 2;                 // popped back above/near the surface
+      const falling = track.length >= 2 && (track[track.length - 1] < track[0] - 8);
+      // C — lateral drive below (only meaningful if not ejected).
+      P(px, g0 - 30, pz);
+      ctx.input.keys['KeyW'] = true;
+      for (let i = 0; i < 40; i++) await raf();
+      ctx.input.keys['KeyW'] = false;
+      const c = at();
+      const movedLat = Math.hypot(c.x - px, c.z - pz) > 1.0;
+      // D — ELEVATOR: the player body is KINEMATIC (the KCC drives it — setLinvel
+      // is silently ignored; the first spike run's punch-up verdict was vacuous).
+      // Behavioral truth instead: a kinematic platform rises from 3m under the
+      // sheet to 2m above it with the capsule standing on it. If the KCC resolves
+      // the heightfield from BELOW, the capsule gets blocked/squeezed as the
+      // platform passes the sheet; if the sheet is one-sided, the capsule rides
+      // straight through and emerges standing on terrain.
+      const RAPIER = g.RAPIER;
+      const world = ctx.physics.world;
+      const platBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(px, g0 - 3.2, pz));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(2, 0.2, 2), platBody);
+      P(px, g0 - 2.2, pz);
+      for (let i = 0; i < 20; i++) await raf();      // settle onto the platform
+      const dStart = at();
+      const onPlat = Math.abs(dStart.y - (g0 - 2.1)) < 1.2;
+      let dEmerged = false, dStuckY = null;
+      for (let i = 0; i < 240; i++) {
+        const py = g0 - 3.2 + (i / 240) * 5.2;       // rise 5.2m over ~4s
+        platBody.setNextKinematicTranslation({ x: px, y: py, z: pz });
+        await raf();
+        const y = at().y;
+        if (y > g0 + 0.4) { dEmerged = true; break; }
+        if (py > g0 + 0.6 && y < g0 - 0.5) { dStuckY = y; break; }   // platform passed the sheet, capsule left behind/squeezed
+      }
+      const d = at();
+      world.removeRigidBody(platBody);
+      return { g0: +g0.toFixed(2), A: { pos: a, ok: aOk }, B: { end: b, track, ejected, falling }, C: { end: c, movedLat }, D: { start: dStart, onPlat, end: d, emerged: dEmerged, stuckY: dStuckY } };
+    });
+    console.log(`[cave-spike] ${JSON.stringify(r, null, 1)}`);
+    const verdict = r.B.ejected ? 'EJECTED below the sheet → portal-island (option 2)'
+      : !r.D.onPlat ? 'INCONCLUSIVE: capsule never settled on the test platform — rerun'
+      : r.D.emerged ? 'ONE-SIDED: capsule rides up THROUGH the sheet → underground volumes are free; caves need only their own floors/walls (trimesh interiors under the real terrain — option 1/3, no portals)'
+      : 'TWO-SIDED: the sheet blocks from below → local heightfield→trimesh swap at the entrance chunk (option 3 ladder)';
+    console.log(`[cave-spike] VERDICT: ${verdict}`);
+  },
+
   'drop-test': async (page) => {
     const ids = await page.evaluate(() => {
       const g = window.__game; g.enterGame(true);

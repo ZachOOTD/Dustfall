@@ -611,3 +611,15 @@ Chosen via a research pass (`docs/research/escape-pod-cylindrical.md`, 5 cylindr
 **Verification**: verify:all PASS (placement 5-seed / colliders / chunks — biome is terrain, no colliders/bodies; determinism stable per seed); a numeric probe found an ash_barren zone at (-11600,-9600) with `biomeAt`='ash_barren'; a shot confirmed the dark scorched ground reads distinct from the tan desert.
 **Residual (polish for the user's review)**: the dark-ground read is present but could be pushed MORE dramatic (darker core / charred scatter props / a signature hazard) — shipped the coherent core biome; flagged for a polish pass if the user wants more drama.
 **friction-score:** 1 (additive, mirrors the proven anchor pattern; the visual-drama level is a tunable follow-up).
+
+## D307 — 2026-07-19 — THE D254 SPIKE RAN (attended): heightfield is TWO-SIDED for the KCC; caves = under-sheet trimesh interiors + entrance-chunk collider swap
+The long-open cave blocker is answered with behavioral evidence (rig `cave-spike`, against the
+SHIPPING terrain collider): (A) surface control normal; (B) a capsule 30m below the sheet is NOT
+ejected (it falls — nothing below — but no eject impulse); (C) lateral KCC control works below
+the sheet; (D) a rising kinematic platform carrying the capsule INTO the sheet leaves the capsule
+blocked beneath while the platform passes — the heightfield blocks the KCC from below.
+NOTE: the first D attempt used setLinvel on the (kinematic) player body — silently ignored,
+verdict vacuous; the elevator variant replaced it (the gates-that-lie lesson, applied to my own
+spike). DECISION: Underworld architecture = trimesh cave interiors under the intact heightfield
++ a chunk-local heightfield→trimesh collider swap at the entrance (digest tier 1); portals
+rejected (unneeded); friction-score low — the spike took ~20 minutes including one false start.
