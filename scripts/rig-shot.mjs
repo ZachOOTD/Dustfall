@@ -602,10 +602,17 @@ const SCENARIOS = {
       const dxF = free.x - sx, dzF = free.z - sz;
       const dxC = carve.x - sx, dzC = carve.z - sz;
       const sep = Math.hypot(carve.x - free.x, carve.z - free.z);
-      return { freeEnd: [+dxF.toFixed(1), +dzF.toFixed(1)], carveEnd: [+dxC.toFixed(1), +dzC.toFixed(1)], sep: +sep.toFixed(1) };
+      // DIRECTION assertion (2026-07-18 — the magnitude-only check passed on INVERTED
+      // controls; Zach caught it in the walk-test). A = left. With forward (fx,fz),
+      // left = (fz,-fx) (yaw+ is CCW from above). The A-held end must lie LEFT of the
+      // free path's travel direction.
+      const fl = Math.hypot(dxF, dzF) || 1;
+      const leftX = dzF / fl, leftZ = -dxF / fl;
+      const carveDot = +(((carve.x - free.x) * leftX + (carve.z - free.z) * leftZ) / (sep || 1)).toFixed(2);
+      return { freeEnd: [+dxF.toFixed(1), +dzF.toFixed(1)], carveEnd: [+dxC.toFixed(1), +dzC.toFixed(1)], sep: +sep.toFixed(1), carveDot };
     });
-    const bPass = b.sep > 3.0;
-    console.log(`[sled-dune] PHASE B (carve): freeEndOffset=${b.freeEnd} carveEndOffset=${b.carveEnd} lateralSep=${b.sep}m => ${bPass ? 'PASS' : 'FAIL'}`);
+    const bPass = b.sep > 3.0 && b.carveDot > 0.3;
+    console.log(`[sled-dune] PHASE B (carve): freeEndOffset=${b.freeEnd} carveEndOffset=${b.carveEnd} lateralSep=${b.sep}m carveDot(A=left)=${b.carveDot} => ${bPass ? 'PASS' : 'FAIL'}`);
 
     // ── PHASE C — uphill stall: kick the sled UPHILL; it must decelerate + slide back.
     const c = await page.evaluate(async () => {

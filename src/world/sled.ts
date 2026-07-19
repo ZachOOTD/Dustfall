@@ -1015,7 +1015,11 @@ export function updateSleds(ctx: GameContext, dt: number): void {
       // Rider input. Forward = the sled's local -Z in world XZ (yoke is at -Z).
       const rk = ctx.input.keys;
       const fwdInput = (rk['KeyW'] ? 1 : 0) - (rk['KeyS'] ? 1 : 0);
-      const steerInput = (rk['KeyD'] ? 1 : 0) - (rk['KeyA'] ? 1 : 0);
+      // A = +1 (left), D = -1 (right). Forward is (-sin yaw, -cos yaw), so a POSITIVE
+      // yaw delta turns LEFT — mapping D to +1 inverted the controls (Zach's walk-test,
+      // 2026-07-18; the probe originally measured carve MAGNITUDE only, so it passed —
+      // it now asserts direction too).
+      const steerInput = (rk['KeyA'] ? 1 : 0) - (rk['KeyD'] ? 1 : 0);
       // A/D — WEAK steering: gentle yaw at speed + a small redirect of velocity
       // toward the new heading (grip). A gravity sled carves, it doesn't snap.
       let sp = Math.hypot(rvx, rvz);
