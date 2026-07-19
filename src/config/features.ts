@@ -87,6 +87,16 @@ export const FEATURES = {
    *  descriptor purity holds per-build; far-field chunkDiffs for a skyfall region
    *  drop silently per D298's content-id rule). Feature slice: docs/feature-skyfall.md. */
   skyfall: import.meta.env?.VITE_SKYFALL !== '0',
+
+  /** UNDERWORLD cycle 1 (2026-07-19, D307) — the cave ENABLING-TECH test bore: a chunk-local
+   *  heightfield→trimesh collider swap at a designated entrance chunk, carving a real opening in
+   *  the terrain sheet so the player walks DOWN through it into a bored ramp + a roofed chamber
+   *  UNDER the intact heightfield (D307's under-sheet trimesh interior). OFF by default = the
+   *  surface world is byte-identical (the cave code is fully dormant — no site, no swap, no bore).
+   *  ON via VITE_CAVE_TEST=1 spawns ONE deterministic test site near origin (seed-hashed, inside
+   *  tile (0,0)). This is the cycle-1 enabling tech only; real cave GENERATION is cycle 2. The
+   *  cave-mouth probe forces it ON; verify:all runs with it OFF (the zero-impact proof). */
+  caveTest: import.meta.env?.VITE_CAVE_TEST === '1',
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

@@ -15,6 +15,7 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
+import { caveTestSite, spawnCaveTestBore } from './world/caveTest.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
@@ -183,7 +184,14 @@ setSalvageBiomesContext(biomes);
 const _bootT: Array<[string, number]> = [['start', performance.now()]];
 const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
 (window as unknown as { __bootT: typeof _bootT }).__bootT = _bootT;
-const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
+// UNDERWORLD cycle 1 (D307) — the cave-tech TEST site. Behind FEATURES.caveTest
+// (VITE_CAVE_TEST=1, default OFF). A pure hash of the world seed (does NOT consume
+// the procgen rand stream → seeded world unchanged). null when the flag is off, so
+// createTerrain builds every tile exactly as before (surface world byte-identical).
+const caveSite = FEATURES.caveTest ? caveTestSite(worldSeed) : null;
+const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes, caveSite);
+// The welded bore (ramp + roofed under-sheet chamber) at the carved entrance-chunk hole.
+if (caveSite) spawnCaveTestBore(three.scene, physics.world, terrain, caveSite);
 _mark('terrain');
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the

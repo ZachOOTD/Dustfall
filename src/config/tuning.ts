@@ -863,6 +863,27 @@ export const Tuning = {
   CAVE_TORCH_INTENSITY: 2.4,           // the player's torch glow (point light, no shadows) when in the cave
   CAVE_TORCH_DIST: 11,                 // m — torch falloff distance
 
+  // UNDERWORLD cycle 1 (2026-07-19, D307) — the ENABLING-TECH test bore. Behind
+  // FEATURES.caveTest / VITE_CAVE_TEST=1 (default OFF → surface world byte-identical).
+  // The designated ENTRANCE CHUNK swaps its heightfield collider for an equivalent
+  // TRIMESH with a carved rectangular hole (the trench), and a welded box bore (a
+  // walkable ramp down to a roofed chamber UNDER the intact terrain sheet — proving
+  // D307's under-sheet trimesh interior). Dimensions snap to the terrain grid
+  // (TERRAIN_CHUNK_SIZE/TERRAIN_CHUNK_CELLS ≈ 4.17m cells) so the hole boundary and
+  // the bore weld share exact grid vertices (no seam gap — the hab_dome/leviathan lesson).
+  // Site: a pure hash of the world seed, kept inside tile (0,0) near origin so the whole
+  // bore streams with the boot ring (no straddle). NOT a shipping feature — greybox, dev-only.
+  CAVE_TEST_SITE_BOX_X0: 120,          // m — hashed site X range [X0, X0+SPAN] (bore extends +X, stays < tile edge 400)
+  CAVE_TEST_SITE_SPAN_X: 140,
+  CAVE_TEST_SITE_BOX_Z: 120,           // m — hashed site Z range [-Z, +Z]
+  CAVE_TEST_WIDTH: 8.34,               // m — trench + chamber clear width (~2 terrain cells); >> the 2.2m min
+  CAVE_TEST_RAMP_RUN: 29.2,            // m — horizontal ramp length (~7 cells); with DEPTH 12 → slope ~22.4° (< 30°)
+  CAVE_TEST_DEPTH: 12,                 // m — descent from the surface to the chamber floor (below the sheet)
+  CAVE_TEST_CHAMBER_LEN: 8.34,         // m — roofed chamber length past the ramp bottom (~2 cells)
+  CAVE_TEST_CEIL_H: 3.0,               // m — chamber interior clear height (headroom ≥ 2m)
+  CAVE_TEST_WALL_T: 0.4,               // m — box wall/floor/roof thickness (rule 7 — real solid volumes)
+  CAVE_TEST_KERB: 0.3,                 // m — trench-wall top rises this far above local terrain max (guarantees no seam gap)
+
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
   // ACAX — darkened + WARMED from ACAT W5's light grey-tan (0x6a6657/0x5e5a52). User

@@ -80,6 +80,10 @@ const SCENARIO = argv.scenario || '';
 // dev-server start; the spawned `npm run dev` inherits process.env, so setting it
 // here (before startDev) flips FEATURES.rideableSled true for THIS probe only.
 if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-pose' || SCENARIO === 'sled-packup') process.env.VITE_RIDEABLE_SLED = '1';
+// UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
+// swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
+// dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
+if (SCENARIO === 'cave-mouth') process.env.VITE_CAVE_TEST = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -2335,6 +2339,234 @@ const SCENARIOS = {
       : r.D.emerged ? 'ONE-SIDED: capsule rides up THROUGH the sheet → underground volumes are free; caves need only their own floors/walls (trimesh interiors under the real terrain — option 1/3, no portals)'
       : 'TWO-SIDED: the sheet blocks from below → local heightfield→trimesh swap at the entrance chunk (option 3 ladder)';
     console.log(`[cave-spike] VERDICT: ${verdict}`);
+  },
+
+  // ── cave-mouth (UNDERWORLD cycle 1, D307) — the ENABLING-TECH gate. The entrance
+  //    chunk swaps its heightfield collider for a holed trimesh + a welded bore (ramp
+  //    → roofed under-sheet chamber). Forces the flag ON (VITE_CAVE_TEST=1, above).
+  //    Proves the tech with REAL KCC motion (not teleported waypoints — the leviathan
+  //    lesson): drive the character controller DOWN the ramp through the opening into
+  //    the chamber, then back OUT; plus castDown floor-continuity + slope, a headroom
+  //    ray in the chamber, and a mouth-lip seam check (no gap terrain↔bore). Shoots the
+  //    mouth from the surface, down the bore, the chamber interior, and back up the bore.
+  //    Run: node scripts/rig-shot.mjs --scenario=cave-mouth --port=5210
+  'cave-mouth': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER; const THREE = g.THREE;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;
+      const body = ctx.player.body.body;
+      const at = () => { const t = body.translation(); return { x: t.x, y: t.y, z: t.z }; };
+      // Find the bore probe on the scene.
+      let probe = null;
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveTestProbe) probe = o.userData.caveTestProbe; });
+      if (!probe) return { fails: ['no caveTestProbe on the scene — the bore was not built (flag off?)'] };
+      const fails = [];
+      const cz = probe.centerZ;
+      const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;   // capsule half-height
+      // Face the FP camera along a level world direction (dx,0,dz); the controller reads
+      // camera.getWorldDirection, so this steers a REAL KCC walk. syncCameraToBody rewrites
+      // camera POSITION each frame, not its orientation, so this holds.
+      const face = (dx, dz) => {
+        const cam = ctx.three.camera; const t = body.translation();
+        cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+        cam.lookAt(t.x + dx, t.y + ctx.player.eyeOffset, t.z + dz);
+        cam.updateMatrixWorld(true);
+      };
+      const placeAt = async (wx, wy, wz) => {
+        body.setTranslation({ x: wx, y: wy + CAP + 0.2, z: wz }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.velocityY = 0;
+        await frames(45);
+      };
+
+      // ── A — REAL KCC DESCENT: from outside, walk +X through the mouth, down the ramp,
+      //      into the chamber. (Honest about climbability — a wall or too-steep ramp
+      //      stalls the KCC; a hole in the floor drops it far below.) ──
+      const out = probe.waypoints.find((w) => w.name === 'outside');
+      await placeAt(out.x, out.y, cz);
+      const startY = at().y;
+      let minY = Infinity, maxDrop = 0;
+      ctx.input.keys['KeyW'] = true;
+      let descended = false;
+      let lastX = at().x, stall = 0;
+      for (let i = 0; i < 700; i++) {
+        face(1, 0);
+        await raf();
+        const p = at();
+        minY = Math.min(minY, p.y);
+        if (p.x >= probe.trenchFarX - 0.5 && p.y <= probe.chamberFloorY + 0.9) { descended = true; break; }
+        if (p.y < probe.chamberFloorY - 2.0) { maxDrop = probe.chamberFloorY - p.y; break; }   // fell THROUGH the floor
+        if (p.x - lastX < 0.02) { if (++stall > 60) break; } else stall = 0;   // stuck: no +X progress
+        lastX = p.x;
+      }
+      ctx.input.keys['KeyW'] = false;
+      const descEnd = at();
+      if (!descended) fails.push(`descent: KCC did not reach the chamber (ended x=${descEnd.x.toFixed(1)} y=${descEnd.y.toFixed(1)}; chamber floor ${probe.chamberFloorY.toFixed(1)}, trenchFar ${probe.trenchFarX.toFixed(1)})`);
+      if (maxDrop > 0) fails.push(`descent: capsule FELL THROUGH the floor (${maxDrop.toFixed(1)}m below chamber floor)`);
+
+      // ── B — REAL KCC ASCENT: turn around, walk back OUT up the ramp to the surface. ──
+      await frames(20);
+      ctx.input.keys['KeyW'] = true;
+      let exited = false;
+      let lastXa = at().x, stallA = 0;
+      for (let i = 0; i < 700; i++) {
+        face(-1, 0);
+        await raf();
+        const p = at();
+        if (p.x <= probe.mouthX + 0.5 && p.y >= probe.gy - 1.5) { exited = true; break; }
+        if (lastXa - p.x < 0.02) { if (++stallA > 60) break; } else stallA = 0;   // stuck: no -X progress
+        lastXa = p.x;
+      }
+      ctx.input.keys['KeyW'] = false;
+      const exitEnd = at();
+      if (!exited) fails.push(`ascent: KCC could not climb back OUT (ended x=${exitEnd.x.toFixed(1)} y=${exitEnd.y.toFixed(1)}; surface ${probe.gy.toFixed(1)})`);
+
+      // ── C — castDown floor continuity + slope along the centreline (cast from just
+      //      above the KNOWN floor so the intact terrain sheet over the chamber isn't
+      //      what we hit). No-hit = a fall-through gap; slope between hits ≤ 32°. ──
+      const floorGuess = (x) => {
+        if (x <= probe.trenchFarX) {
+          const t = Math.max(0, Math.min(1, (x - probe.mouthX) / (probe.trenchFarX - probe.mouthX)));
+          return probe.gy + (probe.chamberFloorY - probe.gy) * t;
+        }
+        return probe.chamberFloorY;
+      };
+      let prev = null, maxSlope = 0, gaps = 0, samples = 0;
+      for (let x = probe.mouthX + 0.3; x <= probe.chamberFarX - 0.4; x += 0.5) {
+        samples++;
+        const hit = g.castDown(x, cz, floorGuess(x) + 2.0, true);
+        if (!hit || Math.abs(hit.hitY - floorGuess(x)) > 1.6) { gaps++; prev = null; continue; }
+        if (prev) {
+          const dxh = x - prev.x, dyh = Math.abs(hit.hitY - prev.y);
+          const slope = (Math.atan2(dyh, dxh) * 180) / Math.PI;
+          if (slope > maxSlope) maxSlope = slope;
+        }
+        prev = { x, y: hit.hitY };
+      }
+      if (gaps > 0) fails.push(`floor: ${gaps}/${samples} centreline samples found NO floor (fall-through gap)`);
+      if (maxSlope > 32) fails.push(`floor: max slope ${maxSlope.toFixed(1)}° exceeds 32°`);
+
+      // ── D — chamber headroom: ray UP from the chamber floor to the roof underside. ──
+      const chamX = (probe.trenchFarX + probe.chamberFarX) * 0.5;
+      let headroom = Infinity;
+      {
+        const ray = new RAPIER.Ray({ x: chamX, y: probe.chamberFloorY + 0.2, z: cz }, { x: 0, y: 1, z: 0 });
+        const hit = ctx.physics.world.castRay(ray, 8, true, undefined, undefined, undefined, body);
+        if (hit) headroom = hit.timeOfImpact + 0.2;
+      }
+      if (headroom < 2.0) fails.push(`headroom: chamber clear height ${headroom.toFixed(2)}m < 2.0m`);
+
+      // ── E — mouth-lip SEAM: just inside vs just outside the lip, across the width;
+      //      both must hit + be continuous (no gap ring / cliff between terrain & bore). ──
+      let seamFail = 0, seamSamples = 0;
+      const HW = probe.width * 0.5;
+      for (let dz = -HW + 0.4; dz <= HW - 0.4; dz += 1.0) {
+        seamSamples++;
+        const inside = g.castDown(probe.mouthX + 0.5, cz + dz, probe.gy + 3, true);
+        const outside = g.castDown(probe.mouthX - 0.5, cz + dz, probe.gy + 3, true);
+        if (!inside) { seamFail++; fails.push(`seam z=${dz.toFixed(1)}: no bore floor just inside the lip`); continue; }
+        if (!outside) { seamFail++; fails.push(`seam z=${dz.toFixed(1)}: no terrain just outside the lip`); continue; }
+        if (Math.abs(inside.hitY - outside.hitY) > 1.6) { seamFail++; fails.push(`seam z=${dz.toFixed(1)}: ${Math.abs(inside.hitY - outside.hitY).toFixed(2)}m step terrain↔bore`); }
+      }
+
+      // ── F — STREAMING TEARDOWN of the SWAPPED chunk (flag-on body balance). Park at
+      //      the bore, record the body count, stream far away (the swapped tile (0,0) +
+      //      its trimesh collider dispose; the bore is a fixed feature and persists),
+      //      then stream back — the count must return to baseline (no leaked bodies from
+      //      the heightfield→trimesh swap teardown/rebuild). ──
+      await placeAt(out.x, out.y, cz);
+      await frames(20);
+      const baseBodies = ctx.physics.world.bodies.len();
+      body.setTranslation({ x: 2600, y: ctx.terrain.heightAt(2600, 2600) + 2, z: 2600 }, true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      await frames(160);   // tile (0,0) leaves the ring + disposes; far tiles/POIs stream in
+      const awayBodies = ctx.physics.world.bodies.len();
+      await placeAt(out.x, out.y, cz);
+      await frames(160);   // tile (0,0) rebuilds (trimesh + hole again); far content disposes
+      let boreStill = false;
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveTestProbe) boreStill = true; });
+      const backBodies = ctx.physics.world.bodies.len();
+      if (backBodies !== baseBodies) fails.push(`stream teardown: body count ${baseBodies}→${awayBodies}→${backBodies} did not balance (leak on the swapped-chunk rebuild)`);
+      if (!boreStill) fails.push('stream teardown: the bore group vanished after streaming away/back');
+
+      return {
+        fails,
+        rampAngleDeg: +probe.rampAngleDeg.toFixed(1),
+        stream: { base: baseBodies, away: awayBodies, back: backBodies, boreStill },
+        descend: { start: +startY.toFixed(1), end: +descEnd.y.toFixed(1), minY: +minY.toFixed(1), reached: descended },
+        ascend: { end: +exitEnd.y.toFixed(1), out: exited },
+        floor: { maxSlope: +maxSlope.toFixed(1), gaps, samples },
+        headroom: headroom === Infinity ? 'open' : +headroom.toFixed(2),
+        seam: { fail: seamFail, samples: seamSamples },
+        site: [+probe.site.x.toFixed(0), +probe.site.z.toFixed(0)],
+        chamberFloorY: +probe.chamberFloorY.toFixed(1),
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`CAVE-MOUTH pass=${pass ? 1 : 0} ramp=${r.rampAngleDeg ?? '?'}° descend=${r.descend ? (r.descend.reached ? 'IN' : 'FAIL') : '?'} ascend=${r.ascend ? (r.ascend.out ? 'OUT' : 'FAIL') : '?'} slope=${r.floor ? r.floor.maxSlope : '?'}° gaps=${r.floor ? r.floor.gaps : '?'} headroom=${r.headroom ?? '?'} seam=${r.seam ? r.seam.fail + '/' + r.seam.samples : '?'} stream=${r.stream ? r.stream.base + '→' + r.stream.away + '→' + r.stream.back : '?'} fails=${r.fails.length}`);
+    if (r.fails.length) console.log('[cave-mouth] ' + JSON.stringify(r.fails.slice(0, 10)));
+    console.log(`[cave-mouth] ${JSON.stringify({ site: r.site, ramp: r.rampAngleDeg, descend: r.descend, ascend: r.ascend, floor: r.floor, headroom: r.headroom, seam: r.seam })}`);
+
+    // ── Screenshots: mouth from the surface, down the bore, chamber interior, back up. ──
+    const shoot = async (spec, name) => {
+      await page.evaluate((s) => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        let probe = null;
+        ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveTestProbe) probe = o.userData.caveTestProbe; });
+        if (!probe) return;
+        ctx.flags.paused = true;
+        ctx.three.renderer.toneMappingExposure = s.exp;
+        if (s.ambient) ctx.lights.ambient.intensity *= s.ambient;
+        const cam = ctx.three.camera;
+        cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+        cam.lookAt(s.look[0], s.look[1], s.look[2]);
+        cam.updateMatrixWorld(true);
+        // Interior fill: a temp point light so the roofed greybox reads (the sun can't
+        // reach under the sheet). Removed after the render so it doesn't leak.
+        let fill = null;
+        if (s.fill) {
+          fill = new THREE.PointLight(0xffe6c0, s.fill.intensity, s.fill.dist, 1.4);
+          fill.position.set(s.fill.pos[0], s.fill.pos[1], s.fill.pos[2]);
+          ctx.three.scene.add(fill);
+        }
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        if (fill) ctx.three.scene.remove(fill);
+      }, spec);
+      await page.waitForTimeout(250);
+      try {
+        await page.screenshot({ path: join(OUT, `scen-cave-mouth-${name}.png`), fullPage: false, timeout: 60000 });
+        console.log(`[cave-mouth] saved scen-cave-mouth-${name}.png`);
+      } catch (e) { console.log(`[cave-mouth] ${name} shot flaked (${e.name})`); }
+    };
+    // Read the geometry back for framing.
+    const geo = await page.evaluate(() => {
+      const ctx = window.__game.ctx; let p = null;
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveTestProbe) p = o.userData.caveTestProbe; });
+      return p ? { mouthX: p.mouthX, trenchFarX: p.trenchFarX, chamberFarX: p.chamberFarX, gy: p.gy, floor: p.chamberFloorY, roof: p.roofUnderY, cz: p.centerZ, w: p.width } : null;
+    });
+    if (geo) {
+      const rampMidX = (geo.mouthX + geo.trenchFarX) / 2;
+      const chamX = (geo.trenchFarX + geo.chamberFarX) / 2;
+      await shoot({ exp: 1.25, cam: [geo.mouthX - 8, geo.gy + 1.7, geo.cz], look: [geo.mouthX + 6, geo.gy - 1.5, geo.cz] }, 'mouth');
+      await shoot({ exp: 1.25, cam: [geo.mouthX - 2, geo.gy + 6, geo.cz], look: [rampMidX + 4, geo.floor, geo.cz] }, 'down-bore');
+      await shoot({ exp: 1.5, ambient: 3.0, cam: [geo.trenchFarX + 0.4, geo.floor + 1.6, geo.cz], look: [geo.chamberFarX, geo.floor + 1.0, geo.cz],
+        fill: { pos: [geo.trenchFarX + 0.4, geo.floor + 1.6, geo.cz], intensity: 30, dist: 22 } }, 'chamber');
+      await shoot({ exp: 1.4, ambient: 2.5, cam: [chamX, geo.floor + 1.5, geo.cz], look: [geo.mouthX - 4, geo.gy + 4, geo.cz],
+        fill: { pos: [chamX, geo.floor + 1.7, geo.cz], intensity: 22, dist: 26 } }, 'look-up');
+    }
+    if (!pass) throw new Error('cave-mouth GATE FAILED');
   },
 
   'drop-test': async (page) => {

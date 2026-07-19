@@ -27,6 +27,7 @@ import type { Rng } from '../core/rng.ts';
 import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createTerrainMaterial } from './terrainMaterial.ts';
+import { caveTestHoleBlock, type CaveTestBlock } from './caveTest.ts';
 
 // Per-biome ground colors (Session P). Punchier than first-pass so the
 // regions read clearly from a distance: dune = saturated orange-sand,
@@ -184,6 +185,12 @@ export function createTerrain(
   world: RAPIER.World,
   rand: Rng,
   biomes: BiomeSampler,
+  // UNDERWORLD cycle 1 (D307) — when non-null (FEATURES.caveTest), the entrance
+  // chunk containing this site swaps its heightfield collider for an equivalent
+  // TRIMESH with a grid-aligned hole carved (the cave mouth), and its visual mesh
+  // loses the same triangles. null (the default, flag OFF) → every tile builds
+  // EXACTLY as before, so the surface world is byte-identical.
+  caveTestSite: { x: number; z: number } | null = null,
 ): Terrain {
   const noise = createNoise2D(rand);
 
@@ -409,6 +416,35 @@ export function createTerrain(
     }
   }
 
+  // ── UNDERWORLD cycle 1 (D307) — the entrance-chunk hole. When caveTestSite is set,
+  //    compute the grid-aligned block of cells to carve (the SINGLE source of truth
+  //    shared with caveTest.ts's bore weld) and a holed index buffer (the shared
+  //    indices minus those cells' triangles). The holed tile also gets a TRIMESH
+  //    collider (built from the same positions + holed indices) instead of the
+  //    heightfield — a heightfield can't have a hole, and the sheet is two-sided, so
+  //    the opening must be real collider geometry. Everything here is skipped when
+  //    caveTestSite is null → identical build → byte-identical world. ──
+  const caveBlock: CaveTestBlock | null = caveTestSite ? caveTestHoleBlock(caveTestSite) : null;
+  let _caveHoledIndices: number[] | null = null;
+  let _caveHoledIndicesU32: Uint32Array | null = null;
+  if (caveBlock) {
+    const idx: number[] = [];
+    for (let i = 0; i < CELLS; i++) {
+      for (let j = 0; j < CELLS; j++) {
+        if (i >= caveBlock.iMin && i <= caveBlock.iMax && j >= caveBlock.jMin && j <= caveBlock.jMax) continue;
+        const a = i * stride + j;
+        const b2 = a + 1;
+        const c2 = (i + 1) * stride + j;
+        const d = c2 + 1;
+        idx.push(a, b2, c2, b2, d, c2);
+      }
+    }
+    _caveHoledIndices = idx;
+    _caveHoledIndicesU32 = Uint32Array.from(idx);
+  }
+  const isCaveTile = (tx: number, tz: number): boolean =>
+    caveBlock !== null && tx === caveBlock.tileTx && tz === caveBlock.tileTz;
+
   const assembleGeometry = (b: TileBuild): void => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(b.positions, 3));
@@ -417,7 +453,8 @@ export function createTerrain(
     geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(b.biomeRaws, 1));
     // Per-vertex erg mask — the shader suppresses cracks/mirage inside it.
     geo.setAttribute('aErgMask', new THREE.BufferAttribute(b.ergMasks, 1));
-    geo.setIndex(_sharedIndices);
+    // UNDERWORLD cycle 1 — the entrance chunk's visual mesh drops the hole triangles.
+    geo.setIndex(isCaveTile(b.tx, b.tz) && _caveHoledIndices ? _caveHoledIndices : _sharedIndices);
     geo.computeVertexNormals();
     b.geo = geo;
   };
@@ -433,16 +470,24 @@ export function createTerrain(
     mesh.receiveShadow = true;
     mesh.userData.noShadow = true;
     scene.add(mesh);
-    // Rapier heightfield collider, body translated to tile center — added
-    // in the SAME step as the mesh (atomic; rule 9).
-    const colliderDesc = RAPIER.ColliderDesc.heightfield(
-      CELLS, CELLS, b.heights,
-      { x: SIZE, y: 1, z: SIZE },
-    );
+    // Rapier collider, body translated to tile center — added in the SAME step as
+    // the mesh (atomic; rule 9). Normally a heightfield; the UNDERWORLD entrance
+    // chunk instead gets an equivalent TRIMESH (same positions as the visual mesh,
+    // same holed index buffer) so the cave mouth is a real opening in the collider,
+    // not just the visuals. The trimesh vertices are the tile-LOCAL positions
+    // (b.positions), matching the heightfield's local frame at the tile-centred body.
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.fixed().setTranslation(b.centerX, 0, b.centerZ),
     );
-    world.createCollider(colliderDesc, body);
+    if (isCaveTile(b.tx, b.tz) && _caveHoledIndicesU32) {
+      world.createCollider(RAPIER.ColliderDesc.trimesh(b.positions, _caveHoledIndicesU32), body);
+    } else {
+      const colliderDesc = RAPIER.ColliderDesc.heightfield(
+        CELLS, CELLS, b.heights,
+        { x: SIZE, y: 1, z: SIZE },
+      );
+      world.createCollider(colliderDesc, body);
+    }
     tiles.set(tileKey(b.tx, b.tz), { centerX: b.centerX, centerZ: b.centerZ, heights: b.heights, mesh, body });
     meshes.push(mesh);
   };
