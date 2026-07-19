@@ -772,9 +772,9 @@ export const Tuning = {
   ERG_SMOKE_MAX_PX: 44,                 // hard screen-space size cap (px) — no giant near-camera sprite (with the near fade)
   ERG_SMOKE_NEAR_FADE_M: 7,             // m — alpha ramps 0→1 from 3.5m to 7m: kills giant walk-through sprites, keeps 8m+ spindrift
   ERG_SMOKE_WIND_M: 26,                 // m — crest-detection sample step along the wind axis (~0.1 dune wavelength × envelope)
-  ERG_SMOKE_LIFE_S: 2.6,                // seconds a puff streams before it re-seeds at a fresh crest
-  ERG_SMOKE_DRIFT_BASE: 7.0,            // m/s downwind drift on a calm day (wisps skimming the lip)
-  ERG_SMOKE_DRIFT_STORM: 24.0,          // m/s downwind drift at full pre-storm wind (streaming)
+  ERG_SMOKE_LIFE_S: 4.2,                // seconds a puff streams before it re-seeds at a fresh crest (longer life pairs with the slower drift — similar travel, lazier motion)
+  ERG_SMOKE_DRIFT_BASE: 2.8,            // m/s downwind drift on a calm day (review 2026-07-19: 7.0 read "too fast/aggressive" — lazy wisps, not streaming)
+  ERG_SMOKE_DRIFT_STORM: 12.0,          // m/s downwind drift at full pre-storm wind (was 24 — still clearly streaming, no longer frantic)
   ERG_SMOKE_LIFT: 0.85,                 // m — how far a grain PEELS up off the surface over its life (hug the sand, don't balloon/float)
   ERG_SMOKE_RIDGE_SPREAD: 46,           // m — lateral jitter along the ridge line at spawn (fills gaps → veil, not spaced plumes)
   ERG_SMOKE_OPACITY: 0.6,              // peak per-grain alpha (the aggregate veil carries the read; each grain stays faint + translucent)
