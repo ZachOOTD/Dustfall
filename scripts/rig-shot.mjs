@@ -79,7 +79,7 @@ const SCENARIO = argv.scenario || '';
 // feature forced ON. Vite exposes VITE_-prefixed env vars from process.env at
 // dev-server start; the spawned `npm run dev` inherits process.env, so setting it
 // here (before startDev) flips FEATURES.rideableSled true for THIS probe only.
-if (SCENARIO === 'sled-ride') process.env.VITE_RIDEABLE_SLED = '1';
+if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-pose') process.env.VITE_RIDEABLE_SLED = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -357,6 +357,417 @@ const SCENARIOS = {
       && d.dismounted && d.onGround && Math.abs(d.standGap) < 0.15
       && e.remounted && e.pin < 0.1;
     console.log(`[sled-ride] RESULT: ${allPass ? 'ALL PHASES PASS' : 'FAILURE — see phases above'}`);
+  },
+
+  // ── sled-dune (Deep-Desert cycle 6) ────────────────────────────────────────
+  // The PAYOFF probe: a ride down a REAL erg slip face. Warps to the nearest erg
+  // (window.__game.gotoErg → deterministic biome centroid), scans the dune sea for
+  // a 30-34° slip face, walks the gradient to the CREST above it + the TROUGH below,
+  // spawns a sled at the crest bow-downhill, then measures over stepped frames:
+  //   PHASE 0  erg geometry — crest/trough/drop/face-slope numbers.
+  //   PHASE A  free descent (no input) — descent time (crest→trough), MAX speed
+  //            (vs PLAYER_SPRINT=13.2), per-frame surface gap |deckY−heightAt| < 0.3
+  //            at every frame at speed (the follow holds), runout distance + no
+  //            abrupt stop, no clip (deckY never below terrain).
+  //   PHASE B  carve — A held vs no-input path: lateral deviation grows.
+  //   PHASE C  uphill stall — kicked UPHILL it decelerates + slides back (no creep).
+  //   PHASE D  dismount at speed — sled keeps sliding briefly then settles; player
+  //            on ground, safely uphill-side, not mid-air/under the sled.
+  // Also screenshots the crouched rider mid-slip-face with the dust trail (postcard).
+  // Run per seed: `node scripts/rig-shot.mjs --scenario=sled-dune --seed=<n>`.
+  'sled-dune': async (page) => {
+    const SPRINT = 13.2;   // WALK_SPEED(6.0) × SPRINT_MULTIPLIER(2.2)
+    // ── PHASE 0 — warp to the erg, find a slip face, locate crest + trough, spawn.
+    const g0 = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const erg = window.__game.gotoErg();
+      if (!erg) return { error: 'no erg within 14km for this seed' };
+      // A few frames so the warp re-anchors chunks (not needed for heightAt, but
+      // keeps the scene coherent for the screenshot later).
+      for (let i = 0; i < 8; i++) await raf();
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      const H = (x, z) => ctx.terrain.heightAt(x, z);
+      // Scan a polar grid around the erg centre for the point whose slope is
+      // closest to the 32° slip-face target (sinθ≈0.53), inside a walkable band.
+      let best = null;
+      for (let r = 40; r <= 1200; r += 18) {
+        for (let deg = 0; deg < 360; deg += 5) {
+          const x = erg.x + Math.cos(deg * Math.PI / 180) * r;
+          const z = erg.z + Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.44 && m < 0.64) {
+            const score = -Math.abs(m - 0.53);
+            if (!best || score > best.score) best = { x, z, m, score };
+          }
+        }
+      }
+      if (!best) return { error: 'no 30-34° slip face found in erg', erg };
+      // Climb UPHILL (against the downhill normal) to the crest: slope < 0.12, ≤70m.
+      let cx = best.x, cz = best.z;
+      for (let s = 0; s < 40; s++) {
+        const n = ctx.terrain.normalAt(cx, cz); const m = Math.hypot(n.x, n.z);
+        if (m < 0.12) break;
+        cx += (-n.x / m) * 2.5; cz += (-n.z / m) * 2.5;
+      }
+      const crestH = H(cx, cz);
+      // Descend the gradient from the crest to the TROUGH: slope < 0.09 after ≥25m.
+      let tx = cx, tz = cz, dist = 0;
+      for (let s = 0; s < 90; s++) {
+        const n = ctx.terrain.normalAt(tx, tz); const m = Math.hypot(n.x, n.z);
+        if (m < 0.09 && dist > 25) break;
+        if (m < 1e-4) break;
+        tx += (n.x / m) * 2; tz += (n.z / m) * 2; dist += 2;
+      }
+      const troughH = H(tx, tz);
+      const drop = crestH - troughH;
+      // Bow (local -Z) faces downhill from the crest.
+      const nc = ctx.terrain.normalAt(cx, cz); const mc = Math.hypot(nc.x, nc.z);
+      const cdX = nc.x / mc, cdZ = nc.z / mc;
+      const yaw = Math.atan2(-cdX, -cdZ);
+      const { id } = window.__game.spawnSled(cx, cz, yaw);
+      window.__sd = { id, cx, cz, crestH, tx, tz, troughH, drop, yaw, downX: cdX, downZ: cdZ };
+      const slopeDeg = +(Math.asin(best.m) * 180 / Math.PI).toFixed(1);
+      // Slope-distance of the face (crest→trough along the ground).
+      const faceRun = Math.hypot(tx - cx, tz - cz);
+      const faceLen = Math.hypot(faceRun, drop);
+      return {
+        ergX: +erg.x.toFixed(0), ergZ: +erg.z.toFixed(0),
+        crest: [+cx.toFixed(0), +cz.toFixed(0)], crestH: +crestH.toFixed(1),
+        troughH: +troughH.toFixed(1), drop: +drop.toFixed(1),
+        faceSlopeDeg: slopeDeg, faceRun: +faceRun.toFixed(0), faceLen: +faceLen.toFixed(0),
+      };
+    });
+    if (g0.error) { console.log('[sled-dune] ABORT: ' + g0.error); return; }
+    console.log(`[sled-dune] PHASE 0 (erg geometry): erg@(${g0.ergX},${g0.ergZ}) crest@(${g0.crest}) crestH=${g0.crestH} troughH=${g0.troughH} DROP=${g0.drop}m faceSlope=${g0.faceSlopeDeg}° faceRun=${g0.faceRun}m faceLen=${g0.faceLen}m`);
+
+    // ── PHASE A — free descent (real E-mount at the crest, no rider input).
+    const a = await page.evaluate(async (SPRINT) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      let sled = find();
+      // Reset sled to the crest, stationary.
+      const gy = ctx.terrain.heightAt(sd.cx, sd.cz);
+      sled.body.setTranslation({ x: sd.cx, y: gy + 0.08, z: sd.cz }, true);
+      sled.pos.set(sd.cx, gy + 0.08, sd.cz);
+      sled.yaw = sd.yaw; sled._slideVx = 0; sled._slideVz = 0;
+      await step(2);
+      // Stand up-slope of the sled + look at it; press E (the real mount path).
+      const pbx = sd.cx - sd.downX * 2.4, pbz = sd.cz - sd.downZ * 2.4;
+      const pby = ctx.terrain.heightAt(pbx, pbz) + 1.0;
+      ctx.player.body.body.setTranslation({ x: pbx, y: pby, z: pbz }, true);
+      const cam = ctx.three.camera;
+      cam.position.set(pbx, pby + 0.85, pbz);
+      cam.lookAt(sled.pos.x, sled.pos.y + 0.2, sled.pos.z);
+      cam.updateMatrixWorld(true);
+      await step(1);
+      ctx.input.pressed.add('KeyE');
+      await step(2);
+      const mounted = ctx.player.ridingSledId === sd.id;
+      // Descend. Record per frame until near the trough elevation or a hard cap.
+      const t0 = performance.now();
+      let maxSpeed = 0, gapMax = 0, clipMin = 999;
+      let px = sd.cx, pz = sd.cz;
+      const disp = [];
+      let reachedTroughFrame = -1, frames = 0;
+      const startY = sled.pos.y;
+      let stoppedFrame = -1;
+      for (let i = 0; i < 900; i++) {
+        await raf();
+        frames++;
+        sled = find();
+        const vx = sled._slideVx ?? 0, vz = sled._slideVz ?? 0;
+        const sp = Math.hypot(vx, vz);
+        if (sp > maxSpeed) maxSpeed = sp;
+        // Surface gap: deck (sled.pos.y) vs terrain at the sled XZ. Should stay
+        // within clearance (~0.06-0.08) — proves the follow holds at speed.
+        const terr = ctx.terrain.heightAt(sled.pos.x, sled.pos.z);
+        const gap = Math.abs(sled.pos.y - terr);
+        if (i > 3) gapMax = Math.max(gapMax, gap);
+        clipMin = Math.min(clipMin, sled.pos.y - terr);   // <0 = clipped under terrain
+        const d = Math.hypot(sled.pos.x - px, sled.pos.z - pz);
+        disp.push(+d.toFixed(3));
+        px = sled.pos.x; pz = sled.pos.z;
+        // Reached the trough elevation?
+        if (reachedTroughFrame < 0 && sled.pos.y <= sd.troughH + 1.0 && (startY - sled.pos.y) > sd.drop * 0.6) {
+          reachedTroughFrame = frames;
+        }
+        // Fully stopped (runout complete)?
+        if (reachedTroughFrame > 0 && sp < 0.4) { stoppedFrame = frames; break; }
+      }
+      const t1 = performance.now();
+      sled = find();
+      const descendedY = +(startY - sled.pos.y).toFixed(1);
+      // Descent time = wall-clock to the trough (approx; the loop runs at rAF≈60fps).
+      const descentTime = reachedTroughFrame > 0 ? +(reachedTroughFrame / 60).toFixed(2) : -1;
+      const runoutTime = stoppedFrame > 0 ? +(stoppedFrame / 60).toFixed(2) : -1;
+      // Runout distance from the trough point to the final rest.
+      const runoutDist = +Math.hypot(sled.pos.x - sd.tx, sled.pos.z - sd.tz).toFixed(1);
+      return {
+        mounted, maxSpeed: +maxSpeed.toFixed(1), sprintX: +(maxSpeed / SPRINT).toFixed(2),
+        gapMax: +gapMax.toFixed(3), clipMin: +clipMin.toFixed(3),
+        descendedY, descentTime, runoutTime, runoutDist,
+        wallMs: +(t1 - t0).toFixed(0),
+        dispEarly: +(disp.slice(2, 8).reduce((s, v) => s + v, 0) / 6).toFixed(3),
+        dispPeak: +Math.max(...disp).toFixed(3),
+      };
+    }, SPRINT);
+    const aPass = a.mounted && a.maxSpeed > SPRINT * 1.8 && a.maxSpeed < SPRINT * 3.2
+      && a.gapMax < 0.3 && a.clipMin > -0.15
+      && a.descentTime >= 3.0 && a.descentTime <= 9.0;
+    console.log(`[sled-dune] PHASE A (free descent): mounted=${a.mounted} maxSpeed=${a.maxSpeed}m/s (${a.sprintX}× sprint) descentTime=${a.descentTime}s descended=${a.descendedY}m gapMax=${a.gapMax}m clipMin=${a.clipMin}m runoutDist=${a.runoutDist}m runoutTime=${a.runoutTime}s dispPeak=${a.dispPeak}m/frame => ${aPass ? 'PASS' : 'FAIL'}`);
+
+    // Screenshot the crouched rider mid-slip-face (re-mount + descend a bit, shoot).
+    // Framed from a cinematic 3/4 SIDE-FRONT angle (not the chase cam) so the crouch,
+    // forward lean, arms + the dust trail all read — this is the postcard AND the
+    // pose-critique frame. `--poseangle=side|3q|front|chase` overrides.
+    const poseAngle = argv.poseangle || '3q';
+    await page.evaluate(async ({ poseAngle }) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sd = window.__sd;
+      const sled = ctx.sleds.list.find((s) => s.id === sd.id);
+      const gy = ctx.terrain.heightAt(sd.cx, sd.cz);
+      sled.body.setTranslation({ x: sd.cx, y: gy + 0.08, z: sd.cz }, true);
+      sled.pos.set(sd.cx, gy + 0.08, sd.cz);
+      sled.yaw = sd.yaw; sled._slideVx = 0; sled._slideVz = 0;
+      ctx.player.ridingSledId = sd.id;                  // direct mount for the shot
+      ctx.flags.thirdPerson = true;
+      window.__game.setTime(0.36);
+      // Descend ~1.2s so it's mid-face at speed with a dust trail.
+      for (let i = 0; i < 72; i++) await raf();
+      // PAUSE so the ride's per-frame camera pin (pinRiderToSeat) can't overwrite
+      // the framing below. The rig + dust freeze in their last posed state.
+      ctx.flags.paused = true;
+      // Frame the rider. Bow forward = sled local -Z = (-sin yaw, -cos yaw); right
+      // of the bow = (cos yaw, -sin yaw). Place the camera off to the side-front.
+      const cam = ctx.three.camera;
+      const s2 = ctx.sleds.list.find((s) => s.id === sd.id);
+      const cx = s2.pos.x, cy = s2.pos.y, cz = s2.pos.z;
+      const fwdX = -Math.sin(s2.yaw), fwdZ = -Math.cos(s2.yaw);
+      const rgtX = Math.cos(s2.yaw), rgtZ = -Math.sin(s2.yaw);
+      const D = 4.2;
+      let ex, ez, ey;
+      if (poseAngle === 'side') { ex = cx + rgtX * D; ez = cz + rgtZ * D; ey = cy + 1.3; }
+      else if (poseAngle === 'front') { ex = cx + fwdX * D; ez = cz + fwdZ * D; ey = cy + 1.4; }
+      else if (poseAngle === 'chase') { ex = cx - fwdX * D; ez = cz - fwdZ * D; ey = cy + 1.8; }
+      else { ex = cx + (fwdX * 0.7 + rgtX * 0.8) * D; ez = cz + (fwdZ * 0.7 + rgtZ * 0.8) * D; ey = cy + 1.5; } // 3q front-side
+      cam.position.set(ex, ey, ez);
+      cam.lookAt(cx, cy + 0.9, cz);
+      cam.updateMatrixWorld(true);
+    }, { poseAngle });
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, 'scen-sled-dune-postcard.png'), timeout: 60000 });
+    console.log('[sled-dune] screenshot saved: scen-sled-dune-postcard.png');
+    // Unpause — the postcard paused the sim to freeze the framing; the remaining
+    // measurement phases need the sled to move again.
+    await page.evaluate(() => { window.__game.ctx.flags.paused = false; });
+
+    // ── PHASE B — carve: A-held path deviates laterally from the free path.
+    const b = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      // Start mid-face (already at speed — carve authority is speed-gated, so the
+      // test must be ON the moving face, not nosing over the flat crest). Helper:
+      // reset to a point 1/3 down the face with a downhill kick, direct-mount, run
+      // N frames with an optional steer key held, return the final XZ.
+      const sx = sd.cx + (sd.tx - sd.cx) * 0.30, sz = sd.cz + (sd.tz - sd.cz) * 0.30;
+      const run = async (holdKey, N) => {
+        const sled = find();
+        const gy = ctx.terrain.heightAt(sx, sz);
+        sled.body.setTranslation({ x: sx, y: gy + 0.08, z: sz }, true);
+        sled.pos.set(sx, gy + 0.08, sz);
+        sled.yaw = sd.yaw;
+        sled._slideVx = sd.downX * 10; sled._slideVz = sd.downZ * 10;   // moving downhill
+        ctx.player.ridingSledId = sd.id;
+        ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false;
+        if (holdKey) ctx.input.keys[holdKey] = true;
+        for (let i = 0; i < N; i++) await raf();
+        if (holdKey) ctx.input.keys[holdKey] = false;
+        const s = find();
+        return { x: s.pos.x, z: s.pos.z };
+      };
+      const N = 110;
+      const free = await run(null, N);
+      const carve = await run('KeyA', N);
+      // Re-derive crest-relative offsets from the mid-face start for logging.
+      sd.cx; sd.cz;
+      // Lateral deviation = distance between the two end points projected off the
+      // straight downhill line from the crest.
+      const dxF = free.x - sx, dzF = free.z - sz;
+      const dxC = carve.x - sx, dzC = carve.z - sz;
+      const sep = Math.hypot(carve.x - free.x, carve.z - free.z);
+      return { freeEnd: [+dxF.toFixed(1), +dzF.toFixed(1)], carveEnd: [+dxC.toFixed(1), +dzC.toFixed(1)], sep: +sep.toFixed(1) };
+    });
+    const bPass = b.sep > 3.0;
+    console.log(`[sled-dune] PHASE B (carve): freeEndOffset=${b.freeEnd} carveEndOffset=${b.carveEnd} lateralSep=${b.sep}m => ${bPass ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE C — uphill stall: kick the sled UPHILL; it must decelerate + slide back.
+    const c = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      // Place mid-face, facing UPHILL, kicked uphill at 9 m/s.
+      const mx = (sd.cx + sd.tx) / 2, mz = (sd.cz + sd.tz) / 2;
+      const gy = ctx.terrain.heightAt(mx, mz);
+      const sled = find();
+      sled.body.setTranslation({ x: mx, y: gy + 0.08, z: mz }, true);
+      sled.pos.set(mx, gy + 0.08, mz);
+      // Uphill dir = opposite the downhill normal at mid-face.
+      const n = ctx.terrain.normalAt(mx, mz); const m = Math.hypot(n.x, n.z);
+      const upX = -n.x / m, upZ = -n.z / m;
+      sled.yaw = Math.atan2(-upX, -upZ);   // bow faces uphill
+      sled._slideVx = upX * 9; sled._slideVz = upZ * 9;
+      ctx.player.ridingSledId = sd.id;
+      ctx.input.keys['KeyW'] = false;   // no paddle — pure momentum test
+      const startH = sled.pos.y;
+      let maxGainH = 0, maxUpDist = 0;
+      for (let i = 0; i < 240; i++) {
+        await raf();
+        const s = find();
+        maxGainH = Math.max(maxGainH, s.pos.y - startH);
+        // signed uphill progress from start
+        const px = s.pos.x - mx, pz = s.pos.z - mz;
+        const upDist = px * upX + pz * upZ;
+        maxUpDist = Math.max(maxUpDist, upDist);
+      }
+      const s = find();
+      const endH = s.pos.y;
+      const endVx = s._slideVx ?? 0, endVz = s._slideVz ?? 0;
+      const endUpVel = endVx * upX + endVz * upZ;   // <0 = now sliding back down
+      return {
+        maxUpDist: +maxUpDist.toFixed(1), maxGainH: +maxGainH.toFixed(1),
+        netH: +(endH - startH).toFixed(1), endUpVel: +endUpVel.toFixed(2),
+      };
+    });
+    // Stall = climbed only a little then reversed (final velocity is downhill, and
+    // it ended LOWER than it started — momentum carried it up briefly then gravity won).
+    const cPass = c.maxUpDist < 12 && c.endUpVel < 0 && c.netH < 0;
+    console.log(`[sled-dune] PHASE C (uphill stall): maxUphillDist=${c.maxUpDist}m maxHgain=${c.maxGainH}m netH=${c.netH}m finalUphillVel=${c.endUpVel}m/s => ${cPass ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE D — dismount at speed on the slope: sled coasts + settles, player safe.
+    const d = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      // Reset to crest, mount, build speed.
+      const sled = find();
+      const gy = ctx.terrain.heightAt(sd.cx, sd.cz);
+      sled.body.setTranslation({ x: sd.cx, y: gy + 0.08, z: sd.cz }, true);
+      sled.pos.set(sd.cx, gy + 0.08, sd.cz);
+      sled.yaw = sd.yaw; sled._slideVx = 0; sled._slideVz = 0;
+      ctx.player.ridingSledId = sd.id;
+      // Descend until moving fast.
+      let speedAtDismount = 0;
+      for (let i = 0; i < 200; i++) {
+        await raf();
+        const s = find();
+        speedAtDismount = Math.hypot(s._slideVx ?? 0, s._slideVz ?? 0);
+        if (speedAtDismount > 10) break;
+      }
+      const sBefore = find();
+      const sledYBefore = sBefore.pos.y;
+      // Dismount (JUMP).
+      ctx.input.pressed.add('Space');
+      await step(2);
+      const dismounted = ctx.player.ridingSledId === null;
+      const p = ctx.player.body.body.translation();
+      const pgy = ctx.terrain.heightAt(p.x, p.z);
+      const capBottom = p.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const standGap = +(capBottom - pgy).toFixed(3);
+      // Player should be on the UPHILL side of the sled (higher terrain than the sled's).
+      const sNow = find();
+      const playerHigherThanSled = p.y > sNow.pos.y - 0.5;
+      // Sled keeps sliding briefly then settles — sample speed a few frames on.
+      const sledSpeedJustAfter = Math.hypot(sNow._slideVx ?? 0, sNow._slideVz ?? 0);
+      await step(120);
+      const sSettled = find();
+      const sledSpeedSettled = Math.hypot(sSettled._slideVx ?? 0, sSettled._slideVz ?? 0);
+      const sledClip = +(sSettled.pos.y - ctx.terrain.heightAt(sSettled.pos.x, sSettled.pos.z)).toFixed(3);
+      return {
+        speedAtDismount: +speedAtDismount.toFixed(1), dismounted,
+        standGap, onGround: ctx.player.onGround === true, playerHigherThanSled,
+        sledSpeedJustAfter: +sledSpeedJustAfter.toFixed(1), sledSpeedSettled: +sledSpeedSettled.toFixed(2),
+        sledClip, sledCoasted: sledSpeedJustAfter > 0.5,
+      };
+    });
+    // On a 32° slip face a released sled keeps sliding to the trough (Mad-Max rules) —
+    // "settles" means it doesn't FREEZE mid-slope + doesn't tunnel, and the player is
+    // placed safely uphill. So: retained its momentum (coasted, not frozen) + on ground
+    // + safe uphill placement + never clipped through terrain while coasting.
+    const dPass = d.dismounted && d.onGround && Math.abs(d.standGap) < 0.2
+      && d.playerHigherThanSled && d.sledCoasted && d.sledClip > -0.15;
+    console.log(`[sled-dune] PHASE D (dismount@speed): speedAtDismount=${d.speedAtDismount}m/s dismounted=${d.dismounted} onGround=${d.onGround} standGap=${d.standGap}m playerUphill=${d.playerHigherThanSled} sledCoasted=${d.sledCoasted} sledSpeedSettled=${d.sledSpeedSettled}m/s sledClip=${d.sledClip}m => ${dPass ? 'PASS' : 'FAIL'}`);
+
+    const allPass = aPass && bPass && cPass && dPass;
+    console.log(`[sled-dune] RESULT: ${allPass ? 'ALL PHASES PASS' : 'FAILURE — see phases above'}`);
+  },
+
+  // ── sled-pose (Deep-Desert cycle 6) — FAST rider-pose iteration. Spawns a sled
+  // on a gentle slope near origin (no 13km erg warp), direct-mounts, ticks so
+  // updatePlayerRig poses the crouched rider, gives it a little speed for a dust
+  // puff, pauses, and shoots the pose from 3q / side / front (three files). Pure
+  // pose critique — no physics measurement. ~1 boot, 3 frames.
+  'sled-pose': async (page) => {
+    const info = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = true;
+      window.__game.setTime(0.36);
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Find a mild slope near origin so the sled sits tilted (reads better) + can slide a touch.
+      let best = { x: 20, z: 0, m: 0 };
+      for (let r = 12; r <= 120; r += 6) {
+        for (let deg = 0; deg < 360; deg += 15) {
+          const x = Math.cos(deg * Math.PI / 180) * r, z = Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.12 && m < 0.4 && m > best.m) best = { x, z, m };
+        }
+      }
+      const n = ctx.terrain.normalAt(best.x, best.z); const mm = Math.hypot(n.x, n.z) || 1;
+      const downX = n.x / mm, downZ = n.z / mm;
+      const yaw = Math.atan2(-downX, -downZ);
+      const { id } = window.__game.spawnSled(best.x, best.z, yaw);
+      const sled = ctx.sleds.list.find((s) => s.id === id);
+      sled._slideVx = downX * 6; sled._slideVz = downZ * 6;   // a little motion for a dust puff
+      ctx.player.ridingSledId = id;
+      for (let i = 0; i < 30; i++) await raf();               // pose settles + dust spawns
+      window.__spose = { id };
+      return { at: [+best.x.toFixed(0), +best.z.toFixed(0)], slope: +best.m.toFixed(2) };
+    });
+    console.log('[sled-pose] mounted on slope ' + JSON.stringify(info));
+    for (const angle of ['3q', 'side', 'front']) {
+      await page.evaluate((angle) => {
+        const ctx = window.__game.ctx;
+        const sled = ctx.sleds.list.find((s) => s.id === window.__spose.id);
+        ctx.flags.paused = true;                              // freeze so the ride pin can't re-grab the camera
+        const cam = ctx.three.camera;
+        const cx = sled.pos.x, cy = sled.pos.y, cz = sled.pos.z;
+        const fwdX = -Math.sin(sled.yaw), fwdZ = -Math.cos(sled.yaw);
+        const rgtX = Math.cos(sled.yaw), rgtZ = -Math.sin(sled.yaw);
+        const D = 3.8;
+        let ex, ez, ey;
+        if (angle === 'side') { ex = cx + rgtX * D; ez = cz + rgtZ * D; ey = cy + 1.2; }
+        else if (angle === 'front') { ex = cx + fwdX * D; ez = cz + fwdZ * D; ey = cy + 1.3; }
+        else { ex = cx + (fwdX * 0.7 + rgtX * 0.8) * D; ez = cz + (fwdZ * 0.7 + rgtZ * 0.8) * D; ey = cy + 1.4; }
+        cam.position.set(ex, ey, ez);
+        cam.lookAt(cx, cy + 0.85, cz);
+        cam.updateMatrixWorld(true);
+      }, angle);
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-sled-pose-${angle}.png`), timeout: 60000 });
+      console.log(`[sled-pose] saved scen-sled-pose-${angle}.png`);
+      await page.evaluate(() => { window.__game.ctx.flags.paused = false; });
+    }
   },
 
   // Prompt-3P (ACW F #149): place the player near a ground pickup, aim the 3P

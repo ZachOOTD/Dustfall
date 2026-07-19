@@ -694,6 +694,83 @@ export function startMusicDesert(): void {
   _introLoops.delete('musicDesert');   // self-managed from here (finite) — not cut by stopAllIntroLoops
 }
 
+// ── Sled-slide hiss (Deep-Desert cycle 6) — a live speed-driven loop for the
+//    rideable sled carving down a dune. Two noise layers: a broad sand HISS
+//    (band-passed, brightens + rises in pitch with speed) over a low RUMBLE
+//    (lowpassed, the mass of the sled on sand). Unlike the intro loops, this is
+//    a PERSISTENT gain-modulated voice driven each frame from setSledSlideLevel;
+//    it's lazily created on the first non-zero level + torn down by stopSledSlide
+//    (called on dismount). Feeds the sfx bus so the storm low-pass muffles it too.
+interface SledSlideVoice {
+  gain: GainNode;         // master level (0 at rest, ramped from speed)
+  hissBp: BiquadFilterNode; // band centre rises with speed
+  hiss: AudioBufferSourceNode;
+  rumble: AudioBufferSourceNode;
+}
+let _sledSlide: SledSlideVoice | null = null;
+
+function _startSledSlide(): SledSlideVoice | null {
+  const a = getAudioInternals();
+  if (!a) return null;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.value = 0.0001;
+  gain.connect(a.sfx);
+  // HISS — bright band-passed noise (the sand spray). playbackRate + band centre
+  // are pushed up with speed in setSledSlideLevel.
+  const hiss = a.ctx.createBufferSource();
+  hiss.buffer = a.noiseBuffer; hiss.loop = true; hiss.playbackRate.value = 0.9;
+  const hissBp = a.ctx.createBiquadFilter(); hissBp.type = 'bandpass'; hissBp.frequency.value = 1600; hissBp.Q.value = 0.7;
+  const hg = a.ctx.createGain(); hg.gain.value = 0.7;
+  hiss.connect(hissBp).connect(hg).connect(gain);
+  hiss.start(t);
+  // RUMBLE — low body of sled-on-sand.
+  const rumble = a.ctx.createBufferSource();
+  rumble.buffer = a.noiseBuffer; rumble.loop = true; rumble.playbackRate.value = 0.35;
+  const rlp = a.ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 300; rlp.Q.value = 0.5;
+  const rg = a.ctx.createGain(); rg.gain.value = 0.5;
+  rumble.connect(rlp).connect(rg).connect(gain);
+  rumble.start(t);
+  _sledSlide = { gain, hissBp, hiss, rumble };
+  return _sledSlide;
+}
+
+/** Drive the sled-slide hiss. `level01` ∈ [0,1] scales with the sled's speed
+ *  (0 = at rest → silent, 1 = at the ride's top speed). Lazily starts the loop
+ *  on the first positive level; a level of 0 just ducks the gain (the loop keeps
+ *  running silently until stopSledSlide tears it down on dismount). Also nudges
+ *  the hiss brightness + pitch up with speed so a fast carve sounds faster. */
+export function setSledSlideLevel(level01: number): void {
+  const v = _sledSlide ?? (level01 > 0.001 ? _startSledSlide() : null);
+  if (!v) return;
+  const a = getAudioInternals();
+  if (!a) return;
+  const s = Math.max(0, Math.min(1, level01));
+  const now = a.ctx.currentTime;
+  // Master gain — quiet at a creep, present at a full slip-face carve.
+  v.gain.gain.setTargetAtTime(0.0001 + s * 0.16, now, 0.06);
+  // Brightness + pitch rise with speed (1500→2900 Hz band, 0.85→1.15 rate).
+  v.hissBp.frequency.setTargetAtTime(1500 + s * 1400, now, 0.08);
+  v.hiss.playbackRate.setTargetAtTime(0.85 + s * 0.30, now, 0.08);
+}
+
+/** Tear down the sled-slide loop (dismount / ride end). Fades then stops. */
+export function stopSledSlide(): void {
+  const v = _sledSlide;
+  if (!v) return;
+  _sledSlide = null;
+  const a = getAudioInternals();
+  if (!a) { return; }
+  const now = a.ctx.currentTime;
+  try {
+    v.gain.gain.cancelScheduledValues(now);
+    v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value), now);
+    v.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+  } catch { /* ctx torn down */ }
+  try { v.hiss.stop(now + 0.3); } catch { /* already stopped */ }
+  try { v.rumble.stop(now + 0.3); } catch { /* already stopped */ }
+}
+
 /** Set master volume, 0..1. Settings panel calls this. */
 export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;

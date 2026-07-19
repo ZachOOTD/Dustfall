@@ -31,6 +31,8 @@ import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import { spawnLockerAt, findLockerById } from './locker.ts';
 import { removeItems, addItem, countItems } from '../inventory/inventory.ts';
 import { spawnFootprintPuff } from './footprintPuffs.ts';
+// Deep-Desert cycle 6 — the ridden sled drives a speed-scaled sand-hiss loop.
+import { setSledSlideLevel, stopSledSlide } from '../audio/audio.ts';
 // ACC P2 — sled-rider promotion needs to read Pickup state.
 import type { Pickup } from '../pickups/pickups.ts';
 
@@ -869,22 +871,42 @@ function dismountSled(ctx: GameContext): void {
   const sled = findSledById(ctx.sleds.list, ctx.player.ridingSledId ?? undefined);
   ctx.player.ridingSledId = null;
   if (!sled) return;
-  // Place the player just to the RIGHT of the sled heading, on the terrain, with
-  // zero carried velocity (mirrors the speeder dismount). Right = 90° CW of the
-  // sled forward (local -Z): forward=(-sin,−cos) → right=(cos,−sin).
-  const rightX = Math.cos(sled.yaw);
-  const rightZ = -Math.sin(sled.yaw);
-  const offX = sled.pos.x + rightX * Tuning.SLED_RIDE_DISMOUNT_OFFSET;
-  const offZ = sled.pos.z + rightZ * Tuning.SLED_RIDE_DISMOUNT_OFFSET;
+  // Deep-Desert cycle 6 — SAFE DISMOUNT-AT-SPEED. Two changes vs cycle 5:
+  //  (1) Place the player on the UPHILL side of the sled (not blindly to the
+  //      right). Dismounting mid-slip-face, "right of heading" could drop the
+  //      player onto lower terrain the sled is about to slide onto/over; uphill
+  //      is always clear (the sled leaves DOWNhill). Falls back to right-of-
+  //      heading on ~flat ground where there's no meaningful uphill.
+  //  (2) DON'T freeze the sled. Cycle 5 zeroed the slide velocity, which on a
+  //      slope froze it mid-face for a frame before the free-slide re-derived
+  //      motion — a visible hitch. Now the ride velocity carries straight into
+  //      the free-slide branch (this same frame, since ridingSledId is already
+  //      null): the sled coasts on, the free-slide's stronger damp bleeds the
+  //      speed, and it settles in the trough (Mad-Max rules — a released sled on
+  //      a steep face slides away; the player's problem, not a bug).
+  const n = ctx.terrain.normalAt(sled.pos.x, sled.pos.z);
+  const slopeMag = Math.hypot(n.x, n.z);
+  let offDirX: number, offDirZ: number;
+  if (slopeMag > 0.08) {
+    // Uphill = opposite the downhill normal XZ.
+    offDirX = -n.x / slopeMag;
+    offDirZ = -n.z / slopeMag;
+  } else {
+    // ~Flat — step out to the right of the sled heading (local -Z forward → right = (cos,−sin)).
+    offDirX = Math.cos(sled.yaw);
+    offDirZ = -Math.sin(sled.yaw);
+  }
+  const offX = sled.pos.x + offDirX * Tuning.SLED_RIDE_DISMOUNT_OFFSET;
+  const offZ = sled.pos.z + offDirZ * Tuning.SLED_RIDE_DISMOUNT_OFFSET;
   const gy = ctx.terrain.heightAt(offX, offZ);
   const offY = gy + ctx.player.body.halfHeight + ctx.player.body.radius + 0.05;
   ctx.player.body.body.setTranslation({ x: offX, y: offY, z: offZ }, true);
   ctx.player.velocityY = 0;
   ctx.player.onGround = true;
   ctx.player.cameraSnapNextFrame = true;
-  // Stop the sled where it is — no runaway coast after the rider steps off.
-  sled._slideVx = 0;
-  sled._slideVz = 0;
+  // Retain the sled's slide velocity so it coasts on instead of freezing (the
+  // free-slide branch owns it from here). Stop the sled-slide audio loop.
+  stopSledSlide();
   ctx.ui.showToast?.('dismounted');
 }
 
@@ -973,48 +995,27 @@ export function updateSleds(ctx: GameContext, dt: number): void {
     let onSlope = false;
 
     if (ridden) {
-      // ── RIDE PHYSICS (Deep-Desert cycle 5) — a surface slider driven by the
-      //    same managed-scalar model as the free slide, but with ride-specific
-      //    gravity/friction + rider input (paddle / brake / steer). No storm
-      //    wind, no rope; the ride owns the sled entirely while mounted.
+      // ── RIDE PHYSICS (Deep-Desert cycle 5; dune-tuned + SUB-STEPPED cycle 6) —
+      //    a surface slider driven by the same managed-scalar model as the free
+      //    slide, but with ride-specific gravity/friction + rider input (paddle /
+      //    brake / steer). No storm wind, no rope; the ride owns the sled while
+      //    mounted.
+      //
+      //    SUB-STEPPING (cycle 6): at dune speed the sled covers ~0.5m/frame at
+      //    60fps (30 m/s). A single per-frame gravity sample + a single 0.5m
+      //    surface-follow teleport under-integrates the descent AND can chord
+      //    across a crest/trough (the sled reads as "popping" off the face). So
+      //    the gravity + friction + damp + move + Y-follow run in K sub-steps
+      //    (K scales with speed so each sub-move is ≤ SLED_RIDE_SUBSTEP_DIST m),
+      //    re-sampling terrain.normalAt / heightAt at every sub-position — the
+      //    deck hugs the sand at any speed. Rider input (paddle/brake/steer yaw +
+      //    grip) is applied ONCE per frame (input-driven, frame-rate stable).
       let rvx = sled._slideVx ?? 0;
       let rvz = sled._slideVz ?? 0;
-      // Gravity slide down the steepest-descent gradient (terrain.normalAt's XZ
-      // points downhill — see the free-slide DOWNHILL SIGN note below).
-      const rNormal = ctx.terrain.normalAt(tr.x, tr.z);
-      const rSlope = Math.hypot(rNormal.x, rNormal.z);
-      onSlope = rSlope > Tuning.SLED_RIDE_SLOPE_THRESHOLD;
-      if (onSlope) {
-        const dhx = rNormal.x / rSlope;
-        const dhz = rNormal.z / rSlope;
-        const accel = 9.81 * rSlope * Tuning.SLED_RIDE_GRAVITY_GAIN;
-        rvx += dhx * accel * dt;
-        rvz += dhz * accel * dt;
-      }
       // Rider input. Forward = the sled's local -Z in world XZ (yoke is at -Z).
       const rk = ctx.input.keys;
       const fwdInput = (rk['KeyW'] ? 1 : 0) - (rk['KeyS'] ? 1 : 0);
       const steerInput = (rk['KeyD'] ? 1 : 0) - (rk['KeyA'] ? 1 : 0);
-      const fwdX = -Math.sin(sled.yaw);
-      const fwdZ = -Math.cos(sled.yaw);
-      // W — paddle: a slow forward push, only while under the paddle cap (this is
-      // for creeping across flats, not a throttle).
-      if (fwdInput > 0) {
-        const alongSpeed = rvx * fwdX + rvz * fwdZ;
-        if (alongSpeed < Tuning.SLED_RIDE_PADDLE_MAX_SPEED) {
-          rvx += fwdX * Tuning.SLED_RIDE_PADDLE_ACCEL * dt;
-          rvz += fwdZ * Tuning.SLED_RIDE_PADDLE_ACCEL * dt;
-        }
-      }
-      // S — drag brake: decel opposing current motion.
-      if (fwdInput < 0) {
-        const sp = Math.hypot(rvx, rvz);
-        if (sp > 1e-4) {
-          const dV = Math.min(sp, Tuning.SLED_RIDE_BRAKE_DECEL * dt);
-          rvx -= (rvx / sp) * dV;
-          rvz -= (rvz / sp) * dV;
-        }
-      }
       // A/D — WEAK steering: gentle yaw at speed + a small redirect of velocity
       // toward the new heading (grip). A gravity sled carves, it doesn't snap.
       let sp = Math.hypot(rvx, rvz);
@@ -1032,42 +1033,81 @@ export function updateSleds(ctx: GameContext, dt: number): void {
         const targetYaw = Math.atan2(-rvx, -rvz);
         sled.yaw += wrapAngle(targetYaw - sled.yaw) * Tuning.SLED_RIDE_YAW_TRACK_LERP;
       }
-      // Coulomb ground friction — rests the sled on flat / gentle uphill.
-      sp = Math.hypot(rvx, rvz);
-      if (sp > 1e-4) {
-        const dV = Math.min(sp, 9.81 * Tuning.SLED_RIDE_FRICTION * dt);
-        rvx -= (rvx / sp) * dV;
-        rvz -= (rvz / sp) * dV;
+      const fwdX = -Math.sin(sled.yaw);
+      const fwdZ = -Math.cos(sled.yaw);
+      // W — paddle: a slow forward push, only while under the paddle cap (this is
+      // for creeping across flats, not a throttle).
+      if (fwdInput > 0) {
+        const alongSpeed = rvx * fwdX + rvz * fwdZ;
+        if (alongSpeed < Tuning.SLED_RIDE_PADDLE_MAX_SPEED) {
+          rvx += fwdX * Tuning.SLED_RIDE_PADDLE_ACCEL * dt;
+          rvz += fwdZ * Tuning.SLED_RIDE_PADDLE_ACCEL * dt;
+        }
       }
-      // Exp air/sand drag — caps terminal velocity on long steep runs.
-      const rDamp = Math.exp(-Tuning.SLED_RIDE_LINEAR_DAMP * dt);
-      rvx *= rDamp;
-      rvz *= rDamp;
-      // Clamp to max ride speed.
-      sp = Math.hypot(rvx, rvz);
-      if (sp > Tuning.SLED_RIDE_MAX_SPEED) {
-        const k = Tuning.SLED_RIDE_MAX_SPEED / sp;
-        rvx *= k;
-        rvz *= k;
+      // S — drag brake: decel opposing current motion.
+      if (fwdInput < 0) {
+        const sbp = Math.hypot(rvx, rvz);
+        if (sbp > 1e-4) {
+          const dV = Math.min(sbp, Tuning.SLED_RIDE_BRAKE_DECEL * dt);
+          rvx -= (rvx / sbp) * dV;
+          rvz -= (rvz / sbp) * dV;
+        }
+      }
+      // Sub-step the force integration + surface-follow. K scales with speed so
+      // each sub-move is ≤ SLED_RIDE_SUBSTEP_DIST metres.
+      const frameDist = Math.hypot(rvx, rvz) * dt;
+      const K = Math.min(
+        Tuning.SLED_RIDE_SUBSTEP_MAX,
+        Math.max(1, Math.ceil(frameDist / Tuning.SLED_RIDE_SUBSTEP_DIST)),
+      );
+      const sdt = dt / K;
+      let curX = tr.x, curZ = tr.z, curY = tr.y;
+      let blocked = false;
+      for (let k = 0; k < K; k++) {
+        // Gravity slide down the steepest-descent gradient at the CURRENT sub-pos
+        // (terrain.normalAt's XZ points downhill — see the free-slide sign note).
+        const rNormal = ctx.terrain.normalAt(curX, curZ);
+        const rSlope = Math.hypot(rNormal.x, rNormal.z);
+        if (rSlope > Tuning.SLED_RIDE_SLOPE_THRESHOLD) {
+          onSlope = true;
+          const accel = 9.81 * rSlope * Tuning.SLED_RIDE_GRAVITY_GAIN;
+          rvx += (rNormal.x / rSlope) * accel * sdt;
+          rvz += (rNormal.z / rSlope) * accel * sdt;
+        }
+        // Coulomb ground friction — rests the sled on flat / gentle uphill.
+        let ssp = Math.hypot(rvx, rvz);
+        if (ssp > 1e-4) {
+          const dV = Math.min(ssp, 9.81 * Tuning.SLED_RIDE_FRICTION * sdt);
+          rvx -= (rvx / ssp) * dV;
+          rvz -= (rvz / ssp) * dV;
+        }
+        // Exp air/sand drag — caps terminal velocity on long steep runs.
+        const rDamp = Math.exp(-Tuning.SLED_RIDE_LINEAR_DAMP * sdt);
+        rvx *= rDamp;
+        rvz *= rDamp;
+        // Clamp to max ride speed.
+        ssp = Math.hypot(rvx, rvz);
+        if (ssp > Tuning.SLED_RIDE_MAX_SPEED) {
+          const kc = Tuning.SLED_RIDE_MAX_SPEED / ssp;
+          rvx *= kc; rvz *= kc;
+        }
+        // Move this sub-step; POI clamp so a ridden sled can't coast through a
+        // wreck; Y sampled at the new XZ so the sled hugs the sand.
+        let nX = curX + rvx * sdt;
+        let nZ = curZ + rvz * sdt;
+        const clamped = clampSledMoveAgainstPOIs(ctx, sled, curX, curZ, nX, nZ, curY);
+        if (clamped.blocked) {
+          nX = clamped.x; nZ = clamped.z;
+          rvx = 0; rvz = 0; blocked = true;
+        }
+        curX = nX; curZ = nZ;
+        curY = ctx.terrain.heightAt(curX, curZ) + hy + Tuning.SLED_GROUND_CLEARANCE;
+        if (blocked) break;
       }
       sled._slideVx = rvx;
       sled._slideVz = rvz;
-      // Apply the XZ move; Y sampled at the new XZ so the sled hugs the sand (no
-      // sinking / launching through terrain). POI clamp so a ridden sled can't
-      // coast through a wreck either.
-      let newX = tr.x + rvx * dt;
-      let newZ = tr.z + rvz * dt;
-      {
-        const clamped = clampSledMoveAgainstPOIs(ctx, sled, tr.x, tr.z, newX, newZ, tr.y);
-        if (clamped.blocked) {
-          newX = clamped.x; newZ = clamped.z;
-          sled._slideVx = 0; sled._slideVz = 0;
-        }
-      }
-      const rGroundY = ctx.terrain.heightAt(newX, newZ);
-      const rTargetBodyY = rGroundY + hy + Tuning.SLED_GROUND_CLEARANCE;
-      sled.body.setNextKinematicTranslation({ x: newX, y: rTargetBodyY, z: newZ });
-      tr = { x: newX, y: rTargetBodyY, z: newZ } as ReturnType<typeof sled.body.translation>;
+      sled.body.setNextKinematicTranslation({ x: curX, y: curY, z: curZ });
+      tr = { x: curX, y: curY, z: curZ } as ReturnType<typeof sled.body.translation>;
     } else {
 
     // ACC playtest follow-up — slope-slide via MANAGED SCALAR velocity
@@ -1212,6 +1252,35 @@ export function updateSleds(ctx: GameContext, dt: number): void {
     // rope/tether resolution (a mounted sled is never simultaneously towed).
     if (ridden) {
       pinRiderToSeat(ctx, sled, tr, hy);
+      // Deep-Desert cycle 6 — ride PRESENTATION: sand kick-up + slide hiss, both
+      // scaled by speed, silent at rest. Pause-gates for free (updateSleds only
+      // runs when unpaused — see the main.ts pause gate).
+      const rideSpeed = Math.hypot(sled._slideVx ?? 0, sled._slideVz ?? 0);
+      // Sand plume behind the sled — reuse the pooled footstep-puff particles,
+      // cadence tightening with speed so a fast carve throws a continuous rooster
+      // tail (none below a crawl). Uses the per-frame travel distance.
+      if (rideSpeed > Tuning.SLED_RIDE_DUST_MIN_SPEED) {
+        const dx = sled.pos.x - prevPosX, dz = sled.pos.z - prevPosZ;
+        const moved = Math.hypot(dx, dz);
+        sled._sandPuffAccum = (sled._sandPuffAccum ?? 0) + moved;
+        // Interval shrinks from ~0.9m at the min speed to ~0.25m near top speed.
+        const speed01 = Math.min(1, rideSpeed / Tuning.SLED_RIDE_MAX_SPEED);
+        const interval = 0.9 - 0.65 * speed01;
+        if (sled._sandPuffAccum >= interval && moved > 1e-4) {
+          sled._sandPuffAccum = 0;
+          const backX = sled.pos.x - (dx / moved) * Tuning.SLED_HALF_EXTENTS_Z;
+          const backZ = sled.pos.z - (dz / moved) * Tuning.SLED_HALF_EXTENTS_Z;
+          spawnFootprintPuff(backX, ctx.terrain.heightAt(backX, backZ) + 0.05, backZ);
+          // A fast carve throws a second, wider puff for a denser rooster tail.
+          if (speed01 > 0.5) {
+            const jx = (Math.random() - 0.5) * 0.5, jz = (Math.random() - 0.5) * 0.5;
+            spawnFootprintPuff(backX + jx, ctx.terrain.heightAt(backX + jx, backZ + jz) + 0.05, backZ + jz);
+          }
+        }
+      }
+      // Slide hiss — level scales with speed; 0 at rest (setSledSlideLevel ducks
+      // the loop). Torn down on dismount (stopSledSlide).
+      setSledSlideLevel(Math.min(1, rideSpeed / Tuning.SLED_RIDE_MAX_SPEED));
       continue;
     }
 

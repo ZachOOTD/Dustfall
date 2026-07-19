@@ -1841,25 +1841,52 @@ export const Tuning = {
   // not a kart). All values are CORE placeholders — feel tuning is cycle 6.
   // ────────────────────────────────────────────────────────────────
   SLED_RIDE_SLOPE_THRESHOLD: 0.02,           // min terrain-normal horizontal mag before gravity slides the ridden sled (matches the free-slide threshold)
-  SLED_RIDE_GRAVITY_GAIN: 4.5,               // downhill accel factor: accel = 9.81 × slopeHorizMag × this. Higher than the empty-sled free-slide gain (2.5) — a ridden sled + rider commits down a dune eagerly.
-  SLED_RIDE_FRICTION: 0.28,                   // Coulomb kinetic-friction coefficient (decel = 9.81 × this). Brings the sled to rest on flat / gentle uphill; low enough that steep dunes still accelerate it.
-  SLED_RIDE_LINEAR_DAMP: 0.6,                 // exp air/sand drag per second on top of Coulomb friction — caps terminal velocity on long steep runs
-  SLED_RIDE_MAX_SPEED: 12,                    // m/s hard clamp on the ridden sled's slide speed
+  // Deep-Desert cycle 6 — DUNE-SCALE re-tune (was placeholders 4.5 / 0.28 / 0.6 / 12,
+  // set on origin-world slopes cycle 5). Tuned against the `sled-dune` probe on a real
+  // erg slip face (53m drop / 32° / 105m face): free descent ~5-8s, peak ~30 m/s ≈ 2.3×
+  // PLAYER_SPRINT (13.2), convincing runout carried into the next windward rise, uphill
+  // stall + slide-back. GAIN is now the DOMINANT term (was capped uselessly under the 12
+  // m/s clamp — the sled read slower than a sprint).
+  SLED_RIDE_GRAVITY_GAIN: 3.0,               // downhill accel factor: accel = 9.81 × slopeHorizMag × this. Steep — a ridden sled + rider commits down a slip face eagerly (empty-sled free-slide gain is 2.5).
+  SLED_RIDE_FRICTION: 0.13,                   // Coulomb kinetic-friction coefficient (decel = 9.81 × this). Rests the sled on flat / gentle uphill; low enough that a 30°+ slip face accelerates it hard.
+  SLED_RIDE_LINEAR_DAMP: 0.24,                // exp air/sand drag per second on top of Coulomb friction — sets the terminal velocity on a long steep face (~30 m/s with GAIN 3.0 on a 32° face)
+  SLED_RIDE_MAX_SPEED: 32,                    // m/s hard clamp on the ridden sled's slide speed (~2.4× sprint) — a safety cap; damp sets the practical terminal below it
+  // Sub-step (cycle 6): at ~30 m/s the sled covers ~0.5m/frame; splitting the gravity +
+  // friction + damp + move + surface-follow into ≤ SUBSTEP_DIST-metre sub-steps keeps the
+  // deck glued to the sand (re-sampling heightAt/normalAt each sub-pos) so it never chords
+  // across a crest/trough at speed. K = ceil(frameDist / SUBSTEP_DIST), capped at SUBSTEP_MAX.
+  SLED_RIDE_SUBSTEP_DIST: 0.25,              // max metres of surface travel per ride sub-step
+  SLED_RIDE_SUBSTEP_MAX: 8,                  // hard cap on sub-steps per frame (bounds the per-frame cost)
+  SLED_RIDE_DUST_MIN_SPEED: 2.0,             // m/s — below this the ridden sled throws no sand kick-up (a crawl doesn't spray)
   SLED_RIDE_PADDLE_ACCEL: 3.0,               // W — forward push accel (m/s²) on flat; a slow paddle, not a throttle
   SLED_RIDE_PADDLE_MAX_SPEED: 3.5,           // W stops adding push once the along-heading speed reaches this (paddling is for creeping across flats, not racing)
   SLED_RIDE_BRAKE_DECEL: 9.0,                // S — drag-brake decel (m/s²) opposing current motion
-  SLED_RIDE_STEER_RATE: 1.1,                 // A/D — max yaw rate (rad/s) at speed; scaled by speedFactor so a stopped sled barely turns
+  SLED_RIDE_STEER_RATE: 1.1,                 // A/D — max yaw rate (rad/s) at speed; scaled by speedFactor so a stopped sled barely turns. Cycle-6 note: carve now reads strongly at dune speed (the cycle-5 weakness was the 12 m/s cap, not the steer rate) — kept at the cycle-5 value; dial here for carve feel.
   SLED_RIDE_STEER_SPEED_REF: 6.0,            // m/s at which steering reaches full authority (speedFactor = min(1, speed/this))
-  SLED_RIDE_STEER_GRIP: 0.08,                // fraction of velocity redirected toward the new heading per frame when steering — WEAK (a sled carves gently, it doesn't snap)
+  SLED_RIDE_STEER_GRIP: 0.08,                // fraction of velocity redirected toward the new heading per frame when steering — WEAK (a sled carves gently, it doesn't snap); speed-gated yaw keeps it weak on flat
   SLED_RIDE_YAW_TRACK_LERP: 0.06,            // when coasting with no steer input, the bow gently lerps to face travel direction by this fraction/frame
   SLED_RIDE_SEAT_X: 0,                        // rider capsule offset in sled-local X (0 = centered laterally)
   SLED_RIDE_SEAT_Z: 0,                        // rider capsule offset in sled-local Z (0 = centered fore/aft on the 2.2m deck)
   SLED_RIDE_SEAT_Y: 0.86,                     // rider capsule CENTER height above the deck plane = halfHeight (0.5) + radius (0.35) + ~1cm so the capsule bottom rests on the deck
   SLED_RIDE_MOUNT_RANGE: 3.5,                // E-mount reach (m) — player body to sled center (mirrors SPEEDER_MOUNT_RANGE)
   SLED_RIDE_MOUNT_LOOK_DOT: 0.4,             // camera-forward · dir-to-sled must clear this to mount (mirrors SPEEDER_MOUNT_LOOK_DOT, a touch looser since the deck is low)
+  // Deep-Desert cycle 6 — RIDER CROUCH POSE (3P). The ridden rig is seated on the
+  // deck in a low, weight-forward crouch (knees bent, hands low, bracing into the
+  // slide) — reads as "riding a sled", not "standing on a tray". Tuned against 3P
+  // rig screenshots (sled-dune postcard + rig-shot sled-pose). Radians.
+  SLED_RIDE_RIG_DROP: 0.10,                  // m the rig origin sits below the deck plane so the crouched feet rest ON the deck
+  SLED_RIDE_RIG_LEAN: 0.66,                  // spineBend forward lean (waist-pivoted) — chest down over the knees, committed boarder's crouch
+  SLED_RIDE_RIG_HIP: 0.58,                   // hip flex — thighs angle down-forward so the feet tuck UNDER the body (not out front like a luge)
+  SLED_RIDE_RIG_SPLAY: 0.18,                 // hip z-roll — a modest knee splay for a stable stance (not a wide frog)
+  SLED_RIDE_RIG_KNEE: 1.35,                  // deep knee bend (shin folds back, butt drops low)
+  SLED_RIDE_RIG_ANKLE: 0.62,                 // dorsiflex → sole stays flat on the deck as the knees fold
+  SLED_RIDE_RIG_SHOULDER: -0.40,             // shoulder pitch — upper arm reaches forward-down, hands out toward the bow to brace
+  SLED_RIDE_RIG_ELBOW: 0.62,                 // elbow bend — arms reach for the front of the deck (bracing "hold on"), not hanging at the lap
+  SLED_RIDE_RIG_HEAD: -0.14,                 // head pitch — chin up a touch so the rider looks ahead down the face
   SLED_RIDE_DISMOUNT_OFFSET: 1.6,            // m to the right of the sled heading where the player is placed on dismount
   SLED_RIDE_3P_CAM_BACK: 4.5,                // 3P chase distance behind the camera-forward while riding
   SLED_RIDE_3P_CAM_ABOVE: 1.2,               // 3P chase height above the rider seat while riding
+  SLED_RIDE_FOV_BUMP: 12,                    // degrees added to the camera FOV at top ride speed (eased via the spyglass FOV lerp) — the speed rush; 0 disables
   STAMINA_TOW_FACTOR: 1.5,                   // sprint+tow on foot drains stamina × this. ABJ: 2.0→1.5 (sprint duration when towing 3s→4s; reads less punishing for short tow runs while still discouraging long sled hauls at sprint)
 
   // ────────────────────────────────────────────────────────────────

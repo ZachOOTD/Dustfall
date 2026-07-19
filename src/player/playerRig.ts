@@ -1172,6 +1172,52 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     rig._aimPrevHeading = rig.heading;
     return;
   }
+  // ── Deep-Desert cycle 6 — RIDING THE SLED. ──
+  // While riding, updateSleds pins the player capsule to the sled seat (it isn't
+  // parked off-world like the speeder), but the on-foot path below plants the rig
+  // at terrain height in a standing pose — which read as "standing bolt upright on
+  // a tray" (the cycle-5 screenshot). Instead: seat the rig ON THE DECK (sled.pos
+  // is the deck-plane world pos; sled.yaw is the bow heading) in a low crouched
+  // ride pose — knees bent, weight forward, hands low, bracing into the slide.
+  // Mirrors the speeder branch's seat-then-pose-then-return structure.
+  const ridingSledId = ctx.player.ridingSledId;
+  if (ridingSledId !== null) {
+    const sled = ctx.sleds.list.find((s) => s.id === ridingSledId);
+    if (sled) {
+      // Seat the rig on the deck. sled.pos.y is the deck plane; drop the rig a
+      // touch so the crouched figure's shins/feet rest ON the deck (the bent-knee
+      // crouch below raises the feet relative to the pelvis).
+      rig.group.position.set(sled.pos.x, sled.pos.y - Tuning.SLED_RIDE_RIG_DROP, sled.pos.z);
+      rig.heading = sled.yaw + Math.PI;          // face the bow (sled local -Z)
+      rig.group.rotation.y = rig.heading;
+      rig.state = 'crouching';
+      // Waist-pivot forward lean (same trick as the speeder — pivot the torso at
+      // the waist, not the feet, so it doesn't slide off the pelvis).
+      const LEAN = Tuning.SLED_RIDE_RIG_LEAN;
+      const PIVOT_Y = 0.92;
+      rig.body.position.set(0, 0, 0);
+      rig.body.rotation.x = 0;
+      rig.spineBend.rotation.set(LEAN, 0, 0);
+      rig.spineBend.position.set(0, PIVOT_Y * (1 - Math.cos(LEAN)), -PIVOT_Y * Math.sin(LEAN));
+      for (let i = 0; i < 2; i++) {
+        const side = i === 1 ? 1 : -1;
+        // Deep crouch: thigh drawn up/forward + a little splay for a wide, stable
+        // stance; shin folded back under; foot flat-ish on the deck.
+        rig.hips[i].rotation.set(Tuning.SLED_RIDE_RIG_HIP, 0, side * Tuning.SLED_RIDE_RIG_SPLAY);
+        rig.knees[i].rotation.x = Tuning.SLED_RIDE_RIG_KNEE;
+        rig.ankles[i].rotation.x = Tuning.SLED_RIDE_RIG_ANKLE;
+        // Arms hang low + forward, bracing into the ride (elbows bent, hands down).
+        rig.shoulders[i].rotation.set(Tuning.SLED_RIDE_RIG_SHOULDER, 0, side * 0.14);
+        rig.elbows[i].rotation.x = Tuning.SLED_RIDE_RIG_ELBOW;
+        rig.wrists[i].rotation.x = -0.10;
+      }
+      rig.headGroup.position.y = HEAD_Y;
+      rig.headGroup.rotation.set(Tuning.SLED_RIDE_RIG_HEAD, 0, 0);   // chin slightly up so the rider looks ahead down the face
+      rig._aimPrevHeading = rig.heading;
+      return;
+    }
+  }
+
   // Not seated — clear any waist-pivot offset the seated branch applied so the
   // on-foot spine bends about its normal (origin) pivot.
   rig.spineBend.position.set(0, 0, 0);
