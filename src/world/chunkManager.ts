@@ -50,6 +50,14 @@ import { spawnWellAt, type WaterSource } from './waterSources.ts';
 import { spawnCactusAt, type Cactus } from './cactus.ts';
 import { spawnScrapAt, spawnMaterialAt, despawnPickup, type Pickup } from '../pickups/pickups.ts';
 import { scatterForArchetype } from '../config/lootRegistry.ts';   // Scavenger's Economy — per-POI identity material scatter (+ generic-wreck fallback)
+import { buildScrapMesh } from './scrapMesh.ts';                    // Deep Desert cycle 7 — the erg trough wreck-fragment vocabulary
+import { createMetalMaterial } from './metalMaterial.ts';
+
+// Deep Desert cycle 7 — shared rusted-metal materials for the erg trough wreck
+// fragments. Module-level singletons (the _treeMat rule): they survive chunk
+// unload; only the per-fragment GEOMETRY is disposed (chunkGeo, no chunkMat).
+const _ergWreckMat = createMetalMaterial(0x5a4630, { rustLevel: 0.7, wornScale: 2.0, scratchStrength: 0.12, localSpace: true });
+const _ergWreckAccentMat = createMetalMaterial(0x3a2c1c, { rustLevel: 0.82, wornScale: 2.6, scratchStrength: 0.08, localSpace: true });
 
 /** 32-bit avalanche mix of (worldSeed, cx, cz) — the per-chunk seed.
  *  Murmur3-finalizer style so adjacent chunk coords (including negatives)
@@ -170,6 +178,12 @@ export interface ChunkDesc {
   dressing: ChunkDressingDesc;
   /** bone_field titan-graveyard scatter (empty off-biome). */
   bones: ChunkBoneDesc[];
+  /** The Deep Desert cycle 7 — a rare deterministic DUNE-TROUGH find (a lone,
+   *  mostly-buried wreck fragment / bone piece / dead tree). null on the vast
+   *  majority of chunks — near-empty by design (the emptiness IS the aesthetic).
+   *  Present only where the chunk rolls it AND the point sits in a real erg
+   *  trough floor. Reuses existing vocabulary; no new archetypes. */
+  ergDressing: { kind: 'wreck' | 'bone' | 'tree'; x: number; z: number; scale: number; seed: number } | null;
   /** The colossal sandworm-skeleton HERO — present on exactly ONE chunk per
    *  bone_field region (the chunk containing the field anchor). null elsewhere.
    *  Hash-seeded (yaw/seed derived from the anchor coords) → deterministic. */
@@ -340,6 +354,11 @@ export function createChunkManager(
     // theirs from the roll). Same archetype weights (the graveyard mix).
     const poiChance = biome === 'wreck_yard'
       ? Tuning.CHUNK_POI_CHANCE * 6
+      // The Deep Desert — the erg is near-EMPTY by design: heavily reduced POI
+      // roll (troughs get their sparse dressing in a later cycle). A lone wreck
+      // half-buried in the sand sea is a discovery, not clutter.
+      : biome === 'erg'
+      ? Tuning.CHUNK_POI_CHANCE * Tuning.ERG_POI_CHANCE_MULT
       : Tuning.CHUNK_POI_CHANCE;
     const present = outsideOrigin && roll < poiChance;
     const poi: ChunkPoiDesc = { present, x: px, z: pz, biome, archetype, renderSeed };
@@ -489,13 +508,15 @@ export function createChunkManager(
     const rlRoll = roamRand();
     const rlx = cx * SIZE + roamRand() * SIZE;
     const rlz = cz * SIZE + roamRand() * SIZE;
-    if (outsideOrigin && rlRoll < Tuning.CHUNK_ROAM_LIZARD_CHANCE && biomes.biomeAt(rlx, rlz) !== 'salt') {
+    // The erg is treated like salt for ambient life — a hushed, near-empty dune
+    // sea (the biome soundscape hush comes in a later cycle). No roaming prey.
+    if (outsideOrigin && rlRoll < Tuning.CHUNK_ROAM_LIZARD_CHANCE && biomes.biomeAt(rlx, rlz) !== 'salt' && biomes.biomeAt(rlx, rlz) !== 'erg') {
       fauna.roamLizards = [{ x: rlx, z: rlz }];
     } else fauna.roamLizards = [];
     const rsRoll = roamRand();
     const rsx = cx * SIZE + roamRand() * SIZE;
     const rsz = cz * SIZE + roamRand() * SIZE;
-    if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt') {
+    if (outsideOrigin && rsRoll < Tuning.CHUNK_ROAM_SHREW_CHANCE && biomes.biomeAt(rsx, rsz) !== 'salt' && biomes.biomeAt(rsx, rsz) !== 'erg') {
       fauna.roamShrews = [{ x: rsx, z: rsz }];
     } else fauna.roamShrews = [];
     // M8 — a rare CIRCLING vulture wheeling over this chunk (aerial life for the
@@ -549,6 +570,44 @@ export function createChunkManager(
       const yaw = (((hseed >>> 8) & 0xffff) / 0x10000) * Math.PI * 2;
       wormSkeleton = { x: wa.x, z: wa.z, yaw, seed: hseed };
     }
+    // ── The Deep Desert cycle 7 — SPARSE TROUGH DRESSING. A dedicated stream
+    //    (APPENDED after every existing stream so they stay byte-stable) with a
+    //    FIXED 6-draw budget. A find is kept only where the chunk rolls it AND
+    //    the point is inside the erg biome AND it sits on a genuine TROUGH floor
+    //    (well below the surrounding erg surface — never on a crest/slope). The
+    //    emptiness is the aesthetic: a lone half-buried wreck fragment / bone
+    //    piece / dead tree is a DISCOVERY, not clutter. Reuses existing
+    //    vocabulary (scrap mesh / bone bit / dead tree); no new archetypes. ──
+    const ergDressRand = makeRng((seed ^ 0xe46d55) >>> 0);
+    const edRoll = ergDressRand();
+    const edx = (cx + 0.5) * SIZE + (ergDressRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const edz = (cz + 0.5) * SIZE + (ergDressRand() - 0.5) * (SIZE - 2 * Tuning.CHUNK_POI_EDGE_MARGIN_M);
+    const edKindRoll = ergDressRand();
+    const edScaleRoll = ergDressRand();
+    const edSeed = Math.floor(ergDressRand() * 0x100000000) >>> 0;
+    let ergDressing: ChunkDesc['ergDressing'] = null;
+    if (outsideOrigin && edRoll < Tuning.ERG_DRESS_CHANCE && biomes.biomeAt(edx, edz) === 'erg') {
+      // Trough gate — PURE closed-form height (bilinear-vs-formula must never flip
+      // a descriptor, the D299 rule). The point must sit ≥ DROP below the ring
+      // average so a find only lands on a real trough floor, not a windward face.
+      const cH = terrain.pureHeightAt(edx, edz);
+      const R = Tuning.ERG_DRESS_TROUGH_RING_M;
+      const ringAvg = (
+        terrain.pureHeightAt(edx + R, edz) +
+        terrain.pureHeightAt(edx - R, edz) +
+        terrain.pureHeightAt(edx, edz + R) +
+        terrain.pureHeightAt(edx, edz - R)
+      ) / 4;
+      if (ringAvg - cH >= Tuning.ERG_DRESS_TROUGH_DROP_M) {
+        const kind: 'wreck' | 'bone' | 'tree' =
+          edKindRoll < 0.42 ? 'bone' : edKindRoll < 0.72 ? 'wreck' : 'tree';   // bone 42% / wreck 30% / tree 28% (tree the rarest — "occasionally a lone dead tree")
+        const scale =
+          kind === 'wreck' ? 14 + edScaleRoll * 12
+          : kind === 'bone' ? 0.9 + edScaleRoll * 1.3
+          : 1;   // dead tree is fixed-scale (its own builder handles size)
+        ergDressing = { kind, x: edx, z: edz, scale, seed: edSeed };
+      }
+    }
     return {
       cx, cz, seed,
       markers: markerList,
@@ -560,6 +619,7 @@ export function createChunkManager(
       dressing: { trees, well: { present: wellPresent, x: wlx, z: wlz, seed: wSeed }, cacti },
       bones,
       wormSkeleton,
+      ergDressing,
     };
   };
 
@@ -1040,6 +1100,58 @@ export function createChunkManager(
         bitRoot.userData.streamBone = true;
         mergeStaticByMaterial(bitRoot);   // → one draw call; merged mesh tagged noCollider
         group.add(bitRoot);
+      }
+    }
+    // ── The Deep Desert cycle 7 — the rare TROUGH DRESSING find. A lone,
+    //    mostly-buried discovery seated on a dune-trough floor. Three reused
+    //    vocabularies: a torn scrap/hull fragment (scaled buildScrapMesh, buried
+    //    ~half, no collider — the scatter-decoration rule), a bone bit (buildBoneBit,
+    //    merged look, no collider), or a lone dead tree (spawnDeadTreeAt — brings
+    //    its own trunk collider + branch pickups, exactly like the salt dressing). ──
+    if (desc.ergDressing) {
+      const ed = desc.ergDressing;
+      const edRand = makeRng(ed.seed);
+      const gy = terrain.heightAt(ed.x, ed.z);
+      if (ed.kind === 'tree' && gameCtx) {
+        const res = spawnDeadTreeAt(scene, terrain, world, ed.x, ed.z, edRand, gameCtx.pickups.list, group);
+        res.group.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) m.userData.chunkGeo = true;   // per-tree geo; _treeMat shared
+        });
+        const tBody = res.collider.parent();
+        if (tBody) bodies.push(tBody);
+        res.branches.forEach((b, j) => trackPickup(b, `ed/b${j}`));
+      } else if (ed.kind === 'bone') {
+        const bit = buildBoneBit('longbone', edRand);
+        bit.scale.setScalar(ed.scale);
+        bit.rotation.y = edRand() * Math.PI * 2;
+        bit.updateMatrixWorld(true);
+        const bbox = new THREE.Box3().setFromObject(bit);
+        const bitH = bbox.max.y - bbox.min.y;
+        const bury = 0.4 + edRand() * 0.25;    // deep burial — a lone weathered bone in the sand
+        bit.position.set(ed.x, gy - bury * bitH - bbox.min.y, ed.z);
+        bit.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) { m.userData.chunkGeo = true; m.material = boneScatterMaterial; }
+        });
+        bit.userData.streamBone = true;
+        group.add(bit);
+      } else {
+        // wreck fragment — a torn hull plate half-swallowed by the dune.
+        const frag = buildScrapMesh(_ergWreckMat, _ergWreckAccentMat);
+        frag.scale.setScalar(ed.scale);
+        frag.rotation.y = edRand() * Math.PI * 2;
+        frag.updateMatrixWorld(true);
+        const bbox = new THREE.Box3().setFromObject(frag);
+        const fragH = bbox.max.y - bbox.min.y;
+        const bury = 0.42 + edRand() * 0.2;    // mostly buried — a jutting fragment, not a whole wreck
+        frag.position.set(ed.x, gy - bury * fragH - bbox.min.y, ed.z);
+        frag.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.userData.chunkGeo = true; }   // geo disposed on unload; _ergWreckMat shared
+        });
+        frag.userData.streamErgWreck = true;
+        group.add(frag);
       }
     }
     // ── The colossal RIBCAGE HERO (one per bone_field region — the biome's

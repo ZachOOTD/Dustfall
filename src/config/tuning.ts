@@ -719,6 +719,84 @@ export const Tuning = {
   DUNE_ASYMMETRY_AMOUNT: 26.0,         // organic u-warp (m); curves ridges
   DUNE_WARP_SCALE: 420,                // wavelength of the warp noise channel
 
+  // ── The Deep Desert (campaign 2026-07-18) — the MEGA DUNE-SEA (erg).
+  //    A rare regional biome (regional-anchor pattern, like bone_field) of
+  //    Sahara-scale dunes: sightline occlusion in the troughs, long views only
+  //    from crests. Its heightfield (terrain.sampleErgHeight) superposes an
+  //    asymmetric primary mega-dune (windward gentle / slip steep), a low-freq
+  //    draa undulation, and a fine ripple overlay, then blends into the
+  //    surrounding desert over a wide border zone. All shape math is PURE
+  //    (same x,z,seed → same height). Playability (research digest table): the
+  //    KCC climbs ≤50°, so windward faces MUST stay ≤~30°; slip faces sit at the
+  //    dry-sand angle of repose (~28-36°) — the sled's playground (cycle 5+).
+  //    The dune-slope probe (verify:chunks) asserts these numerically.
+  // Region grid: erg uses its OWN, LARGER region cell so a single erg spans
+  // multiple km (a dune SEA, not one glance). ERG_REGION_CHUNKS × CHUNK_SIZE
+  // (32 × 112 = 3584m) per cell; the anchor is kept a full radius inside its
+  // cell so adjacent ergs never overlap (a 3×3 neighborhood scan suffices).
+  ERG_REGION_CHUNKS: 32,               // 3584m region cell (vs 16 for wreck/bone)
+  ERG_REGION_CHANCE: 0.14,             // per-region presence — rare but findable (~bone_field rarity)
+  ERG_REGION_MIN_DIST: 3400,           // anchors ≥ this from origin; erg edge stays clear of the 1697m boot ring (3400−1500=1900m)
+  ERG_FIELD_RADIUS: 1500,              // erg influence radius (m) — diameter 3km core + border
+  ERG_CORE_FRAC: 0.38,                 // inner fraction at full erg mask; core→edge is a WIDE smoothstep border (~930m) so the mask gradient can't spike a seam slope
+  // Erg heightfield shape (sampleErgHeight). Tuned against the dune-slope probe.
+  ERG_DUNE_WAVELENGTH: 300,            // primary mega-dune spacing (m) — 150-300 per the playability table
+  ERG_DUNE_HEIGHT: 64,                 // primary mega-dune peak height (m) — 40-70 target (× envelope → ~40-64m crest-to-trough)
+  ERG_WINDWARD_FRAC: 0.75,             // along-wind fraction spent on the GENTLE windward rise (rest = steep slip face)
+  ERG_ANISO_RATIO: 0.34,              // <1 = ridges elongate perpendicular to the erg's wind
+  ERG_WARP_SCALE: 620,                 // wavelength of the along-wind warp channel (meanders the ridges) — LOW-freq so it curves ridges without injecting steep cross-slopes
+  ERG_ASYMMETRY_AMOUNT: 36,            // organic u-warp (m); gently curves the mega ridges (kept modest so it doesn't blur the windward/slip asymmetry)
+  ERG_RIDGE_ENV_SCALE: 900,            // perpendicular envelope wavelength — breaks infinite walls into finite dunes
+  ERG_RIDGE_ENV_MIN: 0.62,             // min height factor of the envelope (troughs between dune segments never flatten fully) — higher floor tightens the slip-slope spread across the field
+  ERG_RIDGE_ENV_MAX: 0.9,              // max height factor — caps the TALLEST dunes so their windward stays ≤30° and slip faces don't go cliff-vertical
+  ERG_MEGA_WAVELENGTH: 1150,           // low-freq draa undulation (large-scale rise/fall)
+  ERG_MEGA_HEIGHT: 16,                 // draa undulation amplitude (m)
+  ERG_MEDIUM_WAVELENGTH: 68,           // fine wind-ripple overlay wavelength
+  ERG_MEDIUM_HEIGHT: 2.6,              // fine ripple amplitude (kept small — ripples must not spike face slopes)
+  ERG_DUNE_AMP_MIN: 34,                // probe bound: primary crest-to-trough amplitude ≥ this
+  ERG_DUNE_AMP_MAX: 80,                // probe bound: primary crest-to-trough amplitude ≤ this
+  ERG_POI_CHANCE_MULT: 0.15,           // erg is near-EMPTY by design — POI roll = base × this (troughs get sparse dressing later, cycle 4)
+
+  // ── The Deep Desert cycle 7 — dune DRESSING (the erg becomes a PLACE). ──
+  // 1) CREST SMOKE — wind-blown spindrift streaming off the mega-dune crests
+  //    (the signature erg image). A pooled sprite system (crestSmoke.ts); only
+  //    active while the player stands inside an erg. Particles seek the nearest
+  //    ridge line along the erg's wind axis, then stream downwind off the lip.
+  // Deep-Desert review fix (spindrift subtlety): MORE, SMALLER, fainter grains
+  // that overlap into a wind-streaked veil — you should never perceive an
+  // individual particle (the fragment shader draws a noise-eroded wind STREAK,
+  // not a disc; see crestSmoke.ts). Points are near-free, so the count doubled.
+  ERG_SMOKE_COUNT: 720,                 // pooled particles (cheap points; overlap into a fine veil, not discrete balls)
+  ERG_SMOKE_SPREAD: 300,                // m — camera-centered wrap box (particles seed within this of the player)
+  ERG_SMOKE_SIZE: 2.4,                  // world-size of a spindrift grain (size-attenuated) — small so no sprite reads big
+  ERG_SMOKE_MAX_PX: 44,                 // hard screen-space size cap (px) — no giant near-camera sprite (with the near fade)
+  ERG_SMOKE_NEAR_FADE_M: 7,             // m — alpha ramps 0→1 from 3.5m to 7m: kills giant walk-through sprites, keeps 8m+ spindrift
+  ERG_SMOKE_WIND_M: 26,                 // m — crest-detection sample step along the wind axis (~0.1 dune wavelength × envelope)
+  ERG_SMOKE_LIFE_S: 4.2,                // seconds a puff streams before it re-seeds at a fresh crest (longer life pairs with the slower drift — similar travel, lazier motion)
+  ERG_SMOKE_DRIFT_BASE: 2.8,            // m/s downwind drift on a calm day (review 2026-07-19: 7.0 read "too fast/aggressive" — lazy wisps, not streaming)
+  ERG_SMOKE_DRIFT_STORM: 12.0,          // m/s downwind drift at full pre-storm wind (was 24 — still clearly streaming, no longer frantic)
+  ERG_SMOKE_LIFT: 0.85,                 // m — how far a grain PEELS up off the surface over its life (hug the sand, don't balloon/float)
+  ERG_SMOKE_RIDGE_SPREAD: 46,           // m — lateral jitter along the ridge line at spawn (fills gaps → veil, not spaced plumes)
+  ERG_SMOKE_OPACITY: 0.6,              // peak per-grain alpha (the aggregate veil carries the read; each grain stays faint + translucent)
+  ERG_SMOKE_NIGHT_FADE_LO: -0.05,       // sun height at which smoke is fully dark/dim (no night glow — lighting-invariant)
+  ERG_SMOKE_NIGHT_FADE_HI: 0.18,        // sun height at which smoke reaches full brightness
+  // 2) TROUGH DRESSING — rare deterministic finds half-buried in the dune
+  //    troughs (streamed via the chunk content path). Near-empty by design.
+  ERG_DRESS_CHANCE: 0.10,               // per qualifying (erg + trough) chunk — sparse (< ~1 per 2-3 troughs)
+  ERG_DRESS_TROUGH_RING_M: 82,          // m — ring radius for trough detection (< a dune half-wavelength)
+  ERG_DRESS_TROUGH_DROP_M: 6.0,         // point must sit ≥ this far BELOW the ring average (a genuine trough floor)
+  // 4) FIRST-CREST DISCOVERY — the one-time "the deep desert" beat when the
+  //    player first tops a mega-dune crest inside an erg (tracked in the
+  //    tutorial flag store, so it persists across save/load; fires once ever).
+  ERG_DISCOVERY_PROMINENCE_M: 16,       // player must stand ≥ this above the surrounding erg (60m ring) to count as "on a crest" — real mega-dune crests read ~20m over the ring
+  // 3) ERG HUSH — the awe-register soundscape duck inside a dune sea. The base
+  //    desert wind/ambience ducks toward a deep hush + a low sand-sigh; storm
+  //    audio is unaffected (only the calm bed ducks).
+  ERG_HUSH_DUCK: 0.62,                  // fraction the calm wind/ambience is ducked at the erg core (0=none, 1=silent). NB: the calm desert WIND bed is currently muted (WIND_*_MASTER=0), so this duck is future-proofing; the AUDIBLE hush is the music duck + sand-sigh below.
+  ERG_HUSH_MUSIC_DUCK: 0.4,             // fraction the calm MUSIC pad ducks inside the erg — the audible "quieter/awe" shift (the wind bed being muted, music is the only audible ambience). Modest dip, not a dropout. PARKED for Zach: veto if the score should stay full in the dunes.
+  ERG_HUSH_SIGH_MASTER: 0.06,           // level of the deep low sand-sigh brought UP inside the erg (the hush's floor tone — the dune sea's quiet voice)
+  ERG_HUSH_LERP_RATE: 0.7,             // per-second crossfade rate of the hush factor (smooth border, no pop)
+
   // Biomes (Session P; GG — rescaled for 2400m world)
   BIOME_NOISE_FREQ: 1 / 900,           // GG — 1/220 → 1/900; vast biome regions (~2.67 per 2400m axis)
   BIOME_THRESHOLD_ROCKY: -0.22,        // noise < this → rocky
@@ -1790,6 +1868,65 @@ export const Tuning = {
   // natural "swing behind" feel.
   SLED_YAW_LERP: 0.07,
   NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
+
+  // ────────────────────────────────────────────────────────────────
+  // RIDEABLE SLED (D257, cycle 5 — behind FEATURES.rideableSled, default OFF).
+  // The ride re-uses the SPEEDER's proven seat-teleport pattern ("Option C"):
+  // while riding, updatePlayer is gated off (like speeder.mounted) and the
+  // kinematic capsule is pinned to a sled rider-seat each frame — bypassing
+  // the KCC slope/contact fights that killed D125. The sled is a SURFACE
+  // slider (not a hoverer): it slides downhill under gravity along the terrain
+  // gradient, has ground friction that brings it to rest on flat/uphill,
+  // carries momentum, and follows the sand. Steering is WEAK (a gravity sled,
+  // not a kart). All values are CORE placeholders — feel tuning is cycle 6.
+  // ────────────────────────────────────────────────────────────────
+  SLED_RIDE_SLOPE_THRESHOLD: 0.02,           // min terrain-normal horizontal mag before gravity slides the ridden sled (matches the free-slide threshold)
+  // Deep-Desert cycle 6 — DUNE-SCALE re-tune (was placeholders 4.5 / 0.28 / 0.6 / 12,
+  // set on origin-world slopes cycle 5). Tuned against the `sled-dune` probe on a real
+  // erg slip face (53m drop / 32° / 105m face): free descent ~5-8s, peak ~30 m/s ≈ 2.3×
+  // PLAYER_SPRINT (13.2), convincing runout carried into the next windward rise, uphill
+  // stall + slide-back. GAIN is now the DOMINANT term (was capped uselessly under the 12
+  // m/s clamp — the sled read slower than a sprint).
+  SLED_RIDE_GRAVITY_GAIN: 3.0,               // downhill accel factor: accel = 9.81 × slopeHorizMag × this. Steep — a ridden sled + rider commits down a slip face eagerly (empty-sled free-slide gain is 2.5).
+  SLED_RIDE_FRICTION: 0.13,                   // Coulomb kinetic-friction coefficient (decel = 9.81 × this). Rests the sled on flat / gentle uphill; low enough that a 30°+ slip face accelerates it hard.
+  SLED_RIDE_LINEAR_DAMP: 0.24,                // exp air/sand drag per second on top of Coulomb friction — sets the terminal velocity on a long steep face (~30 m/s with GAIN 3.0 on a 32° face)
+  SLED_RIDE_MAX_SPEED: 32,                    // m/s hard clamp on the ridden sled's slide speed (~2.4× sprint) — a safety cap; damp sets the practical terminal below it
+  // Sub-step (cycle 6): at ~30 m/s the sled covers ~0.5m/frame; splitting the gravity +
+  // friction + damp + move + surface-follow into ≤ SUBSTEP_DIST-metre sub-steps keeps the
+  // deck glued to the sand (re-sampling heightAt/normalAt each sub-pos) so it never chords
+  // across a crest/trough at speed. K = ceil(frameDist / SUBSTEP_DIST), capped at SUBSTEP_MAX.
+  SLED_RIDE_SUBSTEP_DIST: 0.25,              // max metres of surface travel per ride sub-step
+  SLED_RIDE_SUBSTEP_MAX: 8,                  // hard cap on sub-steps per frame (bounds the per-frame cost)
+  SLED_RIDE_DUST_MIN_SPEED: 2.0,             // m/s — below this the ridden sled throws no sand kick-up (a crawl doesn't spray)
+  SLED_RIDE_PADDLE_ACCEL: 3.0,               // W — forward push accel (m/s²) on flat; a slow paddle, not a throttle
+  SLED_RIDE_PADDLE_MAX_SPEED: 3.5,           // W stops adding push once the along-heading speed reaches this (paddling is for creeping across flats, not racing)
+  SLED_RIDE_BRAKE_DECEL: 9.0,                // S — drag-brake decel (m/s²) opposing current motion
+  SLED_RIDE_STEER_RATE: 1.1,                 // A/D — max yaw rate (rad/s) at speed; scaled by speedFactor so a stopped sled barely turns. Cycle-6 note: carve now reads strongly at dune speed (the cycle-5 weakness was the 12 m/s cap, not the steer rate) — kept at the cycle-5 value; dial here for carve feel.
+  SLED_RIDE_STEER_SPEED_REF: 6.0,            // m/s at which steering reaches full authority (speedFactor = min(1, speed/this))
+  SLED_RIDE_STEER_GRIP: 0.08,                // fraction of velocity redirected toward the new heading per frame when steering — WEAK (a sled carves gently, it doesn't snap); speed-gated yaw keeps it weak on flat
+  SLED_RIDE_YAW_TRACK_LERP: 0.06,            // when coasting with no steer input, the bow gently lerps to face travel direction by this fraction/frame
+  SLED_RIDE_SEAT_X: 0,                        // rider capsule offset in sled-local X (0 = centered laterally)
+  SLED_RIDE_SEAT_Z: 0,                        // rider capsule offset in sled-local Z (0 = centered fore/aft on the 2.2m deck)
+  SLED_RIDE_SEAT_Y: 0.86,                     // rider capsule CENTER height above the deck plane = halfHeight (0.5) + radius (0.35) + ~1cm so the capsule bottom rests on the deck
+  SLED_RIDE_MOUNT_RANGE: 3.5,                // E-mount reach (m) — player body to sled center (mirrors SPEEDER_MOUNT_RANGE)
+  SLED_RIDE_MOUNT_LOOK_DOT: 0.4,             // camera-forward · dir-to-sled must clear this to mount (mirrors SPEEDER_MOUNT_LOOK_DOT, a touch looser since the deck is low)
+  // Deep-Desert cycle 6 — RIDER CROUCH POSE (3P). The ridden rig is seated on the
+  // deck in a low, weight-forward crouch (knees bent, hands low, bracing into the
+  // slide) — reads as "riding a sled", not "standing on a tray". Tuned against 3P
+  // rig screenshots (sled-dune postcard + rig-shot sled-pose). Radians.
+  SLED_RIDE_RIG_DROP: 0.10,                  // m the rig origin sits below the deck plane so the crouched feet rest ON the deck
+  SLED_RIDE_RIG_LEAN: 0.66,                  // spineBend forward lean (waist-pivoted) — chest down over the knees, committed boarder's crouch
+  SLED_RIDE_RIG_HIP: 0.58,                   // hip flex — thighs angle down-forward so the feet tuck UNDER the body (not out front like a luge)
+  SLED_RIDE_RIG_SPLAY: 0.18,                 // hip z-roll — a modest knee splay for a stable stance (not a wide frog)
+  SLED_RIDE_RIG_KNEE: 1.35,                  // deep knee bend (shin folds back, butt drops low)
+  SLED_RIDE_RIG_ANKLE: 0.62,                 // dorsiflex → sole stays flat on the deck as the knees fold
+  SLED_RIDE_RIG_SHOULDER: -0.40,             // shoulder pitch — upper arm reaches forward-down, hands out toward the bow to brace
+  SLED_RIDE_RIG_ELBOW: 0.62,                 // elbow bend — arms reach for the front of the deck (bracing "hold on"), not hanging at the lap
+  SLED_RIDE_RIG_HEAD: -0.14,                 // head pitch — chin up a touch so the rider looks ahead down the face
+  SLED_RIDE_DISMOUNT_OFFSET: 1.6,            // m to the right of the sled heading where the player is placed on dismount
+  SLED_RIDE_3P_CAM_BACK: 4.5,                // 3P chase distance behind the camera-forward while riding
+  SLED_RIDE_3P_CAM_ABOVE: 1.2,               // 3P chase height above the rider seat while riding
+  SLED_RIDE_FOV_BUMP: 12,                    // degrees added to the camera FOV at top ride speed (eased via the spyglass FOV lerp) — the speed rush; 0 disables
   STAMINA_TOW_FACTOR: 1.5,                   // sprint+tow on foot drains stamina × this. ABJ: 2.0→1.5 (sprint duration when towing 3s→4s; reads less punishing for short tow runs while still discouraging long sled hauls at sprint)
 
   // ────────────────────────────────────────────────────────────────

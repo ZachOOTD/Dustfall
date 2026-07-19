@@ -67,6 +67,7 @@ import { isJournalPanelOpen } from '../ui/journalPanel.ts';
 import { findJournalById, type JournalKind } from '../world/journal.ts';   // ACBE (D1) — crash black-box per-instance content
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 import { Tuning } from '../config/tuning.ts';
+import { FEATURES } from '../config/features.ts';   // Deep-Desert cycle 5 (D257) — rideableSled prompt gate
 
 const RAYCAST_DISTANCE = 2.5;
 const _ray = new THREE.Raycaster();
@@ -1016,6 +1017,26 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         return;
       }
 
+      // Deep-Desert cycle 5 (D257, behind FEATURES.rideableSled) — the deck's
+      // primary E action becomes RIDE (E is polled + consumed in updateSleds's
+      // mount path, which runs earlier this tick). Show a ride prompt instead of
+      // the cargo prompt so the [E] chip reads true. OFF path unchanged.
+      // Deep-Desert — pack-up hint suffix. Shown only when packing would
+      // actually succeed (empty deck + no locker), so the RMB affordance
+      // never advertises an action that would just toast a refusal.
+      const packable = sled.contents.length === 0 && sled.attachedLockerId === null;
+      const packHint = packable ? '  ·  pack up [RMB]' : '';
+
+      if (FEATURES.rideableSled && ctx.player.ridingSledId === null) {
+        ctx.inventory.hover = {
+          type: 'open_sled',
+          distance: info.distance,
+          promptNoun: 'sled' + packHint,
+          verb: 'ride',
+        };
+        return;
+      }
+
       // Default: cargo-deck open. QQ-2 — sled is bidirectional storage
       // (deposit + take), so empty sleds also open the menu so the
       // player can stash items into them.
@@ -1023,7 +1044,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       ctx.inventory.hover = {
         type: 'open_sled',
         distance: info.distance,
-        promptNoun: empty ? 'sled (empty)' : 'sled cargo',
+        promptNoun: (empty ? 'sled (empty)' : 'sled cargo') + packHint,
       };
       if (ctx.input.pressed.has('KeyE')) {
         sled.opened = true;

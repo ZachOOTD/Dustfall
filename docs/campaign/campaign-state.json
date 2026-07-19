@@ -1,17 +1,19 @@
 {
-  "campaign": "Scavenger's Economy (setup)",
-  "status": "active",
-  "started": "2026-07-17",
-  "branch": "campaign/2026-07-17-economy",
+  "campaign": "The Deep Desert",
+  "status": "paused",
+  "started": "2026-07-18",
+  "branch": "campaign/2026-07-18-deep-desert",
   "cycles_completed": 8,
-  "current_tier": "build:done-awaiting-walktest",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "current_tier": "PAUSED:morning-review (build complete)",
+  "awaiting_approval": true,
+  "stop_reasons": [
+    "feel-review"
+  ],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
   "visual_gate": "auto",
-  "until": "milestone:economy-proposal",
+  "until": "milestone:deep-desert-shipped",
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": {
@@ -21,115 +23,75 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 2600000
+    "total": 2500000
   },
-  "queue": [
-    {
-      "id": "#28",
-      "unit": "Skyfall stern seam",
-      "kind": "fix",
-      "overnight_safe": true
-    },
-    {
-      "id": "#29",
-      "unit": "Boneyard scatter overhaul",
-      "kind": "hero-visual",
-      "overnight_safe": true,
-      "iterate": "5-8 rounds + day/night check"
-    },
-    {
-      "id": "research",
-      "unit": "4-digest research swarm",
-      "kind": "research",
-      "overnight_safe": true,
-      "digests": [
-        "crafting-improvements",
-        "multiplayer-architecture",
-        "character-pipeline",
-        "cave-feasibility"
-      ]
-    },
-    {
-      "id": "proposal",
-      "unit": "economy-proposal.md",
-      "kind": "proposal",
-      "then": "PAUSE awaiting_approval",
-      "bake_itemids": false,
-      "change_loot_tables": false
-    }
-  ],
+  "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
     {
       "n": 1,
-      "date": "2026-07-17",
-      "focus": "#28 Skyfall stern seam",
+      "date": "2026-07-18",
+      "focus": "dune synthesis research",
       "outcome": "SHIPPED",
-      "spend": 400000,
-      "commit": "009ccca",
-      "note": "solidInner bridge-band winding fix at the endFlip end; winding-only, determinism byte-identical"
+      "spend": 50000,
+      "note": "heightErg recipe + playability table + region-blend purity"
     },
     {
       "n": 2,
-      "date": "2026-07-17",
-      "focus": "#29 boneyard scatter overhaul",
+      "date": "2026-07-18",
+      "focus": "erg region core",
       "outcome": "SHIPPED",
-      "spend": 350000,
-      "commit": "e90344b",
-      "note": "5-type real-bone vocabulary sharing the hero material+fracture pipeline; night-glow class fixed via the shared registry; steering processed (Fable plan / Opus execute)"
+      "spend": 400000,
+      "commit": "(above)",
+      "note": "region+heightErg+dune-slope gate; stubs show cracked texture climbing dunes -- cycle 3 fixes the read before the checkpoint"
     },
     {
       "n": 3,
-      "date": "2026-07-17",
-      "focus": "research swarm (4 digests)",
+      "date": "2026-07-18",
+      "focus": "erg surface read + vista set",
       "outcome": "SHIPPED",
-      "spend": 150000,
-      "commit": "2c58916",
-      "note": "crafting/multiplayer/character/cave digests to docs/research/ \u00e2\u20ac\u201d decision support, no code changes"
+      "spend": 250000,
+      "note": "aErgMask crack suppression; 7-round vista iteration; PAUSED checkpoint 1"
     },
     {
       "n": 4,
       "date": "2026-07-18",
-      "focus": "economy proposal + pause",
-      "outcome": "PROPOSED",
-      "spend": 100000,
-      "commit": "(this)",
-      "note": "economy-proposal.md written (4 materials, drop matrix, 8 recipes, unification plan, Q1-Q6 w/ defaults); morning summary; PAUSED milestone-review"
+      "focus": "sled ride core",
+      "outcome": "SHIPPED",
+      "spend": 450000,
+      "note": "kinematic seat-pin, approach 1 of 2 worked; sled-ride probe all phases; flag OFF, digests unchanged"
     },
     {
       "n": 5,
       "date": "2026-07-18",
-      "focus": "build 1: loot-registry unification",
+      "focus": "sled dune descent + presentation",
       "outcome": "SHIPPED",
-      "spend": 400000,
-      "commit": "34f4aca",
-      "note": "one registry + verify:loot digest gate; loot-preserving proven; found the 4th hidden system (tuning.ts container thresholds); COMPONENT_LOOT was in interaction.ts not wrecks.ts"
+      "spend": 650000,
+      "note": "agent stalled twice on its watcher; orchestrator took over verification -- all gates green x2 seeds; PAUSED combined review"
     },
     {
       "n": 6,
       "date": "2026-07-18",
-      "focus": "build 2: 4 materials + drop matrix",
+      "focus": "steering inversion fix (attended)",
       "outcome": "SHIPPED",
-      "spend": 600000,
-      "commit": "e571d82",
-      "note": "metal_pipe/machine_part/wiring/battery + meshes/icons + identity drops + ground scatter on independent rng (descriptor digests unchanged); cactus_pulp deprecated for save-compat"
+      "spend": 50000,
+      "commit": "b1b00e6",
+      "note": "A/D inverted (yaw+ = left); carve gate now asserts direction (carveDot 0.66)"
     },
     {
       "n": 7,
-      "date": "2026-07-18",
-      "focus": "build 3: recipes + discovery UX",
+      "date": "2026-07-19",
+      "focus": "dune dressing (smoke/finds/hush/discovery)",
       "outcome": "SHIPPED",
-      "spend": 450000,
-      "commit": "310dbbe",
-      "note": "3 new (anyOf raw meat) + 7 updated recipes; source hints on cards; craft-unlock probe extended incl. old-recipe rejection"
+      "spend": 550000,
+      "note": "4 parked morning questions incl. music duck + shard collision"
     },
     {
       "n": 8,
-      "date": "2026-07-18",
-      "focus": "build 4: balance check + walk-test guide",
+      "date": "2026-07-19",
+      "focus": "integration proof + docs closeout + morning summary",
       "outcome": "SHIPPED",
-      "spend": 150000,
-      "commit": "(this)",
-      "note": "analytic yield-vs-cost table (battery scarcest by design); economy-walktest-2026-07-18.md; campaign complete pending walk-test + ship call"
+      "spend": 100000,
+      "note": "sled-dune re-run with smoke+dressing live: ALL PHASES PASS; campaign build complete, paused for Zach"
     }
   ]
 }

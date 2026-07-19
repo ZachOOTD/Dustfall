@@ -145,6 +145,28 @@ if (!cm) {
   rows.push(`ribcage-climb: ${cm[2]} colliders, crest ${cm[3]}pts / ${cm[4]} ribs, crestRest=${cm[5]}, ribRest=${cm[6]}, climb=${cm[7]}, traverse=${cm[8]}, ${cm[9]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
+// ── 7. The Deep Desert — the ERG (mega dune-sea) PLAYABILITY gate. For BOTH
+//      seeds: locate the nearest erg, sample the real pure height function across
+//      the core dunes, and assert windward faces are walkable (≤30°), slip faces
+//      sit at the angle of repose (the sled's playground), the erg→desert border
+//      has no seam-slope spike, the mega-dunes are colossal (40-70m), a KCC march
+//      climbs a windward face, and the erg height fn stays within the perf budget. ──
+let dsPort = 5500;
+for (const seed of DET_SEEDS) {
+  const dm = runParsed('dune-slope', seed, dsPort,
+    /DUNE-SLOPE pass=(\d) seed=(\S+) erg=\((-?\d+),(-?\d+)\)@(\d+)m .*windP95=([\d.]+)° .*slipMed=([\d.]+)° .*amp=([\d.]+)m border=([\d.]+)° .*fails=(\d+)/,
+    420000);
+  dsPort += 3;
+  if (!dm) {
+    allPass = false;
+    rows.push(`dune-slope seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`);
+    continue;
+  }
+  const ok = dm[1] === '1';
+  if (!ok) allPass = false;
+  rows.push(`dune-slope seed ${seed}: erg@${dm[5]}m windP95=${dm[6]}° slipMed=${dm[7]}° amp=${dm[8]}m border=${dm[9]}°, ${dm[10]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass

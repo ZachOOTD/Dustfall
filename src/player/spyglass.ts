@@ -41,9 +41,23 @@ export function initSpyglass(): void {
  *  Runs after the camera is positioned for the frame and inside the pause gate. */
 export function updateSpyglass(ctx: GameContext, dt: number): void {
   const cam = ctx.three.camera;
-  const base = getSettings().fov;
+  let base = getSettings().fov;
+  // Deep-Desert cycle 6 — RIDE FOV rush. FOV is centrally eased here every frame,
+  // so a speed-based widen must route through this `base` (setting it elsewhere is
+  // undone next frame). When riding a sled (flag-gated: ridingSledId is only ever
+  // set when FEATURES.rideableSled is on → zero change to the OFF path), widen the
+  // base toward SLED_RIDE_FOV_BUMP° at top speed. The existing lerp eases in/out +
+  // restores on dismount (ridingSledId → null → base). Suppressed while aiming the
+  // spyglass (you can't do both meaningfully).
+  const ridingSledId = ctx.player.ridingSledId;
   const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
   const aiming = slot?.item === 'spyglass' && ctx.input.mouseHeld.has(2) && !ctx.speeder?.mounted;
+  if (ridingSledId !== null && !aiming) {
+    const sled = ctx.sleds.list.find((s) => s.id === ridingSledId);
+    const sp = sled ? Math.hypot(sled._slideVx ?? 0, sled._slideVz ?? 0) : 0;
+    const speed01 = Math.min(1, sp / Tuning.SLED_RIDE_MAX_SPEED);
+    base += speed01 * Tuning.SLED_RIDE_FOV_BUMP;
+  }
   const target = aiming ? Tuning.SPYGLASS_FOV : base;
 
   if (Math.abs(cam.fov - target) > 0.02) {

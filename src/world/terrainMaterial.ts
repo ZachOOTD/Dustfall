@@ -94,9 +94,11 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
       /* glsl */ `
         #include <common>
         attribute float aBiomeRaw;
+        attribute float aErgMask;
         varying vec3 vWorldPositionTerrain;
         varying vec3 vWorldNormal;
         varying float vBiomeRaw;
+        varying float vErgMask;
         uniform float uTime;
         uniform vec2 uCameraPosXZ;
         uniform float uSunHeight;
@@ -109,6 +111,7 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         vWorldPositionTerrain = (modelMatrix * vec4(position, 1.0)).xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * normal);
         vBiomeRaw = aBiomeRaw;
+        vErgMask = aErgMask;
 
         // AAG — salt-flat mirage. Vertical wobble on far salt-flat
         // vertices, animated, gated by sun height. Subtle — peak amp
@@ -118,7 +121,8 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         float mirageDistFactor = smoothstep(${Tuning.MIRAGE_NEAR_M.toFixed(1)}, ${Tuning.MIRAGE_FAR_M.toFixed(1)}, mirageDist);
         // Saltness: match the fragment's smoothstep window so the wobble
         // fades in over the same biome-boundary band as the visual cracks.
-        float mirageSaltness = smoothstep(0.10, 0.54, aBiomeRaw);
+        // Suppressed inside the erg — the dune sea is clean sand, no salt shimmer.
+        float mirageSaltness = smoothstep(0.10, 0.54, aBiomeRaw) * (1.0 - aErgMask);
         // Sun-height gate: invisible at night/dawn, peak at midday.
         float mirageSun = smoothstep(0.3, 0.9, uSunHeight);
         // Wobble: two crossed sin waves at different freqs, time-driven.
@@ -139,6 +143,7 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         varying vec3 vWorldPositionTerrain;
         varying vec3 vWorldNormal;
         varying float vBiomeRaw;
+        varying float vErgMask;
         uniform float uWindCos;
         uniform float uWindSin;
         uniform float uTime;        // ACAH — cloud-shadow drift
@@ -206,7 +211,13 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         // Threshold matches Tuning.BIOME_THRESHOLD_SALT = 0.32 with a
         // smoothstep window equal to the color blend width (0.22) so
         // cracks ramp on at the same boundary the color does.
-        float saltness = smoothstep(0.10, 0.54, vBiomeRaw);
+        // The Deep Desert — inside the erg (vErgMask 0→1) the ground is a clean
+        // aeolian dune sea: the cracked-hardpan / salt-crust pattern is gated on
+        // this same saltness, so fading it out here removes ALL crack read from
+        // the dunes (the "mud hills" blocker) with the exact mask/falloff the
+        // height blend uses — no hard seam. The sand-detail block (grain, ripples,
+        // wind streaks) still runs (sandStrength = 1 - saltness → full in the erg).
+        float saltness = smoothstep(0.10, 0.54, vBiomeRaw) * (1.0 - vErgMask);
 
         // Slope-derived constants reused by multiple effects. World-
         // space normal so the values stay correct regardless of camera

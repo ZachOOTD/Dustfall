@@ -14,6 +14,7 @@ import type { ShelterRegistry } from './shelter/shelterZones.ts';
 import type { Raider } from './enemies/raider.ts';
 import type { Weather } from './world/weather.ts';
 import type { AmbientDust } from './world/ambientDust.ts';
+import type { CrestSmoke } from './world/crestSmoke.ts';
 import type { DustMotes } from './world/dustMotes.ts';
 import type { StormVignette } from './world/stormVignette.ts';
 import type { SpeederState } from './world/speeder.ts';
@@ -102,6 +103,12 @@ export interface GameContext {
      *  frame. Set by systems that teleport the player (mount/dismount,
      *  save/load restore) so the camera doesn't lerp across the warp. */
     cameraSnapNextFrame: boolean;
+    /** Deep-Desert cycle 5 (D257, behind FEATURES.rideableSled) — the id of the
+     *  sled the player is currently riding, or null. When non-null, updatePlayer
+     *  is gated off (like speeder.mounted) and updateSleds pins the capsule to the
+     *  sled's rider seat + drives the camera each frame. Transient (never saved) —
+     *  a save mid-ride reloads standing (the capsule sits at the seat). */
+    ridingSledId: number | null;
   };
   pickups: {
     list: Pickup[];
@@ -182,6 +189,9 @@ export interface GameContext {
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
+  /** The Deep Desert cycle 7 — wind-blown spindrift streaming off the mega-dune
+   *  crests. Only alive inside an erg (self-culls otherwise). Pooled sprites. */
+  crestSmoke: CrestSmoke;
   /** Session AAG — fine bone-white dust motes layer, complementary
    *  to the tan ambientDust drift. Visible in lit areas via lighting
    *  contrast (no shader, just color choice). */

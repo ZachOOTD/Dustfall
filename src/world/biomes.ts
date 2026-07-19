@@ -13,7 +13,19 @@ import { Tuning } from '../config/tuning.ts';
 
 // Cycle 8 (ACAQ) — 'wreck_yard' is a rare DESTINATION biome, not a noise region:
 // a single distance-override disc around a seed-derived anchor far from spawn.
-export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard' | 'bone_field';
+export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard' | 'bone_field' | 'erg';
+
+/** The Deep Desert — the per-erg parameters at a query point: the blend mask
+ *  (0 outside → 1 in the core), the erg's own wind direction, and a per-erg
+ *  coordinate offset so each erg samples a different patch of the shared noise
+ *  (one noise instance, decorrelated ergs). Null when no erg influences (x, z).
+ *  Pure (hash-derived, no rand at query time) — feeds terrain.sampleErgHeight. */
+export interface ErgInfo {
+  mask: number;
+  windRad: number;
+  ox: number;
+  oz: number;
+}
 
 export interface BiomeSampler {
   biomeAt: (x: number, z: number) => BiomeId;
@@ -45,6 +57,13 @@ export interface BiomeSampler {
   caveAnchor: { x: number; z: number };
   /** Deep-cave terrain-clearing strength 0..1 (the recessed descent funnel). */
   caveAt: (x: number, z: number) => number;
+  /** The Deep Desert — erg (mega dune-sea) blend strength 0..1 at (x, z). Drives
+   *  the terrain ground-tint toward wind-blown sand + gates the near-empty
+   *  placement rules. A rare, LARGE regional biome (own bigger region grid). */
+  ergAt: (x: number, z: number) => number;
+  /** The Deep Desert — the full erg parameters at (x, z) for the terrain height
+   *  function (mask + per-erg wind + noise offset), or null outside any erg. */
+  ergInfoAt: (x: number, z: number) => ErgInfo | null;
 }
 
 export function createBiomeSampler(rand: Rng): BiomeSampler {
@@ -149,6 +168,11 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
   // in the sampler, so every earlier anchor (incl. the wreck-yard region seed
   // above) stays byte-identical — the chunks determinism gate is the tripwire.
   const boneRegionSeed = Math.floor(rand() * 0x100000000) >>> 0;
+  // The Deep Desert — the erg (mega dune-sea) region seed. Drawn IMMEDIATELY
+  // AFTER the bone_field region seed and is now the LAST rand() use in the
+  // sampler, so every earlier anchor stays byte-identical (deterministic append;
+  // the chunks-determinism gate is the tripwire).
+  const ergRegionSeed = Math.floor(rand() * 0x100000000) >>> 0;
   const REGION_M = Tuning.CHUNK_REGION_CHUNKS * Tuning.CHUNK_SIZE;
   const regionMix = (rx: number, rz: number): number => {
     let h = regionSeed >>> 0;
@@ -286,16 +310,95 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return best;
   };
 
+  // ── The Deep Desert — the erg (mega dune-sea) regional anchors. Same rare-
+  //    regional-anchor pattern as bone_field, but on its OWN, LARGER region grid
+  //    (ERG_REGION_CHUNKS × CHUNK_SIZE) so a single erg spans multiple km — a
+  //    dune SEA, not one glance. Its OWN appended seed (ergRegionSeed → everything
+  //    earlier stays byte-identical) and NO origin anchor (purely far-field).
+  //    Anchors keep ERG_REGION_MIN_DIST from origin so the erg edge (min_dist −
+  //    radius) stays well clear of the boot ring — the origin world bakes
+  //    identically. The anchor is placed a full radius inside its region so
+  //    adjacent ergs never overlap and a 3×3 neighborhood scan is exact. ──
+  const ergRadius = Tuning.ERG_FIELD_RADIUS;
+  const ERG_REGION_M = Tuning.ERG_REGION_CHUNKS * Tuning.CHUNK_SIZE;
+  const ergMix = (rx: number, rz: number): number => {
+    let h = ergRegionSeed >>> 0;
+    h = Math.imul(h ^ (rx | 0), 0x85ebca6b) >>> 0;
+    h = ((h << 13) | (h >>> 19)) >>> 0;
+    h = Math.imul(h ^ (rz | 0), 0xc2b2ae35) >>> 0;
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x45d9f3b) >>> 0;
+    h ^= h >>> 15;
+    return h >>> 0;
+  };
+  interface ErgAnchor { x: number; z: number; windRad: number; ox: number; oz: number; }
+  const _regionErg = new Map<string, ErgAnchor | null>();
+  const regionalErgAnchor = (rx: number, rz: number): ErgAnchor | null => {
+    const k = `${rx},${rz}`;
+    const memo = _regionErg.get(k);
+    if (memo !== undefined) return memo;
+    const h = ergMix(rx, rz);
+    const roll = (h & 0xffff) / 0x10000;
+    let out: ErgAnchor | null = null;
+    if (roll < Tuning.ERG_REGION_CHANCE) {
+      const u = ((h >>> 16) & 0xff) / 256;
+      const v = ((h >>> 24) & 0xff) / 256;
+      const margin = ergRadius;
+      const ax = rx * ERG_REGION_M + margin + u * (ERG_REGION_M - 2 * margin);
+      const az = rz * ERG_REGION_M + margin + v * (ERG_REGION_M - 2 * margin);
+      if (ax * ax + az * az >= Tuning.ERG_REGION_MIN_DIST * Tuning.ERG_REGION_MIN_DIST) {
+        // A second hash gives the erg its own wind bearing + a large noise offset
+        // (so each erg reads as a distinct dune field). Pure — no rand at query.
+        const h2 = ergMix(rx ^ 0x5bd1e995, rz ^ 0x1b873593);
+        const windRad = (h2 & 0xffff) / 0x10000 * Math.PI * 2;
+        const ox = 1000 + ((h2 >>> 10) & 0x3fff) * 1.37;
+        const oz = 2000 + ((h2 >>> 6) & 0x3fff) * 1.71;
+        out = { x: ax, z: az, windRad, ox, oz };
+      }
+    }
+    _regionErg.set(k, out);
+    return out;
+  };
+  const ergFalloff = (d: number): number => {
+    if (d >= ergRadius) return 0;
+    const coreR = ergRadius * Tuning.ERG_CORE_FRAC;
+    if (d <= coreR) return 1;
+    const t = (ergRadius - d) / (ergRadius - coreR);   // 1 at core edge → 0 at radius
+    return t * t * (3 - 2 * t);                          // wide smoothstep border (no seam slope spike)
+  };
+  const ergInfoAt = (x: number, z: number): ErgInfo | null => {
+    let best: ErgInfo | null = null;
+    const rx0 = Math.floor(x / ERG_REGION_M);
+    const rz0 = Math.floor(z / ERG_REGION_M);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) {
+      for (let rz = rz0 - 1; rz <= rz0 + 1; rz++) {
+        const a = regionalErgAnchor(rx, rz);
+        if (!a) continue;
+        const dx = x - a.x, dz = z - a.z;
+        const m = ergFalloff(Math.sqrt(dx * dx + dz * dz));
+        if (m > 0 && (!best || m > best.mask)) {
+          best = { mask: m, windRad: a.windRad, ox: a.ox, oz: a.oz };
+        }
+      }
+    }
+    return best;
+  };
+  const ergAt = (x: number, z: number): number => {
+    const info = ergInfoAt(x, z);
+    return info ? info.mask : 0;
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
     if (wreckYardAtFull(x, z) > 0.5) return 'wreck_yard';
     if (boneFieldAtFull(x, z) > 0.5) return 'bone_field';
+    if (ergAt(x, z) > 0.5) return 'erg';
     const n = rawAt(x, z);
     if (n < Tuning.BIOME_THRESHOLD_ROCKY) return 'rocky';
     if (n > Tuning.BIOME_THRESHOLD_SALT) return 'salt';
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, boneFieldAt: boneFieldAtFull, boneFieldAnchor, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
+  return { biomeAt, rawAt, wreckYardAt: wreckYardAtFull, boneFieldAt: boneFieldAtFull, boneFieldAnchor, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt, ergAt, ergInfoAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

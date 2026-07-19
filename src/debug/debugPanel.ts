@@ -32,6 +32,7 @@ import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMat
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
 import { placeProcgenPOI, auditArchetypeColliders } from '../world/poiAssembler.ts';
 import { placeSkyfallWreck } from '../world/skyfallWreck.ts';   // review 2026-07-14 — __game.spawnSkyfall
+import { spawnSledAt } from '../world/sled.ts';   // Deep-Desert cycle 5 (D257) — __game.spawnSled (sled-ride probe)
 import { findBiomeCentroid } from '../world/biomes.ts';         // review 2026-07-14 — __game.gotoBoneField
 import type { ArchetypeId } from '../world/poiArchetypes.ts';
 import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
@@ -249,6 +250,12 @@ interface DebugApi {
   /** Review — find the nearest bone_field biome zone and warp there (the titan
    *  graveyard — pale bone scatter). Null if none within range. */
   gotoBoneField: () => { x: number; z: number } | null;
+  gotoErg: () => { x: number; z: number } | null;
+  /** Deep-Desert cycle 5 (D257, sled-ride probe) — spawn a sled at (x,z) with
+   *  optional yaw (radians), terrain-snapped. Returns the sled id. Behind no
+   *  flag (spawning a sled is always harmless); the RIDE only engages when
+   *  FEATURES.rideableSled is on. */
+  spawnSled: (x?: number, z?: number, yaw?: number) => { id: number };
   /** Dev — aim the crosshair at a wreck + call this to identify it (archetype / name /
    *  distance). The reliable way to name a specific procgen read for removal/tuning. */
   identifyWreck: () => { hit: boolean; archetype?: string; name?: string; dist?: number; userDataKeys?: string[] };
@@ -714,6 +721,28 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.player.cameraSnapNextFrame = true;
       ctx.ui.showToast?.('warped to the bone-field graveyard');
       return { x: +c.x.toFixed(0), z: +c.z.toFixed(0) };
+    },
+    gotoErg: () => {
+      // erg regions are the rarest + farthest anchors (nearest ~5-10km by seed) — search widest.
+      const c = findBiomeCentroid(ctx.biomes, 'erg', { searchRadius: 14000, gridStep: 250 });
+      if (!c) { ctx.ui.showToast?.('no dune sea within 14km — reload for a fresh seed'); return null; }
+      const y = ctx.terrain.heightAt(c.x, c.z) + 2;
+      ctx.player.body.body.setTranslation({ x: c.x, y, z: c.z }, true);
+      ctx.player.cameraSnapNextFrame = true;
+      ctx.ui.showToast?.('warped to the dune sea');
+      return { x: +c.x.toFixed(0), z: +c.z.toFixed(0) };
+    },
+    spawnSled: (x, z, yaw = 0) => {
+      // No coords (the dev-panel button) → drop 3m ahead of the player, facing them.
+      if (x === undefined || z === undefined) {
+        const p = ctx.player.body.body.translation();
+        const dir = new THREE.Vector3(); ctx.three.camera.getWorldDirection(dir);
+        x = p.x + dir.x * 3; z = p.z + dir.z * 3;
+        yaw = Math.atan2(-dir.x, -dir.z);
+      }
+      const y = ctx.terrain.heightAt(x, z);
+      const sled = spawnSledAt(ctx, new THREE.Vector3(x, y, z), yaw, [], { kind: 'none' });
+      return { id: sled.id };
     },
     identifyWreck: () => {
       // Raycast from the camera along the look direction; find the first wreck-ish hit

@@ -772,6 +772,11 @@ const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
   // favours organic/skeletal-adjacent reads: hollow husks, torn debris fields,
   // stripped derelicts. Sparse machinery. Sums ≈1.0.
   bone_field: [['hollow_husk', 0.22], ['debris_field', 0.18], ['derelict', 0.16], ['debris_trail', 0.12], ['wrecked_tank', 0.10], ['buried_pipeline', 0.08], ['well', 0.05], ['relay_mast', 0.05], ['cargo_crawler', 0.04]],
+  // erg (the mega dune-sea) — near-empty by design (POI roll is heavily reduced
+  // upstream). The rare wreck half-buried in the sand favours weathered, wind-
+  // scoured reads: torn hulks, half-buried hulls, stripped derelicts, the odd
+  // buried pipeline surfacing between dunes. Sums ≈1.0.
+  erg: [['hollow_husk', 0.24], ['derelict', 0.20], ['debris_field', 0.16], ['wrecked_tank', 0.12], ['buried_pipeline', 0.12], ['debris_trail', 0.10], ['relay_mast', 0.06]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

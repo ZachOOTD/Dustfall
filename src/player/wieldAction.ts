@@ -41,7 +41,7 @@ import { packUpLantern } from '../world/lantern.ts';
 import { packUpLocker } from '../world/locker.ts';
 import { packUpStake } from '../world/stake.ts';
 import { packUpCompanion } from '../enemies/companion.ts';
-import { detachRope } from '../world/sled.ts';
+import { detachRope, packUpSled } from '../world/sled.ts';
 import { isLootMenuOpen } from '../ui/lootMenu.ts';
 import { isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
 import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
@@ -194,10 +194,24 @@ function handleContextAction(ctx: GameContext): void {
     }
   }
 
-  // RMB on a sled (cargo or rope-stub) → release rope if tethered
-  // to the speeder. No-op if untethered or player-tethered (those use
-  // the existing LMB-on-rope-stub detach path from QQ-2 / D67).
-  if (hover.type === 'open_sled' || hover.type === 'attach_rope') {
+  // Deep-Desert — RMB on the sled CARGO DECK ('open_sled') → pack it back
+  // into a sled_kit. packUpSled owns the guards (cargo / locker / riding /
+  // bag-room) + auto-detaches any tether + tears the body down completely.
+  // Scoped to the cargo-deck hover so the rope-stub RMB (speeder-rope
+  // release, below) stays a separate, quicker affordance.
+  if (hover.type === 'open_sled') {
+    for (const sled of ctx.sleds.list) {
+      if (sled.hovered) {
+        packUpSled(ctx, sled);
+        return;
+      }
+    }
+  }
+
+  // RMB on the sled ROPE STUB ('attach_rope') → release the rope if tethered
+  // to the speeder. No-op if untethered or player-tethered (those use the
+  // existing LMB-on-rope-stub detach path from QQ-2 / D67).
+  if (hover.type === 'attach_rope') {
     for (const sled of ctx.sleds.list) {
       if (sled.hovered && sled.tether.kind === 'speeder') {
         detachRope(ctx, sled, 'rope released');

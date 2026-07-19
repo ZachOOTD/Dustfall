@@ -60,6 +60,11 @@ const BIOME_COLOR_SARLACC_PIT: readonly [number, number, number] = [0x5a / 255, 
 // M8 ⑨ (C47) — the deep-cave MOUTH reads DARKER than the Sarlacc pit (a shadowed descent into
 // the earth, not just a sand bowl): a near-black shadowed brown, deepening to the center.
 const BIOME_COLOR_CAVE_MOUTH: readonly [number, number, number] = [0x24 / 255, 0x1d / 255, 0x16 / 255];
+// The Deep Desert — the erg (mega dune-sea) is clean WIND-BLOWN sand: a bright,
+// faintly warmer dune tone so the sea reads as pristine drifting sand (the
+// underlying biome-noise color — which could stray to rocky-brown or salt-white
+// in patches — is overridden toward this so the dune sea stays coherent).
+const BIOME_COLOR_ERG: readonly [number, number, number] = [0xd8 / 255, 0xa2 / 255, 0x60 / 255];
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -242,6 +247,16 @@ export function createTerrain(
         h -= profile * Tuning.CAVE_PIT_CRATER_DEPTH;
       }
     }
+    // The Deep Desert — inside an erg region, blend the mega dune-sea heightfield
+    // over the surrounding desert. The mask (0 outside → 1 in the core) crosses a
+    // WIDE smoothstep border (ERG_CORE_FRAC → radius), so the seam slope stays
+    // gentle even though the erg dunes tower ~50m above the base terrain. Pure:
+    // ergInfoAt + sampleErgHeight are hash/noise-only (descriptor gates depend on it).
+    const erg = biomes.ergInfoAt(x, z);
+    if (erg) {
+      const hErg = sampleErgHeight(noise, x, z, erg.windRad, erg.ox, erg.oz);
+      h = h * (1 - erg.mask) + hErg * erg.mask;
+    }
     return h;
   };
 
@@ -278,6 +293,13 @@ export function createTerrain(
     // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
     const caveC = biomes.caveAt(wx2, wz2);
     if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
+    // The Deep Desert — override the erg toward clean wind-blown sand so the dune
+    // sea reads coherent (the base biome-noise color could stray rocky/salt).
+    // FULL override at the core (ergC is the 0→1 mask, so this fades naturally
+    // through the border) — a partial override let dark rocky / pale salt base
+    // color bleed through and read as a mud/rock patch on the dunes.
+    const ergC = biomes.ergAt(wx2, wz2);
+    if (ergC > 0) c = lerp3(c, BIOME_COLOR_ERG, ergC);
     return c;
   };
 
@@ -306,6 +328,13 @@ export function createTerrain(
     positions: Float32Array;
     colors: Float32Array;
     biomeRaws: Float32Array;
+    /** The Deep Desert — per-vertex erg blend mask (0 outside → 1 in the dune
+     *  sea). Baked into geometry as `aErgMask` so the shared terrain shader can
+     *  SUPPRESS the salt-crack ("cracked-hardpan") pattern + heat mirage inside
+     *  the erg (they're gated on the underlying biome noise, which still strays
+     *  into salt range under the dunes → the "mud hills" read). Pure: ergAt is
+     *  hash/noise-only, so descriptor gates + save persistence stay unaffected. */
+    ergMasks: Float32Array;
     /** Next i-row to fill; > CELLS = fill complete. */
     row: number;
     geo: THREE.BufferGeometry | null;
@@ -331,6 +360,7 @@ export function createTerrain(
       positions: new Float32Array(vertCount * 3),
       colors: new Float32Array(vertCount * 3),
       biomeRaws: new Float32Array(vertCount),
+      ergMasks: new Float32Array(vertCount),
       row: 0,
       geo: null,
     };
@@ -360,6 +390,7 @@ export function createTerrain(
         b.colors[idx + 1] = c[1];
         b.colors[idx + 2] = c[2];
         b.biomeRaws[i * stride + j] = n;
+        b.ergMasks[i * stride + j] = biomes.ergAt(wx2, wz2);
       }
     }
     b.row = end + 1;
@@ -384,6 +415,8 @@ export function createTerrain(
     geo.setAttribute('color', new THREE.BufferAttribute(b.colors, 3));
     // Custom per-vertex biome noise — read by terrainMaterial shader.
     geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(b.biomeRaws, 1));
+    // Per-vertex erg mask — the shader suppresses cracks/mirage inside it.
+    geo.setAttribute('aErgMask', new THREE.BufferAttribute(b.ergMasks, 1));
     geo.setIndex(_sharedIndices);
     geo.computeVertexNormals();
     b.geo = geo;
@@ -600,6 +633,72 @@ export function createTerrain(
 // wind direction, with rounded crests and rounded valleys — no sharp peaks.
 function smoothRidge(n: number): number {
   return Math.cos(n * Math.PI * 0.5);
+}
+
+// The Deep Desert — the erg (mega dune-sea) heightfield. A SEPARATE, much
+// larger-amplitude dune profile that the terrain blends in inside an erg region
+// (biomes.ergInfoAt gives the mask + this erg's wind + a per-erg noise offset).
+//
+// Shape: an ASYMMETRIC primary mega-dune (a gentle windward rise over
+// ERG_WINDWARD_FRAC of the cycle, then a steep slip-face drop — the dry-sand
+// angle of repose), modulated by a slow perpendicular ENVELOPE (breaks infinite
+// walls into finite dune segments), plus a low-freq draa undulation and a fine
+// wind-ripple overlay. Ridges elongate perpendicular to the erg's wind (aniso <
+// 1) and meander via an along-wind domain warp. PURE: same (x, z, seed) → same
+// height (no rand, no state) — descriptor gates + save persistence depend on it.
+// Slope playability (windward ≤~30°, slip ~28-36°) is proven by the dune-slope
+// probe; the DUNE_*/ERG_* constants are tuned against it.
+function sampleErgHeight(
+  noise: (x: number, y: number) => number,
+  x: number,
+  z: number,
+  windRad: number,
+  ox: number,
+  oz: number,
+): number {
+  const cs = Math.cos(windRad);
+  const sn = Math.sin(windRad);
+  // Per-erg coordinate offset decorrelates ergs on the one shared noise instance.
+  const X = x + ox, Z = z + oz;
+  const u = X * cs + Z * sn;        // along wind
+  const v = -X * sn + Z * cs;       // perpendicular to wind (ridges run along v)
+  const aniso = Tuning.ERG_ANISO_RATIO;
+
+  // Along-wind domain warp — meanders the ridge crests so they aren't ruler-straight.
+  const warp = noise(v / Tuning.ERG_WARP_SCALE, u / Tuning.ERG_WARP_SCALE) * Tuning.ERG_ASYMMETRY_AMOUNT;
+  const uShift = u + warp;
+
+  // Perpendicular envelope — a slow height factor along the ridge so a single
+  // ridge rises + fades into finite dune segments (not an endless wall).
+  const envN = noise(v / Tuning.ERG_RIDGE_ENV_SCALE + 3.7, uShift / (2 * Tuning.ERG_DUNE_WAVELENGTH) - 1.9);
+  const env = Tuning.ERG_RIDGE_ENV_MIN + (Tuning.ERG_RIDGE_ENV_MAX - Tuning.ERG_RIDGE_ENV_MIN) * (0.5 + 0.5 * envN);
+
+  // Primary ASYMMETRIC mega-dune. `phase` walks along wind; its fractional part
+  // within one dune cycle drives a piecewise profile: a smooth windward rise over
+  // ERG_WINDWARD_FRAC, then a linear steep slip-face drop. Crest spacing is
+  // jittered by a low-freq noise added as a BOUNDED PHASE OFFSET (never a
+  // multiplier on the absolute coordinate — uShift is thousands of metres, so a
+  // spatially-varying multiplier would race the phase into near-vertical chaos).
+  const jitter = noise(uShift / (Tuning.ERG_DUNE_WAVELENGTH * 4) + 5.1, v / (Tuning.ERG_DUNE_WAVELENGTH * 4) - 2.3);
+  const phase = uShift / Tuning.ERG_DUNE_WAVELENGTH + jitter * 0.5;
+  const pf = phase - Math.floor(phase);   // [0,1) within a dune cycle
+  const w = Tuning.ERG_WINDWARD_FRAC;
+  let prof: number;
+  if (pf < w) {
+    const t = pf / w;                     // 0 at trough → 1 at crest (windward)
+    prof = t * t * (3 - 2 * t);           // smoothstep rise — gentle windward face
+  } else {
+    prof = 1 - (pf - w) / (1 - w);        // linear steep drop — slip face
+  }
+  const duneH = prof * Tuning.ERG_DUNE_HEIGHT * env;
+
+  // Low-freq draa undulation (0..H) — large-scale rise/fall so the sea isn't uniform.
+  const draa = (0.5 + 0.5 * noise(X / Tuning.ERG_MEGA_WAVELENGTH, Z / Tuning.ERG_MEGA_WAVELENGTH)) * Tuning.ERG_MEGA_HEIGHT;
+
+  // Fine wind-ripple overlay (kept small — must not spike the face slopes).
+  const ripple = smoothRidge(noise(uShift * aniso / Tuning.ERG_MEDIUM_WAVELENGTH, v / Tuning.ERG_MEDIUM_WAVELENGTH)) * Tuning.ERG_MEDIUM_HEIGHT;
+
+  return duneH + draa + ripple;
 }
 
 export function sampleHeight(

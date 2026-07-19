@@ -354,7 +354,7 @@ export function spawnShrewsProcgen(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
-  biomes: { biomeAt: (x: number, z: number) => 'dune' | 'rocky' | 'salt' | 'wreck_yard' | 'bone_field' },
+  biomes: { biomeAt: (x: number, z: number) => 'dune' | 'rocky' | 'salt' | 'wreck_yard' | 'bone_field' | 'erg' },
   scatterRand: () => number,
   poiPositions: ReadonlyArray<THREE.Vector3>,
 ): Shrew[] {

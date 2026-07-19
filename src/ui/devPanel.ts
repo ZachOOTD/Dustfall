@@ -92,6 +92,9 @@ function makeActionsSection(): HTMLDivElement {
     ['skyfall', () => { g()?.spawnSkyfall(); }],
     ['new POIs', () => { g()?.spawnNewPois(); }],
     ['boneyard', () => { g()?.gotoBoneField(); }],
+    // Deep Desert review (2026-07-19) — one-click reach for the mega-dune erg.
+    ['dune sea', () => { g()?.gotoErg(); }],
+    ['spawn sled', () => { g()?.spawnSled(); toast('sled dropped ahead'); }],
   ]);
   group('stats', [
     ['full', () => { g()?.setStats({ thirst: 1, hunger: 1, stamina: 1, health: 1, temperature: 0 }); toast('stats restored'); }],

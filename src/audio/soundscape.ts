@@ -13,6 +13,7 @@ import type { GameContext } from '../GameContext.ts';
 import { getAudioInternals, setStormMuffle } from './audio.ts';
 import { preloadSamples, getSample, type SampleId } from './samples.ts';
 import { Tuning } from '../config/tuning.ts';
+import { getPlayerWorldPos } from '../player/effectivePos.ts';   // Deep Desert cycle 7 — erg hush reads the effective player pos
 
 interface StemNodes {
   src: AudioBufferSourceNode | null;
@@ -82,6 +83,13 @@ let _state: SoundscapeState | null = null;
 // resumes the live bed seamlessly (no muted-forever state, no pop). The intro's own
 // desert-wind cue (startDesertWind) hands off to this real bed at the desert handoff.
 let _soundscapeSuppressed = false;
+
+// Deep Desert cycle 7 — the ERG HUSH. Smoothed 0..1 erg-core factor: inside a
+// dune sea the calm desert wind/ambience ducks toward a deep hush (the awe
+// register) + a low sand-sigh comes up. Lerped toward the live erg mask each
+// frame so the border crossfades (no pop). Storm audio is UNAFFECTED — only the
+// calm bed ducks. Exposed on the snapshot for the probe.
+let _ergHush = 0;
 
 /** Suppress (silence) or restore the normal desert soundscape — called by the escape-pod
  *  intro so the ship/space beats don't layer desert wind over orbit. Idempotent; the duck
@@ -278,6 +286,18 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   const storm = clamp01(ctx.weather.perceivedIntensity);
   // ACW E (#134) — muffle the whole mix as the storm engulfs the player.
   setStormMuffle(storm);
+
+  // Deep Desert cycle 7 — the ERG HUSH. Ease the smoothed hush factor toward the
+  // erg-core mask at the player, then derive: (a) a CALM duck (the base wind +
+  // ambient bed goes quieter inside the dune sea — the awe register), and (b) a
+  // low sand-sigh floor tone. Both are gated OFF by the storm so a sandstorm
+  // overrides the hush entirely (the calm-only rule). Smooth lerp = no border pop.
+  const pp = getPlayerWorldPos(ctx);
+  const ergMask = ctx.biomes.ergAt(pp.x, pp.z);
+  _ergHush += (ergMask - _ergHush) * Math.min(1, Tuning.ERG_HUSH_LERP_RATE * dt);
+  const calmGate = 1 - smoothstep(0.1, 0.45, storm);      // 1 in calm → 0 in a real blow
+  const hushDuck = 1 - _ergHush * Tuning.ERG_HUSH_DUCK * calmGate;   // multiply the CALM wind/ambience by this
+
   const sy = ctx.time.sunHeight;
   const day = clamp01(sy * 1.5 + 0.1);
   const night = clamp01(-sy * 1.5 + 0.1);
@@ -316,11 +336,16 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
     // Calm wind stays muted (WIND_BODY_MASTER=0); the STORM masters bring the roar in,
     // wired to perceivedIntensity (`storm`) so it SWELLS as the wall approaches + peaks
     // as it engulfs, then fades as it passes. This is the "hear it coming" wind.
-    const bodyLvl = (Tuning.WIND_BODY_MASTER * windLvl + Tuning.STORM_WIND_BODY_MASTER * storm) * gust;
+    // Deep Desert cycle 7 — the CALM wind components (body + whistle) duck by
+    // hushDuck inside an erg; the STORM components are untouched (storm overrides).
+    const bodyLvl = (Tuning.WIND_BODY_MASTER * windLvl * hushDuck + Tuning.STORM_WIND_BODY_MASTER * storm) * gust;
     const stormRamp = smoothstep(0.12, 0.9, storm);
-    const howlLvl = Tuning.STORM_WIND_HOWL_MASTER * stormRamp * gust;
+    // The howl carries the deep storm roar AND the erg's low sand-sigh floor tone
+    // (the hush's presence — a felt low breath inside the dune sea, calm-gated).
+    const sighLvl = Tuning.ERG_HUSH_SIGH_MASTER * _ergHush * calmGate;
+    const howlLvl = Tuning.STORM_WIND_HOWL_MASTER * stormRamp * gust + sighLvl;
     const whistleLvl =
-      Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness))
+      Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness)) * hushDuck
       + Tuning.STORM_WIND_WHISTLE_MASTER * Math.pow(storm, 1.3) * gust;
     const whistleFreq = 760 + windLvl * 220 + storm * 340;
     const t0 = s.ctx.currentTime, tc = 0.3;
@@ -332,13 +357,18 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   }
 
   // Ambient life — suppressed under sandstorm
-  const lifeMask = 1 - smoothstep(0.15, 0.35, storm);
+  const lifeMask = (1 - smoothstep(0.15, 0.35, storm)) * hushDuck;   // erg hush ducks the ambient life bed too
   setStem(s.ambient.day,   day   * lifeMask * AMBIENT_LIFE_MASTER, s.ctx);
   setStem(s.ambient.night, night * lifeMask * AMBIENT_LIFE_MASTER, s.ctx);
 
-  // Music — calm continuous, tense swells with storm
+  // Music — calm continuous, tense swells with storm. Deep Desert cycle 7: the
+  // calm pad DUCKS inside the erg (the hush's audible "quieter/awe" shift, since
+  // the wind bed is muted → the pad is the only audible ambience). Storm-gated
+  // (calmGate→0 in a blow) and only the CALM pad — the tense storm swell is
+  // untouched, so a sandstorm overrides the hush.
   const tenseW = smoothstep(0.30, 0.55, storm);
-  setStem(s.music.calm,  (1 - tenseW) * MUSIC_CALM_TARGET,  s.ctx);
+  const musicHush = 1 - _ergHush * Tuning.ERG_HUSH_MUSIC_DUCK * calmGate;
+  setStem(s.music.calm,  (1 - tenseW) * MUSIC_CALM_TARGET * musicHush,  s.ctx);
   setStem(s.music.tense, tenseW * MUSIC_TENSE_TARGET,        s.ctx);
 }
 
@@ -358,6 +388,8 @@ export interface AudioStateSnapshot {
   day: number;
   night: number;
   storm: number;
+  /** Deep Desert cycle 7 — smoothed erg-core hush factor (0 open desert → ~1 dune-sea core). */
+  ergHush: number;
   gains: {
     windCalm: number; windMid: number; windStorm: number;
     ambientDay: number; ambientNight: number;
@@ -385,6 +417,7 @@ export function getAudioStateSnapshot(ctx: GameContext): AudioStateSnapshot | nu
     running: true,
     windLevel: Math.max(storm, drift),
     day, night, storm,
+    ergHush: _ergHush,
     gains: {
       windCalm:    s.wind.calm.gain.gain.value,
       windMid:     s.wind.mid.gain.gain.value,

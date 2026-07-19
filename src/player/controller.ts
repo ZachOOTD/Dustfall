@@ -102,6 +102,17 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
     if (prev > 0.9 && ctx.time.dayTime < 0.1) ctx.time.daysSurvived++;
     return;
   }
+  // Riding a sled (Deep-Desert cycle 5, D257 — behind FEATURES.rideableSled): the
+  // capsule is pinned to the sled seat + the camera driven from it inside updateSleds
+  // (which runs earlier this tick), exactly like the mounted speeder. Skip movement +
+  // syncCameraToBody; just advance the day clock. When the flag is OFF, ridingSledId is
+  // never set (mount is flag-gated), so this branch never runs → zero behaviour change.
+  if (ctx.player.ridingSledId !== null) {
+    const prev = ctx.time.dayTime;
+    ctx.time.dayTime = (ctx.time.dayTime + dt / Tuning.DAY_LENGTH_SECONDS) % 1;
+    if (prev > 0.9 && ctx.time.dayTime < 0.1) ctx.time.daysSurvived++;
+    return;
+  }
   if (!isPlaying(ctx)) {
     // Sync camera to body even when not playing so death cam doesn't drift.
     syncCameraToBody(ctx);

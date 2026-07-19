@@ -75,6 +75,11 @@ const POSES = {
 // hidden-preview path can't satisfy, D146), set up a situation, and capture a
 // STRIP of frames over wall-clock time. Output: verification/scen-<name>-fNN.png.
 const SCENARIO = argv.scenario || '';
+// Deep-Desert cycle 5 (D257) — the sled-ride probe must run with the rideable-sled
+// feature forced ON. Vite exposes VITE_-prefixed env vars from process.env at
+// dev-server start; the spawned `npm run dev` inherits process.env, so setting it
+// here (before startDev) flips FEATURES.rideableSled true for THIS probe only.
+if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-pose' || SCENARIO === 'sled-packup') process.env.VITE_RIDEABLE_SLED = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -148,6 +153,840 @@ async function captureStrip(page, name, perFrame) {
 }
 
 const SCENARIOS = {
+  // ── sled-ride (Deep-Desert cycle 5, D257) ──────────────────────────────────
+  // Proves the rideable-sled CORE (flag forced ON via VITE_RIDEABLE_SLED=1, set
+  // above). Spawns a sled on a real origin-world slope, MOUNTS via the real code
+  // path (E + look + range), then asserts over stepped frames:
+  //   (a) mounted → capsule pinned to the seat (dist < 0.1m each frame)
+  //   (b) on a slope the sled accelerates downhill + its path follows the gradient
+  //   (c) on flat it decelerates to rest
+  //   (d) JUMP dismount → player standing beside the sled on terrain, KCC restored
+  //   (e) re-mount works
+  // Also screenshots the mounted mid-slide (3P). Numbers are printed per phase.
+  'sled-ride': async (page) => {
+    // ── PHASE A — find a slope, spawn a sled, mount via the real path, measure pin.
+    const a = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = true;
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Search a coarse ring grid for the STEEPEST moderate slope (not a cliff) —
+      // a steeper face gives a clearer accel + descent read for phase B.
+      let slope = null;
+      for (let r = 24; r <= 500; r += 6) {
+        for (let deg = 0; deg < 360; deg += 12) {
+          const x = Math.cos(deg * Math.PI / 180) * r;
+          const z = Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.12 && m < 0.6 && (!slope || m > slope.m)) slope = { x, z, m };
+        }
+      }
+      if (!slope) return { error: 'no slope near origin' };
+      const sn = ctx.terrain.normalAt(slope.x, slope.z);
+      const shm = Math.hypot(sn.x, sn.z);
+      const downX = sn.x / shm, downZ = sn.z / shm;   // terrain normal XZ points downhill
+      const yaw = Math.atan2(-downX, -downZ);          // bow (local -Z) faces downhill
+      const { id } = window.__game.spawnSled(slope.x, slope.z, yaw);
+      window.__sr = { id, slope, downX, downZ };
+      const find = () => ctx.sleds.list.find((s) => s.id === id);
+      let sled = find();
+      sled._slideVx = 0; sled._slideVz = 0;
+      await step(2);
+      // Stand up-slope of the sled, within mount range, camera on it; press E.
+      const pbx = slope.x - downX * 2.4, pbz = slope.z - downZ * 2.4;
+      const pby = ctx.terrain.heightAt(pbx, pbz) + 1.0;
+      ctx.player.body.body.setTranslation({ x: pbx, y: pby, z: pbz }, true);
+      sled = find();
+      const cam = ctx.three.camera;
+      cam.position.set(pbx, pby + 0.85, pbz);
+      cam.lookAt(sled.pos.x, sled.pos.y + 0.2, sled.pos.z);
+      cam.updateMatrixWorld(true);
+      await step(1);
+      ctx.input.pressed.add('KeyE');
+      await step(2);
+      const mountedOk = ctx.player.ridingSledId === id;
+      // Pin distance (capsule XZ vs sled center) over 6 frames WHILE sliding.
+      const pin = [];
+      for (let i = 0; i < 6; i++) {
+        await step(1);
+        sled = find();
+        const p = ctx.player.body.body.translation();
+        pin.push(+Math.hypot(p.x - sled.pos.x, p.z - sled.pos.z).toFixed(3));
+      }
+      sled = find();
+      const p = ctx.player.body.body.translation();
+      const capBottomOverDeck = +((p.y - (ctx.player.body.halfHeight + ctx.player.body.radius)) - sled.pos.y).toFixed(3);
+      return {
+        slopeX: +slope.x.toFixed(0), slopeZ: +slope.z.toFixed(0), slopeMag: +slope.m.toFixed(3),
+        mountedOk, pin, capBottomOverDeck,
+      };
+    });
+    if (a.error) { console.log('[sled-ride] ABORT: ' + a.error); return; }
+    const pinMax = Math.max(...a.pin);
+    console.log(`[sled-ride] PHASE A (mount + pin): slope@(${a.slopeX},${a.slopeZ}) normHoriz=${a.slopeMag} mounted=${a.mountedOk} pinDist(m)=${JSON.stringify(a.pin)} maxPin=${pinMax.toFixed(3)} capsuleBottomOverDeck(m)=${a.capBottomOverDeck} => ${a.mountedOk && pinMax < 0.1 ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE B — slope slide (no input): accel downhill + path follows gradient.
+    const b = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sr = window.__sr;
+      const find = () => ctx.sleds.list.find((s) => s.id === sr.id);
+      let sled = find();
+      const startX = sled.pos.x, startZ = sled.pos.z, startY = sled.pos.y;
+      let px = startX, pz = startZ;
+      const disp = [], ys = [];
+      for (let i = 0; i < 42; i++) {
+        await raf();
+        sled = find();
+        disp.push(+Math.hypot(sled.pos.x - px, sled.pos.z - pz).toFixed(4));
+        ys.push(+sled.pos.y.toFixed(2));
+        px = sled.pos.x; pz = sled.pos.z;
+      }
+      sled = find();
+      const pathX = sled.pos.x - startX, pathZ = sled.pos.z - startZ;
+      const pathLen = Math.hypot(pathX, pathZ);
+      const pathDot = pathLen > 1e-4 ? +((pathX * sr.downX + pathZ * sr.downZ) / pathLen).toFixed(3) : 0;
+      const descended = +(startY - sled.pos.y).toFixed(2);
+      const early = disp.slice(1, 6).reduce((s, v) => s + v, 0) / 5;
+      const late = disp.slice(30, 40).reduce((s, v) => s + v, 0) / 10;
+      return { disp, ys, pathDot, descended, early: +early.toFixed(4), late: +late.toFixed(4) };
+    });
+    const accelerated = b.late > b.early;
+    const bPass = accelerated && b.pathDot > 0.7 && b.descended > 0.2;
+    console.log(`[sled-ride] PHASE B (slope slide): per-frame disp early=${b.early} late=${b.late} accelerated=${accelerated} pathDot(vs downhill)=${b.pathDot} descended(m)=${b.descended} => ${bPass ? 'PASS' : 'FAIL'}`);
+
+    // Screenshot the mounted mid-slide (the 3P chase cam frames it; the loop keeps
+    // ticking so the sled is actively descending when the shot lands).
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(OUT, 'scen-sled-ride-midslide.png'), timeout: 60000 });
+    console.log('[sled-ride] screenshot saved: scen-sled-ride-midslide.png');
+
+    // ── PHASE C — flat decel: teleport the ridden sled to a flat spot, give it an
+    //    initial slide, run frames, assert it decelerates to rest.
+    const c = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sr = window.__sr;
+      const find = () => ctx.sleds.list.find((s) => s.id === sr.id);
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Find the flattest point in a wide grid.
+      let flat = null, flatM = 1;
+      for (let r = 0; r <= 600; r += 15) {
+        for (let deg = 0; deg < 360; deg += 15) {
+          const x = Math.cos(deg * Math.PI / 180) * r;
+          const z = Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m < flatM) { flatM = m; flat = { x, z }; }
+          if (r === 0) break;
+        }
+      }
+      let sled = find();
+      // Seed body Y = groundY + SLED_HALF_EXTENTS_Y (0.02) + SLED_GROUND_CLEARANCE
+      // (0.06); the ride branch re-derives it each frame anyway.
+      const gy = ctx.terrain.heightAt(flat.x, flat.z) + 0.08;
+      sled.body.setTranslation({ x: flat.x, y: gy, z: flat.z }, true);
+      sled.pos.set(flat.x, gy, flat.z);
+      sled._slideVx = 5; sled._slideVz = 0;   // kick it moving across the flat
+      await step(1);
+      const speeds = [];
+      let px = find().pos.x, pz = find().pos.z;
+      for (let i = 0; i < 180; i++) {
+        await raf();
+        sled = find();
+        const d = Math.hypot(sled.pos.x - px, sled.pos.z - pz);
+        if (i % 18 === 0) speeds.push(+(d / (1 / 60)).toFixed(2));   // approx m/s samples
+        px = sled.pos.x; pz = sled.pos.z;
+      }
+      const restSpeed = +(Math.hypot(find()._slideVx ?? 0, find()._slideVz ?? 0)).toFixed(3);
+      return { flatM: +flatM.toFixed(3), speeds, restSpeed };
+    });
+    console.log(`[sled-ride] PHASE C (flat decel): flatNormHoriz=${c.flatM} m/s samples=${JSON.stringify(c.speeds)} restSlideSpeed(m/s)=${c.restSpeed} => ${c.restSpeed < 0.2 ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE D — JUMP dismount: player standing beside the sled on terrain, KCC back.
+    const d = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sr = window.__sr;
+      ctx.input.pressed.add('Space');
+      await step(2);
+      const dismounted = ctx.player.ridingSledId === null;
+      // let the KCC settle the capsule on terrain a few frames
+      await step(6);
+      const p = ctx.player.body.body.translation();
+      const gy = ctx.terrain.heightAt(p.x, p.z);
+      const capBottom = p.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const standGap = +(capBottom - gy).toFixed(3);   // ~0 = standing on terrain
+      const onGround = ctx.player.onGround === true;
+      const sled = ctx.sleds.list.find((s) => s.id === sr.id);
+      const besideDist = sled ? +Math.hypot(p.x - sled.pos.x, p.z - sled.pos.z).toFixed(2) : -1;
+      return { dismounted, standGap, onGround, besideDist };
+    });
+    console.log(`[sled-ride] PHASE D (jump dismount): dismounted=${d.dismounted} onGround=${d.onGround} standGap(m)=${d.standGap} besideSled(m)=${d.besideDist} => ${d.dismounted && d.onGround && Math.abs(d.standGap) < 0.15 ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE E — re-mount: stand by the sled, look, press E again.
+    const e = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sr = window.__sr;
+      const sled = ctx.sleds.list.find((s) => s.id === sr.id);
+      const pbx = sled.pos.x + 2.0, pbz = sled.pos.z;
+      const pby = ctx.terrain.heightAt(pbx, pbz) + 1.0;
+      ctx.player.body.body.setTranslation({ x: pbx, y: pby, z: pbz }, true);
+      const cam = ctx.three.camera;
+      cam.position.set(pbx, pby + 0.85, pbz);
+      cam.lookAt(sled.pos.x, sled.pos.y + 0.2, sled.pos.z);
+      cam.updateMatrixWorld(true);
+      await step(1);
+      ctx.input.pressed.add('KeyE');
+      await step(2);
+      const remounted = ctx.player.ridingSledId === sr.id;
+      const p = ctx.player.body.body.translation();
+      const pin = +Math.hypot(p.x - sled.pos.x, p.z - sled.pos.z).toFixed(3);
+      return { remounted, pin };
+    });
+    console.log(`[sled-ride] PHASE E (re-mount): remounted=${e.remounted} pinDist(m)=${e.pin} => ${e.remounted && e.pin < 0.1 ? 'PASS' : 'FAIL'}`);
+
+    const allPass = a.mountedOk && Math.max(...a.pin) < 0.1
+      && bPass
+      && c.restSpeed < 0.2
+      && d.dismounted && d.onGround && Math.abs(d.standGap) < 0.15
+      && e.remounted && e.pin < 0.1;
+    console.log(`[sled-ride] RESULT: ${allPass ? 'ALL PHASES PASS' : 'FAILURE — see phases above'}`);
+  },
+
+  // ── sled-packup (Deep-Desert review-fix) ───────────────────────────────────
+  // Proves the RECLAIM affordance end-to-end via the REAL input path (aim the
+  // camera at the deck + press RMB → updateInteraction sets the hover, then
+  // updateWieldAction/handleContextAction → packUpSled). Asserts, in order:
+  //   GUARD     cargo aboard → pack-up refused, sled + kit unchanged.
+  //   PACK      empty deck → RMB packs it: sled gone from ctx.sleds.list, ONE
+  //             sled_kit returned to the bag, the RigidBody (+ all its colliders)
+  //             removed (world body-count drops).
+  //   PERSIST   save + load does NOT resurrect the packed sled (list replay only
+  //             replays what's in the list, and the spliced entry isn't).
+  //   REDEPLOY  a fresh sled can be placed again afterward.
+  'sled-packup': async (page) => {
+    const r = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;                 // FP → interaction ray from cam.position
+      ctx.input.controls.isLocked = true;            // isPlaying() → wieldAction ticks
+
+      const countKit = () => {
+        let n = 0;
+        for (const s of ctx.inventory.slots) if (s.item === 'sled_kit') n += s.count;
+        for (const s of ctx.inventory.backpack) if (s.item === 'sled_kit') n += s.count;
+        return n;
+      };
+
+      // Spawn a sled a few metres ahead on ~flat ground.
+      const p0 = ctx.player.body.body.translation();
+      const sx = p0.x + 3, sz = p0.z;
+      const { id } = window.__game.spawnSled(sx, sz, 0);
+      await step(3);
+      const find = () => ctx.sleds.list.find((s) => s.id === id);
+      if (!find()) return { error: 'sled spawn failed' };
+
+      const bodiesWithSled = ctx.physics.world.bodies.len();
+      const kitBefore = countKit();
+
+      // Aim at the deck from ~1.2m (inside the 2.5m interaction reach) + RMB one frame.
+      // Stand the player + let the KCC SETTLE the capsule first, THEN aim from the
+      // real (post-settle) eye — the FP interaction ray originates at the eye, so
+      // aiming before the capsule settles fires the ray from the wrong height.
+      const rmbOnSled = async () => {
+        const sled = find();
+        if (!sled) return null;
+        const ex = sled.pos.x - 1.2, ez = sled.pos.z;
+        ctx.player.body.body.setTranslation({ x: ex, y: ctx.terrain.heightAt(ex, ez) + 1.0, z: ez }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        await step(5);                               // KCC settles the capsule on terrain
+        const cam = ctx.three.camera;                // == player eye now (updatePlayer set it)
+        cam.lookAt(sled.pos.x, sled.pos.y + 0.05, sled.pos.z);
+        cam.updateMatrixWorld(true);
+        await step(1);                               // updateInteraction raycasts → sets the hover
+        const hovType = ctx.inventory.hover ? ctx.inventory.hover.type : null;
+        ctx.input.mousePressed.add(2);               // RMB pressed THIS frame
+        await step(1);                               // wieldAction/handleContextAction consumes it
+        return hovType;
+      };
+
+      // ── GUARD: cargo aboard blocks the pack-up. ──
+      find().contents.push({ itemId: 'rope', count: 1 });
+      const hovA = await rmbOnSled();
+      const blockedStillThere = !!find();
+      const kitAfterBlocked = countKit();
+
+      // ── PACK: empty the deck, RMB packs it. ──
+      find().contents.length = 0;
+      const hovB = await rmbOnSled();
+      const goneAfterPack = !find();
+      const kitAfterPack = countKit();
+      const bodiesAfterPack = ctx.physics.world.bodies.len();
+
+      // ── PERSIST: save + reload → stays gone. ──
+      const sv = window.__game.saveGame();
+      const ld = window.__game.loadGame();
+      await step(3);
+      const goneAfterReload = !ctx.sleds.list.find((s) => s.id === id);
+
+      // ── REDEPLOY: a fresh sled can be placed again. ──
+      const before = ctx.sleds.list.length;
+      window.__game.spawnSled(p0.x + 5, p0.z + 1, 0);
+      await step(2);
+      const redeployedOk = ctx.sleds.list.length === before + 1;
+
+      return {
+        id, hovA, hovB, bodiesWithSled, kitBefore,
+        blockedStillThere, kitAfterBlocked,
+        goneAfterPack, kitAfterPack, bodiesAfterPack,
+        saveOk: sv && sv.ok !== false, loadOk: ld && ld.ok !== false,
+        goneAfterReload, redeployedOk,
+      };
+    });
+    if (r.error) { console.log('[sled-packup] ABORT: ' + r.error); return; }
+    const guardPass = r.blockedStillThere && r.kitAfterBlocked === r.kitBefore;
+    const packPass = r.goneAfterPack && r.kitAfterPack === r.kitBefore + 1 && r.bodiesAfterPack < r.bodiesWithSled;
+    const persistPass = r.goneAfterReload && r.saveOk && r.loadOk;
+    console.log(`[sled-packup] hover types seen: guard=${r.hovA} pack=${r.hovB} (expect open_sled)`);
+    console.log(`[sled-packup] GUARD (cargo blocks): stillThere=${r.blockedStillThere} kit=${r.kitAfterBlocked}(was ${r.kitBefore}) => ${guardPass ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] PACK  (empty→kit): gone=${r.goneAfterPack} kit=${r.kitAfterPack} bodies ${r.bodiesWithSled}->${r.bodiesAfterPack} => ${packPass ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] PERSIST (save+load): goneAfterReload=${r.goneAfterReload} saveOk=${r.saveOk} loadOk=${r.loadOk} => ${persistPass ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] REDEPLOY (kit→new sled): ${r.redeployedOk} => ${r.redeployedOk ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] RESULT: ${guardPass && packPass && persistPass && r.redeployedOk ? 'ALL PASS' : 'FAILURE — see above'}`);
+  },
+
+  // ── crest-smoke (Deep-Desert review-fix — spindrift subtlety) ───────────────
+  // Warp to an erg, climb to a mega-dune crest, then shoot the crest spindrift
+  // from the PLAYER'S EYE at three framings so the "circle read" can be judged:
+  //   (1) mid  — stand at the crest, look downwind + slightly down the slip face.
+  //   (2) close — drop just under the lip, look ALONG it (streaks blow across).
+  //   (3) night — same as mid but at deep night, to re-verify NO glow.
+  // Prints the erg wind + weather so runs are comparable. Framing is first-person
+  // (rig + viewmodel hidden). Filenames: scen-crest-{mid,close,night}.png.
+  'crest-smoke': async (page) => {
+    const info = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;
+      ctx.input.controls.isLocked = true;
+      // Hide the FP viewmodel + rig so nothing photobombs the sky/dune framing.
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(1200, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 720; cam.updateProjectionMatrix(); }
+
+      const erg = window.__game.gotoErg();
+      if (!erg) return { error: 'no erg within 14km for this seed' };
+      for (let i = 0; i < 10; i++) await raf();
+      const H = (x, z) => ctx.terrain.heightAt(x, z);
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Find a slip face near the erg, climb to its crest (mirrors sled-dune PHASE 0).
+      let best = null;
+      for (let r = 40; r <= 1200; r += 18) {
+        for (let deg = 0; deg < 360; deg += 5) {
+          const x = erg.x + Math.cos(deg * Math.PI / 180) * r;
+          const z = erg.z + Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.42 && m < 0.64) {
+            const score = -Math.abs(m - 0.53);
+            if (!best || score > best.score) best = { x, z, m, score };
+          }
+        }
+      }
+      if (!best) return { error: 'no slip face found in erg' };
+      let cx = best.x, cz = best.z;
+      for (let s = 0; s < 40; s++) {
+        const n = ctx.terrain.normalAt(cx, cz); const m = Math.hypot(n.x, n.z);
+        if (m < 0.12) break;
+        cx += (-n.x / m) * 2.5; cz += (-n.z / m) * 2.5;
+      }
+      const crestH = H(cx, cz);
+      // Downhill (slip-face) direction at the crest.
+      const nc = ctx.terrain.normalAt(cx, cz); const mc = Math.hypot(nc.x, nc.z) || 1;
+      const downX = nc.x / mc, downZ = nc.z / mc;
+      // Erg wind (the smoke streams along this).
+      const ei = ctx.biomes.ergInfoAt(cx, cz);
+      const windRad = ei ? ei.windRad : 0;
+      const mask = ei ? +ei.mask.toFixed(2) : 0;
+
+      // Breezy so the veil reads without being a whiteout (mid-strength stream).
+      ctx.weather.intensity = 0.35;
+      window.__cs = { cx, cz, crestH, downX, downZ, windRad };
+      window.__game.setTime(0.42);
+      await step(30);   // let the pool seed onto the crests
+      return { erg: [+erg.x.toFixed(0), +erg.z.toFixed(0)], crest: [+cx.toFixed(0), +cz.toFixed(0)], crestH: +crestH.toFixed(1), windRad: +windRad.toFixed(2), mask };
+    });
+    if (info.error) { console.log('[crest-smoke] ABORT: ' + info.error); return; }
+    console.log(`[crest-smoke] erg@(${info.erg}) crest@(${info.crest}) crestH=${info.crestH} windRad=${info.windRad} mask=${info.mask}`);
+
+    // Framing helper — place the eye + aim, run a few frames so smoke advects.
+    const frame = async (mode) => {
+      await page.evaluate(async (mode) => {
+        const ctx = window.__game.ctx;
+        const raf = () => new Promise((r) => requestAnimationFrame(r));
+        const cs = window.__cs;
+        const H = (x, z) => ctx.terrain.heightAt(x, z);
+        const cam = ctx.three.camera;
+        // Stand on the DOWNWIND (slip-face) side and look BACK UP at the crest lip
+        // against the sky — the spindrift streams off the lip toward the camera, so
+        // the puffs read against bright sky (the worst case for a circular-sprite
+        // read). 'close' = near the lip (near-camera sprite test); 'mid'/'night'
+        // pull back for the postcard.
+        const back = mode === 'close' ? 11 : 26;
+        if (mode === 'close') ctx.weather.intensity = 0.5;
+        else ctx.weather.intensity = 0.35;
+        const ex = cs.cx + cs.downX * back, ez = cs.cz + cs.downZ * back;
+        const ey = H(ex, ez) + 1.7;
+        ctx.player.body.body.setTranslation({ x: ex, y: ey, z: ez }, true);
+        cam.position.set(ex, ey, ez);
+        // Aim at the lip, a touch above it so the sky sits behind the streaming sand.
+        cam.lookAt(cs.cx, cs.crestH + 1.2, cs.cz);
+        if (mode === 'night') window.__game.setTime(0.86);
+        else window.__game.setTime(0.42);
+        cam.updateMatrixWorld(true);
+        // Camera is hand-placed; keep updatePlayer from yanking it back by pausing
+        // AFTER a few advection frames. Run frames first so smoke drifts into frame.
+        for (let i = 0; i < 24; i++) { await raf(); cam.updateMatrixWorld(true); }
+      }, mode);
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-crest-${mode}.png`), timeout: 60000 });
+      console.log(`[crest-smoke] screenshot saved: scen-crest-${mode}.png`);
+    };
+    await frame('mid');
+    await frame('close');
+    await frame('night');
+    console.log('[crest-smoke] done — inspect scen-crest-{mid,close,night}.png');
+  },
+
+  // ── sled-dune (Deep-Desert cycle 6) ────────────────────────────────────────
+  // The PAYOFF probe: a ride down a REAL erg slip face. Warps to the nearest erg
+  // (window.__game.gotoErg → deterministic biome centroid), scans the dune sea for
+  // a 30-34° slip face, walks the gradient to the CREST above it + the TROUGH below,
+  // spawns a sled at the crest bow-downhill, then measures over stepped frames:
+  //   PHASE 0  erg geometry — crest/trough/drop/face-slope numbers.
+  //   PHASE A  free descent (no input) — descent time (crest→trough), MAX speed
+  //            (vs PLAYER_SPRINT=13.2), per-frame surface gap |deckY−heightAt| < 0.3
+  //            at every frame at speed (the follow holds), runout distance + no
+  //            abrupt stop, no clip (deckY never below terrain).
+  //   PHASE B  carve — A held vs no-input path: lateral deviation grows.
+  //   PHASE C  uphill stall — kicked UPHILL it decelerates + slides back (no creep).
+  //   PHASE D  dismount at speed — sled keeps sliding briefly then settles; player
+  //            on ground, safely uphill-side, not mid-air/under the sled.
+  // Also screenshots the crouched rider mid-slip-face with the dust trail (postcard).
+  // Run per seed: `node scripts/rig-shot.mjs --scenario=sled-dune --seed=<n>`.
+  'sled-dune': async (page) => {
+    const SPRINT = 13.2;   // WALK_SPEED(6.0) × SPRINT_MULTIPLIER(2.2)
+    // ── PHASE 0 — warp to the erg, find a slip face, locate crest + trough, spawn.
+    const g0 = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const erg = window.__game.gotoErg();
+      if (!erg) return { error: 'no erg within 14km for this seed' };
+      // A few frames so the warp re-anchors chunks (not needed for heightAt, but
+      // keeps the scene coherent for the screenshot later).
+      for (let i = 0; i < 8; i++) await raf();
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      const H = (x, z) => ctx.terrain.heightAt(x, z);
+      // Scan a polar grid around the erg centre for the point whose slope is
+      // closest to the 32° slip-face target (sinθ≈0.53), inside a walkable band.
+      let best = null;
+      for (let r = 40; r <= 1200; r += 18) {
+        for (let deg = 0; deg < 360; deg += 5) {
+          const x = erg.x + Math.cos(deg * Math.PI / 180) * r;
+          const z = erg.z + Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.44 && m < 0.64) {
+            const score = -Math.abs(m - 0.53);
+            if (!best || score > best.score) best = { x, z, m, score };
+          }
+        }
+      }
+      if (!best) return { error: 'no 30-34° slip face found in erg', erg };
+      // Climb UPHILL (against the downhill normal) to the crest: slope < 0.12, ≤70m.
+      let cx = best.x, cz = best.z;
+      for (let s = 0; s < 40; s++) {
+        const n = ctx.terrain.normalAt(cx, cz); const m = Math.hypot(n.x, n.z);
+        if (m < 0.12) break;
+        cx += (-n.x / m) * 2.5; cz += (-n.z / m) * 2.5;
+      }
+      const crestH = H(cx, cz);
+      // Descend the gradient from the crest to the TROUGH: slope < 0.09 after ≥25m.
+      let tx = cx, tz = cz, dist = 0;
+      for (let s = 0; s < 90; s++) {
+        const n = ctx.terrain.normalAt(tx, tz); const m = Math.hypot(n.x, n.z);
+        if (m < 0.09 && dist > 25) break;
+        if (m < 1e-4) break;
+        tx += (n.x / m) * 2; tz += (n.z / m) * 2; dist += 2;
+      }
+      const troughH = H(tx, tz);
+      const drop = crestH - troughH;
+      // Bow (local -Z) faces downhill from the crest.
+      const nc = ctx.terrain.normalAt(cx, cz); const mc = Math.hypot(nc.x, nc.z);
+      const cdX = nc.x / mc, cdZ = nc.z / mc;
+      const yaw = Math.atan2(-cdX, -cdZ);
+      const { id } = window.__game.spawnSled(cx, cz, yaw);
+      window.__sd = { id, cx, cz, crestH, tx, tz, troughH, drop, yaw, downX: cdX, downZ: cdZ };
+      const slopeDeg = +(Math.asin(best.m) * 180 / Math.PI).toFixed(1);
+      // Slope-distance of the face (crest→trough along the ground).
+      const faceRun = Math.hypot(tx - cx, tz - cz);
+      const faceLen = Math.hypot(faceRun, drop);
+      return {
+        ergX: +erg.x.toFixed(0), ergZ: +erg.z.toFixed(0),
+        crest: [+cx.toFixed(0), +cz.toFixed(0)], crestH: +crestH.toFixed(1),
+        troughH: +troughH.toFixed(1), drop: +drop.toFixed(1),
+        faceSlopeDeg: slopeDeg, faceRun: +faceRun.toFixed(0), faceLen: +faceLen.toFixed(0),
+      };
+    });
+    if (g0.error) { console.log('[sled-dune] ABORT: ' + g0.error); return; }
+    console.log(`[sled-dune] PHASE 0 (erg geometry): erg@(${g0.ergX},${g0.ergZ}) crest@(${g0.crest}) crestH=${g0.crestH} troughH=${g0.troughH} DROP=${g0.drop}m faceSlope=${g0.faceSlopeDeg}° faceRun=${g0.faceRun}m faceLen=${g0.faceLen}m`);
+
+    // ── PHASE A — free descent (real E-mount at the crest, no rider input).
+    const a = await page.evaluate(async (SPRINT) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      let sled = find();
+      // Reset sled to the crest, stationary.
+      const gy = ctx.terrain.heightAt(sd.cx, sd.cz);
+      sled.body.setTranslation({ x: sd.cx, y: gy + 0.08, z: sd.cz }, true);
+      sled.pos.set(sd.cx, gy + 0.08, sd.cz);
+      sled.yaw = sd.yaw; sled._slideVx = 0; sled._slideVz = 0;
+      await step(2);
+      // Stand up-slope of the sled + look at it; press E (the real mount path).
+      const pbx = sd.cx - sd.downX * 2.4, pbz = sd.cz - sd.downZ * 2.4;
+      const pby = ctx.terrain.heightAt(pbx, pbz) + 1.0;
+      ctx.player.body.body.setTranslation({ x: pbx, y: pby, z: pbz }, true);
+      const cam = ctx.three.camera;
+      cam.position.set(pbx, pby + 0.85, pbz);
+      cam.lookAt(sled.pos.x, sled.pos.y + 0.2, sled.pos.z);
+      cam.updateMatrixWorld(true);
+      await step(1);
+      ctx.input.pressed.add('KeyE');
+      await step(2);
+      const mounted = ctx.player.ridingSledId === sd.id;
+      // Descend. Record per frame until near the trough elevation or a hard cap.
+      const t0 = performance.now();
+      let maxSpeed = 0, gapMax = 0, clipMin = 999;
+      let px = sd.cx, pz = sd.cz;
+      const disp = [];
+      let reachedTroughFrame = -1, frames = 0;
+      const startY = sled.pos.y;
+      let stoppedFrame = -1;
+      for (let i = 0; i < 900; i++) {
+        await raf();
+        frames++;
+        sled = find();
+        const vx = sled._slideVx ?? 0, vz = sled._slideVz ?? 0;
+        const sp = Math.hypot(vx, vz);
+        if (sp > maxSpeed) maxSpeed = sp;
+        // Surface gap: deck (sled.pos.y) vs terrain at the sled XZ. Should stay
+        // within clearance (~0.06-0.08) — proves the follow holds at speed.
+        const terr = ctx.terrain.heightAt(sled.pos.x, sled.pos.z);
+        const gap = Math.abs(sled.pos.y - terr);
+        if (i > 3) gapMax = Math.max(gapMax, gap);
+        clipMin = Math.min(clipMin, sled.pos.y - terr);   // <0 = clipped under terrain
+        const d = Math.hypot(sled.pos.x - px, sled.pos.z - pz);
+        disp.push(+d.toFixed(3));
+        px = sled.pos.x; pz = sled.pos.z;
+        // Reached the trough elevation?
+        if (reachedTroughFrame < 0 && sled.pos.y <= sd.troughH + 1.0 && (startY - sled.pos.y) > sd.drop * 0.6) {
+          reachedTroughFrame = frames;
+        }
+        // Fully stopped (runout complete)?
+        if (reachedTroughFrame > 0 && sp < 0.4) { stoppedFrame = frames; break; }
+      }
+      const t1 = performance.now();
+      sled = find();
+      const descendedY = +(startY - sled.pos.y).toFixed(1);
+      // Descent time = wall-clock to the trough (approx; the loop runs at rAF≈60fps).
+      const descentTime = reachedTroughFrame > 0 ? +(reachedTroughFrame / 60).toFixed(2) : -1;
+      const runoutTime = stoppedFrame > 0 ? +(stoppedFrame / 60).toFixed(2) : -1;
+      // Runout distance from the trough point to the final rest.
+      const runoutDist = +Math.hypot(sled.pos.x - sd.tx, sled.pos.z - sd.tz).toFixed(1);
+      return {
+        mounted, maxSpeed: +maxSpeed.toFixed(1), sprintX: +(maxSpeed / SPRINT).toFixed(2),
+        gapMax: +gapMax.toFixed(3), clipMin: +clipMin.toFixed(3),
+        descendedY, descentTime, runoutTime, runoutDist,
+        wallMs: +(t1 - t0).toFixed(0),
+        dispEarly: +(disp.slice(2, 8).reduce((s, v) => s + v, 0) / 6).toFixed(3),
+        dispPeak: +Math.max(...disp).toFixed(3),
+      };
+    }, SPRINT);
+    const aPass = a.mounted && a.maxSpeed > SPRINT * 1.8 && a.maxSpeed < SPRINT * 3.2
+      && a.gapMax < 0.3 && a.clipMin > -0.15
+      && a.descentTime >= 3.0 && a.descentTime <= 9.0;
+    console.log(`[sled-dune] PHASE A (free descent): mounted=${a.mounted} maxSpeed=${a.maxSpeed}m/s (${a.sprintX}× sprint) descentTime=${a.descentTime}s descended=${a.descendedY}m gapMax=${a.gapMax}m clipMin=${a.clipMin}m runoutDist=${a.runoutDist}m runoutTime=${a.runoutTime}s dispPeak=${a.dispPeak}m/frame => ${aPass ? 'PASS' : 'FAIL'}`);
+
+    // Screenshot the crouched rider mid-slip-face (re-mount + descend a bit, shoot).
+    // Framed from a cinematic 3/4 SIDE-FRONT angle (not the chase cam) so the crouch,
+    // forward lean, arms + the dust trail all read — this is the postcard AND the
+    // pose-critique frame. `--poseangle=side|3q|front|chase` overrides.
+    const poseAngle = argv.poseangle || '3q';
+    await page.evaluate(async ({ poseAngle }) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sd = window.__sd;
+      const sled = ctx.sleds.list.find((s) => s.id === sd.id);
+      const gy = ctx.terrain.heightAt(sd.cx, sd.cz);
+      sled.body.setTranslation({ x: sd.cx, y: gy + 0.08, z: sd.cz }, true);
+      sled.pos.set(sd.cx, gy + 0.08, sd.cz);
+      sled.yaw = sd.yaw; sled._slideVx = 0; sled._slideVz = 0;
+      ctx.player.ridingSledId = sd.id;                  // direct mount for the shot
+      ctx.flags.thirdPerson = true;
+      window.__game.setTime(0.36);
+      // Descend ~1.2s so it's mid-face at speed with a dust trail.
+      for (let i = 0; i < 72; i++) await raf();
+      // PAUSE so the ride's per-frame camera pin (pinRiderToSeat) can't overwrite
+      // the framing below. The rig + dust freeze in their last posed state.
+      ctx.flags.paused = true;
+      // Frame the rider. Bow forward = sled local -Z = (-sin yaw, -cos yaw); right
+      // of the bow = (cos yaw, -sin yaw). Place the camera off to the side-front.
+      const cam = ctx.three.camera;
+      const s2 = ctx.sleds.list.find((s) => s.id === sd.id);
+      const cx = s2.pos.x, cy = s2.pos.y, cz = s2.pos.z;
+      const fwdX = -Math.sin(s2.yaw), fwdZ = -Math.cos(s2.yaw);
+      const rgtX = Math.cos(s2.yaw), rgtZ = -Math.sin(s2.yaw);
+      const D = 4.2;
+      let ex, ez, ey;
+      if (poseAngle === 'side') { ex = cx + rgtX * D; ez = cz + rgtZ * D; ey = cy + 1.3; }
+      else if (poseAngle === 'front') { ex = cx + fwdX * D; ez = cz + fwdZ * D; ey = cy + 1.4; }
+      else if (poseAngle === 'chase') { ex = cx - fwdX * D; ez = cz - fwdZ * D; ey = cy + 1.8; }
+      else { ex = cx + (fwdX * 0.7 + rgtX * 0.8) * D; ez = cz + (fwdZ * 0.7 + rgtZ * 0.8) * D; ey = cy + 1.5; } // 3q front-side
+      cam.position.set(ex, ey, ez);
+      cam.lookAt(cx, cy + 0.9, cz);
+      cam.updateMatrixWorld(true);
+    }, { poseAngle });
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, 'scen-sled-dune-postcard.png'), timeout: 60000 });
+    console.log('[sled-dune] screenshot saved: scen-sled-dune-postcard.png');
+    // Unpause — the postcard paused the sim to freeze the framing; the remaining
+    // measurement phases need the sled to move again.
+    await page.evaluate(() => { window.__game.ctx.flags.paused = false; });
+
+    // ── PHASE B — carve: A-held path deviates laterally from the free path.
+    const b = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      // Start mid-face (already at speed — carve authority is speed-gated, so the
+      // test must be ON the moving face, not nosing over the flat crest). Helper:
+      // reset to a point 1/3 down the face with a downhill kick, direct-mount, run
+      // N frames with an optional steer key held, return the final XZ.
+      const sx = sd.cx + (sd.tx - sd.cx) * 0.30, sz = sd.cz + (sd.tz - sd.cz) * 0.30;
+      const run = async (holdKey, N) => {
+        const sled = find();
+        const gy = ctx.terrain.heightAt(sx, sz);
+        sled.body.setTranslation({ x: sx, y: gy + 0.08, z: sz }, true);
+        sled.pos.set(sx, gy + 0.08, sz);
+        sled.yaw = sd.yaw;
+        sled._slideVx = sd.downX * 10; sled._slideVz = sd.downZ * 10;   // moving downhill
+        ctx.player.ridingSledId = sd.id;
+        ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false;
+        if (holdKey) ctx.input.keys[holdKey] = true;
+        for (let i = 0; i < N; i++) await raf();
+        if (holdKey) ctx.input.keys[holdKey] = false;
+        const s = find();
+        return { x: s.pos.x, z: s.pos.z };
+      };
+      const N = 110;
+      const free = await run(null, N);
+      const carve = await run('KeyA', N);
+      // Re-derive crest-relative offsets from the mid-face start for logging.
+      sd.cx; sd.cz;
+      // Lateral deviation = distance between the two end points projected off the
+      // straight downhill line from the crest.
+      const dxF = free.x - sx, dzF = free.z - sz;
+      const dxC = carve.x - sx, dzC = carve.z - sz;
+      const sep = Math.hypot(carve.x - free.x, carve.z - free.z);
+      // DIRECTION assertion (2026-07-18 — the magnitude-only check passed on INVERTED
+      // controls; Zach caught it in the walk-test). A = left. With forward (fx,fz),
+      // left = (fz,-fx) (yaw+ is CCW from above). The A-held end must lie LEFT of the
+      // free path's travel direction.
+      const fl = Math.hypot(dxF, dzF) || 1;
+      const leftX = dzF / fl, leftZ = -dxF / fl;
+      const carveDot = +(((carve.x - free.x) * leftX + (carve.z - free.z) * leftZ) / (sep || 1)).toFixed(2);
+      return { freeEnd: [+dxF.toFixed(1), +dzF.toFixed(1)], carveEnd: [+dxC.toFixed(1), +dzC.toFixed(1)], sep: +sep.toFixed(1), carveDot };
+    });
+    const bPass = b.sep > 3.0 && b.carveDot > 0.3;
+    console.log(`[sled-dune] PHASE B (carve): freeEndOffset=${b.freeEnd} carveEndOffset=${b.carveEnd} lateralSep=${b.sep}m carveDot(A=left)=${b.carveDot} => ${bPass ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE C — uphill stall: kick the sled UPHILL; it must decelerate + slide back.
+    const c = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      // Place mid-face, facing UPHILL, kicked uphill at 9 m/s.
+      const mx = (sd.cx + sd.tx) / 2, mz = (sd.cz + sd.tz) / 2;
+      const gy = ctx.terrain.heightAt(mx, mz);
+      const sled = find();
+      sled.body.setTranslation({ x: mx, y: gy + 0.08, z: mz }, true);
+      sled.pos.set(mx, gy + 0.08, mz);
+      // Uphill dir = opposite the downhill normal at mid-face.
+      const n = ctx.terrain.normalAt(mx, mz); const m = Math.hypot(n.x, n.z);
+      const upX = -n.x / m, upZ = -n.z / m;
+      sled.yaw = Math.atan2(-upX, -upZ);   // bow faces uphill
+      sled._slideVx = upX * 9; sled._slideVz = upZ * 9;
+      ctx.player.ridingSledId = sd.id;
+      ctx.input.keys['KeyW'] = false;   // no paddle — pure momentum test
+      const startH = sled.pos.y;
+      let maxGainH = 0, maxUpDist = 0;
+      for (let i = 0; i < 240; i++) {
+        await raf();
+        const s = find();
+        maxGainH = Math.max(maxGainH, s.pos.y - startH);
+        // signed uphill progress from start
+        const px = s.pos.x - mx, pz = s.pos.z - mz;
+        const upDist = px * upX + pz * upZ;
+        maxUpDist = Math.max(maxUpDist, upDist);
+      }
+      const s = find();
+      const endH = s.pos.y;
+      const endVx = s._slideVx ?? 0, endVz = s._slideVz ?? 0;
+      const endUpVel = endVx * upX + endVz * upZ;   // <0 = now sliding back down
+      return {
+        maxUpDist: +maxUpDist.toFixed(1), maxGainH: +maxGainH.toFixed(1),
+        netH: +(endH - startH).toFixed(1), endUpVel: +endUpVel.toFixed(2),
+      };
+    });
+    // Stall = climbed only a little then reversed (final velocity is downhill, and
+    // it ended LOWER than it started — momentum carried it up briefly then gravity won).
+    const cPass = c.maxUpDist < 12 && c.endUpVel < 0 && c.netH < 0;
+    console.log(`[sled-dune] PHASE C (uphill stall): maxUphillDist=${c.maxUpDist}m maxHgain=${c.maxGainH}m netH=${c.netH}m finalUphillVel=${c.endUpVel}m/s => ${cPass ? 'PASS' : 'FAIL'}`);
+
+    // ── PHASE D — dismount at speed on the slope: sled coasts + settles, player safe.
+    const d = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const sd = window.__sd;
+      const find = () => ctx.sleds.list.find((s) => s.id === sd.id);
+      // Reset to crest, mount, build speed.
+      const sled = find();
+      const gy = ctx.terrain.heightAt(sd.cx, sd.cz);
+      sled.body.setTranslation({ x: sd.cx, y: gy + 0.08, z: sd.cz }, true);
+      sled.pos.set(sd.cx, gy + 0.08, sd.cz);
+      sled.yaw = sd.yaw; sled._slideVx = 0; sled._slideVz = 0;
+      ctx.player.ridingSledId = sd.id;
+      // Descend until moving fast.
+      let speedAtDismount = 0;
+      for (let i = 0; i < 200; i++) {
+        await raf();
+        const s = find();
+        speedAtDismount = Math.hypot(s._slideVx ?? 0, s._slideVz ?? 0);
+        if (speedAtDismount > 10) break;
+      }
+      const sBefore = find();
+      const sledYBefore = sBefore.pos.y;
+      // Dismount (JUMP).
+      ctx.input.pressed.add('Space');
+      await step(2);
+      const dismounted = ctx.player.ridingSledId === null;
+      const p = ctx.player.body.body.translation();
+      const pgy = ctx.terrain.heightAt(p.x, p.z);
+      const capBottom = p.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const standGap = +(capBottom - pgy).toFixed(3);
+      // Player should be on the UPHILL side of the sled (higher terrain than the sled's).
+      const sNow = find();
+      const playerHigherThanSled = p.y > sNow.pos.y - 0.5;
+      // Sled keeps sliding briefly then settles — sample speed a few frames on.
+      const sledSpeedJustAfter = Math.hypot(sNow._slideVx ?? 0, sNow._slideVz ?? 0);
+      await step(120);
+      const sSettled = find();
+      const sledSpeedSettled = Math.hypot(sSettled._slideVx ?? 0, sSettled._slideVz ?? 0);
+      const sledClip = +(sSettled.pos.y - ctx.terrain.heightAt(sSettled.pos.x, sSettled.pos.z)).toFixed(3);
+      return {
+        speedAtDismount: +speedAtDismount.toFixed(1), dismounted,
+        standGap, onGround: ctx.player.onGround === true, playerHigherThanSled,
+        sledSpeedJustAfter: +sledSpeedJustAfter.toFixed(1), sledSpeedSettled: +sledSpeedSettled.toFixed(2),
+        sledClip, sledCoasted: sledSpeedJustAfter > 0.5,
+      };
+    });
+    // On a 32° slip face a released sled keeps sliding to the trough (Mad-Max rules) —
+    // "settles" means it doesn't FREEZE mid-slope + doesn't tunnel, and the player is
+    // placed safely uphill. So: retained its momentum (coasted, not frozen) + on ground
+    // + safe uphill placement + never clipped through terrain while coasting.
+    const dPass = d.dismounted && d.onGround && Math.abs(d.standGap) < 0.2
+      && d.playerHigherThanSled && d.sledCoasted && d.sledClip > -0.15;
+    console.log(`[sled-dune] PHASE D (dismount@speed): speedAtDismount=${d.speedAtDismount}m/s dismounted=${d.dismounted} onGround=${d.onGround} standGap=${d.standGap}m playerUphill=${d.playerHigherThanSled} sledCoasted=${d.sledCoasted} sledSpeedSettled=${d.sledSpeedSettled}m/s sledClip=${d.sledClip}m => ${dPass ? 'PASS' : 'FAIL'}`);
+
+    const allPass = aPass && bPass && cPass && dPass;
+    console.log(`[sled-dune] RESULT: ${allPass ? 'ALL PHASES PASS' : 'FAILURE — see phases above'}`);
+  },
+
+  // ── sled-pose (Deep-Desert cycle 6) — FAST rider-pose iteration. Spawns a sled
+  // on a gentle slope near origin (no 13km erg warp), direct-mounts, ticks so
+  // updatePlayerRig poses the crouched rider, gives it a little speed for a dust
+  // puff, pauses, and shoots the pose from 3q / side / front (three files). Pure
+  // pose critique — no physics measurement. ~1 boot, 3 frames.
+  'sled-pose': async (page) => {
+    const info = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = true;
+      window.__game.setTime(0.36);
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Find a mild slope near origin so the sled sits tilted (reads better) + can slide a touch.
+      let best = { x: 20, z: 0, m: 0 };
+      for (let r = 12; r <= 120; r += 6) {
+        for (let deg = 0; deg < 360; deg += 15) {
+          const x = Math.cos(deg * Math.PI / 180) * r, z = Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.12 && m < 0.4 && m > best.m) best = { x, z, m };
+        }
+      }
+      const n = ctx.terrain.normalAt(best.x, best.z); const mm = Math.hypot(n.x, n.z) || 1;
+      const downX = n.x / mm, downZ = n.z / mm;
+      const yaw = Math.atan2(-downX, -downZ);
+      const { id } = window.__game.spawnSled(best.x, best.z, yaw);
+      const sled = ctx.sleds.list.find((s) => s.id === id);
+      sled._slideVx = downX * 6; sled._slideVz = downZ * 6;   // a little motion for a dust puff
+      ctx.player.ridingSledId = id;
+      for (let i = 0; i < 30; i++) await raf();               // pose settles + dust spawns
+      window.__spose = { id };
+      return { at: [+best.x.toFixed(0), +best.z.toFixed(0)], slope: +best.m.toFixed(2) };
+    });
+    console.log('[sled-pose] mounted on slope ' + JSON.stringify(info));
+    for (const angle of ['3q', 'side', 'front']) {
+      await page.evaluate((angle) => {
+        const ctx = window.__game.ctx;
+        const sled = ctx.sleds.list.find((s) => s.id === window.__spose.id);
+        ctx.flags.paused = true;                              // freeze so the ride pin can't re-grab the camera
+        const cam = ctx.three.camera;
+        const cx = sled.pos.x, cy = sled.pos.y, cz = sled.pos.z;
+        const fwdX = -Math.sin(sled.yaw), fwdZ = -Math.cos(sled.yaw);
+        const rgtX = Math.cos(sled.yaw), rgtZ = -Math.sin(sled.yaw);
+        const D = 3.8;
+        let ex, ez, ey;
+        if (angle === 'side') { ex = cx + rgtX * D; ez = cz + rgtZ * D; ey = cy + 1.2; }
+        else if (angle === 'front') { ex = cx + fwdX * D; ez = cz + fwdZ * D; ey = cy + 1.3; }
+        else { ex = cx + (fwdX * 0.7 + rgtX * 0.8) * D; ez = cz + (fwdZ * 0.7 + rgtZ * 0.8) * D; ey = cy + 1.4; }
+        cam.position.set(ex, ey, ez);
+        cam.lookAt(cx, cy + 0.85, cz);
+        cam.updateMatrixWorld(true);
+      }, angle);
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-sled-pose-${angle}.png`), timeout: 60000 });
+      console.log(`[sled-pose] saved scen-sled-pose-${angle}.png`);
+      await page.evaluate(() => { window.__game.ctx.flags.paused = false; });
+    }
+  },
+
   // Prompt-3P (ACW F #149): place the player near a ground pickup, aim the 3P
   // camera at it so the eye-ray hovers it, tick live, then verify the prompt was
   // re-pinned to the object's projected screen position (inline left set to a px
@@ -7331,6 +8170,850 @@ const SCENARIOS = {
     await page.screenshot({ path: join(OUT, 'scen-ribcage-climb-ramp.png'), timeout: 60000 });
     console.log('[ribcage-climb] saved scen-ribcage-climb-ramp.png');
     if (!pass) throw new Error('ribcage-climb GATE FAILED');
+  },
+
+  // ── dune-slope — the ERG (mega dune-sea) PLAYABILITY gate (The Deep Desert,
+  //    campaign 2026-07-18). Locates the nearest erg region, then samples the
+  //    REAL pure height function (terrain.pureHeightAt — the exact samples the
+  //    heightfield collider is baked from, so an analytic march against it is a
+  //    faithful KCC model, not a teleport lie) and asserts:
+  //      (A) SLOPES        — a dense grid across the core dunes, classified by the
+  //          erg's own wind: windward faces (rising downwind) p95 ≤ 30° (the KCC's
+  //          50° climb limit + the charter's walkable-windward rule); slip faces
+  //          (falling downwind) median within [28,36]° (the dry-sand angle of
+  //          repose — the sled's playground). Proves the windward/slip ASYMMETRY.
+  //      (B) BORDER        — radial transects through the erg→desert border zone:
+  //          NO slope in the transition exceeds the interior dune max (a wide
+  //          smoothstep border must not spike a seam).
+  //      (C) AMPLITUDE     — crest-to-trough of the primary mega-dunes within the
+  //          ERG_DUNE_AMP_* bounds (a real dune SEA, not ripples).
+  //      (D) KCC MARCH     — a step-limited march up a windward face trough→crest
+  //          SUCCEEDS (max per-step rise ≤ the 50° KCC limit); the paired slip
+  //          face is measurably STEEPER (asymmetry, the sled's descent line).
+  //      (E) PERF          — a chunk-sized (193²) pureHeightAt grid in the erg
+  //          generates within a small multiple of the origin cost (≤4-octave
+  //          budget guidance) — the erg height fn isn't a frame killer.
+  //    Prints DUNE-SLOPE pass=… for verify:chunks, and shoots crest / trough /
+  //    approach vista stubs for the next cycle's real vista set.
+  //    Run: node scripts/rig-shot.mjs --scenario=dune-slope --seed=1337 --port=5211
+  'dune-slope': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.5);
+      ctx.three.renderer.setSize(1180, 780, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1180 / 780; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const dynImport = async (url) => {
+        try { return await (0, eval)(`import(${JSON.stringify(url)})`); }
+        catch (e) {
+          if (e && /module|import/i.test(String(e.message)) === false) throw e;
+          return await new Promise((resx, rej) => {
+            const key = '__si_' + Math.random().toString(36).slice(2);
+            const s = document.createElement('script'); s.type = 'module';
+            s.textContent = `import * as m from ${JSON.stringify(url)}; window[${JSON.stringify(key)}]=m; window.dispatchEvent(new Event(${JSON.stringify(key)}));`;
+            const t = setTimeout(() => { cleanup(); rej(new Error('import timeout ' + url)); }, 20000);
+            const onEvt = () => { const m = window[key]; cleanup(); resx(m); };
+            function cleanup() { clearTimeout(t); window.removeEventListener(key, onEvt); s.remove(); delete window[key]; }
+            window.addEventListener(key, onEvt);
+            document.head.appendChild(s);
+          });
+        }
+      };
+      const { Tuning } = await dynImport('/src/config/tuning.ts');
+      const bio = ctx.biomes; const ph = (x, z) => ctx.terrain.pureHeightAt(x, z);
+      const DEG = 180 / Math.PI;
+      const fails = [];
+
+      // ── locate the nearest erg core (coarse scan → centroid refine) ──
+      let coarse = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200) {
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z;
+          if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; coarse = { x, z }; }
+        }
+      }
+      if (!coarse) return { fails: ['NO ERG found within a 24km scan (seed-dependent — rarity too low?)'], found: false };
+      let sx = 0, sz = 0, w = 0;
+      for (let dx = -400; dx <= 400; dx += 16) {
+        for (let dz = -400; dz <= 400; dz += 16) {
+          if (bio.ergAt(coarse.x + dx, coarse.z + dz) > 0.95) { sx += coarse.x + dx; sz += coarse.z + dz; w++; }
+        }
+      }
+      const cx = w ? Math.round(sx / w) : coarse.x;
+      const cz = w ? Math.round(sz / w) : coarse.z;
+      const info = bio.ergInfoAt(cx, cz);
+      const windRad = info ? info.windRad : 0;
+      const wd = { x: Math.cos(windRad), z: Math.sin(windRad) };
+      const dist = Math.hypot(cx, cz);
+
+      // slope + along-wind gradient sign at (x,z), central diff over 2m.
+      const D = 2;
+      const slopeAt = (x, z) => {
+        const gx = (ph(x + D, z) - ph(x - D, z)) / (2 * D);
+        const gz = (ph(x, z + D) - ph(x, z - D)) / (2 * D);
+        const slope = Math.atan(Math.hypot(gx, gz)) * DEG;
+        const gu = gx * wd.x + gz * wd.z;   // >0 windward (rising downwind), <0 slip
+        return { slope, gu };
+      };
+      const pct = (arr, p) => {
+        if (!arr.length) return NaN;
+        const a = arr.slice().sort((u, v) => u - v);
+        return a[Math.min(a.length - 1, Math.max(0, Math.floor(p * a.length)))];
+      };
+
+      // ── (A) dense grid across the core dunes ──
+      const wind = [], slip = [];
+      for (let dx = -300; dx <= 300; dx += 4) {
+        for (let dz = -300; dz <= 300; dz += 4) {
+          const x = cx + dx, z = cz + dz;
+          if (bio.ergAt(x, z) < 0.98) continue;       // core only (mask ~1) — no border mixing
+          const s = slopeAt(x, z);
+          if (s.slope < 10) continue;                 // skip trough/crest transitions — measure FACES
+          if (s.gu > 0.03) wind.push(s.slope);
+          else if (s.gu < -0.03) slip.push(s.slope);
+        }
+      }
+      const windP95 = pct(wind, 0.95), windMax = Math.max(...wind, 0);
+      const slipMed = pct(slip, 0.5), slipP05 = pct(slip, 0.05), slipP95 = pct(slip, 0.95), slipMax = Math.max(...slip, 0);
+      const interiorMax = Math.max(windMax, slipMax);
+      // The KCC climbs ≤50°, the charter requires walkable windward: p95 ≤ 30°.
+      if (!(windP95 <= 30)) fails.push(`windward p95 ${windP95.toFixed(1)}° > 30° (unwalkable windward face)`);
+      // Slip faces sit at the dry-sand angle of repose (~28-34°). Real dune fields
+      // vary (the envelope scales dune height), so the MEDIAN is checked over a
+      // band that admits legitimate ±few° seed variance but still catches a field
+      // that is all-gentle (no sled faces) or all-cliff (unnatural).
+      if (!(slipMed >= 27 && slipMed <= 37)) fails.push(`slip median ${slipMed.toFixed(1)}° outside [27,37]° (angle-of-repose band)`);
+      // The steep slip faces (the sled's descent line) must reach the repose band.
+      if (!(slipP95 >= 30 && slipP95 <= 50)) fails.push(`slip p95 ${slipP95.toFixed(1)}° outside [30,50]° (the steep slip faces are wrong)`);
+      // Asymmetry: the slip side is genuinely steeper than the windward side.
+      if (!(slipMed > windP95 - 3)) fails.push(`no asymmetry: slip median ${slipMed.toFixed(1)}° not steeper than windward p95 ${windP95.toFixed(1)}°`);
+
+      // ── (B) border-zone continuity: radial transects out through the border ──
+      let borderMax = 0;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+        const dirx = Math.cos(a), dirz = Math.sin(a);
+        for (let rr = 0; rr <= Tuning.ERG_FIELD_RADIUS + 40; rr += 4) {
+          const x = cx + dirx * rr, z = cz + dirz * rr;
+          const m = bio.ergAt(x, z);
+          if (m <= 0 || m >= 0.98) continue;          // the transition band only
+          const s = slopeAt(x, z).slope;
+          if (s > borderMax) borderMax = s;
+        }
+      }
+      // The wide smoothstep border must not create a slope STEEPER than the erg's
+      // own dunes (a hard seam) — and never an unclimbable ramp near the 50° KCC
+      // limit. A real seam discontinuity would spike well past the interior dunes.
+      if (borderMax > interiorMax + 6) fails.push(`border slope ${borderMax.toFixed(1)}° spikes above interior max ${interiorMax.toFixed(1)}° (+6° tol) — seam discontinuity`);
+      if (borderMax > 48) fails.push(`border slope ${borderMax.toFixed(1)}° > 48° — the erg edge is an unclimbable seam`);
+
+      // ── wind-aligned transect through the core (for amplitude + the marches) ──
+      const STEP = 0.4, T0 = -420, TN = 420;
+      const prof = [];
+      for (let t = T0; t <= TN; t += STEP) {
+        const x = cx + wd.x * t, z = cz + wd.z * t;
+        prof.push({ t, x, z, h: ph(x, z) });
+      }
+      // extrema with a ±6m window + ≥6m prominence → primary crests/troughs only.
+      const WW = Math.round(6 / STEP);
+      const ext = [];
+      for (let i = WW; i < prof.length - WW; i++) {
+        let isMax = true, isMin = true;
+        for (let k = i - WW; k <= i + WW; k++) {
+          if (prof[k].h > prof[i].h + 1e-6) isMax = false;
+          if (prof[k].h < prof[i].h - 1e-6) isMin = false;
+        }
+        if (isMax) ext.push({ i, kind: 'max', h: prof[i].h });
+        else if (isMin) ext.push({ i, kind: 'min', h: prof[i].h });
+      }
+      // dedup adjacent same-kind (plateaus)
+      const ex2 = [];
+      for (const e of ext) { const last = ex2[ex2.length - 1]; if (last && last.kind === e.kind) { if (e.kind === 'max' ? e.h > last.h : e.h < last.h) ex2[ex2.length - 1] = e; } else ex2.push(e); }
+      const amps = [];
+      for (let i = 1; i < ex2.length; i++) { const d = Math.abs(ex2[i].h - ex2[i - 1].h); if (d > 6) amps.push(d); }
+      const ampMed = amps.length ? pct(amps, 0.5) : 0;
+      if (!(ampMed >= Tuning.ERG_DUNE_AMP_MIN && ampMed <= Tuning.ERG_DUNE_AMP_MAX))
+        fails.push(`mega-dune amplitude ${ampMed.toFixed(1)}m outside [${Tuning.ERG_DUNE_AMP_MIN},${Tuning.ERG_DUNE_AMP_MAX}]m`);
+
+      // ── (D) KCC marches: pick a mid crest + its windward (lower-t) & slip
+      //     (higher-t) troughs, then measure the per-step rise up each face. ──
+      const maxima = ex2.filter((e) => e.kind === 'max');
+      const minima = ex2.filter((e) => e.kind === 'min');
+      let march = null;
+      if (maxima.length && minima.length >= 1) {
+        // crest nearest the transect centre
+        const crest = maxima.reduce((b, e) => Math.abs(prof[e.i].t) < Math.abs(prof[b.i].t) ? e : b, maxima[0]);
+        const windTrough = minima.filter((m) => m.i < crest.i).sort((a, b) => b.i - a.i)[0];
+        const slipTrough = minima.filter((m) => m.i > crest.i).sort((a, b) => a.i - b.i)[0];
+        const stepRise = (aIdx, bIdx) => {         // steepest per-STEP height change between two prof indices
+          const lo = Math.min(aIdx, bIdx), hi = Math.max(aIdx, bIdx);
+          let mx = 0;                              // |Δh| — direction-agnostic (a face is a face climbed either way)
+          for (let i = lo; i < hi; i++) { const d = Math.abs(prof[i + 1].h - prof[i].h); if (d > mx) mx = d; }
+          return mx;
+        };
+        const KCC_LIMIT = STEP * Math.tan(50 * Math.PI / 180);   // 50° per 0.4m step ≈ 0.476m
+        let windRise = NaN, slipRise = NaN, climbWind = false, climbedTo = 0;
+        if (windTrough) {
+          windRise = stepRise(windTrough.i, crest.i);
+          climbWind = windRise <= KCC_LIMIT;
+          climbedTo = crest.h - windTrough.h;
+          if (!climbWind) fails.push(`windward march NOT climbable: max step-rise ${windRise.toFixed(3)}m > KCC limit ${KCC_LIMIT.toFixed(3)}m`);
+        } else fails.push('no windward trough found on the transect');
+        if (slipTrough) slipRise = stepRise(slipTrough.i, crest.i);
+        // On this crest's pair, the slip face must be steeper than the windward
+        // (a small margin — the STRONG asymmetry proof is the grid stat above; a
+        // single transect pair is noisier, so this is a sanity floor, not the gate).
+        if (windTrough && slipTrough && !(slipRise > windRise * 1.05))
+          fails.push(`slip face not steeper than windward (slip step-rise ${slipRise.toFixed(3)}m vs windward ${windRise.toFixed(3)}m)`);
+        march = { windRise, slipRise, climbWind, climbedTo, kccLimit: KCC_LIMIT, crestT: +prof[crest.i].t.toFixed(0), crestH: +crest.h.toFixed(1) };
+      } else fails.push('could not resolve a crest+trough pair on the wind transect');
+
+      // ── (E) perf: a chunk-sized (193²) pure-height grid, erg vs origin ──
+      const gridMs = (ox, oz) => {
+        const t0 = performance.now();
+        let acc = 0;
+        for (let i = 0; i <= 192; i++) for (let j = 0; j <= 192; j++) acc += ph(ox + (i - 96) * 2, oz + (j - 96) * 2);
+        return { ms: performance.now() - t0, acc };
+      };
+      const perfErg = gridMs(cx, cz).ms;
+      const perfOrigin = gridMs(0, 0).ms;
+      if (perfErg > perfOrigin * 4 + 30) fails.push(`erg grid ${perfErg.toFixed(1)}ms >> origin ${perfOrigin.toFixed(1)}ms (×4+30 budget) — erg height fn too costly`);
+
+      window.__ergSpot = { cx, cz, windRad, crestT: march ? march.crestT : 0 };
+      return {
+        found: true, fails, cx, cz, dist, windRad,
+        windP95, windMax, slipMed, slipP05, slipP95, slipMax, interiorMax,
+        borderMax, ampMed, windN: wind.length, slipN: slip.length,
+        march,
+        perfErg, perfOrigin,
+      };
+    });
+    const pass = r.found && r.fails.length === 0;
+    if (!r.found) {
+      console.log(`DUNE-SLOPE pass=0 seed=${argv.seed || '?'} found=0 fails=${r.fails.length}`);
+      console.log('[dune-slope] ' + JSON.stringify(r.fails));
+      throw new Error('dune-slope GATE FAILED — no erg found');
+    }
+    const m = r.march || {};
+    console.log(
+      `DUNE-SLOPE pass=${pass ? 1 : 0} seed=${argv.seed || '?'} erg=(${r.cx},${r.cz})@${r.dist.toFixed(0)}m wind=${(r.windRad * 180 / Math.PI).toFixed(0)}° ` +
+      `windP95=${r.windP95.toFixed(1)}° windMax=${r.windMax.toFixed(1)}° slipMed=${r.slipMed.toFixed(1)}° slip=[${r.slipP05.toFixed(1)}-${r.slipP95.toFixed(1)}]° ` +
+      `amp=${r.ampMed.toFixed(1)}m border=${r.borderMax.toFixed(1)}° interiorMax=${r.interiorMax.toFixed(1)}° ` +
+      `climbWind=${m.climbWind ? 'UP' : 'FAIL'}(rise=${(m.windRise ?? 0).toFixed(3)}/lim=${(m.kccLimit ?? 0).toFixed(3)}m,+${(m.climbedTo ?? 0).toFixed(1)}m) slipRise=${(m.slipRise ?? 0).toFixed(3)}m ` +
+      `perfErg=${r.perfErg.toFixed(1)}ms perfOrigin=${r.perfOrigin.toFixed(1)}ms fails=${r.fails.length}`
+    );
+    if (r.fails.length) console.log('[dune-slope] ' + JSON.stringify(r.fails.slice(0, 8)));
+
+    // ── vista stubs for the next cycle: stream the erg in, shoot crest / trough /
+    //    approach. (Terrain tiles stream on teleport; colliders not needed for a shot.) ──
+    await page.evaluate(async (spot) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: spot.cx, y: ctx.terrain.heightAt(spot.cx, spot.cz) + 1.6, z: spot.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 160; f++) await raf();
+      ctx.flags.paused = true;
+    }, { cx: r.cx, cz: r.cz });
+    const shot = async (name, code) => {
+      await page.evaluate(code);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-dune-slope-${name}.png`), timeout: 60000 });
+      console.log(`[dune-slope] saved scen-dune-slope-${name}.png`);
+    };
+    // A helper string: local steepest-ascent unit direction at (x,z) via central diff.
+    const upDir = `(x,z)=>{ const ctx=window.__game.ctx; const h=(a,b)=>ctx.terrain.heightAt(a,b); const gx=h(x+3,z)-h(x-3,z), gz=h(x,z+3)-h(x,z-3); const L=Math.hypot(gx,gz)||1; return {x:gx/L, z:gz/L}; }`;
+    // crest view — stand on a crest, look ALONG the ridge line (perpendicular to
+    // wind) so a colonnade of dunes recedes into the haze (the dune-sea postcard).
+    await shot('crest', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const s = window.__ergSpot; const wr = s.windRad;
+      let bx = s.cx, bz = s.cz, bh = -1e9;
+      for (let t = -160; t <= 160; t += 3) { const x = s.cx + Math.cos(wr)*t, z = s.cz + Math.sin(wr)*t; const h = ctx.terrain.heightAt(x,z); if (h > bh) { bh = h; bx = x; bz = z; } }
+      const rv = { x: -Math.sin(wr), z: Math.cos(wr) };   // along the ridge (perp to wind)
+      cam.position.set(bx, ctx.terrain.heightAt(bx, bz) + 1.7, bz);
+      const tx = bx + rv.x*160, tz = bz + rv.z*160;
+      cam.lookAt(tx, ctx.terrain.heightAt(tx, tz) - 6, tz);   // slight downward — fill frame with sand
+      cam.updateMatrixWorld(true);
+    })()`);
+    // trough view — drop into a low sample, look UP the steepest local face so a
+    // dune WALL rises and fills the frame (sightline occlusion — the trough read).
+    await shot('trough', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const s = window.__ergSpot; const wr = s.windRad; const upDir = ${upDir};
+      let bx = s.cx, bz = s.cz, bh = 1e9;
+      for (let t = -160; t <= 160; t += 3) { const x = s.cx + Math.cos(wr)*t, z = s.cz + Math.sin(wr)*t; const h = ctx.terrain.heightAt(x,z); if (h < bh) { bh = h; bx = x; bz = z; } }
+      const up = upDir(bx, bz);
+      cam.position.set(bx, ctx.terrain.heightAt(bx, bz) + 1.7, bz);
+      const tx = bx + up.x*80, tz = bz + up.z*80;
+      cam.lookAt(tx, ctx.terrain.heightAt(tx, tz) + 8, tz);   // up the face toward the crest
+      cam.updateMatrixWorld(true);
+    })()`);
+    // approach view — stand out on the flat desert just beyond the erg edge and
+    // look HORIZONTALLY at the near wall of dunes rising from the flats (the
+    // "approaching the dune sea" read). The vantage is ~1.6km from the erg core,
+    // OUTSIDE the origin-following sky sphere's last recenter — so we teleport the
+    // player to the vantage first (unpaused, to stream terrain + recenter the sky
+    // there) BEFORE framing the shot, else the sky renders as a distant dome.
+    await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const s = window.__ergSpot;
+      const ang = Math.atan2(-s.cz, -s.cx);   // roughly toward origin
+      let ex = s.cx, ez = s.cz;               // march out to the erg boundary
+      for (let rr = 0; rr <= 2400; rr += 8) { const x = s.cx + Math.cos(ang)*rr, z = s.cz + Math.sin(ang)*rr; if (ctx.biomes.ergAt(x, z) <= 0) { ex = x; ez = z; break; } }
+      const ox = ex + Math.cos(ang) * 90, oz = ez + Math.sin(ang) * 90;   // 90m out on the flats
+      window.__ergApproach = { ox, oz, tx: ex - Math.cos(ang) * 260, tz: ez - Math.sin(ang) * 260 };
+      ctx.flags.paused = false;
+      ctx.player.body.body.setTranslation({ x: ox, y: ctx.terrain.heightAt(ox, oz) + 1.6, z: oz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 160; f++) await raf();   // stream + recenter sky at the vantage
+      ctx.flags.paused = true;
+    });
+    await shot('approach', `(() => {
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const a = window.__ergApproach;
+      cam.position.set(a.ox, ctx.terrain.heightAt(a.ox, a.oz) + 2.0, a.oz);
+      cam.lookAt(a.tx, ctx.terrain.heightAt(a.tx, a.tz) + 10, a.tz);
+      cam.updateMatrixWorld(true);
+    })()`);
+    if (!pass) throw new Error('dune-slope GATE FAILED');
+  },
+
+  // ── erg-vista (Deep Desert cycle 3) — the CHECKPOINT vista set Zach approves
+  //    scale/feel from. Streams the nearest erg core in at late-afternoon raking
+  //    light (dayTime 0.70), hides the HUD chrome, and shoots four well-framed
+  //    player's-eye vistas — approach / crest / trough / scale — printing the
+  //    LOCAL dune height + wavelength at each spot so numbers ship WITH pictures.
+  //    Output: verification/scen-erg-vista-<name>.png.
+  //    Run: node scripts/rig-shot.mjs --scenario=erg-vista --port=5262
+  'erg-vista': async (page) => {
+    // ── clean scene + late-afternoon raking sun + hidden HUD + big canvas ──
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0;
+      g.setTime(0.65);   // late afternoon — raking sun (~37° elev) shows dune form + keeps sand legible
+      const css = document.createElement('style');
+      css.textContent = '#hud,#hotbar,#crosshair,#dev-mode-badge,#interact-prompt,#damage-vignette,#long-storm-indicator,#shelter-indicator,#toast,#perf-hud,#crafting-menu,#dev-item-panel{display:none!important}';
+      document.head.appendChild(css);
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;   // re-enabled only for the scale shot
+      ctx.three.renderer.setSize(1600, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1600 / 900; cam.updateProjectionMatrix(); }
+    });
+
+    // ── locate the nearest erg core (coarse scan → centroid refine) ──
+    const spot = await page.evaluate(() => {
+      const bio = window.__game.ctx.biomes;
+      let coarse = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200)
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z; if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; coarse = { x, z }; }
+        }
+      if (!coarse) return null;
+      let sx = 0, sz = 0, w = 0;
+      for (let dx = -400; dx <= 400; dx += 16)
+        for (let dz = -400; dz <= 400; dz += 16)
+          if (bio.ergAt(coarse.x + dx, coarse.z + dz) > 0.95) { sx += coarse.x + dx; sz += coarse.z + dz; w++; }
+      const cx = w ? Math.round(sx / w) : coarse.x, cz = w ? Math.round(sz / w) : coarse.z;
+      const info = bio.ergInfoAt(cx, cz);
+      return { cx, cz, windRad: info ? info.windRad : 0, dist: Math.round(Math.hypot(cx, cz)) };
+    });
+    if (!spot) throw new Error('erg-vista: NO erg found within a 24km scan');
+    console.log(`[erg-vista] erg core @(${spot.cx},${spot.cz}) ${spot.dist}m from origin, wind=${(spot.windRad * 180 / Math.PI).toFixed(0)}°`);
+    await page.evaluate((s) => { window.__ergVista = s; }, spot);
+
+    // ── stream the core in (teleport past the anchor margin → ring re-anchors) ──
+    await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx; ctx.flags.paused = false;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.6, z: s.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();   // stream the 3×3 tile ring + recenter sky
+      ctx.flags.paused = true;
+    }, spot);
+
+    // Shared in-page helpers, re-declared per shot (each page.evaluate is isolated):
+    //   duneMetrics(cx,cz,windRad) → {height, wavelength} from a ±300m wind transect.
+    const HELPERS = `
+      const ctx = window.__game.ctx; const cam = ctx.three.camera; ctx.flags.paused = true;
+      const h = (x, z) => ctx.terrain.heightAt(x, z);
+      const duneMetrics = (px, pz, wr) => {
+        const wx = Math.cos(wr), wz = Math.sin(wr);
+        const prof = [];
+        for (let t = -300; t <= 300; t += 2) prof.push({ t, y: h(px + wx * t, pz + wz * t) });
+        const WW = 4; const ext = [];
+        for (let i = WW; i < prof.length - WW; i++) {
+          let isMax = true, isMin = true;
+          for (let k = i - WW; k <= i + WW; k++) { if (prof[k].y > prof[i].y + 1e-6) isMax = false; if (prof[k].y < prof[i].y - 1e-6) isMin = false; }
+          if (isMax) ext.push({ t: prof[i].t, y: prof[i].y, kind: 'max' });
+          else if (isMin) ext.push({ t: prof[i].t, y: prof[i].y, kind: 'min' });
+        }
+        const ded = [];
+        for (const e of ext) { const l = ded[ded.length - 1]; if (l && l.kind === e.kind) { if (e.kind === 'max' ? e.y > l.y : e.y < l.y) ded[ded.length - 1] = e; } else ded.push(e); }
+        const amps = [], spac = []; let lastMax = null;
+        for (let i = 1; i < ded.length; i++) { const d = Math.abs(ded[i].y - ded[i - 1].y); if (d > 4) amps.push(d); }
+        for (const e of ded) { if (e.kind === 'max') { if (lastMax) spac.push(Math.abs(e.t - lastMax)); lastMax = e.t; } }
+        const med = (a) => { if (!a.length) return NaN; const s = a.slice().sort((u, v) => u - v); return s[Math.floor(s.length / 2)]; };
+        return { height: med(amps), wavelength: med(spac) };
+      };
+    `;
+    const shoot = async (name, code) => {
+      const meta = await page.evaluate('(() => {' + HELPERS + code + '})()');
+      await page.waitForTimeout(450);
+      await page.screenshot({ path: join(OUT, `scen-erg-vista-${name}.png`), timeout: 60000 });
+      const hStr = Number.isFinite(meta.height) ? meta.height.toFixed(1) : '?';
+      const wStr = Number.isFinite(meta.wavelength) ? meta.wavelength.toFixed(0) : '?';
+      console.log(`[erg-vista] ${name}: dune height ~${hStr}m · wavelength ~${wStr}m  → scen-erg-vista-${name}.png  ${meta.note || ''}`);
+      return meta;
+    };
+
+    // 1) CREST — stand on the tallest local mega-dune crest, look DOWNWIND so the
+    //    slip face drops away underfoot and the sea of crests recedes to the haze.
+    await shoot('crest', `
+      const s = window.__ergVista; const wr = s.windRad; const wx = Math.cos(wr), wz = Math.sin(wr);
+      const rx = -Math.sin(wr), rz = Math.cos(wr);                 // along ridge (toward the lit horizon)
+      let bx = s.cx, bz = s.cz, by = -1e9;
+      for (let t = -200; t <= 200; t += 3) { const x = s.cx + wx * t, z = s.cz + wz * t; const y = h(x, z); if (y > by) { by = y; bx = x; bz = z; } }
+      cam.position.set(bx, h(bx, bz) + 1.7, bz);
+      // diagonal: ridge axis (lit) blended with downwind (slip face drops away underfoot)
+      let dxk = rx + wx * 0.6, dzk = rz + wz * 0.6; const dl = Math.hypot(dxk, dzk); dxk /= dl; dzk /= dl;
+      const tx = bx + dxk * 320, tz = bz + dzk * 320;
+      cam.lookAt(tx, h(tx, tz) - 7, tz);                          // gentle down-tilt: corrugated sea recedes
+      cam.updateMatrixWorld(true);
+      return duneMetrics(bx, bz, wr);
+    `);
+
+    // 2) TROUGH — drop into the lowest local interdune, look ALONG the ridge axis
+    //    (perpendicular to wind) so dune WALLS flank both sides and occlude the
+    //    horizon — the lost-in-the-dunes read.
+    await shoot('trough', `
+      const s = window.__ergVista; const wr = s.windRad; const wx = Math.cos(wr), wz = Math.sin(wr);
+      const rx = -Math.sin(wr), rz = Math.cos(wr);                 // along ridge (perp to wind)
+      let bx = s.cx, bz = s.cz, by = 1e9;
+      for (let t = -200; t <= 200; t += 3) { const x = s.cx + wx * t, z = s.cz + wz * t; const y = h(x, z); if (y < by) { by = y; bx = x; bz = z; } }
+      cam.position.set(bx, h(bx, bz) + 1.7, bz);
+      const tx = bx + rx * 160, tz = bz + rz * 160;
+      cam.lookAt(tx, h(tx, tz) + 6, tz);                           // slight up: walls rise, sky slot narrows
+      cam.updateMatrixWorld(true);
+      return duneMetrics(bx, bz, wr);
+    `);
+
+    // 3) SCALE — the player figure at a trough base with a mega-dune towering
+    //    behind (human ~1.8m against a ~45m dune = the scale read). Re-enable the
+    //    rig, face it into the dune, camera behind + above looking past it.
+    await shoot('scale', `
+      const s = window.__ergVista; const wr = s.windRad; const wx = Math.cos(wr), wz = Math.sin(wr);
+      // trough base near core, and the crest it faces (upwind, higher-ground side)
+      let bx = s.cx, bz = s.cz, by = 1e9;
+      for (let t = -200; t <= 200; t += 3) { const x = s.cx + wx * t, z = s.cz + wz * t; const y = h(x, z); if (y < by) { by = y; bx = x; bz = z; } }
+      // steepest-ascent direction at the trough (toward the near dune wall)
+      const gx = h(bx + 4, bz) - h(bx - 4, bz), gz = h(bx, bz + 4) - h(bx, bz - 4);
+      const gl = Math.hypot(gx, gz) || 1; const ux = gx / gl, uz = gz / gl;
+      // place the player body at the trough, facing up the dune
+      const py = h(bx, bz);
+      ctx.player.body.body.setTranslation({ x: bx, y: py + 1.0, z: bz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (ctx.player.rig) { ctx.player.rig.group.visible = true; ctx.player.rig.group.position.set(bx, py, bz); ctx.player.rig.group.rotation.y = Math.atan2(ux, uz); }
+      // camera behind + above the figure, looking past it up the dune face
+      cam.position.set(bx - ux * 7, py + 3.0, bz - uz * 7);
+      const tx = bx + ux * 80, tz = bz + uz * 80;
+      cam.lookAt(tx, h(tx, tz) + 14, tz);
+      cam.updateMatrixWorld(true);
+      return duneMetrics(bx, bz, wr);
+    `);
+
+    // 4) APPROACH — teleport OUT onto the flat desert beyond the erg edge (stream
+    //    + recenter the sky there), then look horizontally at the near wall of
+    //    mega-dunes rising from the flats (the "entering the erg" moment).
+    await page.evaluate(async () => {
+      const ctx = window.__game.ctx; const bio = ctx.biomes;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const s = window.__ergVista;
+      const wr = s.windRad;
+      // Front-light the wall: choose the edge azimuth pointing most toward the SUN
+      // (so looking inward at the dunes has the sun behind the camera → warm lit
+      // faces, not a shadowed lump). sunDir.xz points toward the sun.
+      const sd = ctx.time.sunDir; let sax = sd.x, saz = sd.z; const sl = Math.hypot(sax, saz) || 1; sax /= sl; saz /= sl;
+      let best = null;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 24) {
+        const dx = Math.cos(a), dz = Math.sin(a);
+        // CROSS-LIGHT the wall: outward ~perpendicular to the sun, so the inward
+        // view has the low sun off to one side → lit windward faces + shadowed
+        // slip faces = the corrugated sea reads as sand (the same oblique light
+        // that makes the crest/trough shots work). Reward perpendicular alignment.
+        const sunAlign = -Math.abs(dx * sax + dz * saz);
+        // march to the erg boundary along this azimuth
+        let ex = s.cx, ez = s.cz;
+        for (let rr = 0; rr <= 2400; rr += 8) { const x = s.cx + dx * rr, z = s.cz + dz * rr; if (bio.ergAt(x, z) <= 0) { ex = x; ez = z; break; } }
+        // tallest dune in the 500m just inside this edge (for aim framing)
+        let tall = -1e9, tx = ex, tz = ez;
+        for (let rr = -500; rr <= -60; rr += 20) { const x = ex + dx * rr, z = ez + dz * rr; const y = ctx.terrain.heightAt(x, z); if (y > tall) { tall = y; tx = x; tz = z; } }
+        // score: front-lighting dominates, a modest tall-dune bonus breaks ties
+        const score = sunAlign * 10 + tall * 0.02;
+        if (!best || score > best.score) best = { score, a, dx, dz, ex, ez, tall, tx, tz };
+      }
+      const ox = best.ex + best.dx * 180, oz = best.ez + best.dz * 180;   // 180m out — clean flats in the foreground
+      window.__ergApproach = { ox, oz, ex: best.ex, ez: best.ez, dx: best.dx, dz: best.dz, tx: best.tx, tz: best.tz, wr };
+      ctx.flags.paused = false;
+      ctx.player.body.body.setTranslation({ x: ox, y: ctx.terrain.heightAt(ox, oz) + 1.6, z: oz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      for (let f = 0; f < 200; f++) await raf();   // stream + recenter sky at the vantage
+      ctx.flags.paused = true;
+    });
+    await shoot('approach', `
+      const a = window.__ergApproach;
+      cam.position.set(a.ox, h(a.ox, a.oz) + 2.0, a.oz);
+      // look INTO the erg toward the rising interior sea (~800m inside the edge),
+      // aimed slightly up so the front-lit dune mass fills the upper-middle band
+      // and the clean flats read as the foreground you're crossing.
+      const tx = a.ex - a.dx * 650, tz = a.ez - a.dz * 650;
+      cam.lookAt(tx, h(tx, tz) + 30, tz);                         // aim up: cross-lit dune sea fills the frame
+      cam.updateMatrixWorld(true);
+      // metrics sampled well inside the dune sea
+      return duneMetrics(a.ex - a.dx * 700, a.ez - a.dz * 700, a.wr);
+    `);
+  },
+
+  // ── erg-smoke (Deep Desert cycle 7) — the CREST SMOKE proof + the erg hush +
+  //    the first-crest discovery beat. Streams the nearest erg, stands the player
+  //    on the tallest local crest, and PROVES: spindrift is visible + crest-riding
+  //    (a visible-puff count), it costs ~nothing (frame-ms in erg vs out on the
+  //    flats), it CULLS OFF the instant you leave the erg (particles.visible=false),
+  //    it never GLOWS at night (uColor darkens with the sun), the erg hush ducks
+  //    the calm wind gain (inside < outside), and the discovery line fires ONCE
+  //    then never again. Day + night screenshots ship WITH the numbers.
+  //    Run: node scripts/rig-shot.mjs --scenario=erg-smoke --port=5271
+  'erg-smoke': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; ctx.weather.perceivedIntensity = 0;
+      const css = document.createElement('style');
+      css.textContent = '#hud,#hotbar,#crosshair,#dev-mode-badge,#interact-prompt,#damage-vignette,#long-storm-indicator,#shelter-indicator,#toast,#perf-hud,#crafting-menu,#dev-item-panel{display:none!important}';
+      document.head.appendChild(css);
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(1600, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1600 / 900; cam.updateProjectionMatrix(); }
+    });
+
+    // locate the nearest erg core + its tallest local crest
+    const spot = await page.evaluate(() => {
+      const bio = window.__game.ctx.biomes, terr = window.__game.ctx.terrain;
+      let coarse = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200)
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z; if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; coarse = { x, z }; }
+        }
+      if (!coarse) return null;
+      const info = bio.ergInfoAt(coarse.x, coarse.z);
+      // Find the tallest crest (max prominence over a 60m ring) in a grid around core.
+      const prom = (x, z) => {
+        const c = terr.heightAt(x, z); let s = 0;
+        for (let d = 0; d < 6; d++) { const a = d / 6 * Math.PI * 2; s += terr.heightAt(x + Math.cos(a) * 60, z + Math.sin(a) * 60); }
+        return c - s / 6;
+      };
+      let best = null, bp = -1e9;
+      for (let dx = -600; dx <= 600; dx += 24)
+        for (let dz = -600; dz <= 600; dz += 24) {
+          const x = coarse.x + dx, z = coarse.z + dz;
+          if (bio.ergAt(x, z) < 0.9) continue;
+          const p = prom(x, z);
+          if (p > bp) { bp = p; best = { x, z }; }
+        }
+      return { cx: best.x, cz: best.z, prom: +bp.toFixed(1), windRad: info ? info.windRad : 0, dist: Math.round(Math.hypot(best.x, best.z)) };
+    });
+    if (!spot) throw new Error('erg-smoke: NO erg found within a 24km scan');
+    console.log(`[erg-smoke] crest @(${spot.cx},${spot.cz}) ${spot.dist}m out, prominence=${spot.prom}m, wind=${(spot.windRad * 180 / Math.PI).toFixed(0)}°`);
+    await page.evaluate((s) => { window.__ergSmoke = s; }, spot);
+
+    // stream the crest in + let the smoke seed, then read state + day perf
+    const dayInfo = await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      window.__game.setTime(0.62);   // afternoon raking light
+      ctx.flags.paused = false;
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();   // stream + seed the spindrift
+      const cs = ctx.crestSmoke;
+      const pos = cs.particles.geometry.attributes.position.array;
+      const al = cs.particles.geometry.attributes.aAlpha.array;
+      let visible = 0, aboveGround = 0;
+      for (let i = 0; i < al.length; i++) {
+        if (pos[i * 3 + 1] > -9000) aboveGround++;
+        if (al[i] > 0.02 && pos[i * 3 + 1] > -9000) visible++;
+      }
+      // day perf: median frame ms over 120 frames (smoke ON)
+      const ms = [];
+      let last = performance.now();
+      for (let f = 0; f < 120; f++) { await raf(); const n = performance.now(); ms.push(n - last); last = n; }
+      ms.sort((a, b) => a - b);
+      const col = cs.mat.uniforms.uColor.value;
+      return {
+        layerVisible: cs.particles.visible, pool: al.length, aboveGround, visiblePuffs: visible,
+        dayMedMs: +ms[60].toFixed(2), dayColor: [+col.r.toFixed(3), +col.g.toFixed(3), +col.b.toFixed(3)],
+        opacity: +cs.mat.uniforms.uOpacity.value.toFixed(3),
+      };
+    }, spot);
+
+    // frame the crest looking DOWNWIND across the slip face (spindrift streams off
+    // the lip toward the haze), then PAUSE so the rig stays hidden + camera holds.
+    const frameCrest = () => {
+      const ctx = window.__game.ctx, cam = ctx.three.camera, s = window.__ergSmoke;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const wr = s.windRad, wx = Math.cos(wr), wz = Math.sin(wr);
+      // eye just behind + above the crest, looking downwind + slightly down the slip face
+      cam.position.set(s.cx - wx * 6, ctx.terrain.heightAt(s.cx, s.cz) + 3.2, s.cz - wz * 6);
+      const tx = s.cx + wx * 90, tz = s.cz + wz * 90;
+      cam.lookAt(tx, ctx.terrain.heightAt(tx, tz) + 2, tz);
+      cam.updateMatrixWorld(true);
+      ctx.flags.paused = true;
+    };
+    await page.evaluate(frameCrest);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-erg-smoke-day.png'), timeout: 60000 });
+    console.log('[erg-smoke] saved scen-erg-smoke-day.png');
+
+    // NIGHT — assert no glow (uColor darkens); re-seed the smoke at midnight (unpause
+    // → run frames → re-frame → pause), then screenshot.
+    const nightInfo = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      ctx.flags.paused = false;
+      window.__game.setTime(0.0);   // midnight
+      for (let f = 0; f < 80; f++) await raf();
+      const col = ctx.crestSmoke.mat.uniforms.uColor.value;
+      return { nightColor: [+col.r.toFixed(3), +col.g.toFixed(3), +col.b.toFixed(3)] };
+    });
+    await page.evaluate(frameCrest);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-erg-smoke-night.png'), timeout: 60000 });
+    console.log('[erg-smoke] saved scen-erg-smoke-night.png');
+    // unpause for the remaining runtime checks (cull / hush / discovery)
+    await page.evaluate(() => { window.__game.ctx.flags.paused = false; });
+
+    // CULL — teleport far out onto the open flats; smoke must switch OFF. Also the
+    // "far perf" baseline for the frame-cost delta.
+    const cullInfo = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      window.__game.setTime(0.62);
+      ctx.player.body.body.setTranslation({ x: 0, y: ctx.terrain.heightAt(0, 0) + 1.7, z: 0 }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 120; f++) await raf();
+      const ms = []; let last = performance.now();
+      for (let f = 0; f < 120; f++) { await raf(); const n = performance.now(); ms.push(n - last); last = n; }
+      ms.sort((a, b) => a - b);
+      return { layerVisible: ctx.crestSmoke.particles.visible, farMedMs: +ms[60].toFixed(2) };
+    });
+
+    // ERG HUSH — read the calm wind body gain inside the erg vs on the flats.
+    const hush = await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const read = () => { try { return window.__game.audioState(); } catch { return null; } };
+      // outside (still at origin from the cull step) — settle the hush lerp
+      ctx.weather.intensity = 0; ctx.weather.perceivedIntensity = 0;
+      for (let f = 0; f < 160; f++) await raf();
+      const out = read();
+      // inside the erg core — settle again
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 220; f++) await raf();
+      const ins = read();
+      // The desert WIND bed is muted (WIND_*_MASTER=0), so the audible ambience is
+      // the MUSIC pad — that's what the hush ducks. The sand-sigh (howl) rises.
+      const mus = (o) => o ? +o.gains.musicCalm.toFixed(4) : null;
+      return {
+        audioLive: !!out,
+        outHush: out ? +out.ergHush.toFixed(3) : null, inHush: ins ? +ins.ergHush.toFixed(3) : null,
+        outMusic: mus(out), inMusic: mus(ins),
+        outHowl: out && out.pwind ? +out.pwind.howlGain.toFixed(4) : null,
+        inHowl: ins && ins.pwind ? +ins.pwind.howlGain.toFixed(4) : null,
+      };
+    }, spot);
+
+    // DISCOVERY — reset the tutorial flag, spy the toast, crest ONCE → fire, then
+    // move off + back on → must NOT re-fire (flag persists = reload-proof).
+    const disco = await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      try { window.__game.resetTutorial(); } catch {}
+      window.__dd = 0;
+      const orig = ctx.ui.showToast;
+      ctx.ui.showToast = (t, o) => { if (t === 'the deep desert') window.__dd++; return orig ? orig(t, o) : undefined; };
+      const flag = () => { try { const r = JSON.parse(localStorage.getItem('dustfall.tutorial.v1') || '{}'); return Array.isArray(r.usedItems) && r.usedItems.includes('_evt_erg_first_crest'); } catch { return false; } };
+      // stand on the crest (prominence high, erg core) — fire
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      for (let f = 0; f < 90; f++) await raf();
+      const firedFlag = flag();
+      await new Promise((r) => setTimeout(r, 1200));   // let the 900ms toast timeout land
+      const toast1 = window.__dd;
+      // drop into a trough (low prominence) then climb the SAME crest again
+      const wr = s.windRad, wx = Math.cos(wr), wz = Math.sin(wr);
+      ctx.player.body.body.setTranslation({ x: s.cx + wx * 150, y: ctx.terrain.heightAt(s.cx + wx * 150, s.cz + wz * 150) + 1.7, z: s.cz + wz * 150 }, true);
+      for (let f = 0; f < 60; f++) await raf();
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      for (let f = 0; f < 90; f++) await raf();
+      await new Promise((r) => setTimeout(r, 1200));
+      const toast2 = window.__dd;
+      ctx.ui.showToast = orig;
+      return { firedFlag, toast1, toast2, flagPersists: flag() };
+    }, spot);
+
+    // ── verdict ──
+    const fails = [];
+    if (!dayInfo.layerVisible) fails.push('smoke layer not visible in the erg');
+    if (dayInfo.visiblePuffs < 8) fails.push(`too few visible puffs (${dayInfo.visiblePuffs})`);
+    if (cullInfo.layerVisible) fails.push('smoke did NOT cull off outside the erg');
+    // night glow: night color must be clearly DARKER than day color (sum of channels)
+    const daySum = dayInfo.dayColor.reduce((a, b) => a + b, 0);
+    const nightSum = nightInfo.nightColor.reduce((a, b) => a + b, 0);
+    if (nightSum > daySum * 0.5) fails.push(`night glow: night color ${nightInfo.nightColor} not dark vs day ${dayInfo.dayColor}`);
+    if (hush.audioLive) {
+      if (!(hush.inHush > hush.outHush + 0.2)) fails.push(`hush factor did not rise inside erg (in=${hush.inHush} out=${hush.outHush})`);
+      // audible ambience (the music pad) must DUCK inside; the deep sand-sigh (howl) must RISE inside.
+      if (hush.inMusic != null && hush.outMusic != null && !(hush.inMusic < hush.outMusic * 0.9)) fails.push(`music not ducked inside erg (in=${hush.inMusic} out=${hush.outMusic})`);
+      if (hush.inHowl != null && hush.outHowl != null && !(hush.inHowl > hush.outHowl + 0.002)) fails.push(`sand-sigh did not rise inside (in=${hush.inHowl} out=${hush.outHowl})`);
+    }
+    if (!disco.firedFlag) fails.push('discovery flag not set on first crest');
+    if (disco.toast1 !== 1) fails.push(`discovery toast fired ${disco.toast1}× on first crest (want 1)`);
+    if (disco.toast2 !== 1) fails.push(`discovery re-fired (toast count ${disco.toast2}) on second crest`);
+    if (!disco.flagPersists) fails.push('discovery flag did not persist (reload would re-fire)');
+    const pass = fails.length === 0;
+    console.log(`ERG-SMOKE pass=${pass ? 1 : 0} pool=${dayInfo.pool} visiblePuffs=${dayInfo.visiblePuffs} opacity=${dayInfo.opacity} perf(inErg=${dayInfo.dayMedMs}ms far=${cullInfo.farMedMs}ms delta=${(dayInfo.dayMedMs - cullInfo.farMedMs).toFixed(2)}ms) cull=${cullInfo.layerVisible ? 'ON!' : 'off'} nightColor=${JSON.stringify(nightInfo.nightColor)} dayColor=${JSON.stringify(dayInfo.dayColor)} hush(audio=${hush.audioLive} ergHush in=${hush.inHush}/out=${hush.outHush} music in=${hush.inMusic}/out=${hush.outMusic} sigh in=${hush.inHowl}/out=${hush.outHowl}) disco(flag=${disco.firedFlag} t1=${disco.toast1} t2=${disco.toast2} persist=${disco.flagPersists}) fails=${fails.length}`);
+    console.log(`[erg-smoke] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(fails)}`);
+    if (!pass) throw new Error('erg-smoke GATE FAILED');
+  },
+
+  // ── erg-dress (Deep Desert cycle 7) — the sparse TROUGH DRESSING proof. Scans
+  //    describeChunk over a large erg area: counts finds vs troughs (sparse:
+  //    target < ~1 per 2-3 troughs), asserts the descriptor is STABLE across two
+  //    derivations (determinism), confirms every find sits in the erg biome on a
+  //    trough floor (never a crest), and shoots ONE dressed trough as a picture.
+  //    Run: node scripts/rig-shot.mjs --scenario=erg-dress --seed=1337 --port=5273
+  'erg-dress': async (page) => {
+    const scan = await page.evaluate(() => {
+      const g = window.__game, ctx = g.ctx, bio = ctx.biomes, terr = ctx.terrain;
+      // find the nearest erg core
+      let core = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200)
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z; if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; core = { x, z }; }
+        }
+      if (!core) return null;
+      const SIZE = 112;
+      const ccx = Math.floor(core.x / SIZE), ccz = Math.floor(core.z / SIZE);
+      // radius in chunks covering the ~1500m erg radius (+margin)
+      const RC = 16;
+      let ergChunks = 0, troughChunks = 0, finds = 0, mismatch = 0, offBiome = 0, notTrough = 0;
+      const kinds = { wreck: 0, bone: 0, tree: 0 };
+      const found = [];
+      const troughDrop = (x, z) => {
+        const c = terr.pureHeightAt(x, z), R = 82;
+        const avg = (terr.pureHeightAt(x + R, z) + terr.pureHeightAt(x - R, z) + terr.pureHeightAt(x, z + R) + terr.pureHeightAt(x, z - R)) / 4;
+        return avg - c;
+      };
+      for (let dcx = -RC; dcx <= RC; dcx++)
+        for (let dcz = -RC; dcz <= RC; dcz++) {
+          const cx = ccx + dcx, cz = ccz + dcz;
+          const centerX = (cx + 0.5) * SIZE, centerZ = (cz + 0.5) * SIZE;
+          const isErg = bio.ergAt(centerX, centerZ) > 0.5;
+          if (isErg) ergChunks++;
+          // a chunk "has a trough" if its center sits meaningfully below its ring
+          if (isErg && troughDrop(centerX, centerZ) >= 6) troughChunks++;
+          const a = JSON.stringify(g.chunkDescribe(cx, cz));
+          const b = JSON.stringify(g.chunkDescribe(cx, cz));
+          if (a !== b) mismatch++;
+          const d = g.chunkDescribe(cx, cz);
+          if (d.ergDressing) {
+            finds++;
+            kinds[d.ergDressing.kind] = (kinds[d.ergDressing.kind] || 0) + 1;
+            const ex = d.ergDressing.x, ez = d.ergDressing.z;
+            if (bio.biomeAt(ex, ez) !== 'erg') offBiome++;
+            if (troughDrop(ex, ez) < 6) notTrough++;
+            if (found.length < 40) found.push({ cx, cz, kind: d.ergDressing.kind, x: ex, z: ez });
+          }
+        }
+      return { core, ccx, ccz, ergChunks, troughChunks, finds, mismatch, offBiome, notTrough, kinds, found, seed: ctx.seed };
+    });
+    if (!scan) throw new Error('erg-dress: NO erg found within a 24km scan');
+    const perTrough = scan.troughChunks ? (scan.finds / scan.troughChunks) : 0;
+    const fails = [];
+    if (scan.mismatch !== 0) fails.push(`${scan.mismatch} chunks unstable across two derivations`);
+    if (scan.offBiome !== 0) fails.push(`${scan.offBiome} finds off the erg biome`);
+    if (scan.notTrough !== 0) fails.push(`${scan.notTrough} finds NOT on a trough floor`);
+    if (scan.finds < 2) fails.push(`too few finds to judge (${scan.finds}) — is the erg big enough?`);
+    if (perTrough >= 0.5) fails.push(`too DENSE: ${perTrough.toFixed(2)} finds/trough (want < 0.5)`);
+    const pass = fails.length === 0;
+    console.log(`ERG-DRESS seed=${scan.seed} ergChunks=${scan.ergChunks} troughChunks=${scan.troughChunks} finds=${scan.finds} perTrough=${perTrough.toFixed(3)} kinds=${JSON.stringify(scan.kinds)} stable=${scan.mismatch === 0} offBiome=${scan.offBiome} notTrough=${scan.notTrough} fails=${fails.length}`);
+    console.log(`[erg-dress] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(fails)}`);
+
+    // Hunt a TREE find across a WIDER chunk window (chunkDescribe uses the pure
+    // closed-form height, valid anywhere) so we can eyeball the rarest kind's
+    // render path even when the local erg didn't happen to roll one.
+    const treeFind = await page.evaluate((core) => {
+      const g = window.__game, SIZE = 112;
+      const ccx = Math.floor(core.x / SIZE), ccz = Math.floor(core.z / SIZE);
+      for (let rc = 1; rc <= 130; rc++) {
+        for (let dcx = -rc; dcx <= rc; dcx++)
+          for (let dcz = -rc; dcz <= rc; dcz++) {
+            if (Math.max(Math.abs(dcx), Math.abs(dcz)) !== rc) continue;   // ring shell only
+            const d = g.chunkDescribe(ccx + dcx, ccz + dcz);
+            if (d.ergDressing && d.ergDressing.kind === 'tree') return { cx: ccx + dcx, cz: ccz + dcz, kind: 'tree', x: d.ergDressing.x, z: d.ergDressing.z };
+          }
+      }
+      return null;
+    }, scan.core);
+    if (treeFind) { console.log(`[erg-dress] tree find located @(${Math.round(treeFind.x)},${Math.round(treeFind.z)}) — rendering it`); scan.found.unshift(treeFind); }
+
+    // shoot ONE dressed trough (if any) — prefer a TREE find (rarest, worth
+    // eyeballing its render path), else the first find. Stream the chunk + frame it.
+    if (scan.found.length) {
+      const pick = scan.found.find((f) => f.kind === 'tree') || scan.found[0];
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        const css = document.createElement('style');
+        css.textContent = '#hud,#hotbar,#crosshair,#dev-mode-badge,#interact-prompt,#damage-vignette,#toast,#perf-hud{display:none!important}';
+        document.head.appendChild(css);
+        if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        ctx.three.renderer.setSize(1600, 900, false);
+        const cam = ctx.three.camera; if (cam.isPerspectiveCamera) { cam.aspect = 1600 / 900; cam.updateProjectionMatrix(); }
+        window.__game.setTime(0.6);
+      });
+      await page.evaluate(async (p) => {
+        const ctx = window.__game.ctx;
+        const raf = () => new Promise((r) => requestAnimationFrame(r));
+        ctx.flags.paused = false;
+        ctx.player.body.body.setTranslation({ x: p.x, y: ctx.terrain.heightAt(p.x, p.z) + 1.7, z: p.z }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        for (let f = 0; f < 200; f++) await raf();   // stream the chunk containing the find
+        const cam = ctx.three.camera;
+        cam.position.set(p.x + 8, ctx.terrain.heightAt(p.x + 8, p.z + 8) + 3, p.z + 8);
+        cam.lookAt(p.x, ctx.terrain.heightAt(p.x, p.z) + 0.6, p.z);
+        cam.updateMatrixWorld(true);
+        ctx.flags.paused = true;
+      }, pick);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-erg-dress-${pick.kind}.png`), timeout: 60000 });
+      console.log(`[erg-dress] saved scen-erg-dress-${pick.kind}.png (a ${pick.kind} in a trough @(${Math.round(pick.x)},${Math.round(pick.z)}))`);
+    }
+    if (!pass) throw new Error('erg-dress GATE FAILED');
   },
 
   // ── bone-scatter — the strewn bone-bit GALLERY (bone_field scatter vocabulary).

@@ -77,6 +77,7 @@ import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { buildPlayerRig, updatePlayerRig } from './player/playerRig.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
+import { createCrestSmoke, updateCrestSmoke } from './world/crestSmoke.ts';
 import { createDustMotes, updateDustMotes } from './world/dustMotes.ts';
 import { updateTerrainShaderUniforms } from './world/terrainMaterial.ts';
 import { updateFabricShaderUniforms } from './world/fabricMaterial.ts';
@@ -425,6 +426,7 @@ const sandWorms = sandWormHomes.map((home) =>
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
+const crestSmoke = createCrestSmoke(three.scene, three.camera);   // Deep Desert cycle 7 — spindrift off the dune crests (erg-only)
 const dustMotes = createDustMotes(three.scene, three.camera);
 const stormVignette = createStormVignette(three.scene);
 const footprints = createFootprintRegistry(three.scene, terrain);
@@ -500,6 +502,7 @@ const ctx: GameContext = {
     viewModel: null,
     rig: null,                       // ABO A3 — built post-context construction
     cameraSnapNextFrame: true,       // ABP Tier 3 — first frame is a "teleport"
+    ridingSledId: null,              // Deep-Desert cycle 5 (D257) — rideable-sled ride state (behind FEATURES.rideableSled)
   },
   pickups: { list: pickupList },
   inventory: createInventory(),
@@ -534,6 +537,7 @@ const ctx: GameContext = {
   salvageables,
   weather,
   ambientDust,
+  crestSmoke,
   dustMotes,
   stormVignette,
   speeder: null,                 // populated by setupOpeningScene on fresh worlds
@@ -1046,6 +1050,7 @@ startLoop(ctx, (c, dt) => {
   c.physics.step(dt);            // physics first
   updateWeather(c, dt);          // sandstorm intensity (drives sky + audio + thirst)
   updateAmbientDust(c, dt);      // toned-down drift, suppressed by sandstorm
+  updateCrestSmoke(c, dt);       // Deep Desert cycle 7 — spindrift streaming off the dune crests (erg-only; self-culls) + the first-crest discovery beat
   updateDustMotes(c);            // AAG — bone-white motes layer, persists through light storms
   // AAG — salt-flat mirage shader uniforms.
   updateTerrainShaderUniforms(
