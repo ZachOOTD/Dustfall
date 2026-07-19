@@ -1,12 +1,14 @@
 {
   "campaign": "The Deep Desert",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 4,
-  "current_tier": "ladder:6-sled-dune-feel",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 5,
+  "current_tier": "PAUSED:combined-review",
+  "awaiting_approval": true,
+  "stop_reasons": [
+    "feel-review"
+  ],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
@@ -21,7 +23,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 1150000
+    "total": 1800000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -57,6 +59,14 @@
       "outcome": "SHIPPED",
       "spend": 450000,
       "note": "kinematic seat-pin, approach 1 of 2 worked; sled-ride probe all phases; flag OFF, digests unchanged"
+    },
+    {
+      "n": 5,
+      "date": "2026-07-18",
+      "focus": "sled dune descent + presentation",
+      "outcome": "SHIPPED",
+      "spend": 650000,
+      "note": "agent stalled twice on its watcher; orchestrator took over verification -- all gates green x2 seeds; PAUSED combined review"
     }
   ]
 }
