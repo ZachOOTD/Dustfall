@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 6,
-  "current_tier": "ladder:7-dune-dressing",
+  "cycles_completed": 7,
+  "current_tier": "ladder:8-integration-polish",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "none",
@@ -21,7 +21,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 1850000
+    "total": 2400000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -74,6 +74,14 @@
       "spend": 50000,
       "commit": "b1b00e6",
       "note": "A/D inverted (yaw+ = left); carve gate now asserts direction (carveDot 0.66)"
+    },
+    {
+      "n": 7,
+      "date": "2026-07-19",
+      "focus": "dune dressing (smoke/finds/hush/discovery)",
+      "outcome": "SHIPPED",
+      "spend": 550000,
+      "note": "4 parked morning questions incl. music duck + shard collision"
     }
   ]
 }
