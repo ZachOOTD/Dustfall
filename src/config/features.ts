@@ -51,7 +51,8 @@ export const FEATURES = {
    *  OFF — `VITE_RIDEABLE_SLED=1` forces it ON for the sled-ride probe + the user's walk-test
    *  (riding FEEL is the exact D125 failure mode — headless can't judge it; adoption is
    *  walk-test-gated). Feel tuning (SLED_RIDE_* values) is cycle 6. */
-  rideableSled: import.meta.env?.VITE_RIDEABLE_SLED === '1',
+  // Deep Desert shipped 2026-07-19 (Zach's review approval): default ON; env kill-switch.
+  rideableSled: import.meta.env?.VITE_RIDEABLE_SLED !== '0',
 
   /** M10 ⑮ (C58) — repairable speeder (the "craftable hover-bike" = ONE vehicle, two states).
    *  OFF = the speeder spawns WORKING + rideable (the proven flow; current game unchanged).
