@@ -8,6 +8,12 @@
       "port": 5180
     },
     {
+      "name": "dustfall-sled",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:sled", "--", "--port", "5180", "--strictPort"],
+      "port": 5180
+    },
+    {
       "name": "dustfall-intro-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "preview", "--mode", "intro", "--port", "4173", "--strictPort"],
