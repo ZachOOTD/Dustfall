@@ -1,12 +1,14 @@
 {
   "campaign": "The Deep Desert",
-  "status": "active",
+  "status": "paused",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 7,
-  "current_tier": "ladder:8-integration-polish",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 8,
+  "current_tier": "PAUSED:morning-review (build complete)",
+  "awaiting_approval": true,
+  "stop_reasons": [
+    "feel-review"
+  ],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
@@ -21,7 +23,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 2400000
+    "total": 2500000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -82,6 +84,14 @@
       "outcome": "SHIPPED",
       "spend": 550000,
       "note": "4 parked morning questions incl. music duck + shard collision"
+    },
+    {
+      "n": 8,
+      "date": "2026-07-19",
+      "focus": "integration proof + docs closeout + morning summary",
+      "outcome": "SHIPPED",
+      "spend": 100000,
+      "note": "sled-dune re-run with smoke+dressing live: ALL PHASES PASS; campaign build complete, paused for Zach"
     }
   ]
 }
