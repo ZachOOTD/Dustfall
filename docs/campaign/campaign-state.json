@@ -1,14 +1,12 @@
 {
   "campaign": "The Deep Desert",
-  "status": "paused",
+  "status": "active",
   "started": "2026-07-18",
   "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 5,
-  "current_tier": "PAUSED:combined-review",
-  "awaiting_approval": true,
-  "stop_reasons": [
-    "feel-review"
-  ],
+  "cycles_completed": 6,
+  "current_tier": "ladder:7-dune-dressing",
+  "awaiting_approval": false,
+  "stop_reasons": [],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
@@ -23,7 +21,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 1800000
+    "total": 1850000
   },
   "charter": "docs/campaign/campaign-deep-desert.md",
   "cycles": [
@@ -67,6 +65,15 @@
       "outcome": "SHIPPED",
       "spend": 650000,
       "note": "agent stalled twice on its watcher; orchestrator took over verification -- all gates green x2 seeds; PAUSED combined review"
+    },
+    {
+      "n": 6,
+      "date": "2026-07-18",
+      "focus": "steering inversion fix (attended)",
+      "outcome": "SHIPPED",
+      "spend": 50000,
+      "commit": "b1b00e6",
+      "note": "A/D inverted (yaw+ = left); carve gate now asserts direction (carveDot 0.66)"
     }
   ]
 }
