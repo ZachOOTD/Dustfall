@@ -757,6 +757,40 @@ export const Tuning = {
   ERG_DUNE_AMP_MAX: 80,                // probe bound: primary crest-to-trough amplitude ≤ this
   ERG_POI_CHANCE_MULT: 0.15,           // erg is near-EMPTY by design — POI roll = base × this (troughs get sparse dressing later, cycle 4)
 
+  // ── The Deep Desert cycle 7 — dune DRESSING (the erg becomes a PLACE). ──
+  // 1) CREST SMOKE — wind-blown spindrift streaming off the mega-dune crests
+  //    (the signature erg image). A pooled sprite system (crestSmoke.ts); only
+  //    active while the player stands inside an erg. Particles seek the nearest
+  //    ridge line along the erg's wind axis, then stream downwind off the lip.
+  ERG_SMOKE_COUNT: 360,                 // pooled particles (small — cheap; overlap into a veil, not discrete balls)
+  ERG_SMOKE_SPREAD: 300,                // m — camera-centered wrap box (particles seed within this of the player)
+  ERG_SMOKE_SIZE: 3.2,                  // world-size of a spindrift puff sprite (size-attenuated) — smaller so they blend
+  ERG_SMOKE_WIND_M: 26,                 // m — crest-detection sample step along the wind axis (~0.1 dune wavelength × envelope)
+  ERG_SMOKE_LIFE_S: 2.6,                // seconds a puff streams before it re-seeds at a fresh crest
+  ERG_SMOKE_DRIFT_BASE: 7.0,            // m/s downwind drift on a calm day (wisps skimming the lip)
+  ERG_SMOKE_DRIFT_STORM: 24.0,          // m/s downwind drift at full pre-storm wind (streaming)
+  ERG_SMOKE_LIFT: 1.4,                  // m — how far a puff PEELS up off the surface over its life (ground-hugging spindrift, not balloons)
+  ERG_SMOKE_RIDGE_SPREAD: 34,           // m — lateral jitter along the ridge line at spawn (a plume, not a line)
+  ERG_SMOKE_OPACITY: 0.55,             // peak per-puff alpha (spindrift haze — reads as a veil but stays translucent)
+  ERG_SMOKE_NIGHT_FADE_LO: -0.05,       // sun height at which smoke is fully dark/dim (no night glow — lighting-invariant)
+  ERG_SMOKE_NIGHT_FADE_HI: 0.18,        // sun height at which smoke reaches full brightness
+  // 2) TROUGH DRESSING — rare deterministic finds half-buried in the dune
+  //    troughs (streamed via the chunk content path). Near-empty by design.
+  ERG_DRESS_CHANCE: 0.10,               // per qualifying (erg + trough) chunk — sparse (< ~1 per 2-3 troughs)
+  ERG_DRESS_TROUGH_RING_M: 82,          // m — ring radius for trough detection (< a dune half-wavelength)
+  ERG_DRESS_TROUGH_DROP_M: 6.0,         // point must sit ≥ this far BELOW the ring average (a genuine trough floor)
+  // 4) FIRST-CREST DISCOVERY — the one-time "the deep desert" beat when the
+  //    player first tops a mega-dune crest inside an erg (tracked in the
+  //    tutorial flag store, so it persists across save/load; fires once ever).
+  ERG_DISCOVERY_PROMINENCE_M: 16,       // player must stand ≥ this above the surrounding erg (60m ring) to count as "on a crest" — real mega-dune crests read ~20m over the ring
+  // 3) ERG HUSH — the awe-register soundscape duck inside a dune sea. The base
+  //    desert wind/ambience ducks toward a deep hush + a low sand-sigh; storm
+  //    audio is unaffected (only the calm bed ducks).
+  ERG_HUSH_DUCK: 0.62,                  // fraction the calm wind/ambience is ducked at the erg core (0=none, 1=silent). NB: the calm desert WIND bed is currently muted (WIND_*_MASTER=0), so this duck is future-proofing; the AUDIBLE hush is the music duck + sand-sigh below.
+  ERG_HUSH_MUSIC_DUCK: 0.4,             // fraction the calm MUSIC pad ducks inside the erg — the audible "quieter/awe" shift (the wind bed being muted, music is the only audible ambience). Modest dip, not a dropout. PARKED for Zach: veto if the score should stay full in the dunes.
+  ERG_HUSH_SIGH_MASTER: 0.06,           // level of the deep low sand-sigh brought UP inside the erg (the hush's floor tone — the dune sea's quiet voice)
+  ERG_HUSH_LERP_RATE: 0.7,             // per-second crossfade rate of the hush factor (smooth border, no pop)
+
   // Biomes (Session P; GG — rescaled for 2400m world)
   BIOME_NOISE_FREQ: 1 / 900,           // GG — 1/220 → 1/900; vast biome regions (~2.67 per 2400m axis)
   BIOME_THRESHOLD_ROCKY: -0.22,        // noise < this → rocky

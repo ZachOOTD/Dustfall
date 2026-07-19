@@ -8473,6 +8473,339 @@ const SCENARIOS = {
     `);
   },
 
+  // ── erg-smoke (Deep Desert cycle 7) — the CREST SMOKE proof + the erg hush +
+  //    the first-crest discovery beat. Streams the nearest erg, stands the player
+  //    on the tallest local crest, and PROVES: spindrift is visible + crest-riding
+  //    (a visible-puff count), it costs ~nothing (frame-ms in erg vs out on the
+  //    flats), it CULLS OFF the instant you leave the erg (particles.visible=false),
+  //    it never GLOWS at night (uColor darkens with the sun), the erg hush ducks
+  //    the calm wind gain (inside < outside), and the discovery line fires ONCE
+  //    then never again. Day + night screenshots ship WITH the numbers.
+  //    Run: node scripts/rig-shot.mjs --scenario=erg-smoke --port=5271
+  'erg-smoke': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.sandWorms.list.length = 0; try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; ctx.weather.perceivedIntensity = 0;
+      const css = document.createElement('style');
+      css.textContent = '#hud,#hotbar,#crosshair,#dev-mode-badge,#interact-prompt,#damage-vignette,#long-storm-indicator,#shelter-indicator,#toast,#perf-hud,#crafting-menu,#dev-item-panel{display:none!important}';
+      document.head.appendChild(css);
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(1600, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1600 / 900; cam.updateProjectionMatrix(); }
+    });
+
+    // locate the nearest erg core + its tallest local crest
+    const spot = await page.evaluate(() => {
+      const bio = window.__game.ctx.biomes, terr = window.__game.ctx.terrain;
+      let coarse = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200)
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z; if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; coarse = { x, z }; }
+        }
+      if (!coarse) return null;
+      const info = bio.ergInfoAt(coarse.x, coarse.z);
+      // Find the tallest crest (max prominence over a 60m ring) in a grid around core.
+      const prom = (x, z) => {
+        const c = terr.heightAt(x, z); let s = 0;
+        for (let d = 0; d < 6; d++) { const a = d / 6 * Math.PI * 2; s += terr.heightAt(x + Math.cos(a) * 60, z + Math.sin(a) * 60); }
+        return c - s / 6;
+      };
+      let best = null, bp = -1e9;
+      for (let dx = -600; dx <= 600; dx += 24)
+        for (let dz = -600; dz <= 600; dz += 24) {
+          const x = coarse.x + dx, z = coarse.z + dz;
+          if (bio.ergAt(x, z) < 0.9) continue;
+          const p = prom(x, z);
+          if (p > bp) { bp = p; best = { x, z }; }
+        }
+      return { cx: best.x, cz: best.z, prom: +bp.toFixed(1), windRad: info ? info.windRad : 0, dist: Math.round(Math.hypot(best.x, best.z)) };
+    });
+    if (!spot) throw new Error('erg-smoke: NO erg found within a 24km scan');
+    console.log(`[erg-smoke] crest @(${spot.cx},${spot.cz}) ${spot.dist}m out, prominence=${spot.prom}m, wind=${(spot.windRad * 180 / Math.PI).toFixed(0)}°`);
+    await page.evaluate((s) => { window.__ergSmoke = s; }, spot);
+
+    // stream the crest in + let the smoke seed, then read state + day perf
+    const dayInfo = await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      window.__game.setTime(0.62);   // afternoon raking light
+      ctx.flags.paused = false;
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 200; f++) await raf();   // stream + seed the spindrift
+      const cs = ctx.crestSmoke;
+      const pos = cs.particles.geometry.attributes.position.array;
+      const al = cs.particles.geometry.attributes.aAlpha.array;
+      let visible = 0, aboveGround = 0;
+      for (let i = 0; i < al.length; i++) {
+        if (pos[i * 3 + 1] > -9000) aboveGround++;
+        if (al[i] > 0.02 && pos[i * 3 + 1] > -9000) visible++;
+      }
+      // day perf: median frame ms over 120 frames (smoke ON)
+      const ms = [];
+      let last = performance.now();
+      for (let f = 0; f < 120; f++) { await raf(); const n = performance.now(); ms.push(n - last); last = n; }
+      ms.sort((a, b) => a - b);
+      const col = cs.mat.uniforms.uColor.value;
+      return {
+        layerVisible: cs.particles.visible, pool: al.length, aboveGround, visiblePuffs: visible,
+        dayMedMs: +ms[60].toFixed(2), dayColor: [+col.r.toFixed(3), +col.g.toFixed(3), +col.b.toFixed(3)],
+        opacity: +cs.mat.uniforms.uOpacity.value.toFixed(3),
+      };
+    }, spot);
+
+    // frame the crest looking DOWNWIND across the slip face (spindrift streams off
+    // the lip toward the haze), then PAUSE so the rig stays hidden + camera holds.
+    const frameCrest = () => {
+      const ctx = window.__game.ctx, cam = ctx.three.camera, s = window.__ergSmoke;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const wr = s.windRad, wx = Math.cos(wr), wz = Math.sin(wr);
+      // eye just behind + above the crest, looking downwind + slightly down the slip face
+      cam.position.set(s.cx - wx * 6, ctx.terrain.heightAt(s.cx, s.cz) + 3.2, s.cz - wz * 6);
+      const tx = s.cx + wx * 90, tz = s.cz + wz * 90;
+      cam.lookAt(tx, ctx.terrain.heightAt(tx, tz) + 2, tz);
+      cam.updateMatrixWorld(true);
+      ctx.flags.paused = true;
+    };
+    await page.evaluate(frameCrest);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-erg-smoke-day.png'), timeout: 60000 });
+    console.log('[erg-smoke] saved scen-erg-smoke-day.png');
+
+    // NIGHT — assert no glow (uColor darkens); re-seed the smoke at midnight (unpause
+    // → run frames → re-frame → pause), then screenshot.
+    const nightInfo = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      ctx.flags.paused = false;
+      window.__game.setTime(0.0);   // midnight
+      for (let f = 0; f < 80; f++) await raf();
+      const col = ctx.crestSmoke.mat.uniforms.uColor.value;
+      return { nightColor: [+col.r.toFixed(3), +col.g.toFixed(3), +col.b.toFixed(3)] };
+    });
+    await page.evaluate(frameCrest);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(OUT, 'scen-erg-smoke-night.png'), timeout: 60000 });
+    console.log('[erg-smoke] saved scen-erg-smoke-night.png');
+    // unpause for the remaining runtime checks (cull / hush / discovery)
+    await page.evaluate(() => { window.__game.ctx.flags.paused = false; });
+
+    // CULL — teleport far out onto the open flats; smoke must switch OFF. Also the
+    // "far perf" baseline for the frame-cost delta.
+    const cullInfo = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      window.__game.setTime(0.62);
+      ctx.player.body.body.setTranslation({ x: 0, y: ctx.terrain.heightAt(0, 0) + 1.7, z: 0 }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 120; f++) await raf();
+      const ms = []; let last = performance.now();
+      for (let f = 0; f < 120; f++) { await raf(); const n = performance.now(); ms.push(n - last); last = n; }
+      ms.sort((a, b) => a - b);
+      return { layerVisible: ctx.crestSmoke.particles.visible, farMedMs: +ms[60].toFixed(2) };
+    });
+
+    // ERG HUSH — read the calm wind body gain inside the erg vs on the flats.
+    const hush = await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const read = () => { try { return window.__game.audioState(); } catch { return null; } };
+      // outside (still at origin from the cull step) — settle the hush lerp
+      ctx.weather.intensity = 0; ctx.weather.perceivedIntensity = 0;
+      for (let f = 0; f < 160; f++) await raf();
+      const out = read();
+      // inside the erg core — settle again
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (let f = 0; f < 220; f++) await raf();
+      const ins = read();
+      // The desert WIND bed is muted (WIND_*_MASTER=0), so the audible ambience is
+      // the MUSIC pad — that's what the hush ducks. The sand-sigh (howl) rises.
+      const mus = (o) => o ? +o.gains.musicCalm.toFixed(4) : null;
+      return {
+        audioLive: !!out,
+        outHush: out ? +out.ergHush.toFixed(3) : null, inHush: ins ? +ins.ergHush.toFixed(3) : null,
+        outMusic: mus(out), inMusic: mus(ins),
+        outHowl: out && out.pwind ? +out.pwind.howlGain.toFixed(4) : null,
+        inHowl: ins && ins.pwind ? +ins.pwind.howlGain.toFixed(4) : null,
+      };
+    }, spot);
+
+    // DISCOVERY — reset the tutorial flag, spy the toast, crest ONCE → fire, then
+    // move off + back on → must NOT re-fire (flag persists = reload-proof).
+    const disco = await page.evaluate(async (s) => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      try { window.__game.resetTutorial(); } catch {}
+      window.__dd = 0;
+      const orig = ctx.ui.showToast;
+      ctx.ui.showToast = (t, o) => { if (t === 'the deep desert') window.__dd++; return orig ? orig(t, o) : undefined; };
+      const flag = () => { try { const r = JSON.parse(localStorage.getItem('dustfall.tutorial.v1') || '{}'); return Array.isArray(r.usedItems) && r.usedItems.includes('_evt_erg_first_crest'); } catch { return false; } };
+      // stand on the crest (prominence high, erg core) — fire
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      for (let f = 0; f < 90; f++) await raf();
+      const firedFlag = flag();
+      await new Promise((r) => setTimeout(r, 1200));   // let the 900ms toast timeout land
+      const toast1 = window.__dd;
+      // drop into a trough (low prominence) then climb the SAME crest again
+      const wr = s.windRad, wx = Math.cos(wr), wz = Math.sin(wr);
+      ctx.player.body.body.setTranslation({ x: s.cx + wx * 150, y: ctx.terrain.heightAt(s.cx + wx * 150, s.cz + wz * 150) + 1.7, z: s.cz + wz * 150 }, true);
+      for (let f = 0; f < 60; f++) await raf();
+      ctx.player.body.body.setTranslation({ x: s.cx, y: ctx.terrain.heightAt(s.cx, s.cz) + 1.7, z: s.cz }, true);
+      for (let f = 0; f < 90; f++) await raf();
+      await new Promise((r) => setTimeout(r, 1200));
+      const toast2 = window.__dd;
+      ctx.ui.showToast = orig;
+      return { firedFlag, toast1, toast2, flagPersists: flag() };
+    }, spot);
+
+    // ── verdict ──
+    const fails = [];
+    if (!dayInfo.layerVisible) fails.push('smoke layer not visible in the erg');
+    if (dayInfo.visiblePuffs < 8) fails.push(`too few visible puffs (${dayInfo.visiblePuffs})`);
+    if (cullInfo.layerVisible) fails.push('smoke did NOT cull off outside the erg');
+    // night glow: night color must be clearly DARKER than day color (sum of channels)
+    const daySum = dayInfo.dayColor.reduce((a, b) => a + b, 0);
+    const nightSum = nightInfo.nightColor.reduce((a, b) => a + b, 0);
+    if (nightSum > daySum * 0.5) fails.push(`night glow: night color ${nightInfo.nightColor} not dark vs day ${dayInfo.dayColor}`);
+    if (hush.audioLive) {
+      if (!(hush.inHush > hush.outHush + 0.2)) fails.push(`hush factor did not rise inside erg (in=${hush.inHush} out=${hush.outHush})`);
+      // audible ambience (the music pad) must DUCK inside; the deep sand-sigh (howl) must RISE inside.
+      if (hush.inMusic != null && hush.outMusic != null && !(hush.inMusic < hush.outMusic * 0.9)) fails.push(`music not ducked inside erg (in=${hush.inMusic} out=${hush.outMusic})`);
+      if (hush.inHowl != null && hush.outHowl != null && !(hush.inHowl > hush.outHowl + 0.002)) fails.push(`sand-sigh did not rise inside (in=${hush.inHowl} out=${hush.outHowl})`);
+    }
+    if (!disco.firedFlag) fails.push('discovery flag not set on first crest');
+    if (disco.toast1 !== 1) fails.push(`discovery toast fired ${disco.toast1}× on first crest (want 1)`);
+    if (disco.toast2 !== 1) fails.push(`discovery re-fired (toast count ${disco.toast2}) on second crest`);
+    if (!disco.flagPersists) fails.push('discovery flag did not persist (reload would re-fire)');
+    const pass = fails.length === 0;
+    console.log(`ERG-SMOKE pass=${pass ? 1 : 0} pool=${dayInfo.pool} visiblePuffs=${dayInfo.visiblePuffs} opacity=${dayInfo.opacity} perf(inErg=${dayInfo.dayMedMs}ms far=${cullInfo.farMedMs}ms delta=${(dayInfo.dayMedMs - cullInfo.farMedMs).toFixed(2)}ms) cull=${cullInfo.layerVisible ? 'ON!' : 'off'} nightColor=${JSON.stringify(nightInfo.nightColor)} dayColor=${JSON.stringify(dayInfo.dayColor)} hush(audio=${hush.audioLive} ergHush in=${hush.inHush}/out=${hush.outHush} music in=${hush.inMusic}/out=${hush.outMusic} sigh in=${hush.inHowl}/out=${hush.outHowl}) disco(flag=${disco.firedFlag} t1=${disco.toast1} t2=${disco.toast2} persist=${disco.flagPersists}) fails=${fails.length}`);
+    console.log(`[erg-smoke] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(fails)}`);
+    if (!pass) throw new Error('erg-smoke GATE FAILED');
+  },
+
+  // ── erg-dress (Deep Desert cycle 7) — the sparse TROUGH DRESSING proof. Scans
+  //    describeChunk over a large erg area: counts finds vs troughs (sparse:
+  //    target < ~1 per 2-3 troughs), asserts the descriptor is STABLE across two
+  //    derivations (determinism), confirms every find sits in the erg biome on a
+  //    trough floor (never a crest), and shoots ONE dressed trough as a picture.
+  //    Run: node scripts/rig-shot.mjs --scenario=erg-dress --seed=1337 --port=5273
+  'erg-dress': async (page) => {
+    const scan = await page.evaluate(() => {
+      const g = window.__game, ctx = g.ctx, bio = ctx.biomes, terr = ctx.terrain;
+      // find the nearest erg core
+      let core = null, bestD = Infinity;
+      for (let x = -24000; x <= 24000; x += 200)
+        for (let z = -24000; z <= 24000; z += 200) {
+          const dd = x * x + z * z; if (dd < 3000 * 3000) continue;
+          if (dd < bestD && bio.ergAt(x, z) > 0.9) { bestD = dd; core = { x, z }; }
+        }
+      if (!core) return null;
+      const SIZE = 112;
+      const ccx = Math.floor(core.x / SIZE), ccz = Math.floor(core.z / SIZE);
+      // radius in chunks covering the ~1500m erg radius (+margin)
+      const RC = 16;
+      let ergChunks = 0, troughChunks = 0, finds = 0, mismatch = 0, offBiome = 0, notTrough = 0;
+      const kinds = { wreck: 0, bone: 0, tree: 0 };
+      const found = [];
+      const troughDrop = (x, z) => {
+        const c = terr.pureHeightAt(x, z), R = 82;
+        const avg = (terr.pureHeightAt(x + R, z) + terr.pureHeightAt(x - R, z) + terr.pureHeightAt(x, z + R) + terr.pureHeightAt(x, z - R)) / 4;
+        return avg - c;
+      };
+      for (let dcx = -RC; dcx <= RC; dcx++)
+        for (let dcz = -RC; dcz <= RC; dcz++) {
+          const cx = ccx + dcx, cz = ccz + dcz;
+          const centerX = (cx + 0.5) * SIZE, centerZ = (cz + 0.5) * SIZE;
+          const isErg = bio.ergAt(centerX, centerZ) > 0.5;
+          if (isErg) ergChunks++;
+          // a chunk "has a trough" if its center sits meaningfully below its ring
+          if (isErg && troughDrop(centerX, centerZ) >= 6) troughChunks++;
+          const a = JSON.stringify(g.chunkDescribe(cx, cz));
+          const b = JSON.stringify(g.chunkDescribe(cx, cz));
+          if (a !== b) mismatch++;
+          const d = g.chunkDescribe(cx, cz);
+          if (d.ergDressing) {
+            finds++;
+            kinds[d.ergDressing.kind] = (kinds[d.ergDressing.kind] || 0) + 1;
+            const ex = d.ergDressing.x, ez = d.ergDressing.z;
+            if (bio.biomeAt(ex, ez) !== 'erg') offBiome++;
+            if (troughDrop(ex, ez) < 6) notTrough++;
+            if (found.length < 40) found.push({ cx, cz, kind: d.ergDressing.kind, x: ex, z: ez });
+          }
+        }
+      return { core, ccx, ccz, ergChunks, troughChunks, finds, mismatch, offBiome, notTrough, kinds, found, seed: ctx.seed };
+    });
+    if (!scan) throw new Error('erg-dress: NO erg found within a 24km scan');
+    const perTrough = scan.troughChunks ? (scan.finds / scan.troughChunks) : 0;
+    const fails = [];
+    if (scan.mismatch !== 0) fails.push(`${scan.mismatch} chunks unstable across two derivations`);
+    if (scan.offBiome !== 0) fails.push(`${scan.offBiome} finds off the erg biome`);
+    if (scan.notTrough !== 0) fails.push(`${scan.notTrough} finds NOT on a trough floor`);
+    if (scan.finds < 2) fails.push(`too few finds to judge (${scan.finds}) — is the erg big enough?`);
+    if (perTrough >= 0.5) fails.push(`too DENSE: ${perTrough.toFixed(2)} finds/trough (want < 0.5)`);
+    const pass = fails.length === 0;
+    console.log(`ERG-DRESS seed=${scan.seed} ergChunks=${scan.ergChunks} troughChunks=${scan.troughChunks} finds=${scan.finds} perTrough=${perTrough.toFixed(3)} kinds=${JSON.stringify(scan.kinds)} stable=${scan.mismatch === 0} offBiome=${scan.offBiome} notTrough=${scan.notTrough} fails=${fails.length}`);
+    console.log(`[erg-dress] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(fails)}`);
+
+    // Hunt a TREE find across a WIDER chunk window (chunkDescribe uses the pure
+    // closed-form height, valid anywhere) so we can eyeball the rarest kind's
+    // render path even when the local erg didn't happen to roll one.
+    const treeFind = await page.evaluate((core) => {
+      const g = window.__game, SIZE = 112;
+      const ccx = Math.floor(core.x / SIZE), ccz = Math.floor(core.z / SIZE);
+      for (let rc = 1; rc <= 130; rc++) {
+        for (let dcx = -rc; dcx <= rc; dcx++)
+          for (let dcz = -rc; dcz <= rc; dcz++) {
+            if (Math.max(Math.abs(dcx), Math.abs(dcz)) !== rc) continue;   // ring shell only
+            const d = g.chunkDescribe(ccx + dcx, ccz + dcz);
+            if (d.ergDressing && d.ergDressing.kind === 'tree') return { cx: ccx + dcx, cz: ccz + dcz, kind: 'tree', x: d.ergDressing.x, z: d.ergDressing.z };
+          }
+      }
+      return null;
+    }, scan.core);
+    if (treeFind) { console.log(`[erg-dress] tree find located @(${Math.round(treeFind.x)},${Math.round(treeFind.z)}) — rendering it`); scan.found.unshift(treeFind); }
+
+    // shoot ONE dressed trough (if any) — prefer a TREE find (rarest, worth
+    // eyeballing its render path), else the first find. Stream the chunk + frame it.
+    if (scan.found.length) {
+      const pick = scan.found.find((f) => f.kind === 'tree') || scan.found[0];
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        const css = document.createElement('style');
+        css.textContent = '#hud,#hotbar,#crosshair,#dev-mode-badge,#interact-prompt,#damage-vignette,#toast,#perf-hud{display:none!important}';
+        document.head.appendChild(css);
+        if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        ctx.three.renderer.setSize(1600, 900, false);
+        const cam = ctx.three.camera; if (cam.isPerspectiveCamera) { cam.aspect = 1600 / 900; cam.updateProjectionMatrix(); }
+        window.__game.setTime(0.6);
+      });
+      await page.evaluate(async (p) => {
+        const ctx = window.__game.ctx;
+        const raf = () => new Promise((r) => requestAnimationFrame(r));
+        ctx.flags.paused = false;
+        ctx.player.body.body.setTranslation({ x: p.x, y: ctx.terrain.heightAt(p.x, p.z) + 1.7, z: p.z }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        for (let f = 0; f < 200; f++) await raf();   // stream the chunk containing the find
+        const cam = ctx.three.camera;
+        cam.position.set(p.x + 8, ctx.terrain.heightAt(p.x + 8, p.z + 8) + 3, p.z + 8);
+        cam.lookAt(p.x, ctx.terrain.heightAt(p.x, p.z) + 0.6, p.z);
+        cam.updateMatrixWorld(true);
+        ctx.flags.paused = true;
+      }, pick);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(OUT, `scen-erg-dress-${pick.kind}.png`), timeout: 60000 });
+      console.log(`[erg-dress] saved scen-erg-dress-${pick.kind}.png (a ${pick.kind} in a trough @(${Math.round(pick.x)},${Math.round(pick.z)}))`);
+    }
+    if (!pass) throw new Error('erg-dress GATE FAILED');
+  },
+
   // ── bone-scatter — the strewn bone-bit GALLERY (bone_field scatter vocabulary).
   //    Builds every BoneBitKind across several seeds in a grid on real terrain +
   //    shoots them, and NUMERICALLY guards the `vertebra` kind against the tall cone
