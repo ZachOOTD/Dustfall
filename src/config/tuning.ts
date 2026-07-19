@@ -762,16 +762,22 @@ export const Tuning = {
   //    (the signature erg image). A pooled sprite system (crestSmoke.ts); only
   //    active while the player stands inside an erg. Particles seek the nearest
   //    ridge line along the erg's wind axis, then stream downwind off the lip.
-  ERG_SMOKE_COUNT: 360,                 // pooled particles (small — cheap; overlap into a veil, not discrete balls)
+  // Deep-Desert review fix (spindrift subtlety): MORE, SMALLER, fainter grains
+  // that overlap into a wind-streaked veil — you should never perceive an
+  // individual particle (the fragment shader draws a noise-eroded wind STREAK,
+  // not a disc; see crestSmoke.ts). Points are near-free, so the count doubled.
+  ERG_SMOKE_COUNT: 720,                 // pooled particles (cheap points; overlap into a fine veil, not discrete balls)
   ERG_SMOKE_SPREAD: 300,                // m — camera-centered wrap box (particles seed within this of the player)
-  ERG_SMOKE_SIZE: 3.2,                  // world-size of a spindrift puff sprite (size-attenuated) — smaller so they blend
+  ERG_SMOKE_SIZE: 2.4,                  // world-size of a spindrift grain (size-attenuated) — small so no sprite reads big
+  ERG_SMOKE_MAX_PX: 44,                 // hard screen-space size cap (px) — no giant near-camera sprite (with the near fade)
+  ERG_SMOKE_NEAR_FADE_M: 7,             // m — alpha ramps 0→1 from 3.5m to 7m: kills giant walk-through sprites, keeps 8m+ spindrift
   ERG_SMOKE_WIND_M: 26,                 // m — crest-detection sample step along the wind axis (~0.1 dune wavelength × envelope)
   ERG_SMOKE_LIFE_S: 2.6,                // seconds a puff streams before it re-seeds at a fresh crest
   ERG_SMOKE_DRIFT_BASE: 7.0,            // m/s downwind drift on a calm day (wisps skimming the lip)
   ERG_SMOKE_DRIFT_STORM: 24.0,          // m/s downwind drift at full pre-storm wind (streaming)
-  ERG_SMOKE_LIFT: 1.4,                  // m — how far a puff PEELS up off the surface over its life (ground-hugging spindrift, not balloons)
-  ERG_SMOKE_RIDGE_SPREAD: 34,           // m — lateral jitter along the ridge line at spawn (a plume, not a line)
-  ERG_SMOKE_OPACITY: 0.55,             // peak per-puff alpha (spindrift haze — reads as a veil but stays translucent)
+  ERG_SMOKE_LIFT: 0.85,                 // m — how far a grain PEELS up off the surface over its life (hug the sand, don't balloon/float)
+  ERG_SMOKE_RIDGE_SPREAD: 46,           // m — lateral jitter along the ridge line at spawn (fills gaps → veil, not spaced plumes)
+  ERG_SMOKE_OPACITY: 0.6,              // peak per-grain alpha (the aggregate veil carries the read; each grain stays faint + translucent)
   ERG_SMOKE_NIGHT_FADE_LO: -0.05,       // sun height at which smoke is fully dark/dim (no night glow — lighting-invariant)
   ERG_SMOKE_NIGHT_FADE_HI: 0.18,        // sun height at which smoke reaches full brightness
   // 2) TROUGH DRESSING — rare deterministic finds half-buried in the dune

@@ -632,6 +632,77 @@ export function attachRopeToSled(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Pack-up (Deep-Desert — reclaim a placed sled into a sled_kit)
+// ─────────────────────────────────────────────────────────────
+
+/** Reclaim a placed sled back into ONE `sled_kit`. Mirrors the established
+ *  placeable pack-up pattern (packUpBedroll / packUpLantern) but also owns
+ *  the sled's richer teardown: the RigidBody (with ALL its colliders — main
+ *  cuboid + top deck + back-wall sensor), the visual group, and any rope /
+ *  tether visual. Save/load can't resurrect it afterward because persistence
+ *  simply replays `ctx.sleds.list`, and the spliced entry is no longer in it.
+ *
+ *  Guards (each with its own toast, checked BEFORE any mutation):
+ *   - riding THIS sled       → refuse (defensive; you can't hover the seat).
+ *   - cargo aboard           → refuse ("empty the sled first").
+ *   - a locker on the deck   → refuse ("remove the locker first" — the locker
+ *                              is a separate entity parented to sled.group).
+ *   - no bag room            → refuse ("no room in your bag"; the kit slot is
+ *                              reserved FIRST via addItem so a full bag aborts
+ *                              cleanly, before anything is torn down).
+ *  A tether is NOT a refuse: detachRope cleanly frees/returns the rope, so we
+ *  auto-detach as part of the pack. Returns true only when the sled was packed. */
+export function packUpSled(ctx: GameContext, sled: Sled): boolean {
+  // Defensive — the ride seat isn't hoverable, but never tear the world out
+  // from under a rider.
+  if (ctx.player.ridingSledId === sled.id) {
+    ctx.ui.showToast('dismount before packing the sled');
+    return false;
+  }
+  if (sled.contents.length > 0) {
+    ctx.ui.showToast('empty the sled first');
+    return false;
+  }
+  if (sled.attachedLockerId !== null) {
+    ctx.ui.showToast('remove the locker first');
+    return false;
+  }
+  // Reserve the kit slot up front — if the bag is full, abort with the sled
+  // fully intact (nothing detached, nothing torn down).
+  const slotIdx = addItem(ctx.inventory, 'sled_kit', undefined, ctx);
+  if (slotIdx < 0) {
+    ctx.ui.showToast('no room in your bag');
+    return false;
+  }
+  // Auto-detach any tether. detachRope returns a deployed rope to the bag (or
+  // drops it at the player's feet if now full) and never fails — a clean free.
+  if (sled.tether.kind !== 'none') {
+    detachRope(ctx, sled);
+  }
+  // Settle any residual free-slide velocity before teardown (harmless — the
+  // body is removed immediately — but keeps the invariant tidy if the flag's on).
+  sled._slideVx = 0;
+  sled._slideVz = 0;
+  // Teardown. removeRigidBody drops the body AND every collider attached to it
+  // (main cuboid, top-deck shelf, back-wall sensor) in one call.
+  ctx.three.scene.remove(sled.group);
+  ctx.physics.world.removeRigidBody(sled.body);
+  if (sled.ropeMesh) {
+    disposeRopeMesh(ctx, sled.ropeMesh);
+    sled.ropeMesh = null;
+  }
+  // Clear the open-cargo pointer if it happened to reference this sled.
+  if (ctx.sleds.open === sled) {
+    ctx.sleds.open = null;
+    sled.opened = false;
+  }
+  const i = ctx.sleds.list.indexOf(sled);
+  if (i >= 0) ctx.sleds.list.splice(i, 1);
+  ctx.ui.showToast('sled packed up');
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Locker attachment (ACB P1)
 // ─────────────────────────────────────────────────────────────
 

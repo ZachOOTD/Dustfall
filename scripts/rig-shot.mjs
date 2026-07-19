@@ -79,7 +79,7 @@ const SCENARIO = argv.scenario || '';
 // feature forced ON. Vite exposes VITE_-prefixed env vars from process.env at
 // dev-server start; the spawned `npm run dev` inherits process.env, so setting it
 // here (before startDev) flips FEATURES.rideableSled true for THIS probe only.
-if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-pose') process.env.VITE_RIDEABLE_SLED = '1';
+if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-pose' || SCENARIO === 'sled-packup') process.env.VITE_RIDEABLE_SLED = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -357,6 +357,216 @@ const SCENARIOS = {
       && d.dismounted && d.onGround && Math.abs(d.standGap) < 0.15
       && e.remounted && e.pin < 0.1;
     console.log(`[sled-ride] RESULT: ${allPass ? 'ALL PHASES PASS' : 'FAILURE — see phases above'}`);
+  },
+
+  // ── sled-packup (Deep-Desert review-fix) ───────────────────────────────────
+  // Proves the RECLAIM affordance end-to-end via the REAL input path (aim the
+  // camera at the deck + press RMB → updateInteraction sets the hover, then
+  // updateWieldAction/handleContextAction → packUpSled). Asserts, in order:
+  //   GUARD     cargo aboard → pack-up refused, sled + kit unchanged.
+  //   PACK      empty deck → RMB packs it: sled gone from ctx.sleds.list, ONE
+  //             sled_kit returned to the bag, the RigidBody (+ all its colliders)
+  //             removed (world body-count drops).
+  //   PERSIST   save + load does NOT resurrect the packed sled (list replay only
+  //             replays what's in the list, and the spliced entry isn't).
+  //   REDEPLOY  a fresh sled can be placed again afterward.
+  'sled-packup': async (page) => {
+    const r = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;                 // FP → interaction ray from cam.position
+      ctx.input.controls.isLocked = true;            // isPlaying() → wieldAction ticks
+
+      const countKit = () => {
+        let n = 0;
+        for (const s of ctx.inventory.slots) if (s.item === 'sled_kit') n += s.count;
+        for (const s of ctx.inventory.backpack) if (s.item === 'sled_kit') n += s.count;
+        return n;
+      };
+
+      // Spawn a sled a few metres ahead on ~flat ground.
+      const p0 = ctx.player.body.body.translation();
+      const sx = p0.x + 3, sz = p0.z;
+      const { id } = window.__game.spawnSled(sx, sz, 0);
+      await step(3);
+      const find = () => ctx.sleds.list.find((s) => s.id === id);
+      if (!find()) return { error: 'sled spawn failed' };
+
+      const bodiesWithSled = ctx.physics.world.bodies.len();
+      const kitBefore = countKit();
+
+      // Aim at the deck from ~1.2m (inside the 2.5m interaction reach) + RMB one frame.
+      // Stand the player + let the KCC SETTLE the capsule first, THEN aim from the
+      // real (post-settle) eye — the FP interaction ray originates at the eye, so
+      // aiming before the capsule settles fires the ray from the wrong height.
+      const rmbOnSled = async () => {
+        const sled = find();
+        if (!sled) return null;
+        const ex = sled.pos.x - 1.2, ez = sled.pos.z;
+        ctx.player.body.body.setTranslation({ x: ex, y: ctx.terrain.heightAt(ex, ez) + 1.0, z: ez }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        await step(5);                               // KCC settles the capsule on terrain
+        const cam = ctx.three.camera;                // == player eye now (updatePlayer set it)
+        cam.lookAt(sled.pos.x, sled.pos.y + 0.05, sled.pos.z);
+        cam.updateMatrixWorld(true);
+        await step(1);                               // updateInteraction raycasts → sets the hover
+        const hovType = ctx.inventory.hover ? ctx.inventory.hover.type : null;
+        ctx.input.mousePressed.add(2);               // RMB pressed THIS frame
+        await step(1);                               // wieldAction/handleContextAction consumes it
+        return hovType;
+      };
+
+      // ── GUARD: cargo aboard blocks the pack-up. ──
+      find().contents.push({ itemId: 'rope', count: 1 });
+      const hovA = await rmbOnSled();
+      const blockedStillThere = !!find();
+      const kitAfterBlocked = countKit();
+
+      // ── PACK: empty the deck, RMB packs it. ──
+      find().contents.length = 0;
+      const hovB = await rmbOnSled();
+      const goneAfterPack = !find();
+      const kitAfterPack = countKit();
+      const bodiesAfterPack = ctx.physics.world.bodies.len();
+
+      // ── PERSIST: save + reload → stays gone. ──
+      const sv = window.__game.saveGame();
+      const ld = window.__game.loadGame();
+      await step(3);
+      const goneAfterReload = !ctx.sleds.list.find((s) => s.id === id);
+
+      // ── REDEPLOY: a fresh sled can be placed again. ──
+      const before = ctx.sleds.list.length;
+      window.__game.spawnSled(p0.x + 5, p0.z + 1, 0);
+      await step(2);
+      const redeployedOk = ctx.sleds.list.length === before + 1;
+
+      return {
+        id, hovA, hovB, bodiesWithSled, kitBefore,
+        blockedStillThere, kitAfterBlocked,
+        goneAfterPack, kitAfterPack, bodiesAfterPack,
+        saveOk: sv && sv.ok !== false, loadOk: ld && ld.ok !== false,
+        goneAfterReload, redeployedOk,
+      };
+    });
+    if (r.error) { console.log('[sled-packup] ABORT: ' + r.error); return; }
+    const guardPass = r.blockedStillThere && r.kitAfterBlocked === r.kitBefore;
+    const packPass = r.goneAfterPack && r.kitAfterPack === r.kitBefore + 1 && r.bodiesAfterPack < r.bodiesWithSled;
+    const persistPass = r.goneAfterReload && r.saveOk && r.loadOk;
+    console.log(`[sled-packup] hover types seen: guard=${r.hovA} pack=${r.hovB} (expect open_sled)`);
+    console.log(`[sled-packup] GUARD (cargo blocks): stillThere=${r.blockedStillThere} kit=${r.kitAfterBlocked}(was ${r.kitBefore}) => ${guardPass ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] PACK  (empty→kit): gone=${r.goneAfterPack} kit=${r.kitAfterPack} bodies ${r.bodiesWithSled}->${r.bodiesAfterPack} => ${packPass ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] PERSIST (save+load): goneAfterReload=${r.goneAfterReload} saveOk=${r.saveOk} loadOk=${r.loadOk} => ${persistPass ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] REDEPLOY (kit→new sled): ${r.redeployedOk} => ${r.redeployedOk ? 'PASS' : 'FAIL'}`);
+    console.log(`[sled-packup] RESULT: ${guardPass && packPass && persistPass && r.redeployedOk ? 'ALL PASS' : 'FAILURE — see above'}`);
+  },
+
+  // ── crest-smoke (Deep-Desert review-fix — spindrift subtlety) ───────────────
+  // Warp to an erg, climb to a mega-dune crest, then shoot the crest spindrift
+  // from the PLAYER'S EYE at three framings so the "circle read" can be judged:
+  //   (1) mid  — stand at the crest, look downwind + slightly down the slip face.
+  //   (2) close — drop just under the lip, look ALONG it (streaks blow across).
+  //   (3) night — same as mid but at deep night, to re-verify NO glow.
+  // Prints the erg wind + weather so runs are comparable. Framing is first-person
+  // (rig + viewmodel hidden). Filenames: scen-crest-{mid,close,night}.png.
+  'crest-smoke': async (page) => {
+    const info = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(r));
+      const step = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false;
+      ctx.flags.thirdPerson = false;
+      ctx.input.controls.isLocked = true;
+      // Hide the FP viewmodel + rig so nothing photobombs the sky/dune framing.
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(1200, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1200 / 720; cam.updateProjectionMatrix(); }
+
+      const erg = window.__game.gotoErg();
+      if (!erg) return { error: 'no erg within 14km for this seed' };
+      for (let i = 0; i < 10; i++) await raf();
+      const H = (x, z) => ctx.terrain.heightAt(x, z);
+      const nh = (x, z) => { const n = ctx.terrain.normalAt(x, z); return Math.hypot(n.x, n.z); };
+      // Find a slip face near the erg, climb to its crest (mirrors sled-dune PHASE 0).
+      let best = null;
+      for (let r = 40; r <= 1200; r += 18) {
+        for (let deg = 0; deg < 360; deg += 5) {
+          const x = erg.x + Math.cos(deg * Math.PI / 180) * r;
+          const z = erg.z + Math.sin(deg * Math.PI / 180) * r;
+          const m = nh(x, z);
+          if (m > 0.42 && m < 0.64) {
+            const score = -Math.abs(m - 0.53);
+            if (!best || score > best.score) best = { x, z, m, score };
+          }
+        }
+      }
+      if (!best) return { error: 'no slip face found in erg' };
+      let cx = best.x, cz = best.z;
+      for (let s = 0; s < 40; s++) {
+        const n = ctx.terrain.normalAt(cx, cz); const m = Math.hypot(n.x, n.z);
+        if (m < 0.12) break;
+        cx += (-n.x / m) * 2.5; cz += (-n.z / m) * 2.5;
+      }
+      const crestH = H(cx, cz);
+      // Downhill (slip-face) direction at the crest.
+      const nc = ctx.terrain.normalAt(cx, cz); const mc = Math.hypot(nc.x, nc.z) || 1;
+      const downX = nc.x / mc, downZ = nc.z / mc;
+      // Erg wind (the smoke streams along this).
+      const ei = ctx.biomes.ergInfoAt(cx, cz);
+      const windRad = ei ? ei.windRad : 0;
+      const mask = ei ? +ei.mask.toFixed(2) : 0;
+
+      // Breezy so the veil reads without being a whiteout (mid-strength stream).
+      ctx.weather.intensity = 0.35;
+      window.__cs = { cx, cz, crestH, downX, downZ, windRad };
+      window.__game.setTime(0.42);
+      await step(30);   // let the pool seed onto the crests
+      return { erg: [+erg.x.toFixed(0), +erg.z.toFixed(0)], crest: [+cx.toFixed(0), +cz.toFixed(0)], crestH: +crestH.toFixed(1), windRad: +windRad.toFixed(2), mask };
+    });
+    if (info.error) { console.log('[crest-smoke] ABORT: ' + info.error); return; }
+    console.log(`[crest-smoke] erg@(${info.erg}) crest@(${info.crest}) crestH=${info.crestH} windRad=${info.windRad} mask=${info.mask}`);
+
+    // Framing helper — place the eye + aim, run a few frames so smoke advects.
+    const frame = async (mode) => {
+      await page.evaluate(async (mode) => {
+        const ctx = window.__game.ctx;
+        const raf = () => new Promise((r) => requestAnimationFrame(r));
+        const cs = window.__cs;
+        const H = (x, z) => ctx.terrain.heightAt(x, z);
+        const cam = ctx.three.camera;
+        // Stand on the DOWNWIND (slip-face) side and look BACK UP at the crest lip
+        // against the sky — the spindrift streams off the lip toward the camera, so
+        // the puffs read against bright sky (the worst case for a circular-sprite
+        // read). 'close' = near the lip (near-camera sprite test); 'mid'/'night'
+        // pull back for the postcard.
+        const back = mode === 'close' ? 11 : 26;
+        if (mode === 'close') ctx.weather.intensity = 0.5;
+        else ctx.weather.intensity = 0.35;
+        const ex = cs.cx + cs.downX * back, ez = cs.cz + cs.downZ * back;
+        const ey = H(ex, ez) + 1.7;
+        ctx.player.body.body.setTranslation({ x: ex, y: ey, z: ez }, true);
+        cam.position.set(ex, ey, ez);
+        // Aim at the lip, a touch above it so the sky sits behind the streaming sand.
+        cam.lookAt(cs.cx, cs.crestH + 1.2, cs.cz);
+        if (mode === 'night') window.__game.setTime(0.86);
+        else window.__game.setTime(0.42);
+        cam.updateMatrixWorld(true);
+        // Camera is hand-placed; keep updatePlayer from yanking it back by pausing
+        // AFTER a few advection frames. Run frames first so smoke drifts into frame.
+        for (let i = 0; i < 24; i++) { await raf(); cam.updateMatrixWorld(true); }
+      }, mode);
+      await page.waitForTimeout(120);
+      await page.screenshot({ path: join(OUT, `scen-crest-${mode}.png`), timeout: 60000 });
+      console.log(`[crest-smoke] screenshot saved: scen-crest-${mode}.png`);
+    };
+    await frame('mid');
+    await frame('close');
+    await frame('night');
+    console.log('[crest-smoke] done — inspect scen-crest-{mid,close,night}.png');
   },
 
   // ── sled-dune (Deep-Desert cycle 6) ────────────────────────────────────────

@@ -37,30 +37,74 @@ export interface CrestSmoke {
 
 const VERT = /* glsl */`
   attribute float aAlpha;
+  attribute float aSeed;
   varying float vAlpha;
+  varying float vSeed;
+  varying float vDepth;         // view-space distance to the camera (metres)
   uniform float uSize;
   uniform float uScale;   // drawingBufferHeight * 0.5 (three's size-attenuation convention)
+  uniform float uMaxPx;   // hard screen-space size cap (belt-and-suspenders with the near fade)
   void main() {
     vAlpha = aAlpha;
+    vSeed = aSeed;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vDepth = -mv.z;
     gl_PointSize = uSize * (uScale / max(1.0, -mv.z));
-    gl_PointSize = clamp(gl_PointSize, 0.0, 128.0);
+    gl_PointSize = clamp(gl_PointSize, 0.0, uMaxPx);
     gl_Position = projectionMatrix * mv;
   }
 `;
 
+// The fragment shader is what KILLS the circular-sprite read (Deep-Desert review
+// fix). Instead of a radial disc it draws a WIND-ALIGNED STREAK eroded by value
+// noise, so you never perceive a round particle — only a fine granular veil:
+//   • rotate gl_PointCoord into a (along-wind, across-wind) basis using the
+//     screen-space wind direction (uWindScreen, set per-frame on the CPU);
+//   • soft anisotropic falloff — long along the wind, thin across it (a streak);
+//   • two octaves of value noise, seeded per particle, ERODE the alpha into
+//     irregular grains so there's no smooth blob edge anywhere;
+//   • a near-camera fade (uNearFade) drops alpha to 0 within ~metres of the eye
+//     so no sprite is ever seen large.
 const FRAG = /* glsl */`
   precision mediump float;
   varying float vAlpha;
+  varying float vSeed;
+  varying float vDepth;
   uniform vec3 uColor;
   uniform float uOpacity;
+  uniform vec2 uWindScreen;    // normalized screen-space wind axis (streak direction)
+  uniform float uNearFade;     // metres: alpha ramps 0→1 from uNearFade*0.5 to uNearFade
+
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i), b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0)), d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
   void main() {
-    // Soft round spindrift puff — feathered radial falloff.
-    vec2 d = gl_PointCoord - vec2(0.5);
-    float r = length(d);
-    float a = smoothstep(0.5, 0.06, r);
-    float alpha = a * vAlpha * uOpacity;
-    if (alpha < 0.003) discard;
+    vec2 pc = gl_PointCoord - vec2(0.5);           // centred sprite coords
+    // Rotate into the wind basis (streak axis = uWindScreen).
+    vec2 w = uWindScreen;
+    vec2 perp = vec2(-w.y, w.x);
+    float along = dot(pc, w);
+    float across = dot(pc, perp);
+    // Anisotropic soft falloff — long along the wind, thin across → a streak, not
+    // a disc. Gaussian-ish (no hard edge) so nothing reads as a bounded circle.
+    float qa = along / 0.5;
+    float qc = across / 0.16;
+    float shape = exp(-(qa * qa + qc * qc) * 2.1);
+    // Erode with per-particle value noise so the alpha is granular, never smooth.
+    vec2 np = (pc + vSeed * 9.0) * 5.5;
+    float n = vnoise(np) * 0.55 + vnoise(np * 2.7 + 1.7) * 0.45;
+    float grain = smoothstep(0.28, 0.85, n);
+    float a = shape * grain;
+    // Near-camera discipline: fade out anything within a few metres of the eye.
+    float near = smoothstep(uNearFade * 0.5, uNearFade, vDepth);
+    float alpha = a * vAlpha * uOpacity * near;
+    if (alpha < 0.004) discard;
     gl_FragColor = vec4(uColor, alpha);
   }
 `;
@@ -72,21 +116,27 @@ export function createCrestSmoke(
   const count = Tuning.ERG_SMOKE_COUNT;
   const positions = new Float32Array(count * 3);
   const alpha = new Float32Array(count);
+  const seed = new Float32Array(count);
   // Seed everything below the world so nothing shows until the first update
   // places it on a real crest (respawn on frame 1).
   for (let i = 0; i < count; i++) {
     positions[i * 3 + 1] = -9999;
+    seed[i] = Math.random();          // per-particle noise seed → each grain-pattern differs
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
+  geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
 
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uSize: { value: Tuning.ERG_SMOKE_SIZE },
       uScale: { value: 400 },
+      uMaxPx: { value: Tuning.ERG_SMOKE_MAX_PX },
       uColor: { value: new THREE.Color(0xcbb290) },
       uOpacity: { value: Tuning.ERG_SMOKE_OPACITY },
+      uWindScreen: { value: new THREE.Vector2(0, 1) },
+      uNearFade: { value: Tuning.ERG_SMOKE_NEAR_FADE_M },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -111,6 +161,8 @@ export function createCrestSmoke(
 }
 
 const _camPos = new THREE.Vector3();
+const _windView = new THREE.Vector3();
+const _camQuatInv = new THREE.Quaternion();
 
 // ── First-crest discovery beat state (piece 4). Transient sampling throttle;
 //    persistence is the tutorial flag store, so this only gates the sampling. ──
@@ -178,6 +230,18 @@ export function updateCrestSmoke(ctx: GameContext, dt: number): void {
   const wdx = Math.cos(windRad), wdz = Math.sin(windRad);
   // perpendicular (ridge) axis
   const rdx = -wdz, rdz = wdx;
+
+  // Screen-space wind axis → the fragment shader stretches each sprite into a
+  // STREAK along this (a spindrift smear, never a round puff). Transform the
+  // world wind vector into view space; its XY is the screen-space direction.
+  // The streak is symmetric, so the sign / Y-flip of gl_PointCoord doesn't
+  // matter — only the axis does.
+  _camQuatInv.copy(cs.cameraRef.quaternion).invert();
+  _windView.set(wdx, 0, wdz).applyQuaternion(_camQuatInv);
+  const wvLen = Math.hypot(_windView.x, _windView.y);
+  const wv = cs.mat.uniforms.uWindScreen.value as THREE.Vector2;
+  if (wvLen > 1e-4) wv.set(_windView.x / wvLen, _windView.y / wvLen);
+  else wv.set(0, 1);   // wind pointing at/away from camera → default vertical streak
   const breeze = 0.22 + 0.12 * Math.sin(ctx.time.elapsed * 0.13);
   const windK = Math.max(breeze, ctx.weather.intensity);     // 0..1
   const drift = Tuning.ERG_SMOKE_DRIFT_BASE + (Tuning.ERG_SMOKE_DRIFT_STORM - Tuning.ERG_SMOKE_DRIFT_BASE) * windK;

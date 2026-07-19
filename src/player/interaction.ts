@@ -1021,11 +1021,17 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       // primary E action becomes RIDE (E is polled + consumed in updateSleds's
       // mount path, which runs earlier this tick). Show a ride prompt instead of
       // the cargo prompt so the [E] chip reads true. OFF path unchanged.
+      // Deep-Desert — pack-up hint suffix. Shown only when packing would
+      // actually succeed (empty deck + no locker), so the RMB affordance
+      // never advertises an action that would just toast a refusal.
+      const packable = sled.contents.length === 0 && sled.attachedLockerId === null;
+      const packHint = packable ? '  ·  pack up [RMB]' : '';
+
       if (FEATURES.rideableSled && ctx.player.ridingSledId === null) {
         ctx.inventory.hover = {
           type: 'open_sled',
           distance: info.distance,
-          promptNoun: 'sled',
+          promptNoun: 'sled' + packHint,
           verb: 'ride',
         };
         return;
@@ -1038,7 +1044,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       ctx.inventory.hover = {
         type: 'open_sled',
         distance: info.distance,
-        promptNoun: empty ? 'sled (empty)' : 'sled cargo',
+        promptNoun: (empty ? 'sled (empty)' : 'sled cargo') + packHint,
       };
       if (ctx.input.pressed.has('KeyE')) {
         sled.opened = true;
