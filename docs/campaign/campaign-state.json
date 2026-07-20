@@ -1,14 +1,12 @@
 {
   "campaign": "Underworld",
-  "status": "paused",
+  "status": "active",
   "started": "2026-07-19",
   "branch": "campaign/2026-07-19-underworld",
   "cycles_completed": 2,
-  "current_tier": "PAUSED:checkpoint-1-cave-blockout",
-  "awaiting_approval": true,
-  "stop_reasons": [
-    "milestone-review"
-  ],
+  "current_tier": "overnight:3-cave-hero-geometry",
+  "awaiting_approval": false,
+  "stop_reasons": [],
   "self_author": "none",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
