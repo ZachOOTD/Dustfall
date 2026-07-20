@@ -1,0 +1,1133 @@
+// UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE: a deterministic room-graph +
+// corridor branching-tree cave (greybox trimesh), hung off cycle 1's entrance bore/throat,
+// living UNDER the intact terrain sheet (D307 under-sheet coexistence — the cave has its own
+// floors/walls; it never touches the neighbouring tiles' heightfield colliders). Behind
+// FEATURES.caveTest (default OFF → the surface world is byte-identical).
+//
+// WHY A NEW FILE (not grown into caveTest.ts): caveTest.ts owns the ENTRANCE weld — the
+// terrain heightfield→trimesh hole swap (its `caveTestHoleBlock` is imported by terrain.ts)
+// + the ramp/trench/throat box geometry that welds to the carved terrain lip. That is stable
+// cycle-1 enabling tech. This module is a distinct concern: the seed-pure ROOM GRAPH, corridor
+// routing, and the displaced-ring mesh lofting of the cave BODY. caveTest hands us a JUNCTION
+// (the throat's open far end); we grow the tree from there.
+//
+// THE ALGORITHM (room-graph + corridor carving, per docs/research/cave-feasibility.md — a
+// BRANCHING TREE, no maze loops, for backtrack-able dark-nav):
+//   1. Node 0 = the entrance hall, planted at the throat junction (floor = junction floor).
+//   2. A descending TRUNK of CAVE_GEN_TRUNK_STEPS chambers walks forward+down from node 0; the
+//      LAST trunk node is the EGG chamber (the deepest + largest — tagged in userData for
+//      cycle 4+). Each trunk corridor's horizontal run is SIZED from its vertical drop so the
+//      floor slope is ≤ CAVE_GEN_MAX_SLOPE by construction (the slope gate can't fail).
+//   3. Side POCKETS branch off non-egg nodes (sideways, shallow) until the chamber count lands
+//      in [MIN, MAX]. Overlap-rejected so chambers stay separated (only corridors connect them),
+//      and never allowed deeper than the egg (egg stays strictly deepest).
+//   4. Every chamber's ceiling is clamped ≥ CAVE_GEN_MIN_COVER below the real terrain height
+//      (no poke-through). The tree (V nodes, V-1 edges) is guaranteed acyclic by construction.
+//
+// THE MESH (greybox but REAL — reads "cave", not "corridor level"): each chamber is a displaced
+// ellipsoid SHELL (irregular rock walls + a domed ceiling) with a FLAT walkable floor (the lower
+// cap is clamped to the floor plane); each corridor is a displaced D-section TUBE (flat tilted
+// floor + arched ceiling). Portal APERTURES are cut in each chamber shell facing its corridors,
+// and the corridor end rings overlap INTO the chambers so there's no gap + no see-through (rule
+// 7 — the player is always inside a closed cavity; shells render BackSide = the interior face of
+// solid rock). One TRIMESH collider is baked from the exact visual triangles (rule 9).
+//
+// DETERMINISM (D290): the generator draws ONLY from its own hashed RNG (caveGenSeed) + a private
+// simplex stream — never the shared procgen rand — so the seeded surface world is untouched and
+// same-seed → identical layout (a graph+vertex digest proves it in the cave-walk gate).
+
+import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
+import { createNoise3D } from 'simplex-noise';
+import type { Terrain } from './terrain.ts';
+import { makeStaticTrimesh } from '../physics/bodies.ts';
+import { makeRng } from '../core/rng.ts';
+import { Tuning } from '../config/tuning.ts';
+
+/** The hand-off from the entrance bore: the throat's open far end (where the cave body begins). */
+export interface CaveJunction {
+  x: number; y: number; z: number;   // throat-far floor point (cave node 0 sits just past it)
+  gy: number;                        // surface height at the mouth (depth reference)
+  width: number;                     // throat clear width
+  heading: { x: number; z: number }; // unit XZ heading into the cave (+X from the bore)
+}
+
+export type CaveNodeKind = 'entrance' | 'pocket' | 'hall' | 'egg';
+
+export interface CaveNode {
+  id: number;
+  x: number; z: number;   // horizontal centre
+  floorY: number;         // flat floor plane world Y
+  rx: number; rz: number; // horizontal ellipsoid radii
+  height: number;         // interior clear height (ceiling = floorY + height)
+  kind: CaveNodeKind;
+  parent: number;         // parent node id (-1 for the entrance)
+  hx: number; hz: number; // the incoming heading (for sideways-branch placement)
+}
+
+export interface CaveEdge {
+  a: number; b: number;   // node ids (a = parent, b = child)
+  halfW: number;          // corridor half-width (clear)
+  height: number;         // corridor clear height
+  squeeze: boolean;
+}
+
+export interface CaveGraph {
+  nodes: CaveNode[];
+  edges: CaveEdge[];
+  eggId: number;
+  tour: number[];         // Euler tour of node ids from the root (each edge down+up) — the march route
+  depthBelowSurface: number;  // gy - egg.floorY
+}
+
+/** Pure hash of the world seed → the cave generator's private RNG seed. Never consumes the
+ *  shared procgen stream (D208), so the surface world stays byte-identical. */
+export function caveGenSeed(worldSeed: number): number {
+  let h = (worldSeed ^ 0xe6600a7e) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39) >>> 0;
+  h ^= h >>> 15;
+  return h >>> 0;
+}
+
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+// ── The room-graph generator ────────────────────────────────────────────────
+
+export function generateCaveGraph(seed: number, junction: CaveJunction, terrain: Terrain): CaveGraph {
+  const T = Tuning;
+  const rand = makeRng(seed);
+  const nodes: CaveNode[] = [];
+  const edges: CaveEdge[] = [];
+
+  // Deepen a node so its ceiling keeps ≥ MIN_COVER of rock below the terrain sheet (never raises
+  // it — the cave only goes deeper). `floorGuard` keeps non-egg nodes above the egg's floor.
+  const clampCover = (n: CaveNode, floorGuard: number | null): void => {
+    // MIN terrain over the chamber footprint (centre + a ring at rx) — a nearby dune valley must
+    // not clip the ceiling even if the centre sits under high ground.
+    let terrH = terrain.pureHeightAt(n.x, n.z);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      terrH = Math.min(terrH, terrain.pureHeightAt(n.x + Math.cos(a) * n.rx, n.z + Math.sin(a) * n.rx));
+    }
+    const coverFloor = terrH - T.CAVE_GEN_MIN_COVER - n.height - T.CAVE_GEN_DISP_AMP;
+    if (n.floorY > coverFloor) n.floorY = coverFloor;             // deepen for cover
+    if (floorGuard !== null && n.floorY < floorGuard) n.floorY = floorGuard;  // but stay above the egg
+  };
+
+  // Node 0 — the entrance hall, planted at the throat junction (floor continuous with the throat).
+  const h0x = junction.heading.x, h0z = junction.heading.z;
+  const n0: CaveNode = {
+    id: 0,
+    x: junction.x + h0x * T.CAVE_GEN_ENTRANCE_RX * 0.5,
+    z: junction.z + h0z * T.CAVE_GEN_ENTRANCE_RX * 0.5,
+    floorY: junction.y,
+    rx: T.CAVE_GEN_ENTRANCE_RX, rz: T.CAVE_GEN_ENTRANCE_RX * 0.92,
+    height: T.CAVE_GEN_ENTRANCE_H,
+    kind: 'entrance', parent: -1, hx: h0x, hz: h0z,
+  };
+  nodes.push(n0);
+
+  // Counts + the egg's target depth.
+  const trunkSteps = T.CAVE_GEN_TRUNK_STEPS_MIN
+    + Math.floor(rand() * (T.CAVE_GEN_TRUNK_STEPS_MAX - T.CAVE_GEN_TRUNK_STEPS_MIN + 1));
+  const totalChambers = T.CAVE_GEN_CHAMBERS_MIN
+    + Math.floor(rand() * (T.CAVE_GEN_CHAMBERS_MAX - T.CAVE_GEN_CHAMBERS_MIN + 1));
+  const eggDepth = lerp(T.CAVE_GEN_DEPTH_MIN, T.CAVE_GEN_DEPTH_MAX, rand());
+  const entranceDepth = junction.gy - junction.y;             // ~12m
+  const trunkDescent = Math.max(6, eggDepth - entranceDepth);
+  const perDrop = trunkDescent / trunkSteps;
+  const slopeTarget = ((T.CAVE_GEN_MAX_SLOPE - 2) * Math.PI) / 180;
+  const tanSlope = Math.tan(slopeTarget);
+  const hallIndex = trunkSteps - 1;                          // the big gallery sits just before the egg
+  // Centre-to-centre run for a corridor. The floor ramps ONLY over the CLEAR span between the two
+  // chamber shells (the tube floor stays flat = the chamber floor across each chamber's flat-floor
+  // disk — buildCorridorGeometry — so the corridor never steps off the disk into a cliff). So size
+  // the run for the CLEAR span (centreDist − raRx − rbRx ≥ drop/tan(target)); the chamber radii add
+  // on top. Jitter only lengthens (flatter, never steeper).
+  const runFor = (raRx: number, rbRx: number, drop: number): number => {
+    const clearSpan = Math.max(T.CAVE_GEN_CORRIDOR_RUN_MIN, drop / tanSlope) * (1 + rand() * 0.25);
+    return raRx + rbRx + clearSpan;
+  };
+
+  // Trunk — descend forward, bending gently, each node deeper than the last (egg = last).
+  let prev = n0;
+  let hx = h0x, hz = h0z;
+  const eggFloorY = junction.y - trunkDescent;               // the egg's floor (deepest)
+  for (let s = 1; s <= trunkSteps; s++) {
+    const ang = (rand() - 0.5) * ((40 * Math.PI) / 180);     // gentle bend keeps it forward (no loops)
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    const nhx = hx * c - hz * sn, nhz = hx * sn + hz * c;
+    hx = nhx; hz = nhz;
+    const isEgg = s === trunkSteps;
+    const isHall = s === hallIndex && !isEgg;
+    const drop = isEgg ? (prev.floorY - eggFloorY) : perDrop * (0.85 + rand() * 0.3);
+    const rx = isEgg ? T.CAVE_GEN_EGG_RX
+      : isHall ? T.CAVE_GEN_HALL_RX
+        : lerp(T.CAVE_GEN_POCKET_RX_MAX - 0.4, T.CAVE_GEN_POCKET_RX_MAX + 1.2, rand());
+    const height = isEgg ? T.CAVE_GEN_EGG_H
+      : isHall ? T.CAVE_GEN_HALL_H
+        : lerp(T.CAVE_GEN_POCKET_H_MIN + 0.6, T.CAVE_GEN_POCKET_H_MAX, rand());
+    const run = runFor(prev.rx, rx, drop);
+    const node: CaveNode = {
+      id: nodes.length,
+      x: prev.x + hx * run, z: prev.z + hz * run,
+      floorY: prev.floorY - drop,
+      rx, rz: rx * (0.86 + rand() * 0.2),
+      height,
+      kind: isEgg ? 'egg' : isHall ? 'hall' : 'pocket',
+      parent: prev.id, hx, hz,
+    };
+    if (!isEgg) clampCover(node, eggFloorY + 3);
+    else clampCover(node, null);
+    nodes.push(node);
+    edges.push(makeEdge(prev, node, rand));
+    prev = node;
+  }
+
+  // Force the trunk to have BOTH a wide gallery (the entry corridor) and a squeeze (right after)
+  // so the player meets varied cross-sections early — the rest stay as rolled.
+  if (edges.length >= 1) { edges[0].squeeze = false; edges[0].halfW = T.CAVE_GEN_GALLERY_HALF_W; edges[0].height = T.CAVE_GEN_GALLERY_H; }
+  if (edges.length >= 2) { edges[1].squeeze = true; edges[1].halfW = T.CAVE_GEN_SQUEEZE_HALF_W; edges[1].height = T.CAVE_GEN_SQUEEZE_H; }
+
+  const eggId = nodes.length - 1;
+
+  // Side pockets — branch sideways off non-egg nodes until the count lands in range.
+  let attempts = 0;
+  while (nodes.length < totalChambers && attempts < 120) {
+    attempts++;
+    // Branch off deeper chambers only (never the shallow entrance) so pockets inherit real cover —
+    // a branch off the ~12m-deep entrance can poke through a nearby dune valley.
+    const candidates = nodes.filter((n) => n.kind !== 'egg' && n.kind !== 'entrance');
+    const parent = candidates[Math.floor(rand() * candidates.length)];
+    const side = rand() < 0.5 ? 1 : -1;
+    const ang = side * ((60 + rand() * 50) * Math.PI) / 180;   // roughly perpendicular to the trunk
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    const bhx = parent.hx * c - parent.hz * sn, bhz = parent.hx * sn + parent.hz * c;
+    const drop = rand() * T.CAVE_GEN_BRANCH_DROP_MAX;
+    const rx = lerp(T.CAVE_GEN_POCKET_RX_MIN, T.CAVE_GEN_POCKET_RX_MAX, rand());
+    const height = lerp(T.CAVE_GEN_POCKET_H_MIN, T.CAVE_GEN_POCKET_H_MAX, rand());
+    const run = runFor(parent.rx, rx, drop);
+    const node: CaveNode = {
+      id: nodes.length,
+      x: parent.x + bhx * run, z: parent.z + bhz * run,
+      floorY: parent.floorY - drop,
+      rx, rz: rx * (0.86 + rand() * 0.2),
+      height,
+      kind: 'pocket', parent: parent.id, hx: bhx, hz: bhz,
+    };
+    clampCover(node, eggFloorY + 3);                          // never deeper than the egg
+    if (tooClose(node, nodes, parent.id)) continue;           // reject chamber overlap
+    if (corridorCrowds(parent, node, nodes, edges)) continue; // reject crossing/crowding corridors
+    nodes.push(node);
+    edges.push(makeEdge(parent, node, rand));
+  }
+
+  // Corridor-span cover pass — a corridor can dip under a dune valley BETWEEN two well-covered
+  // chambers. Sample the terrain min along each corridor and deepen the SHALLOWER endpoint until
+  // its ceiling clears (never the entrance — its floor is welded to the throat — nor below the
+  // egg). Deepening the shallow end only FLATTENS that corridor (slope-safe); a couple of passes
+  // let it propagate. The egg is re-confirmed deepest afterward.
+  for (let iter = 0; iter < 3; iter++) {
+    for (const e of edges) {
+      const a = nodes[e.a], b = nodes[e.b];
+      const D = Math.hypot(b.x - a.x, b.z - a.z);
+      const steps = Math.max(4, Math.ceil(D / 3));
+      let minTerr = Infinity;
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        minTerr = Math.min(minTerr, terrain.pureHeightAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t));
+      }
+      const shallow = a.floorY >= b.floorY ? a : b;
+      if (shallow.kind === 'entrance') continue;                // never move the welded entrance
+      const need = minTerr - T.CAVE_GEN_MIN_COVER - shallow.height - T.CAVE_GEN_DISP_AMP;
+      if (shallow.floorY > need) shallow.floorY = Math.max(need, eggFloorY + 2);   // deepen, stay above egg
+    }
+  }
+
+  // SLOPE GUARANTEE re-asserted against the FINAL floors. `runFor` sized every corridor from its
+  // PROVISIONAL drop, but clampCover + the corridor-span cover pass move chambers vertically AFTER
+  // sizing (a deepened child steepens the corridor above it — suspects a/c). For any corridor now
+  // steeper than the target, push the child AND ITS WHOLE SUBTREE outward along the corridor heading
+  // until the run again fits the FINAL drop at ≤ the slope target. Rigid subtree translation leaves
+  // every downstream corridor's slope + relative shape untouched; it fires only where deepening
+  // actually over-steepened a run (within-target seeds keep their exact layout). Node ids are
+  // creation order and a parent is always created before its child, so id-ascending is topological.
+  const childIdsOf = (id: number): number[] => nodes.filter((n) => n.parent === id).map((n) => n.id);
+  const translateSubtree = (rootId: number, dx: number, dz: number): void => {
+    const stack = [rootId];
+    while (stack.length) {
+      const id = stack.pop()!;
+      nodes[id].x += dx; nodes[id].z += dz;
+      for (const c of childIdsOf(id)) stack.push(c);
+    }
+  };
+  for (let s = 1; s < nodes.length; s++) {
+    const n = nodes[s], p = nodes[n.parent];
+    const drop = Math.abs(p.floorY - n.floorY);
+    const centerDist = Math.hypot(n.x - p.x, n.z - p.z);
+    const need = p.rx + n.rx + drop / tanSlope;   // clear span (shell-to-shell) fits the drop at target
+    if (centerDist < need - 1e-3) {
+      const extra = need - centerDist, u = 1 / (centerDist || 1);
+      translateSubtree(n.id, (n.x - p.x) * u * extra, (n.z - p.z) * u * extra);
+    }
+  }
+
+  // FAIL-LOUD tripwire (dev only) — the generator must NEVER emit an untraversable cave (the cave
+  // holds the mandatory egg). Validate the FINAL geometry: every corridor's centre-to-centre floor
+  // slope ≤ the ceiling (+ a small displacement margin), clear height ≥ the 2.0m headroom minimum,
+  // and sibling corridors diverging (no crossing mouths). Throws in dev so a bad seed is caught at
+  // the source; production (guarantee already enforced above) degrades to the built geometry.
+  if (import.meta.env?.DEV) assertCaveTraversable(nodes, edges);
+
+  // Euler tour of the tree from the root (each edge down then up) — the DFS march route with
+  // backtracking through junctions. Children sorted by id for determinism.
+  const children = new Map<number, number[]>();
+  for (const e of edges) {
+    if (!children.has(e.a)) children.set(e.a, []);
+    children.get(e.a)!.push(e.b);
+  }
+  for (const arr of children.values()) arr.sort((p, q) => p - q);
+  const tour: number[] = [];
+  const dfs = (u: number): void => {
+    tour.push(u);
+    for (const ch of children.get(u) ?? []) { dfs(ch); tour.push(u); }
+  };
+  dfs(0);
+
+  return { nodes, edges, eggId, tour, depthBelowSurface: junction.gy - nodes[eggId].floorY };
+}
+
+/** Dev-only guarantee tripwire: throws if the FINAL cave geometry is untraversable — a corridor floor
+ *  steeper than the ceiling (centre-to-centre, matching how the mesh + probe measure the ramp), a
+ *  corridor clear height below the 2.0m headroom minimum, or two sibling corridors whose mouths cross
+ *  (< MIN_SIBLING_ANGLE apart). A generator that can silently emit a broken mandatory objective is a
+ *  bug; this makes it fail at the source instead. */
+function assertCaveTraversable(nodes: CaveNode[], edges: CaveEdge[]): void {
+  const T = Tuning;
+  const slopeCeil = T.CAVE_GEN_MAX_SLOPE + 4;   // ° — +margin for local floor displacement
+  for (const e of edges) {
+    const a = nodes[e.a], b = nodes[e.b];
+    const cd = Math.hypot(b.x - a.x, b.z - a.z);
+    const rampSpan = Math.max(0.5, cd - a.rx - b.rx);   // the floor ramps only over the CLEAR span
+    const slopeDeg = (Math.atan2(Math.abs(a.floorY - b.floorY), rampSpan) * 180) / Math.PI;
+    if (slopeDeg > slopeCeil)
+      throw new Error(`caveGen: corridor ${e.a}-${e.b} floor slope ${slopeDeg.toFixed(1)}° > ${slopeCeil}° — untraversable`);
+    if (e.height < 2.0)
+      throw new Error(`caveGen: corridor ${e.a}-${e.b} clear height ${e.height}m < 2.0m headroom`);
+  }
+  const minCos = Math.cos((T.CAVE_GEN_MIN_SIBLING_ANGLE * Math.PI) / 180);
+  for (const p of nodes) {
+    const kids = edges.filter((e) => e.a === p.id).map((e) => nodes[e.b]);
+    for (let i = 0; i < kids.length; i++) {
+      for (let j = i + 1; j < kids.length; j++) {
+        const A = kids[i], B = kids[j];
+        const la = Math.hypot(A.x - p.x, A.z - p.z) || 1, lb = Math.hypot(B.x - p.x, B.z - p.z) || 1;
+        const dot = ((A.x - p.x) * (B.x - p.x) + (A.z - p.z) * (B.z - p.z)) / (la * lb);
+        if (dot > minCos)
+          throw new Error(`caveGen: corridors ${p.id}-${A.id} & ${p.id}-${B.id} diverge < ${T.CAVE_GEN_MIN_SIBLING_ANGLE}° — crossing mouths`);
+      }
+    }
+  }
+}
+
+function makeEdge(a: CaveNode, b: CaveNode, rand: () => number): CaveEdge {
+  const squeeze = rand() < Tuning.CAVE_GEN_SQUEEZE_CHANCE;
+  return {
+    a: a.id, b: b.id,
+    halfW: squeeze ? Tuning.CAVE_GEN_SQUEEZE_HALF_W : Tuning.CAVE_GEN_GALLERY_HALF_W,
+    height: squeeze ? Tuning.CAVE_GEN_SQUEEZE_H : Tuning.CAVE_GEN_GALLERY_H,
+    squeeze,
+  };
+}
+
+/** Reject a candidate chamber that overlaps an existing one (except its own parent, which is
+ *  spaced by a corridor). Horizontal + vertical separation both required to count as clear. */
+function tooClose(node: CaveNode, nodes: CaveNode[], parentId: number): boolean {
+  for (const m of nodes) {
+    if (m.id === parentId) continue;
+    const dx = node.x - m.x, dz = node.z - m.z;
+    const horiz = Math.hypot(dx, dz);
+    const dy = Math.abs(node.floorY - m.floorY);
+    if (horiz < (node.rx + m.rx) * 0.9 && dy < (node.height + m.height) * 0.6) return true;
+  }
+  return false;
+}
+
+/** Reject a side-pocket candidate whose CORRIDOR would cross or crowd existing geometry — the cause
+ *  chamber-overlap (`tooClose`) misses. Two failures: (1) two corridors leaving the SAME parent that
+ *  diverge by < MIN_SIBLING_ANGLE overlap their flared mouths into a crossing floor/ceiling (the
+ *  seed-42 wedge — two pockets ~30° apart off one hub, corridors crossing → a 2m local floor step
+ *  read as 59.6° + a blocking wall + <2m headroom); (2) a corridor that passes through a chamber it
+ *  doesn't connect. Both are XZ tests (a compact cave keeps heights close). */
+function corridorCrowds(parent: CaveNode, node: CaveNode, nodes: CaveNode[], edges: CaveEdge[]): boolean {
+  const T = Tuning;
+  const nl = Math.hypot(node.x - parent.x, node.z - parent.z) || 1;
+  const nux = (node.x - parent.x) / nl, nuz = (node.z - parent.z) / nl;
+  const minCos = Math.cos((T.CAVE_GEN_MIN_SIBLING_ANGLE * Math.PI) / 180);
+  // (1) sibling divergence — vs every corridor already touching this parent (its children AND the
+  //     incoming trunk corridor), so mouths never overlap.
+  for (const e of edges) {
+    const sib = e.a === parent.id ? nodes[e.b] : e.b === parent.id ? nodes[e.a] : null;
+    if (!sib) continue;
+    const sl = Math.hypot(sib.x - parent.x, sib.z - parent.z) || 1;
+    if ((nux * (sib.x - parent.x) + nuz * (sib.z - parent.z)) / sl > minCos) return true;
+  }
+  // (2) the new corridor segment must clear every non-adjacent chamber (segment→centre distance).
+  for (const m of nodes) {
+    if (m.id === parent.id || m.id === node.id) continue;
+    const along = Math.max(0, Math.min(nl, (m.x - parent.x) * nux + (m.z - parent.z) * nuz));
+    const d = Math.hypot(m.x - (parent.x + nux * along), m.z - (parent.z + nuz * along));
+    if (d < m.rx + T.CAVE_GEN_GALLERY_HALF_W + T.CAVE_GEN_CORRIDOR_CLEARANCE) return true;
+  }
+  // (3) the new corridor must not cross or run alongside a NON-adjacent corridor at a similar depth
+  //     (a pocket corridor crossing the trunk, or two pockets' corridors overlapping). Skip edges
+  //     that share the parent (governed by (1)). Sample the new segment; reject if it comes within a
+  //     combined-mouth width of another corridor AND their floors there overlap vertically.
+  const nSteps = Math.max(3, Math.ceil(nl / 1.5));
+  for (const e of edges) {
+    if (e.a === parent.id || e.b === parent.id || e.a === node.id || e.b === node.id) continue;
+    const ea = nodes[e.a], eb = nodes[e.b];
+    const el = Math.hypot(eb.x - ea.x, eb.z - ea.z) || 1;
+    const eux = (eb.x - ea.x) / el, euz = (eb.z - ea.z) / el;
+    const wSum = T.CAVE_GEN_GALLERY_HALF_W + e.halfW + T.CAVE_GEN_CORRIDOR_CLEARANCE;
+    for (let s = 0; s <= nSteps; s++) {
+      const tt = s / nSteps;
+      const px = parent.x + (node.x - parent.x) * tt, pz = parent.z + (node.z - parent.z) * tt;
+      const pf = parent.floorY + (node.floorY - parent.floorY) * tt;
+      const al = Math.max(0, Math.min(el, (px - ea.x) * eux + (pz - ea.z) * euz));
+      const qf = ea.floorY + (eb.floorY - ea.floorY) * (al / el);
+      if (Math.hypot(px - (ea.x + eux * al), pz - (ea.z + euz * al)) < wSum
+        && Math.abs(pf - qf) < (node.height + e.height) * 0.55) return true;
+    }
+  }
+  return false;
+}
+
+// ── Mesh lofting ─────────────────────────────────────────────────────────────
+
+type Noise3 = (x: number, y: number, z: number) => number;
+
+const _tmpCol = new THREE.Color();
+
+/** Multi-octave rock displacement (big bulge + medium knob + fine roughness) → a signed value,
+ *  then made ASYMMETRIC: OUTWARD (positive → enlarging the cavity) scaled to `ampOut`, INWARD
+ *  (negative → into the walk space) capped to the small `ampIn` so the walk path + the 2.0m
+ *  headroom are never eaten. Reads as carved stone, not a smoothed blob. */
+function rockDisp(n3: Noise3, wx: number, wy: number, wz: number, freq: number, ampOut: number, ampIn: number): number {
+  let v = n3(wx * freq, wy * freq, wz * freq) * 0.62;
+  v += n3(wx * freq * 2.7 + 19, wy * freq * 2.7, wz * freq * 2.7 + 5) * 0.27;
+  v += n3(wx * freq * 5.9 + 41, wy * freq * 5.9, wz * freq * 5.9 + 13) * 0.13;   // v ≈ [-1,1]
+  return v >= 0 ? v * ampOut : v * ampIn;
+}
+
+/** Cave-rock vertex colour by role + world position + normalized depth `depthT` (0 near the mouth,
+ *  1 at the egg). Ceiling/wall/floor read DIFFERENTLY (the brief): walls carry horizontal STRATA
+ *  bands + patchy mineral (rust / cool) STAINING; the ceiling is darker + cooler (soot, less light);
+ *  the floor blends pooled TAN SAND sediment into its dips (ties to the desert above). Writes `out`. */
+function caveVertexColor(
+  role: 'wall' | 'ceiling' | 'floor',
+  wx: number, wy: number, wz: number,
+  depthT: number, cn: Noise3, out: THREE.Color,
+): void {
+  // Base neutral grey-brown, cooling + darkening with depth.
+  let r = lerp(0.315, 0.235, depthT);
+  let g = lerp(0.285, 0.245, depthT);
+  let b = lerp(0.255, 0.275, depthT);
+  // Horizontal STRATA bands — mineral layering; the band phase wobbles with low-freq noise so bands
+  // aren't ruler-straight.
+  const bandN = cn(wx * 0.02, 0, wz * 0.02) * 1.4;
+  const bandLight = 1 + Math.sin(wy * 0.85 + bandN) * 0.10;
+  r *= bandLight; g *= bandLight; b *= bandLight;
+  // Warm ochre / iron STAINING zones (+ cool mineral in the opposite pockets).
+  const stain = cn(wx * 0.055 + 11, wy * 0.055, wz * 0.055 + 7);   // [-1,1]
+  const warm = Math.max(0, stain) * 0.55;
+  r = lerp(r, 0.40, warm); g = lerp(g, 0.235, warm * 0.85); b = lerp(b, 0.145, warm * 0.9);
+  const cool = Math.max(0, -stain) * 0.32;
+  r = lerp(r, 0.195, cool); g = lerp(g, 0.235, cool); b = lerp(b, 0.30, cool);
+  if (role === 'ceiling') {
+    r *= 0.58; g *= 0.62; b *= 0.72;                 // darker + cooler roof
+  } else if (role === 'floor') {
+    const pool = cn(wx * 0.10 + 5, 3.7, wz * 0.10 + 9);
+    const sand = Math.max(0, pool) * 0.9;            // pooled tan sand sediment in floor patches
+    r = lerp(r, 0.52, sand); g = lerp(g, 0.43, sand); b = lerp(b, 0.28, sand);
+    const gr = cn(wx * 0.9, 1.3, wz * 0.9) * 0.035;  // fine grain
+    r += gr; g += gr; b += gr;
+  }
+  // The picked values are perceptual (sRGB); store them LINEAR so they render as intended dark stone
+  // (a raw sRGB value in the vertex buffer renders far too bright — the pale-plaster look).
+  out.setRGB(Math.max(0.02, r), Math.max(0.02, g), Math.max(0.02, b)).convertSRGBToLinear();
+}
+
+/** A corridor's carve footprint in the chamber shell: the shell is removed exactly where the
+ *  (flared) tube passes — within `halfW` of the corridor axis, above the floor, up to `ceilTop` —
+ *  so the tube plugs the opening with NO rim gap (a cone aperture left a see-through rim). */
+interface Carve { ux: number; uz: number; halfW: number; ceilTop: number; }
+
+/** Build one chamber's displaced ellipsoid shell (flat floor, domed ceiling, tube-carved portals).
+ *  Multi-octave carved-rock walls + baked strata/staining/sediment vertex colours. WORLD space. */
+function buildChamberGeometry(node: CaveNode, carves: Carve[], noise3: Noise3, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
+  const T = Tuning;
+  const R = T.CAVE_GEN_CHAMBER_RINGS, S = T.CAVE_GEN_CHAMBER_SEGS;
+  const ampOut = T.CAVE_GEN_DISP_AMP, ampIn = T.CAVE_GEN_DISP_IN, freq = T.CAVE_GEN_DISP_FREQ;
+  const ry = node.height * 0.6;
+  const cy = node.floorY + node.height - ry;      // ellipsoid centre → top = floorY + height
+  const cx = node.x, cz = node.z;
+  const floorTop = node.floorY + node.height * T.CAVE_GEN_FLOOR_FILL;
+  const stride = S + 1;
+  const pos = new Float32Array((R + 1) * stride * 3);
+  const col = new Float32Array((R + 1) * stride * 3);
+  let vi = 0;
+  for (let i = 0; i <= R; i++) {
+    const theta = (i / R) * Math.PI;
+    const st = Math.sin(theta), ct = Math.cos(theta);
+    for (let j = 0; j <= S; j++) {
+      const phi = (j / S) * Math.PI * 2;
+      const dxu = st * Math.cos(phi), dyu = ct, dzu = st * Math.sin(phi);
+      let bx = dxu * node.rx, by = dyu * ry, bz = dzu * node.rz;
+      const d = rockDisp(noise3, cx + bx, cy + by, cz + bz, freq, ampOut, ampIn);
+      bx += dxu * d; by += dyu * d; bz += dzu * d;
+      let wx = cx + bx, wy = cy + by, wz = cz + bz;
+      // Flatten the lower CAVE_GEN_FLOOR_FILL of the chamber height into a wide flat floor disk (so
+      // it reaches ~0.94·rx and corridors — connecting at rx−overlap — land on flat floor).
+      let role: 'wall' | 'ceiling' | 'floor';
+      if (wy < floorTop) { wy = node.floorY + noise3(wx * 0.5, 7.3, wz * 0.5) * T.CAVE_GEN_FLOOR_BUMP; role = 'floor'; }
+      else role = ct > 0.34 ? 'ceiling' : 'wall';
+      pos[vi * 3] = wx; pos[vi * 3 + 1] = wy; pos[vi * 3 + 2] = wz;
+      caveVertexColor(role, wx, wy, wz, depthT, cnoise, _tmpCol);
+      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
+      vi++;
+    }
+  }
+  const floorGuard = node.floorY + 0.2;                    // never carve the flat floor (drops the player through)
+  // Remove a triangle iff its centroid sits inside a corridor's tube footprint: on the +axis side,
+  // within the flared half-width of the axis, and in the wall band above the floor. The tube's own
+  // (equally-flared) mouth then plugs exactly this opening — coincident edges, no rim gap/see-through.
+  const carved = (a: number, b: number, cc: number): boolean => {
+    const cx = (pos[a * 3] + pos[b * 3] + pos[cc * 3]) / 3;
+    const cyTri = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[cc * 3 + 1]) / 3;
+    const cz = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[cc * 3 + 2]) / 3;
+    if (cyTri < floorGuard) return false;                  // keep the floor
+    const dx = cx - node.x, dz = cz - node.z;
+    for (const c of carves) {
+      const along = dx * c.ux + dz * c.uz;
+      if (along <= 0) continue;                            // only the wall toward this corridor
+      const perp = Math.hypot(dx - along * c.ux, dz - along * c.uz);
+      if (perp < c.halfW && cyTri < c.ceilTop) return true;
+    }
+    return false;
+  };
+  const idx: number[] = [];
+  for (let i = 0; i < R; i++) {
+    for (let j = 0; j < S; j++) {
+      const a = i * stride + j;
+      const b = a + 1;
+      const c2 = (i + 1) * stride + j;
+      const d2 = c2 + 1;
+      if (!carved(a, c2, b)) idx.push(a, c2, b);
+      if (!carved(b, c2, d2)) idx.push(b, c2, d2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Build one corridor's displaced D-section tube (flat tilted floor + arched ceiling). End rings
+ *  overlap into both chambers (no gap at the aperture). Geometry is in WORLD space. */
+function buildCorridorGeometry(a: CaveNode, b: CaveNode, edge: CaveEdge, noise3: Noise3, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
+  const T = Tuning;
+  const M = T.CAVE_GEN_CORRIDOR_RINGS, K = T.CAVE_GEN_CORRIDOR_SEGS;
+  // Corridors take SMALLER displacement than chambers (esp. inward) so a squeeze never pinches below
+  // the 2.2m clear width / 2.0m headroom.
+  const ampOut = T.CAVE_GEN_DISP_AMP * 0.5, ampIn = T.CAVE_GEN_DISP_IN * 0.55, freq = T.CAVE_GEN_DISP_FREQ;
+  const ax = a.x, az = a.z, bx = b.x, bz = b.z;
+  const dx = bx - ax, dz = bz - az;
+  const horiz = Math.hypot(dx, dz) || 1;
+  const hx = dx / horiz, hz = dz / horiz;         // heading (XZ)
+  const rgtx = -hz, rgtz = hx;                     // right = heading rotated +90° (XZ)
+  // CRITICAL (the partition bug): the tube spans SURFACE-to-SURFACE — from just inside a's surface
+  // to just inside b's surface — NOT centre-to-centre. Extending the tube's side walls into the
+  // chamber interiors would wall the chamber off; here it only pokes CAVE_GEN_END_OVERLAP past each
+  // surface to plug the aperture, leaving the chamber interiors fully open.
+  const ov = T.CAVE_GEN_END_OVERLAP;
+  const sx = ax + hx * (a.rx - ov), sz = az + hz * (a.rx - ov);   // tube near end (inside a by ov)
+  const ex = bx - hx * (b.rx - ov), ez = bz - hz * (b.rx - ov);   // tube far end (inside b by ov)
+  const sdx = ex - sx, sdz = ez - sz;
+  const tubeLen = Math.hypot(sdx, sdz) || 1;
+  // Keep the corridor floor FLAT at each chamber's floor across that chamber's flat-floor DISK
+  // (radius ≈0.95·rx; the tube starts/ends at rx−ov, i.e. INSIDE the disk), and ramp only over the
+  // CLEAR span between the two disks. Without this the ramp starts descending while still overlapping
+  // the flat disk → castDown hits the flat disk then the lower ramp a step below (seed-99's 40° read
+  // on a short trunk corridor between two large, close chambers). Coincident floors → no step.
+  const padA = ov / tubeLen;   // flat to a's shell edge (covers a's whole flat-floor disk, radius < rx)
+  const padB = ov / tubeLen;   // flat to b's shell edge
+  const rampSpan = Math.max(1e-3, 1 - padA - padB);
+  const stride = K + 1;
+  const pos = new Float32Array((M + 1) * stride * 3);
+  const col = new Float32Array((M + 1) * stride * 3);
+  let vi = 0;
+  for (let m = 0; m <= M; m++) {
+    const t = m / M;                               // 0..1 ALONG THE TUBE (surface to surface)
+    const px = sx + sdx * t, pz = sz + sdz * t;
+    // Floor descends a.floorY → b.floorY across the TUBE (surface to surface), so it meets each
+    // chamber's flat floor exactly at the mouth (no cliff) and the drop is spread over the tube
+    // length (run was sized so this slope ≤ the target).
+    const tf = Math.max(0, Math.min(1, (t - padA) / rampSpan));   // flat within each disk, ramp between
+    const floorY = lerp(a.floorY, b.floorY, tf);
+    // Mouth FLARE at the ends (both width AND ceiling): near each chamber the tube opens up so it
+    // fully COVERS that chamber's round aperture hole — else the hole's rim (wider than the tube)
+    // is left open and you see straight up to the surface (a see-through / cover gap). In the middle
+    // it's the corridor's own cross-section (a squeeze stays a tight NARROW passage, width constant,
+    // never mid-pinched below the ~2.2m minimum).
+    const endW = Math.max(0, 1 - Math.min(t, 1 - t) / 0.22);   // 1 at the ends → 0 by t≈0.22
+    const Wt = edge.halfW * (1 + endW * 0.7);                  // widen the mouth to plug the carve exactly
+    // At the mouths the ceiling drops to DOORWAY_H above the LOCAL floor (constant headroom — a
+    // fixed CHAMBER-floor lintel pinched the headroom on a descending corridor and bumped the
+    // capsule's head). At the exact mouth the local floor == the chamber floor, so it still meets
+    // the chamber's carved doorway top; the chamber wall above stays closed (no see-through).
+    const doorCeil = floorY + Tuning.CAVE_GEN_DOORWAY_H;
+    const baseCeil = floorY + edge.height;
+    const ceilY = lerp(baseCeil, doorCeil, endW);
+    const Ht = ceilY - floorY;
+    for (let k = 0; k <= K; k++) {
+      const beta = (k / K) * Math.PI * 2;
+      const cb = Math.cos(beta), sb = Math.sin(beta);
+      const horizOff = cb * Wt;
+      let wy: number;
+      let role: 'wall' | 'ceiling' | 'floor';
+      if (sb <= 0) {
+        wy = floorY + noise3(px * 0.5, 3.1, pz * 0.5) * T.CAVE_GEN_FLOOR_BUMP;   // flat floor + micro-bump
+        role = 'floor';
+      } else {
+        wy = floorY + sb * Ht;
+        role = sb > 0.72 ? 'ceiling' : 'wall';
+      }
+      let wx = px + rgtx * horizOff;
+      let wz = pz + rgtz * horizOff;
+      if (sb > 0.15) {                              // displace walls/ceiling only (keep the floor clean)
+        const d = rockDisp(noise3, wx, wy, wz, freq, ampOut, ampIn);
+        wx += rgtx * cb * d; wz += rgtz * cb * d; wy += Math.max(0, sb) * d;
+      }
+      pos[vi * 3] = wx; pos[vi * 3 + 1] = wy; pos[vi * 3 + 2] = wz;
+      caveVertexColor(role, wx, wy, wz, depthT, cnoise, _tmpCol);
+      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
+      vi++;
+    }
+  }
+  const idx: number[] = [];
+  for (let m = 0; m < M; m++) {
+    for (let k = 0; k < K; k++) {
+      const p0 = m * stride + k;
+      const p1 = p0 + 1;
+      const p2 = (m + 1) * stride + k;
+      const p3 = p2 + 1;
+      idx.push(p0, p2, p1, p1, p2, p3);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// ── Speleothems + the egg dais ───────────────────────────────────────────────
+
+/** A raised natural rock PEDESTAL (dais) at the egg-chamber centre — a wide, gently-sloped mound
+ *  (sides ≤ the walk grade so the KCC climbs it; top ≤ the floor-grid tolerance so it isn't read as
+ *  a hole). Where the egg will sit next cycle. WORLD space; baked into the trimesh (collider=visual). */
+function buildDais(node: CaveNode, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
+  const baseR = Math.min(node.rx * 0.34, 3.4);
+  const topR = baseR * 0.42;
+  const H = 0.9;                           // slope = H/(baseR−topR) ≈ 0.48 → ~26° (KCC-walkable, gentle)
+  const RINGS = 5, SEGS = 20;
+  const stride = SEGS + 1;
+  const pos = new Float32Array((RINGS + 1) * stride * 3);
+  const col = new Float32Array((RINGS + 1) * stride * 3);
+  let vi = 0;
+  for (let i = 0; i <= RINGS; i++) {
+    const t = i / RINGS;                   // 0 rim → 1 top
+    const rr = lerp(baseR, topR, t);
+    const yy = node.floorY + H * t;
+    for (let j = 0; j <= SEGS; j++) {
+      const ph = (j / SEGS) * Math.PI * 2;
+      const wob = 1 + cnoise(Math.cos(ph) * 2 + i, 5.5, Math.sin(ph) * 2) * 0.10;
+      const wx = node.x + Math.cos(ph) * rr * wob;
+      const wz = node.z + Math.sin(ph) * rr * wob;
+      const wy = yy + (i > 0 && i < RINGS ? cnoise(wx * 0.4, 2.2, wz * 0.4) * 0.06 : 0);
+      pos[vi * 3] = wx; pos[vi * 3 + 1] = wy; pos[vi * 3 + 2] = wz;
+      caveVertexColor(i === RINGS ? 'floor' : 'wall', wx, wy, wz, depthT, cnoise, _tmpCol);
+      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
+      vi++;
+    }
+  }
+  const idx: number[] = [];
+  for (let i = 0; i < RINGS; i++) {
+    for (let j = 0; j < SEGS; j++) {
+      const p0 = i * stride + j, p1 = p0 + 1, p2 = (i + 1) * stride + j, p3 = p2 + 1;
+      idx.push(p0, p2, p1, p1, p2, p3);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** A single speleothem cone (stalactite hanging DOWN from `apexY` a length `len`, or stalagmite/
+ *  column rising UP from the floor). `up` = +1 rises from base, −1 hangs from apex. Slightly bent +
+ *  fluted (noise per ring) so it reads as dripstone, not a party hat. Solid (rule 7). WORLD space. */
+function buildSpeleothem(
+  x: number, z: number, baseY: number, topY: number, r0: number,
+  cnoise: Noise3, depthT: number, hangDown: boolean, bendScale: number,
+): THREE.BufferGeometry {
+  const RINGS = 6, SEGS = 8;
+  const stride = SEGS + 1;
+  const H = topY - baseY;                  // signed (hang: topY<baseY)
+  const pos = new Float32Array((RINGS + 1) * stride * 3 + 3);
+  const col = new Float32Array((RINGS + 1) * stride * 3 + 3);
+  const bendA = cnoise(x * 0.3, 9.1, z * 0.3) * 0.5 * bendScale, bendB = cnoise(x * 0.3 + 4, 9.1, z * 0.3) * 0.5 * bendScale;
+  let vi = 0;
+  for (let i = 0; i <= RINGS; i++) {
+    const t = i / RINGS;                   // 0 base → 1 tip
+    const rr = r0 * (1 - t) * (0.85 + cnoise(t * 6, x, z) * 0.15) + 0.02;
+    const yy = baseY + H * t;
+    const bx = x + bendA * t * t * 1.6, bz = z + bendB * t * t * 1.6;   // gentle taper-bend
+    for (let j = 0; j <= SEGS; j++) {
+      const ph = (j / SEGS) * Math.PI * 2;
+      const flute = 1 + cnoise(Math.cos(ph) * 3, i * 1.7, Math.sin(ph) * 3) * 0.22;   // fluted ridges
+      const wx = bx + Math.cos(ph) * rr * flute;
+      const wz = bz + Math.sin(ph) * rr * flute;
+      pos[vi * 3] = wx; pos[vi * 3 + 1] = yy; pos[vi * 3 + 2] = wz;
+      caveVertexColor(hangDown ? 'ceiling' : 'floor', wx, yy, wz, depthT, cnoise, _tmpCol);
+      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
+      vi++;
+    }
+  }
+  // tip vertex
+  const tipX = x + bendA * 1.6, tipZ = z + bendB * 1.6;
+  pos[vi * 3] = tipX; pos[vi * 3 + 1] = topY; pos[vi * 3 + 2] = tipZ;
+  caveVertexColor(hangDown ? 'ceiling' : 'floor', tipX, topY, tipZ, depthT, cnoise, _tmpCol);
+  col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
+  const tip = vi; vi++;
+  const idx: number[] = [];
+  for (let i = 0; i < RINGS; i++) {
+    for (let j = 0; j < SEGS; j++) {
+      const p0 = i * stride + j, p1 = p0 + 1, p2 = (i + 1) * stride + j, p3 = p2 + 1;
+      idx.push(p0, p2, p1, p1, p2, p3);
+    }
+  }
+  for (let j = 0; j < SEGS; j++) { const p0 = RINGS * stride + j; idx.push(p0, tip, p0 + 1); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Populate one chamber with speleothems: STALACTITES hang from the ceiling (visual-only — kept
+ *  ≥CLEAR above the floor so they never eat headroom), STALAGMITES rise from the floor + COLUMNS
+ *  span floor→ceiling (both collider-bearing, so a real player can't walk through them). Floor
+ *  features are placed OFF the walk path: beyond the chamber floor-grid the walk gate samples, clear
+ *  of corridor mouths, and spaced apart. Denser in the hall + egg, sparse in small pockets. */
+function addSpeleothems(
+  node: CaveNode,
+  mouthDirs: Array<{ x: number; z: number }>,
+  cnoise: Noise3, depthT: number, rand: () => number,
+  group: THREE.Group, meshes: THREE.Mesh[], decor: THREE.Mesh[],
+): void {
+  const T = Tuning;
+  const rx = node.rx, floorY = node.floorY, height = node.height;
+  const ry = height * 0.6, cyc = floorY + height - ry;
+  const ceilAt = (fr: number): number => cyc + ry * Math.sqrt(Math.max(0, 1 - fr * fr));
+  const mouthCos = Math.cos((T.CAVE_SPELEO_MOUTH_CLEAR_DEG * Math.PI) / 180);
+  const clearOfMouth = (ux: number, uz: number): boolean => {
+    for (const md of mouthDirs) if (ux * md.x + uz * md.z > mouthCos) return false;
+    return true;
+  };
+  // The floor grid the walk gate samples (rings 0.72·rx·{0..1}, 8 spokes) — floor features must not
+  // overlap any of these thin castDown rays (else they'd read as a floor "hole" or eat headroom).
+  const grid: Array<{ x: number; z: number }> = [];
+  for (let ri = 0; ri <= 4; ri++) {
+    const rr = (rx * 0.72 * ri) / 4, spokes = ri === 0 ? 1 : 8;
+    for (let si = 0; si < spokes; si++) { const a = (si / spokes) * Math.PI * 2; grid.push({ x: node.x + Math.cos(a) * rr, z: node.z + Math.sin(a) * rr }); }
+  }
+  const placed: Array<{ x: number; z: number; r: number }> = [];
+  const floorOk = (x: number, z: number, baseR: number): boolean => {
+    for (const gp of grid) if (Math.hypot(x - gp.x, z - gp.z) < baseR + 0.2) return false;
+    for (const p of placed) if (Math.hypot(x - p.x, z - p.z) < baseR + p.r + 0.5) return false;
+    return true;
+  };
+  const kind = node.kind;
+  const dens = kind === 'egg' ? 1.0 : kind === 'hall' ? 0.85 : kind === 'entrance' ? 0.2 : 0.5;
+
+  // ── Floor stalagmites + columns (collider-bearing). ──
+  const nStalag = kind === 'egg' ? 5 : kind === 'hall' ? 4 : kind === 'entrance' ? 0 : rx > 3.6 ? 2 : 1;
+  const nColumn = kind === 'egg' ? 2 : kind === 'hall' ? 1 : 0;
+  const placeFloor = (isColumn: boolean): void => {
+    for (let a = 0; a < 26; a++) {
+      const ang = rand() * Math.PI * 2;
+      const ux = Math.cos(ang), uz = Math.sin(ang);
+      if (!clearOfMouth(ux, uz)) continue;
+      const fr = lerp(T.CAVE_SPELEO_RING_MIN, T.CAVE_SPELEO_RING_MAX, rand());
+      const x = node.x + ux * rx * fr, z = node.z + uz * rx * fr;
+      const baseR = isColumn
+        ? Math.min(0.55 + rx * 0.05, 1.05)
+        : Math.min(0.30 + rx * 0.045, 0.85) * (0.7 + rand() * 0.5);
+      if (!floorOk(x, z, baseR)) continue;
+      const ceilY = ceilAt(fr);
+      let topY: number, bend: number;
+      if (isColumn) { topY = ceilY - 0.05; bend = 0.22; }          // reach the ceiling; near-straight
+      else {
+        const maxUp = ceilY - 0.4 - floorY;                        // stay clear of the ceiling
+        const h = Math.min(1.0 + rand() * 2.0, Math.max(0.6, maxUp));
+        topY = floorY + h; bend = 0.9;
+      }
+      const geo = buildSpeleothem(x, z, floorY - 0.15, topY, baseR, cnoise, depthT, false, bend);
+      const m = new THREE.Mesh(geo, _caveSolid);
+      m.castShadow = false; m.receiveShadow = true;
+      group.add(m); meshes.push(m);                                // collider (baked into trimesh)
+      placed.push({ x, z, r: baseR });
+      return;
+    }
+  };
+  for (let i = 0; i < nStalag; i++) placeFloor(false);
+  for (let i = 0; i < nColumn; i++) placeFloor(true);
+  // small no-collider floor nubbins for density (still off the walk grid).
+  const nSmall = Math.round((kind === 'entrance' ? 1 : rx > 4 ? 4 : 2) * dens * 2);
+  for (let i = 0; i < nSmall; i++) {
+    for (let a = 0; a < 12; a++) {
+      const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
+      const fr = lerp(0.55, 0.94, rand());
+      const x = node.x + ux * rx * fr, z = node.z + uz * rx * fr;
+      const baseR = 0.15 + rand() * 0.22;
+      if (!clearOfMouth(ux, uz) || !floorOk(x, z, baseR)) continue;
+      const geo = buildSpeleothem(x, z, floorY - 0.1, floorY + 0.35 + rand() * 0.7, baseR, cnoise, depthT, false, 0.9);
+      const m = new THREE.Mesh(geo, _caveSolid); m.receiveShadow = true;
+      group.add(m); decor.push(m); placed.push({ x, z, r: baseR });
+      break;
+    }
+  }
+
+  // ── Ceiling stalactites (visual-only; tips kept ≥ CLEAR above the floor). ──
+  const nTip = kind === 'egg' ? 22 : kind === 'hall' ? 16 : kind === 'entrance' ? 4 : 9;
+  for (let i = 0; i < nTip; i++) {
+    const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
+    const fr = Math.sqrt(rand()) * 0.86;                            // bias toward the walls where drips cluster
+    const x = node.x + ux * rx * fr, z = node.z + uz * rx * fr;
+    const apexY = ceilAt(fr) - 0.05;
+    const maxLen = apexY - (floorY + T.CAVE_SPELEO_STALACTITE_CLEAR);
+    if (maxLen < 0.4) continue;
+    const big = i < nTip * 0.35;
+    const len = Math.min(big ? 1.0 + rand() * 2.2 : 0.35 + rand() * 0.9, maxLen * 0.92);
+    const baseR = big ? 0.28 + rand() * 0.32 : 0.12 + rand() * 0.18;
+    const geo = buildSpeleothem(x, z, apexY, apexY - len, baseR, cnoise, depthT, true, 1.0);
+    const m = new THREE.Mesh(geo, _caveSolid); m.receiveShadow = true;
+    group.add(m); decor.push(m);
+  }
+}
+
+// ── Weird mushrooms (the life accent) ────────────────────────────────────────
+
+// Pale bone-cream stalk (lit by the torch when the player is near) + a faintly cool-bioluminescent
+// cap. The cap's LOW emissive renders even in pitch black (a navigation breadcrumb + eerie accent),
+// but toneMapped keeps it from blowing out so DARKNESS still dominates — these are NOT lamps. Shared
+// materials → one program for every fungus. Solid primitives (rule 7 — cylinders/spheres are thick).
+const _fungiStalk = new THREE.MeshStandardMaterial({ color: Tuning.CAVE_FUNGI_STALK_HEX, roughness: 0.9, metalness: 0.0, flatShading: true });
+const _fungiCap = new THREE.MeshStandardMaterial({
+  color: 0x243c3a, roughness: 0.6, metalness: 0.0,
+  emissive: Tuning.CAVE_FUNGI_EMISSIVE_HEX, emissiveIntensity: Tuning.CAVE_FUNGI_EMISSIVE_INT,
+});
+
+/** One mushroom (bent stalk + a domed glowing cap) at LOCAL origin, stalk rising +Y. Height `h`,
+ *  cap radius `capR`. Solid — a real capped stalk, not a flat shell. */
+function buildMushroom(h: number, capR: number, rand: () => number): THREE.Group {
+  const grp = new THREE.Group();
+  const stalkR = Math.max(0.012, capR * (0.28 + rand() * 0.12));
+  const bend = (rand() - 0.5) * 0.5;
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(stalkR * 0.8, stalkR, h, 6), _fungiStalk);
+  stalk.position.y = h * 0.5;
+  stalk.rotation.z = bend * 0.6;
+  grp.add(stalk);
+  // Cap — a squashed hemisphere dome sitting on the stalk top (glowing underside + top).
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(capR, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.62), _fungiCap);
+  cap.scale.set(1, 0.72 + rand() * 0.2, 1);
+  cap.position.set(Math.sin(bend) * h * 0.5, h - capR * 0.15, 0);
+  grp.add(cap);
+  grp.traverse((o) => { const mm = o as THREE.Mesh; if (mm.isMesh) mm.receiveShadow = true; });
+  return grp;
+}
+
+/** A cluster of 2..MAX mushrooms of varied height crowded within ~`spread` of a point. */
+function buildFungiCluster(rand: () => number, spread: number): THREE.Group {
+  const cl = new THREE.Group();
+  const n = 2 + Math.floor(rand() * (Tuning.CAVE_FUNGI_PER_CLUSTER_MAX - 1));
+  for (let i = 0; i < n; i++) {
+    const capR = Tuning.CAVE_FUNGI_CAP_MAX_R * (0.42 + rand() * 0.58);
+    const h = capR * (2.2 + rand() * 3.4);
+    const m = buildMushroom(h, capR, rand);
+    const a = rand() * Math.PI * 2, rr = rand() * spread;
+    m.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    m.rotation.y = rand() * Math.PI * 2;
+    cl.add(m);
+  }
+  return cl;
+}
+
+/** UNDERWORLD cycle 3 — a HARVESTABLE fungi cluster. E on it yields 1-2 alien_fruit (the
+ *  established weird-flora food; no new craftable output). Visual-only geometry (no collider), but
+ *  its meshes are tagged for the 'caveFungi' interaction raycast so a real player can pick it. */
+export interface CaveFungiCluster {
+  id: number;
+  group: THREE.Group;     // the cluster's mushrooms (harvested → hidden)
+  pos: THREE.Vector3;     // world-space cluster centre (for the hover prompt distance)
+  harvested: boolean;
+  hovered: boolean;
+}
+
+let _fungiId = 1;
+
+function tagFungi(root: THREE.Object3D, id: number): void {
+  root.traverse((o) => { o.userData.interactType = 'harvest'; o.userData.interactId = id; o.userData.interactRegistry = 'caveFungi'; });
+}
+
+/** Seed the chosen chamber with sparse fungi clusters: floor clusters at mid radii (near the walls
+ *  / floor dips) + optional shelf fungi on the wall. Floor clusters are HARVESTABLE (tagged +
+ *  recorded); wall-shelf fungi stay pure decor. No colliders — never trips the walk/collision gates.
+ *  Deterministic via the passed rng stream. */
+function addFungi(node: CaveNode, cnoise: Noise3, rand: () => number, group: THREE.Group, decor: THREE.Mesh[], clusters: CaveFungiCluster[]): void {
+  const rx = node.rx, floorY = node.floorY;
+  const nClusters = Tuning.CAVE_FUNGI_CLUSTER_MIN
+    + Math.floor(rand() * (Tuning.CAVE_FUNGI_CLUSTER_MAX - Tuning.CAVE_FUNGI_CLUSTER_MIN + 1));
+  for (let c = 0; c < nClusters; c++) {
+    const ang = rand() * Math.PI * 2;
+    const fr = 0.45 + rand() * 0.42;                    // mid → outer floor (toward the walls)
+    const x = node.x + Math.cos(ang) * rx * fr, z = node.z + Math.sin(ang) * rx * fr;
+    // Sit on the actual bumpy floor (matches the mesh floor micro-bump).
+    const fy = floorY + Math.max(0, cnoise(x * 0.5, 7.3, z * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
+    const cl = buildFungiCluster(rand, 0.35);
+    cl.position.set(x, fy, z);
+    for (const o of cl.children) o.traverse((m) => { (m as THREE.Mesh).receiveShadow = true; });
+    group.add(cl); cl.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
+    // HARVESTABLE — tag the cluster + record it (E → alien_fruit). The dais/egg chamber is a rich
+    // spot; every seeded floor cluster is pickable.
+    const cid = _fungiId++;
+    tagFungi(cl, cid);
+    clusters.push({ id: cid, group: cl, pos: new THREE.Vector3(x, fy, z), harvested: false, hovered: false });
+  }
+  // Optional wall shelf fungi — a few small caps jutting horizontally from the wall at head height.
+  if (rand() < Tuning.CAVE_FUNGI_WALL_CHANCE) {
+    const ry = node.height * 0.6, cyc = floorY + node.height - ry;
+    const shelves = 2 + Math.floor(rand() * 3);
+    for (let s = 0; s < shelves; s++) {
+      const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
+      const hFrac = 0.28 + rand() * 0.34;               // fraction up the wall
+      const wy = floorY + node.height * hFrac;
+      // approx shell radius at this height on the ellipsoid (relative to the vertical centre)
+      const yn = Math.max(-0.98, Math.min(0.98, (wy - cyc) / ry));
+      const wallR = rx * Math.sqrt(Math.max(0.02, 1 - yn * yn)) - 0.05;
+      const x = node.x + ux * wallR, z = node.z + uz * wallR;
+      const m = buildMushroom(0.08 + rand() * 0.1, Tuning.CAVE_FUNGI_CAP_MAX_R * (0.4 + rand() * 0.4), rand);
+      m.position.set(x, wy, z);
+      m.rotation.z = Math.PI * 0.5;                     // lay it horizontal, growing off the wall
+      m.rotation.y = Math.atan2(uz, ux);
+      group.add(m); m.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
+    }
+  }
+}
+
+// Cave rock — dark, slightly cool flat-shaded stone. Colour comes from baked VERTEX colours (strata
+// bands, mineral staining, pooled floor sediment) so ONE program serves every chamber + corridor.
+// The SHELL renders BackSide (we're inside solid rock, seeing its interior face); SPELEOTHEMS + the
+// dais are solid objects seen from OUTSIDE → FrontSide. white base so vertexColor is the final tint.
+const _caveShell = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.BackSide });
+const _caveSolid = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
+
+export interface CaveGenProbe {
+  seed: number;
+  eggId: number;
+  depthBelowSurface: number;
+  triCount: number;
+  digest: string;
+  nodes: Array<{ id: number; x: number; y: number; z: number; rx: number; height: number; kind: CaveNodeKind; parent: number }>;
+  edges: Array<{ a: number; b: number; halfW: number; height: number; squeeze: boolean }>;
+  tour: number[];
+  junction: CaveJunction;
+}
+
+export interface SpawnedCave {
+  group: THREE.Group;
+  body: RAPIER.RigidBody | null;
+  graph: CaveGraph;
+  probe: CaveGenProbe;
+  /** UNDERWORLD cycle 3 — harvestable fungi clusters (E → alien_fruit). Wired to ctx.caveFungi. */
+  fungi: CaveFungiCluster[];
+  /** World-space top of the egg-chamber dais — where main.ts places the companion egg. */
+  eggDaisTop: THREE.Vector3;
+  /** World-space floor anchors for the deep loot caches (the hall + the egg chamber, battery-rich). */
+  lootAnchors: THREE.Vector3[];
+}
+
+/** Build + place the generated cave body: chamber + corridor meshes welded to the throat junction,
+ *  one trimesh collider matching the visual (rule 9). Attaches a `caveGenProbe` on the group. */
+export function spawnCave(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  junction: CaveJunction,
+  seed: number,
+): SpawnedCave {
+  const graph = generateCaveGraph(seed, junction, terrain);
+  const noise3 = createNoise3D(makeRng((seed ^ 0x5eed3d) >>> 0));
+  const cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));   // colour/dressing noise stream
+  const srand = makeRng((seed ^ 0x59e1e0) >>> 0);                   // speleothem placement RNG
+  const frand = makeRng((seed ^ 0xf0091a) >>> 0);                   // fungi placement RNG (own stream — leaves speleothems untouched)
+  const depthOf = (n: CaveNode): number =>
+    Math.max(0, Math.min(1, (junction.gy - n.floorY) / Math.max(1, graph.depthBelowSurface)));
+
+  const group = new THREE.Group();
+  group.name = 'caveGen';
+
+  // Per-node CARVE list: one tube-footprint per connected corridor + the entrance's throat opening.
+  // Each carve removes the chamber wall exactly where the (flared) corridor tube passes — a doorway
+  // up to floor+DOORWAY_H, width = the tube's flared mouth — so the tube plugs it with no rim gap and
+  // the dome above stays closed (no see-through). The tube mouth flares to the SAME width (×1.7).
+  const carveByNode = new Map<number, Carve[]>();
+  const addCarve = (id: number, ux: number, uz: number, halfW: number, floorY: number): void => {
+    const list = carveByNode.get(id) ?? [];
+    list.push({ ux, uz, halfW, ceilTop: floorY + Tuning.CAVE_GEN_DOORWAY_H });
+    carveByNode.set(id, list);
+  };
+  const byId = (id: number): CaveNode => graph.nodes[id];
+  for (const e of graph.edges) {
+    const na = byId(e.a), nb = byId(e.b);
+    const hl = Math.hypot(nb.x - na.x, nb.z - na.z) || 1;
+    const ux = (nb.x - na.x) / hl, uz = (nb.z - na.z) / hl;
+    const flaredHalf = e.halfW * 1.7;                            // matches the tube's mouth width flare
+    addCarve(e.a, ux, uz, flaredHalf, na.floorY);
+    addCarve(e.b, -ux, -uz, flaredHalf, nb.floorY);
+  }
+  // Entrance node — a carve toward the throat (opposite the cave heading), the throat's width.
+  {
+    const n0 = byId(0);
+    addCarve(0, -junction.heading.x, -junction.heading.z, junction.width * 0.5 + 0.4, n0.floorY);
+  }
+
+  // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems).
+  const dirsByNode = new Map<number, Array<{ x: number; z: number }>>();
+  const pushDir = (id: number, tx: number, tz: number): void => {
+    const n = byId(id); const d = Math.hypot(tx - n.x, tz - n.z) || 1;
+    (dirsByNode.get(id) ?? dirsByNode.set(id, []).get(id)!).push({ x: (tx - n.x) / d, z: (tz - n.z) / d });
+  };
+  for (const e of graph.edges) { pushDir(e.a, byId(e.b).x, byId(e.b).z); pushDir(e.b, byId(e.a).x, byId(e.a).z); }
+  { const n0 = byId(0); pushDir(0, n0.x - junction.heading.x, n0.z - junction.heading.z); }
+
+  const meshes: THREE.Mesh[] = [];            // baked into the trimesh collider (rule 9)
+  const decor: THREE.Mesh[] = [];             // visual-only (small speleothems + fungi; no collider, like scatter)
+  const fungi: CaveFungiCluster[] = [];       // UNDERWORLD cycle 3 — harvestable fungi clusters (E → alien_fruit)
+
+  // Weird mushrooms — seed 2-4 chambers (never every one), the egg + hall favoured (the "distinct
+  // landmark" rooms), the rest chosen by rng score. Deterministic (frand stream). Visual-only.
+  const fungiTarget = Tuning.CAVE_FUNGI_CHAMBERS_MIN
+    + Math.floor(frand() * (Tuning.CAVE_FUNGI_CHAMBERS_MAX - Tuning.CAVE_FUNGI_CHAMBERS_MIN + 1));
+  const fungiCandidates = graph.nodes
+    .filter((n) => n.kind !== 'entrance')
+    .map((n) => ({ id: n.id, score: (n.kind === 'egg' || n.kind === 'hall' ? 1 : 0) + frand() }))
+    .sort((a, b) => b.score - a.score);
+  const fungiSet = new Set(fungiCandidates.slice(0, fungiTarget).map((c) => c.id));
+
+  for (const node of graph.nodes) {
+    const dT = depthOf(node);
+    const geo = buildChamberGeometry(node, carveByNode.get(node.id) ?? [], noise3, cnoise, dT);
+    const mesh = new THREE.Mesh(geo, _caveShell);
+    mesh.castShadow = false; mesh.receiveShadow = true;
+    mesh.userData.caveNode = node.id;
+    if (node.kind === 'egg') mesh.userData.eggChamber = true;
+    group.add(mesh);
+    meshes.push(mesh);
+    // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
+    if (node.kind === 'egg') {
+      const dm = new THREE.Mesh(buildDais(node, cnoise, dT), _caveSolid);
+      dm.castShadow = false; dm.receiveShadow = true; dm.userData.eggDais = true;
+      group.add(dm); meshes.push(dm);
+    }
+    addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
+    if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
+  }
+  for (const e of graph.edges) {
+    const geo = buildCorridorGeometry(byId(e.a), byId(e.b), e, noise3, cnoise, depthOf(byId(e.b)));
+    const mesh = new THREE.Mesh(geo, _caveShell);
+    mesh.castShadow = false; mesh.receiveShadow = true;
+    group.add(mesh);
+    meshes.push(mesh);
+  }
+
+  scene.add(group);
+
+  // ONE trimesh collider baked from the exact visual triangles (rule 9): the shells, corridors,
+  // dais + the player-scale (collider-bearing) speleothems in `meshes`. Small decor speleothems are
+  // visual-only (no collider, like scatter). Meshes are world-space (identity group) → body at origin.
+  const body = makeStaticTrimesh(world, meshes, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }, new THREE.Matrix4());
+
+  // Triangle count (perf report) — the full visual set incl. decor.
+  const allMeshes = meshes.concat(decor);
+  let triCount = 0;
+  for (const m of allMeshes) triCount += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
+
+  const probe: CaveGenProbe = {
+    seed, eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
+    digest: caveDigest(graph, allMeshes),
+    nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
+    edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),
+    tour: graph.tour,
+    junction,
+  };
+  group.userData.caveGenProbe = probe;
+
+  // UNDERWORLD cycle 3 — egg dais top (where main.ts sets the companion egg) + deep loot-cache
+  // anchors. The egg chamber's dais rises 0.9m (buildDais H); the egg centre sits on top. Loot
+  // caches go on the floor of the egg chamber + the big hall (+ the deepest pocket if any) — the
+  // deepest, most dangerous rooms, so the cave EARNS its danger (battery-rich, per scarcity design).
+  const eggNode = graph.nodes[graph.eggId];
+  const eggDaisTop = new THREE.Vector3(eggNode.x, eggNode.floorY + 0.9 + 0.23, eggNode.z);
+  const lootAnchors: THREE.Vector3[] = [];
+  const floorAnchor = (n: CaveNode, frac: number, angOff: number): THREE.Vector3 => {
+    // A deterministic floor point offset from the chamber centre (clear of the central dais / mouths).
+    const ang = (n.id * 1.7 + angOff);
+    return new THREE.Vector3(n.x + Math.cos(ang) * n.rx * frac, n.floorY + 0.02, n.z + Math.sin(ang) * n.rx * frac);
+  };
+  lootAnchors.push(floorAnchor(eggNode, 0.6, 0));                       // egg chamber (deepest)
+  const hallNode = graph.nodes.find((n) => n.kind === 'hall');
+  if (hallNode) lootAnchors.push(floorAnchor(hallNode, 0.55, 1.3));     // the big gallery
+  const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
+  if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
+
+  return { group, body, graph, probe, fungi, eggDaisTop, lootAnchors };
+}
+
+/** Determinism digest: FNV-1a over the graph (rounded node/edge fields + egg) AND a checksum of
+ *  every cave-mesh vertex (rounded to 1cm). Same seed → identical; different seeds → different. */
+function caveDigest(graph: CaveGraph, meshes: THREE.Mesh[]): string {
+  let h = 0x811c9dc5 >>> 0;
+  const mix = (n: number): void => { h = Math.imul(h ^ (n & 0xffffffff), 0x01000193) >>> 0; };
+  const r2 = (v: number): number => Math.round(v * 100);
+  for (const n of graph.nodes) {
+    mix(n.id); mix(r2(n.x)); mix(r2(n.floorY)); mix(r2(n.z)); mix(r2(n.rx)); mix(r2(n.height));
+    mix(n.parent); mix(n.kind.charCodeAt(0));
+  }
+  for (const e of graph.edges) { mix(e.a); mix(e.b); mix(r2(e.halfW)); mix(r2(e.height)); mix(e.squeeze ? 1 : 0); }
+  mix(graph.eggId);
+  for (const m of meshes) {
+    const p = m.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) { mix(r2(p.getX(i))); mix(r2(p.getY(i))); mix(r2(p.getZ(i))); }
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}

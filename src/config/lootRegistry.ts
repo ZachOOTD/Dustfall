@@ -165,6 +165,34 @@ export function rollSalvageTable(kind: SalvageKind, rng: Rng): SalvageLootEntry[
   return out;
 }
 
+// ── UNDERWORLD (2026-07-20) — the CAVE CACHE table. Deep loot caches in the cave's
+//    hall + egg chamber. The cave is the RICHEST battery/wiring source in the game (it
+//    EARNS its darkness/danger beyond the egg), and battery is the scarcest material by
+//    design, so a cave cache is where a run reliably finds power cells. INDEPENDENT
+//    weighted rolls (like salvage) → several items per cache, battery + wiring near-
+//    guaranteed. NOT enumerated by verify:loot (a standalone table, not in SALVAGE_TABLES),
+//    so it leaves the committed loot-digest baseline untouched.
+export const CAVE_CACHE_LOOT: LootRoll[] = [
+  { id: 'battery',      chance: 0.85 },
+  { id: 'battery',      chance: 0.35 },
+  { id: 'wiring',       chance: 0.90, count: 2 },
+  { id: 'machine_part', chance: 0.55 },
+  { id: 'scrap',        chance: 0.70, count: 2 },
+  { id: 'bandage',      chance: 0.40 },
+  { id: 'metal_pipe',   chance: 0.30 },
+];
+
+/** Roll one cave cache — INDEPENDENT weighted rolls (guarantees ≥1 item). The same shape as
+ *  rollSalvageTable; kept separate so its battery/wiring-rich palette is unmistakable. */
+export function rollCaveCache(rng: Rng): SalvageLootEntry[] {
+  const out: SalvageLootEntry[] = [];
+  for (const r of CAVE_CACHE_LOOT) {
+    if (rng() < r.chance) out.push({ id: r.id, count: r.count });
+  }
+  if (out.length === 0) out.push({ id: 'battery' });
+  return out;
+}
+
 // ════════════════════════════════════════════════════════════════
 // 2. LOOT CONTAINER TABLE (weighted-pick cascade)
 // ════════════════════════════════════════════════════════════════

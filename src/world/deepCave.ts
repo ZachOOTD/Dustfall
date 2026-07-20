@@ -63,6 +63,21 @@ export interface DeepCave {
   egg: CaveEgg;
 }
 
+/** Build the companion EGG — a softly-glowing ovoid tagged for the 'eggs' interaction (E hatches →
+ *  spawns the companion). Zero-asset procedural (D107). Reused by BOTH the legacy funnel deepCave
+ *  (below) AND the generated cave's egg-chamber dais (main.ts, UNDERWORLD). `worldPos` = where the
+ *  egg centre sits; the returned group is at that world position (add it to the scene). */
+export function buildCompanionEgg(worldPos: THREE.Vector3): CaveEgg {
+  const eggGroup = new THREE.Group();
+  const eggMat = new THREE.MeshStandardMaterial({ color: 0xcab89a, roughness: 0.55, metalness: 0.0, emissive: 0x3a2614, emissiveIntensity: 0.7 });
+  const eggShell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14), eggMat);
+  eggShell.scale.set(1.0, 1.4, 1.0);      // ovoid
+  eggGroup.add(eggShell);
+  eggGroup.position.copy(worldPos);
+  eggGroup.traverse((o) => { o.userData.interactType = 'hatch'; o.userData.interactRegistry = 'eggs'; o.userData.interactId = 1; });
+  return { group: eggGroup, pos: worldPos.clone(), hovered: false };
+}
+
 /** Build + place the deep-cave interior chamber at the carved funnel floor. */
 export function spawnDeepCave(
   scene: THREE.Scene,
@@ -167,21 +182,11 @@ export function spawnDeepCave(
     rim.userData.isWreckDecoration = true; g.add(rim);
   }
   // the EGG — a softly-glowing ovoid resting on the dais ("Pebble curls inside, asleep").
-  // Procedural, zero-asset (D107). Tagged for the interaction raycast (registry 'eggs').
-  const eggGroup = new THREE.Group();
-  const eggMat = new THREE.MeshStandardMaterial({ color: 0xcab89a, roughness: 0.55, metalness: 0.0, emissive: 0x3a2614, emissiveIntensity: 0.7 });
-  const eggShell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14), eggMat);
-  eggShell.scale.set(1.0, 1.4, 1.0);      // ovoid
-  eggGroup.add(eggShell);
   const eggLocalY = 0.22 + 0.16 * 1.4;    // resting on the dais top (dais half-height 0.11 + center 0.11)
-  eggGroup.position.set(daisX, eggLocalY, daisZ);
-  eggGroup.traverse((o) => { o.userData.interactType = 'hatch'; o.userData.interactRegistry = 'eggs'; o.userData.interactId = 1; });
-  g.add(eggGroup);
-  const egg: CaveEgg = {
-    group: eggGroup,
-    pos: new THREE.Vector3(anchor.x + daisX, floorY + eggLocalY, anchor.z + daisZ),
-    hovered: false,
-  };
+  const egg = buildCompanionEgg(new THREE.Vector3(anchor.x + daisX, floorY + eggLocalY, anchor.z + daisZ));
+  // The funnel deepCave keeps the egg parented to its group (local coords); reposition to local.
+  egg.group.position.set(daisX, eggLocalY, daisZ);
+  g.add(egg.group);
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);

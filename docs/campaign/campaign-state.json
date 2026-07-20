@@ -1,10 +1,10 @@
 {
-  "campaign": "The Deep Desert",
+  "campaign": "Underworld",
   "status": "paused",
-  "started": "2026-07-18",
-  "branch": "campaign/2026-07-18-deep-desert",
-  "cycles_completed": 8,
-  "current_tier": "PAUSED:morning-review (build complete)",
+  "started": "2026-07-19",
+  "branch": "campaign/2026-07-19-underworld",
+  "cycles_completed": 5,
+  "current_tier": "PAUSED:descent-walk-test (build complete)",
   "awaiting_approval": true,
   "stop_reasons": [
     "feel-review"
@@ -13,7 +13,7 @@
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
   "visual_gate": "auto",
-  "until": "milestone:deep-desert-shipped",
+  "until": "milestone:underworld-shipped",
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": {
@@ -23,75 +23,53 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 2500000
+    "total": 2900000
   },
-  "charter": "docs/campaign/campaign-deep-desert.md",
+  "charter": "docs/campaign/campaign-underworld.md",
   "cycles": [
     {
       "n": 1,
-      "date": "2026-07-18",
-      "focus": "dune synthesis research",
+      "date": "2026-07-19",
+      "focus": "entrance collider-swap tech",
       "outcome": "SHIPPED",
-      "spend": 50000,
-      "note": "heightErg recipe + playability table + region-blend purity"
+      "spend": 450000,
+      "note": "trimesh-from-heightfield-samples swap + welded greybox bore; real KCC walk proof; flag-off digests identical to master"
     },
     {
       "n": 2,
-      "date": "2026-07-18",
-      "focus": "erg region core",
+      "date": "2026-07-20",
+      "focus": "cave-gen core (greybox)",
       "outcome": "SHIPPED",
-      "spend": 400000,
-      "commit": "(above)",
-      "note": "region+heightErg+dune-slope gate; stubs show cracked texture climbing dunes -- cycle 3 fixes the read before the checkpoint"
+      "spend": 600000,
+      "commit": "955c6f9",
+      "note": "room-graph tree, 7 chambers, egg deepest; full-tree KCC march 7/7; digests identical flag-off; PAUSED blockout checkpoint"
     },
     {
       "n": 3,
-      "date": "2026-07-18",
-      "focus": "erg surface read + vista set",
+      "date": "2026-07-20",
+      "focus": "hero cave geometry",
       "outcome": "SHIPPED",
-      "spend": 250000,
-      "note": "aErgMask crack suppression; 7-round vista iteration; PAUSED checkpoint 1"
+      "spend": 400000,
+      "commit": "803c2ea",
+      "note": "26 MINUTES (speed rules proven); rock displacement, speleothems, sinkhole mouth, egg dais"
     },
     {
       "n": 4,
-      "date": "2026-07-18",
-      "focus": "sled ride core",
+      "date": "2026-07-20",
+      "focus": "darkness/light/mushrooms/audio",
       "outcome": "SHIPPED",
-      "spend": 450000,
-      "note": "kinematic seat-pin, approach 1 of 2 worked; sled-ride probe all phases; flag OFF, digests unchanged"
+      "spend": 500000,
+      "commit": "1fc2d29",
+      "note": "true darkness, teal fungi breadcrumbs, drips; red-cube proven a distant POI beacon"
     },
     {
       "n": 5,
-      "date": "2026-07-18",
-      "focus": "sled dune descent + presentation",
+      "date": "2026-07-20",
+      "focus": "integration + 2 generator bug-fixes + flag ON",
       "outcome": "SHIPPED",
-      "spend": 650000,
-      "note": "agent stalled twice on its watcher; orchestrator took over verification -- all gates green x2 seeds; PAUSED combined review"
-    },
-    {
-      "n": 6,
-      "date": "2026-07-18",
-      "focus": "steering inversion fix (attended)",
-      "outcome": "SHIPPED",
-      "spend": 50000,
-      "commit": "b1b00e6",
-      "note": "A/D inverted (yaw+ = left); carve gate now asserts direction (carveDot 0.66)"
-    },
-    {
-      "n": 7,
-      "date": "2026-07-19",
-      "focus": "dune dressing (smoke/finds/hush/discovery)",
-      "outcome": "SHIPPED",
-      "spend": 550000,
-      "note": "4 parked morning questions incl. music duck + shard collision"
-    },
-    {
-      "n": 8,
-      "date": "2026-07-19",
-      "focus": "integration proof + docs closeout + morning summary",
-      "outcome": "SHIPPED",
-      "spend": 100000,
-      "note": "sled-dune re-run with smoke+dressing live: ALL PHASES PASS; campaign build complete, paused for Zach"
+      "spend": 950000,
+      "commit": "265270d",
+      "note": "egg on the dais; corridor-crossing + junction-step defects fixed structurally + fail-loud assert; 6/6 seeds traversable; integration agent stalled on a watcher AGAIN -- orchestrator completed verification"
     }
   ]
 }

@@ -15,6 +15,9 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
+import { caveTestSite, spawnCaveTestBore } from './world/caveTest.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
+import { caveGenSeed, spawnCave, type CaveFungiCluster } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
+import { createCaveAtmosphere, updateCaveAtmosphere, type CaveAtmosphere } from './world/caveAtmosphere.ts'; // UNDERWORLD cycle 2 — darkness + light model
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
@@ -69,7 +72,9 @@ import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DE
 import { spawnVulturesProcgen, spawnCirclingVultures, updateVultures } from './enemies/vulture.ts'; // ACAH
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { spawnSarlaccPit, updateSarlaccPit } from './enemies/sarlaccPit.ts';
-import { spawnDeepCave, updateDeepCave } from './world/deepCave.ts';
+import { spawnDeepCave, updateDeepCave, buildCompanionEgg, type CaveEgg } from './world/deepCave.ts';
+import { rollCaveCache } from './config/lootRegistry.ts';                 // UNDERWORLD cycle 3 — deep cave caches
+import { spawnLootContainerAt, type LootContainer } from './world/lootContainers.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
@@ -183,7 +188,38 @@ setSalvageBiomesContext(biomes);
 const _bootT: Array<[string, number]> = [['start', performance.now()]];
 const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
 (window as unknown as { __bootT: typeof _bootT }).__bootT = _bootT;
-const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
+// UNDERWORLD cycle 1 (D307) — the cave-tech TEST site. Behind FEATURES.caveTest
+// (VITE_CAVE_TEST=1, default OFF). A pure hash of the world seed (does NOT consume
+// the procgen rand stream → seeded world unchanged). null when the flag is off, so
+// createTerrain builds every tile exactly as before (surface world byte-identical).
+const caveSite = FEATURES.caveTest ? caveTestSite(worldSeed) : null;
+const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes, caveSite);
+// The welded bore (ramp + trench + roofed throat) at the carved entrance-chunk hole, then the
+// GENERATED cave body (cycle 2: deterministic room-graph + corridors) hung off the throat junction.
+let caveAtmosphere: CaveAtmosphere | null = null;
+let caveEgg: CaveEgg | null = null;                       // UNDERWORLD cycle 3 — the egg on the cave dais
+let caveFungiList: CaveFungiCluster[] = [];               // harvestable fungi (E → alien_fruit)
+const caveLootCaches: LootContainer[] = [];              // deep loot caches (battery/wiring-rich)
+if (caveSite) {
+  const bore = spawnCaveTestBore(three.scene, physics.world, terrain, caveSite);
+  const cave = spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));
+  // UNDERWORLD cycle 2 — the light model + darkness + mouth shaft, keyed to the cave's bounds.
+  caveAtmosphere = createCaveAtmosphere(three.scene, bore.probe, cave.graph);
+  // UNDERWORLD cycle 3 — the companion EGG moves onto the generated cave's egg-chamber dais
+  // (the objective/interaction flow is IDENTICAL — same 'eggs' hatch; only the location changed).
+  caveFungiList = cave.fungi;
+  caveEgg = buildCompanionEgg(cave.eggDaisTop);
+  three.scene.add(caveEgg.group);
+  // Deep loot caches — placed on the floor of the hall + egg chamber (+ deepest pocket). Their
+  // contents are pre-rolled from the cave-cache table on a DEDICATED seed-derived rng (never
+  // touches the procgen/scatter streams → surface determinism intact). Ids are assigned first at
+  // boot (deterministic order) so save restore matches on Continue.
+  const cacheRng = makeRng((worldSeed ^ 0xca5eca5e) >>> 0);
+  for (const anchor of cave.lootAnchors) {
+    const contents = rollCaveCache(cacheRng).map((e) => ({ itemId: e.id, count: e.count ?? 1 }));
+    caveLootCaches.push(spawnLootContainerAt(three.scene, anchor, contents, cacheRng));
+  }
+}
 _mark('terrain');
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the
@@ -359,7 +395,10 @@ _mark('scrap');
 const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.sarlaccPitAnchor, Tuning.SARLACC_PIT_RADIUS);
 // M8 ⑨ (C48) — the deep-cave enclosed interior at the carved funnel floor (biomes.caveAnchor).
 // A fixed feature (one per world); the funnel descent itself is carved in terrain.ts (C47).
-const deepCave = spawnDeepCave(three.scene, physics.world, terrain, biomes.caveAnchor);
+// Retired under FEATURES.caveTest: with the generated cave ON, the old funnel deepCave does NOT
+// spawn (and terrain.ts skips its funnel carve too), so the two never fight. Flag OFF = the legacy
+// funnel deepCave + its egg, byte-identical. When on, ctx.egg comes from the generated cave's dais.
+const deepCave = caveSite ? null : spawnDeepCave(three.scene, physics.world, terrain, biomes.caveAnchor);
 // Infinite Sands S3 — wire the live lizard array into the chunk streamer
 // AFTER the boot population spawns (boot spawn order = boot creature ids,
 // sacred). Streamed lizards push into / splice out of this same array.
@@ -520,7 +559,7 @@ const ctx: GameContext = {
   sandWorms: { list: sandWorms },
   waterSources: { list: waterSources },
   cacti: { list: cacti },
-  lootContainers: { list: [], open: null },
+  lootContainers: { list: [...caveLootCaches], open: null },   // UNDERWORLD cycle 3 — deep cave caches seed the list
   fires: { list: [] },
   tents: { list: [] },
   sleds: { list: [], open: null },   // Session QQ
@@ -531,8 +570,10 @@ const ctx: GameContext = {
   stakes: { list: [] },              // Session ACE
   companion: null,                   // Session AAE
   sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
-  deepCave,                          // M8 ⑨ (C48/C49) — the deep cave interior + dark-nav
-  egg: deepCave.egg,                  // M8 ⑩ (C52) — the companion egg on the cave dais (reconciled in handoffToGame)
+  deepCave,                          // M8 ⑨ — legacy funnel deep cave (null when the generated cave is on)
+  caveFungi: { list: caveFungiList },  // UNDERWORLD cycle 3 — harvestable fungi (empty with the flag off)
+  caveAtmosphere,                    // UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor (null with FEATURES.caveTest off)
+  egg: caveSite ? caveEgg : (deepCave ? deepCave.egg : null),   // M8 ⑩ — egg from the generated cave dais (flag on) or the legacy funnel (flag off); reconciled in handoffToGame
 
   salvageables,
   weather,
@@ -1106,7 +1147,8 @@ startLoop(ctx, (c, dt) => {
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateSarlaccPit(c, dt);       // ACAQ Cycle 8 — wreck-yard maw; gapes + pulls + bites near the player
-  updateDeepCave(c, deepCave);   // M8 ⑨ (C49) — dark-nav: darken ambient/sun + torch glow when the player is down in the cave (AFTER updateLighting set the surface values)
+  if (deepCave) updateDeepCave(c, deepCave);   // M8 ⑨ (C49) — legacy funnel dark-nav (null when the generated cave is on)
+  if (caveAtmosphere) updateCaveAtmosphere(c, caveAtmosphere, dt);  // UNDERWORLD cycle 2 — the generated cave's darkness/fog/mouth-shaft (AFTER updateLighting; only with FEATURES.caveTest on)
   updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep

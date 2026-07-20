@@ -863,6 +863,145 @@ export const Tuning = {
   CAVE_TORCH_INTENSITY: 2.4,           // the player's torch glow (point light, no shadows) when in the cave
   CAVE_TORCH_DIST: 11,                 // m — torch falloff distance
 
+  // UNDERWORLD cycle 1 (2026-07-19, D307) — the ENABLING-TECH test bore. Behind
+  // FEATURES.caveTest / VITE_CAVE_TEST=1 (default OFF → surface world byte-identical).
+  // The designated ENTRANCE CHUNK swaps its heightfield collider for an equivalent
+  // TRIMESH with a carved rectangular hole (the trench), and a welded box bore (a
+  // walkable ramp down to a roofed chamber UNDER the intact terrain sheet — proving
+  // D307's under-sheet trimesh interior). Dimensions snap to the terrain grid
+  // (TERRAIN_CHUNK_SIZE/TERRAIN_CHUNK_CELLS ≈ 4.17m cells) so the hole boundary and
+  // the bore weld share exact grid vertices (no seam gap — the hab_dome/leviathan lesson).
+  // Site: a pure hash of the world seed, kept inside tile (0,0) near origin so the whole
+  // bore streams with the boot ring (no straddle). NOT a shipping feature — greybox, dev-only.
+  CAVE_TEST_SITE_BOX_X0: 120,          // m — hashed site X range [X0, X0+SPAN] (bore extends +X, stays < tile edge 400)
+  CAVE_TEST_SITE_SPAN_X: 140,
+  CAVE_TEST_SITE_BOX_Z: 120,           // m — hashed site Z range [-Z, +Z]
+  CAVE_TEST_WIDTH: 8.34,               // m — trench + chamber clear width (~2 terrain cells); >> the 2.2m min
+  CAVE_TEST_RAMP_RUN: 29.2,            // m — horizontal ramp length (~7 cells); with DEPTH 12 → slope ~22.4° (< 30°)
+  CAVE_TEST_DEPTH: 12,                 // m — descent from the surface to the chamber floor (below the sheet)
+  CAVE_TEST_CHAMBER_LEN: 8.34,         // m — roofed chamber length past the ramp bottom (~2 cells)
+  CAVE_TEST_CEIL_H: 3.0,               // m — chamber interior clear height (headroom ≥ 2m)
+  CAVE_TEST_WALL_T: 0.4,               // m — box wall/floor/roof thickness (rule 7 — real solid volumes)
+  CAVE_TEST_KERB: 0.3,                 // m — trench-wall top rises this far above local terrain max (guarantees no seam gap)
+  // UNDERWORLD cycle 2 — the entrance THROAT: a short roofed box tunnel that welds the open
+  // descending trench (cycle 1) to the first ROUND cave chamber (the generated body). Reuses the
+  // proven box-weld discipline for the hard seam; the round cave hangs off its far (open) end.
+  CAVE_TEST_THROAT_LEN: 4.0,           // m — throat length past the trench far edge (roofed, under the intact sheet)
+  CAVE_TEST_THROAT_H: 3.0,             // m — throat interior clear height (matches CEIL_H; ≥2m headroom)
+
+  // UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE. A deterministic room-graph +
+  // corridor branching-tree cave (greybox trimesh) hung off the entrance bore's throat,
+  // living UNDER the intact terrain sheet (D307 under-sheet coexistence). Seed-pure per site
+  // (its own hashed RNG stream — never draws the shared procgen rand; the surface world is
+  // byte-identical). Displaced-ring chamber/corridor meshes (irregular rock cross-sections,
+  // flat walkable floors) with a single trimesh collider matching the visual (rule 9). Behind
+  // FEATURES.caveTest (default OFF). Real cave GENERATION; dressing to hero quality is cycle 4+.
+  CAVE_GEN_CHAMBERS_MIN: 8,            // chambers incl. the entrance hall (tree nodes), inclusive range — a LABYRINTH of narrow + larger rooms
+  CAVE_GEN_CHAMBERS_MAX: 11,
+  CAVE_GEN_TRUNK_STEPS_MIN: 4,         // descending trunk corridors from the entrance hall to the egg (egg = trunk end)
+  CAVE_GEN_TRUNK_STEPS_MAX: 5,         // side pockets branch off trunk nodes → natural forks (2-3 children per hub), still a tree
+  CAVE_GEN_DEPTH_MIN: 28,              // m below the SURFACE the egg chamber floor reaches (target range; entrance is ~12m)
+  CAVE_GEN_DEPTH_MAX: 38,
+  CAVE_GEN_MIN_COVER: 3.0,             // m — min rock between any chamber/corridor ceiling and the terrain sheet (no poke-through)
+  CAVE_GEN_MAX_SLOPE: 26,              // ° — corridor floor slope ceiling (runs are sized from the drop to guarantee this; < probe 32°)
+  // Chamber sizes (horizontal radii rx/rz + interior clear height). The egg is the largest +
+  // most distinct; the hall is the big gallery; pockets are the small chambers.
+  CAVE_GEN_ENTRANCE_RX: 4.8,           // m — entrance hall horizontal radius
+  CAVE_GEN_ENTRANCE_H: 4.8,            // m — entrance hall clear height (taller than any corridor so the dome guard leaves room)
+  CAVE_GEN_HALL_RX: 8.0,               // m — the large hall (~16m across)
+  CAVE_GEN_HALL_H: 6.5,                // m
+  CAVE_GEN_POCKET_RX_MIN: 2.8,         // m — small pocket chambers (~5.6m across at min)
+  CAVE_GEN_POCKET_RX_MAX: 4.4,
+  CAVE_GEN_POCKET_H_MIN: 4.4,          // m — taller than the gallery corridor (3.4) + the dome guard, so corridor mouths clear
+  CAVE_GEN_POCKET_H_MAX: 5.4,
+  CAVE_GEN_EGG_RX: 9.5,               // m — the egg chamber: largest + most distinct (deepest, a domed cathedral ~19m across)
+  CAVE_GEN_EGG_H: 8.5,                // m
+  CAVE_GEN_CHAMBER_FLOOR_DROP: 0.55,   // fraction of height the flat floor sits below the ellipsoid centre (rest is walls+dome)
+  CAVE_GEN_FLOOR_FILL: 0.24,           // fraction of chamber height flattened into the floor disk — makes the flat floor
+                                       // reach ~0.94·rx so corridors (which connect at rx−overlap) land ON flat floor, not the sloped wall
+  // Corridor cross-sections (D-shape: flat tilted floor + arched ceiling). Half-width and clear
+  // height per corridor — squeeze vs. gallery chosen per edge for varied cross-sections.
+  CAVE_GEN_SQUEEZE_HALF_W: 1.85,       // m — squeeze corridor half-width (3.7m clear; UNDERWORLD cycle 3: 1.55→1.85 for extra steering margin — a climbing backtrack pressed the capsule against the corridor wall and wedged even though the passage was wide; more lateral room lets it recover)
+  CAVE_GEN_SQUEEZE_H: 2.8,             // m — squeeze clear height (walkable; > 2.0m min with displacement margin)
+  CAVE_GEN_GALLERY_HALF_W: 2.8,        // m — wide-gallery corridor half-width (~5.6m across; UNDERWORLD cycle 3: 2.3→2.8 — the seed-2 wedge pressed the KCC ~2.3m off-axis onto a 2.3m-halfW gallery wall on a climb; widening the tube gives the capsule room to keep progressing instead of catching the wall. Widens the tube only — node positions/slopes/cover unchanged)
+  CAVE_GEN_GALLERY_H: 3.4,             // m — gallery clear height
+  CAVE_GEN_SQUEEZE_CHANCE: 0.4,        // per-corridor chance of a squeeze (else gallery); trunk always has ≥1 of each
+  CAVE_GEN_CORRIDOR_RUN_MIN: 8.0,      // m — min horizontal corridor run (also the level-branch run floor)
+  CAVE_GEN_MIN_SIBLING_ANGLE: 55,      // ° — min angular divergence between two corridors leaving the SAME chamber. Below this their flared mouths (halfW×1.7 ≈ 9.5m for a gallery — wider than a small pocket itself) overlap into a crossing floor/ceiling (seed-42 wedge: pockets ~30° apart off one hub crossed → a 2m step read as 59.6° + a blocking wall; seed-2024: two corridors 51° apart still crowded a rx-4.4 hub). Enforced when placing side pockets + asserted post-build.
+  CAVE_GEN_CORRIDOR_CLEARANCE: 1.5,    // m — extra margin a new side-corridor must keep from any non-adjacent chamber it doesn't connect (segment→centre distance ≥ chamber rx + gallery half-width + this), so a corridor never spears a chamber it isn't linked to
+  CAVE_GEN_BRANCH_DROP_MAX: 4.0,       // m — max descent on a side-branch corridor (branches stay shallower than the egg)
+  CAVE_GEN_END_OVERLAP: 1.2,           // m — corridor end rings poke this far into each chamber (no gap at the aperture)
+  CAVE_GEN_DOORWAY_H: 3.0,             // m — corridor mouths open the chamber wall only up to here (a doorway with a lintel);
+                                       // the dome above is NEVER carved, so the ceiling can't open to the sky (no see-through)
+  // Mesh resolution + rock displacement (greybox — keep tri counts modest, floor bumps < the
+  // 0.4m KCC step so the floor stays walkable).
+  CAVE_GEN_CHAMBER_RINGS: 16,          // lat rings per chamber shell (finer facets → carved-rock read, not a smooth blob)
+  CAVE_GEN_CHAMBER_SEGS: 24,           // long segments per chamber shell
+  CAVE_GEN_CORRIDOR_RINGS: 14,         // cross-section rings along a corridor
+  CAVE_GEN_CORRIDOR_SEGS: 18,          // verts per corridor cross-section ring
+  // Multi-octave rock displacement (big bulges + medium knobs + fine roughness). OUTWARD excursions
+  // (enlarging the cavity) are free; INWARD excursions are capped small so they never eat the walk
+  // path or the 2.0m headroom. AMP is the max OUTWARD push → it's what clampCover reserves as cover.
+  CAVE_GEN_DISP_AMP: 0.95,             // m — max OUTWARD wall/ceiling displacement (bulges that read as carved stone)
+  CAVE_GEN_DISP_IN: 0.30,             // m — max INWARD displacement (small — protects the walk path + headroom)
+  CAVE_GEN_DISP_FREQ: 0.14,            // 1/m — base (big-bulge) displacement frequency; octaves ×2.7, ×5.9 add knobs + roughness
+  CAVE_GEN_FLOOR_BUMP: 0.10,           // m — flat-floor micro-texture (< the 0.4m step; keeps floors walkable)
+  // Speleothems (stalactites / stalagmites / columns) — the signature cave read. Floor features are
+  // placed BEYOND the 0.72·rx floor-grid the walk gate samples (RING_MIN) and clear of corridor
+  // mouths (MOUTH_CLEAR_DEG), so they never block the walk path or trip the headroom/floor asserts.
+  CAVE_SPELEO_STALACTITE_CLEAR: 2.35,  // m — a stalactite tip must stay at least this high above the floor (keeps ≥2.0m headroom)
+  CAVE_SPELEO_RING_MIN: 0.74,          // fraction of rx — inner radius for FLOOR speleothems (> the 0.72 floor-grid the gate samples)
+  CAVE_SPELEO_RING_MAX: 0.92,          // fraction of rx — outer radius for floor speleothems (near the wall, off the walk path)
+  CAVE_SPELEO_MOUTH_CLEAR_DEG: 42,     // ° — keep this angular sector clear around each corridor mouth (UNDERWORLD cycle 3: 32→42 so no floor stalagmite/column can pinch a junction throat where two mouths sit close)
+  CAVE_SPELEO_DENSITY: 0.9,            // speleothems per 10m² of chamber floor (scaled up in hall/egg, ~0 in squeeze pockets)
+
+  // ── UNDERWORLD cycle 2 — DARKNESS + the light model (caveAtmosphere.ts). The labyrinth is
+  //    genuinely DARK: past the throat, ambient/sun/moon fade to a near-black floor over a few
+  //    metres of depth below the surface sheet, so the survival loop is "no light, no cave" (the
+  //    player's own torch/flashlight/lantern is the only real illumination). A warm DAYLIGHT SHAFT
+  //    at the mouth spills down the ramp (time-of-day driven), fading with depth. Only active while
+  //    the player is CONTAINED in the cave AABB + below the surface → the surface world is untouched.
+  CAVE_DARK_DEPTH_FADE: 7.0,           // m — depth below the surface sheet over which darkness ramps 0→1 (a few metres past the throat = full dark)
+  CAVE_DARK_AMBIENT_FLOOR: 0.03,       // ambient intensity multiplier at full dark (near-black; not 0 so torch-lit rock still has a faint base)
+  CAVE_DARK_SUN_FLOOR: 0.0,            // sun/moon intensity multiplier at full dark (the sky can't reach deep rock)
+  CAVE_DARK_AABB_MARGIN: 14,           // m — the cave XZ bounding box is expanded by this before the depth test gates darkness (so standing in a surface valley never darkens)
+  CAVE_FOG_DENSITY: 0.055,             // FogExp2 density at full dark — near walls read, the far end of a hall fades to black (depth cue; base density restored at the mouth)
+  CAVE_FOG_HEX: 0x05060a,              // near-black cool cave fog colour (a sandy desert-fog haze underground reads wrong)
+  CAVE_SHAFT_COLOR_HEX: 0xffd69a,      // warm daylight shaft colour spilling down the mouth ramp
+  CAVE_SHAFT_INTENSITY: 8.5,           // SpotLight intensity at full daylight (scales with sun height; faint at night)
+  CAVE_SHAFT_DIST: 34,                 // m — shaft falloff distance (reaches the ramp + throat + entrance mouth, fades before the deep tree)
+  CAVE_SHAFT_ANGLE_RAD: 0.72,          // shaft cone half-angle (a broad wash down the trench, not a torch beam)
+  CAVE_SHAFT_PENUMBRA: 0.55,           // soft cone edge
+
+  // ── UNDERWORLD cycle 2 — WEIRD MUSHROOMS (the life accent; caveGen.ts). Sparse clusters of pale,
+  //    faintly cool-bioluminescent fungi in 2-4 chambers (denser near floor dips, a few on walls).
+  //    Emissive is LOW — a navigation breadcrumb + eerie accent, NOT a lamp (darkness still dominates).
+  //    Visual-only this cycle (no collider, no loot logic); seed-varied via the caveGen rng.
+  CAVE_FUNGI_CHAMBERS_MIN: 2,          // clusters seeded across this many chambers (min)
+  CAVE_FUNGI_CHAMBERS_MAX: 4,          // (max) — never every chamber
+  CAVE_FUNGI_CLUSTER_MIN: 2,           // fungi clusters per chosen chamber (min)
+  CAVE_FUNGI_CLUSTER_MAX: 4,           // (max)
+  CAVE_FUNGI_PER_CLUSTER_MAX: 6,       // mushrooms per cluster (min 2)
+  CAVE_FUNGI_EMISSIVE_HEX: 0x8fe6d8,   // cool teal-cyan bioluminescence
+  CAVE_FUNGI_EMISSIVE_INT: 0.9,        // emissive intensity on the CAP (low — self-glow breadcrumb, reads in the dark; toneMapped so it never blows out)
+  CAVE_FUNGI_STALK_HEX: 0xc8c2b0,      // pale bone-cream stalk (lit by the torch when near)
+  CAVE_FUNGI_CAP_MAX_R: 0.16,          // m — largest cap radius
+  CAVE_FUNGI_WALL_CHANCE: 0.35,        // chance a chosen chamber also gets a few wall-mounted shelf fungi
+
+  // ── UNDERWORLD cycle 2 — the CAVE AUDIO BED (soundscape.ts). Inside the cave the desert wind/
+  //    ambience/music DUCK out entirely and a cave bed fades in: a low stone-hush air tone + sparse
+  //    echoing drips (randomized interval, quiet, fed through a feedback delay for a cheap echo).
+  //    Crossfades at the mouth. Storm-independent (you're sealed in rock). Smoothed like the erg hush.
+  CAVE_BED_LERP_RATE: 1.6,             // 1/s — how fast the smoothed cave-inside factor eases toward the live containment (mouth crossfade)
+  CAVE_BED_DESERT_DUCK: 1.0,           // fraction the desert wind/ambience/music duck by at full-inside (1 = fully silent)
+  CAVE_BED_HUSH_MASTER: 0.05,          // gain of the low stone-hush air tone at full-inside (a felt low breath, very quiet)
+  CAVE_BED_HUSH_CUTOFF: 240,           // Hz — lowpass cutoff for the hush tone (deep, airless)
+  CAVE_BED_DRIP_MASTER: 0.32,          // peak gain of a single drip blip (quiet)
+  CAVE_BED_DRIP_MIN_S: 1.7,            // s — min interval between drips
+  CAVE_BED_DRIP_MAX_S: 6.5,            // s — max interval between drips (randomized each time → sparse, irregular)
+  CAVE_BED_DRIP_ECHO_S: 0.26,          // s — feedback-delay time for the drip echo
+  CAVE_BED_DRIP_ECHO_FEEDBACK: 0.42,   // delay feedback (a couple of audible repeats, decaying — not a reverb engine)
+
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
   // ACAX — darkened + WARMED from ACAT W5's light grey-tan (0x6a6657/0x5e5a52). User
