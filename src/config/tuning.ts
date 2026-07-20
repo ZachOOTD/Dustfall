@@ -883,6 +883,63 @@ export const Tuning = {
   CAVE_TEST_CEIL_H: 3.0,               // m — chamber interior clear height (headroom ≥ 2m)
   CAVE_TEST_WALL_T: 0.4,               // m — box wall/floor/roof thickness (rule 7 — real solid volumes)
   CAVE_TEST_KERB: 0.3,                 // m — trench-wall top rises this far above local terrain max (guarantees no seam gap)
+  // UNDERWORLD cycle 2 — the entrance THROAT: a short roofed box tunnel that welds the open
+  // descending trench (cycle 1) to the first ROUND cave chamber (the generated body). Reuses the
+  // proven box-weld discipline for the hard seam; the round cave hangs off its far (open) end.
+  CAVE_TEST_THROAT_LEN: 4.0,           // m — throat length past the trench far edge (roofed, under the intact sheet)
+  CAVE_TEST_THROAT_H: 3.0,             // m — throat interior clear height (matches CEIL_H; ≥2m headroom)
+
+  // UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE. A deterministic room-graph +
+  // corridor branching-tree cave (greybox trimesh) hung off the entrance bore's throat,
+  // living UNDER the intact terrain sheet (D307 under-sheet coexistence). Seed-pure per site
+  // (its own hashed RNG stream — never draws the shared procgen rand; the surface world is
+  // byte-identical). Displaced-ring chamber/corridor meshes (irregular rock cross-sections,
+  // flat walkable floors) with a single trimesh collider matching the visual (rule 9). Behind
+  // FEATURES.caveTest (default OFF). Real cave GENERATION; dressing to hero quality is cycle 4+.
+  CAVE_GEN_CHAMBERS_MIN: 5,            // chambers incl. the entrance hall (tree nodes), inclusive range
+  CAVE_GEN_CHAMBERS_MAX: 7,
+  CAVE_GEN_TRUNK_STEPS_MIN: 3,         // descending trunk corridors from the entrance hall to the egg (egg = trunk end)
+  CAVE_GEN_TRUNK_STEPS_MAX: 4,
+  CAVE_GEN_DEPTH_MIN: 28,              // m below the SURFACE the egg chamber floor reaches (target range; entrance is ~12m)
+  CAVE_GEN_DEPTH_MAX: 38,
+  CAVE_GEN_MIN_COVER: 3.0,             // m — min rock between any chamber/corridor ceiling and the terrain sheet (no poke-through)
+  CAVE_GEN_MAX_SLOPE: 26,              // ° — corridor floor slope ceiling (runs are sized from the drop to guarantee this; < probe 32°)
+  // Chamber sizes (horizontal radii rx/rz + interior clear height). The egg is the largest +
+  // most distinct; the hall is the big gallery; pockets are the small chambers.
+  CAVE_GEN_ENTRANCE_RX: 4.8,           // m — entrance hall horizontal radius
+  CAVE_GEN_ENTRANCE_H: 4.8,            // m — entrance hall clear height (taller than any corridor so the dome guard leaves room)
+  CAVE_GEN_HALL_RX: 8.0,               // m — the large hall (~16m across)
+  CAVE_GEN_HALL_H: 6.5,                // m
+  CAVE_GEN_POCKET_RX_MIN: 2.8,         // m — small pocket chambers (~5.6m across at min)
+  CAVE_GEN_POCKET_RX_MAX: 4.4,
+  CAVE_GEN_POCKET_H_MIN: 4.4,          // m — taller than the gallery corridor (3.4) + the dome guard, so corridor mouths clear
+  CAVE_GEN_POCKET_H_MAX: 5.4,
+  CAVE_GEN_EGG_RX: 9.5,               // m — the egg chamber: largest + most distinct (deepest, a domed cathedral ~19m across)
+  CAVE_GEN_EGG_H: 8.5,                // m
+  CAVE_GEN_CHAMBER_FLOOR_DROP: 0.55,   // fraction of height the flat floor sits below the ellipsoid centre (rest is walls+dome)
+  CAVE_GEN_FLOOR_FILL: 0.24,           // fraction of chamber height flattened into the floor disk — makes the flat floor
+                                       // reach ~0.94·rx so corridors (which connect at rx−overlap) land ON flat floor, not the sloped wall
+  // Corridor cross-sections (D-shape: flat tilted floor + arched ceiling). Half-width and clear
+  // height per corridor — squeeze vs. gallery chosen per edge for varied cross-sections.
+  CAVE_GEN_SQUEEZE_HALF_W: 1.35,       // m — squeeze corridor half-width (2.7m clear, constant; > the 2.2m min)
+  CAVE_GEN_SQUEEZE_H: 2.8,             // m — squeeze clear height (walkable; > 2.0m min with displacement margin)
+  CAVE_GEN_GALLERY_HALF_W: 2.3,        // m — wide-gallery corridor half-width (~4.6m across)
+  CAVE_GEN_GALLERY_H: 3.4,             // m — gallery clear height
+  CAVE_GEN_SQUEEZE_CHANCE: 0.4,        // per-corridor chance of a squeeze (else gallery); trunk always has ≥1 of each
+  CAVE_GEN_CORRIDOR_RUN_MIN: 8.0,      // m — min horizontal corridor run (also the level-branch run floor)
+  CAVE_GEN_BRANCH_DROP_MAX: 4.0,       // m — max descent on a side-branch corridor (branches stay shallower than the egg)
+  CAVE_GEN_END_OVERLAP: 1.2,           // m — corridor end rings poke this far into each chamber (no gap at the aperture)
+  CAVE_GEN_DOORWAY_H: 3.0,             // m — corridor mouths open the chamber wall only up to here (a doorway with a lintel);
+                                       // the dome above is NEVER carved, so the ceiling can't open to the sky (no see-through)
+  // Mesh resolution + rock displacement (greybox — keep tri counts modest, floor bumps < the
+  // 0.4m KCC step so the floor stays walkable).
+  CAVE_GEN_CHAMBER_RINGS: 12,          // lat rings per chamber shell
+  CAVE_GEN_CHAMBER_SEGS: 18,           // long segments per chamber shell
+  CAVE_GEN_CORRIDOR_RINGS: 10,         // cross-section rings along a corridor
+  CAVE_GEN_CORRIDOR_SEGS: 14,          // verts per corridor cross-section ring
+  CAVE_GEN_DISP_AMP: 0.24,             // m — rock wall/ceiling displacement amplitude (small so it never dips into the walk path)
+  CAVE_GEN_DISP_FREQ: 0.22,            // 1/m — displacement noise frequency
+  CAVE_GEN_FLOOR_BUMP: 0.07,           // m — flat-floor micro-texture (< the 0.4m step; keeps floors walkable)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

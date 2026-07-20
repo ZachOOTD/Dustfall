@@ -16,6 +16,7 @@ import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
 import { caveTestSite, spawnCaveTestBore } from './world/caveTest.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
+import { caveGenSeed, spawnCave } from './world/caveGen.ts';             // UNDERWORLD cycle 2 — the generated cave body
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
@@ -190,8 +191,12 @@ const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
 // createTerrain builds every tile exactly as before (surface world byte-identical).
 const caveSite = FEATURES.caveTest ? caveTestSite(worldSeed) : null;
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes, caveSite);
-// The welded bore (ramp + roofed under-sheet chamber) at the carved entrance-chunk hole.
-if (caveSite) spawnCaveTestBore(three.scene, physics.world, terrain, caveSite);
+// The welded bore (ramp + trench + roofed throat) at the carved entrance-chunk hole, then the
+// GENERATED cave body (cycle 2: deterministic room-graph + corridors) hung off the throat junction.
+if (caveSite) {
+  const bore = spawnCaveTestBore(three.scene, physics.world, terrain, caveSite);
+  spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));
+}
 _mark('terrain');
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the

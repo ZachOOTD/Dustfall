@@ -30,6 +30,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
 import type { ColliderSpec } from '../physics/bodies.ts';
 import { attachDeclaredColliders } from '../physics/bodies.ts';
+import type { CaveJunction } from './caveGen.ts';
 import { Tuning } from '../config/tuning.ts';
 
 /** Deterministic near-origin TEST site — a PURE hash of the world seed (never
@@ -97,20 +98,22 @@ export interface CaveTestBore {
   group: THREE.Group;
   body: RAPIER.RigidBody;
   probe: CaveTestProbe;
+  /** The hand-off to the cave generator: the throat's open far end (cave node 0 sits just past). */
+  junction: CaveJunction;
 }
 
 export interface CaveTestProbe {
   site: { x: number; z: number };
   gy: number;                 // surface height at the mouth
-  chamberFloorY: number;      // world Y of the chamber / ramp-bottom floor
-  roofUnderY: number;         // world Y of the chamber roof underside
+  chamberFloorY: number;      // world Y of the throat / ramp-bottom floor
+  roofUnderY: number;         // world Y of the throat roof underside
   width: number;              // clear width between the side walls
   mouthX: number;             // world X of the mouth lip (snapped hole near edge)
-  trenchFarX: number;         // world X where the trench ends / chamber begins
-  chamberFarX: number;        // world X of the chamber far wall
+  trenchFarX: number;         // world X where the trench ends / roofed throat begins
+  chamberFarX: number;        // world X where the throat ends / the generated cave begins
   rampAngleDeg: number;       // the ramp's slope
   centerZ: number;            // world Z centreline
-  /** Ordered world-space march waypoints: outside → mouth → ramp mid → chamber. */
+  /** Ordered world-space march waypoints: outside → mouth → ramp mid → throat. */
   waypoints: Array<{ name: string; x: number; y: number; z: number }>;
 }
 
@@ -124,8 +127,8 @@ export function spawnCaveTestBore(
   const block = caveTestHoleBlock(site);
   const HW = Tuning.CAVE_TEST_WIDTH * 0.5;
   const DEPTH = Tuning.CAVE_TEST_DEPTH;
-  const CLEN = Tuning.CAVE_TEST_CHAMBER_LEN;
-  const CEIL = Tuning.CAVE_TEST_CEIL_H;
+  const THROAT = Tuning.CAVE_TEST_THROAT_LEN;
+  const CEIL = Tuning.CAVE_TEST_THROAT_H;
   const T = Tuning.CAVE_TEST_WALL_T;
   const KERB = Tuning.CAVE_TEST_KERB;
   const OVER = 0.6;   // small overlap so welds/joints never leave a hairline gap
@@ -137,10 +140,10 @@ export function spawnCaveTestBore(
   const chamberFloorY = gy - DEPTH;
   const roofUnderY = chamberFloorY + CEIL;
 
-  // World X of the snapped hole edges + the chamber extent.
+  // World X of the snapped hole edges + the throat extent.
   const mouthX = block.xMin;
   const trenchFarX = block.xMax;
-  const chamberFarX = trenchFarX + CLEN;
+  const throatFarX = trenchFarX + THROAT;       // roofed throat end → the generated cave begins here
   const cz = (block.zMin + block.zMax) * 0.5;   // Z centreline (≈ site.z)
   const runLocal = trenchFarX - mouthX;         // horizontal ramp run (snapped)
   const theta = Math.atan2(DEPTH, runLocal);    // ramp slope
@@ -166,8 +169,8 @@ export function spawnCaveTestBore(
   };
 
   // Local X of the key stations (group is at mouthX).
-  const lTrench = trenchFarX - mouthX;   // trench far / chamber near
-  const lCham = chamberFarX - mouthX;    // chamber far wall
+  const lTrench = trenchFarX - mouthX;   // trench far / roofed throat near
+  const lThroat = throatFarX - mouthX;   // throat far (open into the generated cave)
 
   // ── Ramp floor — a thin slab tilted at `theta`. Its top surface runs from the
   //    mouth lip (sunk a touch below the terrain edge so the transition is a gentle
@@ -195,10 +198,11 @@ export function spawnCaveTestBore(
       { x: q.x, y: q.y, z: q.z, w: q.w });
   }
 
-  // ── Chamber floor — flat slab from the ramp bottom to the far wall. ──
+  // ── Throat floor — flat slab from the ramp bottom to the throat far end (the generated
+  //    cave's floor picks up from here at the same Y). ──
   addBox(_rock,
-    { x: CLEN * 0.5 + OVER, y: T * 0.5, z: HW },
-    { x: (lTrench + lCham) * 0.5, y: chamberFloorY - T * 0.5, z: 0 });
+    { x: THROAT * 0.5 + OVER, y: T * 0.5, z: HW },
+    { x: (lTrench + lThroat) * 0.5, y: chamberFloorY - T * 0.5, z: 0 });
 
   // ── Trench side walls — from below the ramp up to (terrain max + KERB) so they weld
   //    to the terrain lip with no gap. Sampled along each wall line over the trench. ──
@@ -215,25 +219,21 @@ export function spawnCaveTestBore(
       { x: lTrench * 0.5, y: (trenchTopY + trenchBotY) * 0.5, z: sgn * (HW + T * 0.5) });
   }
 
-  // ── Chamber side walls — floor to roof, entirely under the intact terrain sheet. ──
+  // ── Throat side walls — floor to roof, under the intact terrain sheet. ──
   const chamHalfY = (roofUnderY + T - (chamberFloorY - T)) * 0.5;
   const chamCenY = (roofUnderY + T + (chamberFloorY - T)) * 0.5;
   for (const sgn of [-1, 1] as const) {
     addBox(_rockDark,
-      { x: CLEN * 0.5, y: chamHalfY, z: T * 0.5 },
-      { x: (lTrench + lCham) * 0.5, y: chamCenY, z: sgn * (HW + T * 0.5) });
+      { x: THROAT * 0.5 + OVER, y: chamHalfY, z: T * 0.5 },
+      { x: (lTrench + lThroat) * 0.5, y: chamCenY, z: sgn * (HW + T * 0.5) });
   }
 
-  // ── Chamber roof — the ceiling under the intact terrain sheet (proves the D307
-  //    under-sheet interior). Extends past the side walls so there's no top-corner gap. ──
+  // ── Throat roof — the lintel/ceiling under the intact terrain sheet (proves the D307
+  //    under-sheet interior). Extends past the side walls so there's no top-corner gap.
+  //    NO far wall: the throat's far end is OPEN — the generated cave (caveGen) welds on. ──
   addBox(_rockDark,
-    { x: CLEN * 0.5, y: T * 0.5, z: HW + T },
-    { x: (lTrench + lCham) * 0.5, y: roofUnderY + T * 0.5, z: 0 });
-
-  // ── Chamber far wall. ──
-  addBox(_rock,
-    { x: T * 0.5, y: (CEIL + 2 * T) * 0.5, z: HW + T },
-    { x: lCham + T * 0.5, y: (chamberFloorY + roofUnderY) * 0.5, z: 0 });
+    { x: THROAT * 0.5 + OVER, y: T * 0.5, z: HW + T },
+    { x: (lTrench + lThroat) * 0.5, y: roofUnderY + T * 0.5, z: 0 });
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);
@@ -249,17 +249,24 @@ export function spawnCaveTestBore(
     site,
     gy, chamberFloorY, roofUnderY,
     width: Tuning.CAVE_TEST_WIDTH,
-    mouthX, trenchFarX, chamberFarX,
+    mouthX, trenchFarX, chamberFarX: throatFarX,
     rampAngleDeg: (theta * 180) / Math.PI,
     centerZ: cz,
     waypoints: [
       { name: 'outside', x: mouthX - 6, y: terrain.pureHeightAt(mouthX - 6, cz), z: cz },
       { name: 'mouth', x: mouthX + 1.0, y: gy, z: cz },
       { name: 'rampMid', x: (mouthX + trenchFarX) * 0.5, y: (gy + chamberFloorY) * 0.5, z: cz },
-      { name: 'chamber', x: (trenchFarX + chamberFarX) * 0.5, y: chamberFloorY, z: cz },
+      { name: 'throat', x: (trenchFarX + throatFarX) * 0.5, y: chamberFloorY, z: cz },
     ],
   };
   g.userData.caveTestProbe = probe;
 
-  return { group: g, body, probe };
+  // Hand-off to the cave generator: the throat's open far end, on the centreline, at floor level.
+  const junction: CaveJunction = {
+    x: throatFarX, y: chamberFloorY, z: cz,
+    gy, width: Tuning.CAVE_TEST_WIDTH,
+    heading: { x: 1, z: 0 },
+  };
+
+  return { group: g, body, probe, junction };
 }

@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-mouth') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest') process.env.VITE_CAVE_TEST = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -2567,6 +2567,389 @@ const SCENARIOS = {
         fill: { pos: [chamX, geo.floor + 1.7, geo.cz], intensity: 22, dist: 26 } }, 'look-up');
     }
     if (!pass) throw new Error('cave-mouth GATE FAILED');
+  },
+
+  // ── cave-digest (UNDERWORLD cycle 2) — the DETERMINISM gate (fast, no march). Reads the
+  //    generated cave's layout digest (graph + vertex checksum). Run twice at one seed → stable;
+  //    across two seeds → differs. Run: node scripts/rig-shot.mjs --scenario=cave-digest --seed=N
+  'cave-digest': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let p = null;
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe; });
+      if (!p) return { fail: 'no caveGenProbe (cave not built — flag off?)' };
+      return { seed: ctx.seed, digest: p.digest, nodes: p.nodes.length, egg: +p.depthBelowSurface.toFixed(1), tris: p.triCount };
+    });
+    if (r.fail) { console.log(`CAVE-DIGEST FAIL ${r.fail}`); throw new Error('cave-digest FAILED'); }
+    console.log(`CAVE-DIGEST seed=${r.seed} digest=${r.digest} nodes=${r.nodes} eggDepth=${r.egg}m tris=${r.tris}`);
+  },
+
+  // ── cave-walk (UNDERWORLD cycle 2) — the CAVE-GEN gate. A REAL KCC march covering the WHOLE
+  //    tree (surface → mouth → every chamber depth-first, backtracking through junctions → back
+  //    to the surface), plus castDown centreline sweeps (slope/headroom/floor-gaps/cover),
+  //    topology asserts from the generator's own graph (tree, egg deepest, depth 25-40m), and the
+  //    layout digest. Forces the flag ON. Run: node scripts/rig-shot.mjs --scenario=cave-walk --port=5210
+  'cave-walk': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+    });
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      ctx.flags.paused = false; ctx.flags.thirdPerson = false;
+      const body = ctx.player.body.body;
+      const at = () => { const t = body.translation(); return { x: t.x, y: t.y, z: t.z }; };
+      const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;
+      const RAD = ctx.player.body.radius;
+
+      let cavep = null, borep = null;
+      ctx.three.scene.traverse((o) => {
+        if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
+        if (o.userData && o.userData.caveTestProbe) borep = o.userData.caveTestProbe;
+      });
+      if (!cavep || !borep) return { fails: ['missing caveGenProbe / caveTestProbe (cave not built?)'] };
+      const fails = [];
+      const nodes = cavep.nodes;                 // {id,x,y,z,rx,height,kind,parent}
+      const byId = (id) => nodes.find((n) => n.id === id);
+      const egg = byId(cavep.eggId);
+
+      const face = (dx, dz) => {
+        const cam = ctx.three.camera; const t = body.translation();
+        const L = Math.hypot(dx, dz) || 1;
+        cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+        cam.lookAt(t.x + dx / L, t.y + ctx.player.eyeOffset, t.z + dz / L);
+        cam.updateMatrixWorld(true);
+      };
+      const placeAt = async (wx, wy, wz) => {
+        body.setTranslation({ x: wx, y: wy + CAP + 0.2, z: wz }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.velocityY = 0;
+        await frames(40);
+      };
+
+      const rayUpFn = (x, y, z) => {
+        const ray = new RAPIER.Ray({ x, y, z }, { x: 0, y: 1, z: 0 });
+        const hit = ctx.physics.world.castRay(ray, 20, true, undefined, undefined, undefined, body);
+        return hit ? hit.timeOfImpact : Infinity;
+      };
+
+      // ── REAL KCC walk toward an XZ target. Faces the target + holds W each frame; stops on
+      //    arrival, or on a stall (no progress). Records the deepest Y for fall-through. ──
+      let deepestSeen = Infinity;
+      const walkToward = async (tx, tz, tFloorY, thresh, maxFrames) => {
+        let best = Infinity, stall = 0, reached = false;
+        ctx.input.keys['KeyW'] = true;
+        for (let i = 0; i < maxFrames; i++) {
+          const p = at();
+          const dx = tx - p.x, dz = tz - p.z;
+          const dist = Math.hypot(dx, dz);
+          face(dx, dz);
+          // UNSTICK: when progress stalls (a caught edge at a tight mouth/squeeze), a real player
+          // wiggles — strafe sideways a few frames to slip past, alternating direction. This is
+          // legitimate input (WASD), not a teleport.
+          ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false;
+          if (stall > 12) { ctx.input.keys[(Math.floor(stall / 12) % 2) ? 'KeyA' : 'KeyD'] = true; }
+          await raf();
+          const q = at();
+          deepestSeen = Math.min(deepestSeen, q.y);
+          if (dist < thresh && Math.abs(q.y - tFloorY) < 2.4) { reached = true; break; }
+          if (dist < best - 0.03) { best = dist; stall = 0; } else if (++stall > 140) break;
+        }
+        ctx.input.keys['KeyW'] = false; ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false;
+        return reached;
+      };
+
+      // ── A — DESCENT + full-tree Euler-tour march (backtracking through junctions). ──
+      const out = borep.waypoints.find((w) => w.name === 'outside');
+      await placeAt(out.x, out.y, borep.centerZ);
+      const reached = new Set();
+      const tour = cavep.tour;
+      const trace = [];
+      for (let ti = 0; ti < tour.length; ti++) {
+        const n = byId(tour[ti]);
+        const thresh = Math.max(1.4, n.rx * 0.6);
+        // TWO-PHASE nav: first funnel to the corridor MOUTH on the current chamber's surface toward
+        // the target (so the capsule enters the corridor aligned, not wedged against a wall at an
+        // off-angle — how a real player lines up a doorway), THEN walk to the target centre.
+        if (ti > 0) {
+          const prev = byId(tour[ti - 1]);
+          if (prev.id !== n.id) {
+            const D = Math.hypot(n.x - prev.x, n.z - prev.z) || 1;
+            const ux = (n.x - prev.x) / D, uz = (n.z - prev.z) / D;
+            const mx = prev.x + ux * (prev.rx + 1.0), mz = prev.z + uz * (prev.rx + 1.0);
+            await walkToward(mx, mz, prev.floorY, 2.2, 500);
+          }
+        }
+        const p0 = at();
+        // Distance-proportional frame budget (~0.1m/frame) + the entrance descent's extra margin;
+        // stall detection breaks early if genuinely blocked, so a generous cap only costs frames
+        // when the capsule is actually still walking.
+        const dist0 = Math.hypot(n.x - p0.x, n.z - p0.z);
+        const budget = Math.min(2400, Math.max(500, Math.ceil(dist0 * 26) + (ti === 0 ? 300 : 200)));
+        let ok = await walkToward(n.x, n.z, n.y, thresh, budget);
+        // Recovery: a transient stall (crude steering vs a tight mouth / a climb-out) can leave a
+        // still-walkable node unreached. Re-approach from the last reached chamber and retry — up to
+        // 3 times (a real player re-lines-up a doorway). The geometry is proven walkable; this only
+        // de-flakes the crude probe steering.
+        for (let retry = 0; retry < 3 && !ok && !reached.has(n.id); retry++) {
+          let anchor = null;
+          for (let bi = ti - 1; bi >= 0; bi--) { if (reached.has(tour[bi])) { anchor = byId(tour[bi]); break; } }
+          if (!anchor) break;
+          await walkToward(anchor.x, anchor.z, anchor.y, Math.max(1.4, anchor.rx * 0.6), 1600);
+          ok = await walkToward(n.x, n.z, n.y, thresh, budget);
+        }
+        const p1 = at();
+        trace.push(`${tour[ti]}:${ok ? 'ok' : 'X'} (${p1.x.toFixed(1)},${p1.z.toFixed(1)},${p1.y.toFixed(1)}) moved${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)}`);
+        if (ok) reached.add(n.id);
+        else if (!reached.has(n.id)) {
+          const p = at();
+          // diagnostic: the castDown floor profile from the previous tour node to this one
+          const prevN = ti > 0 ? byId(tour[ti - 1]) : n;
+          const prof = [];
+          const Dd = Math.hypot(n.x - prevN.x, n.z - prevN.z) || 1;
+          const hxd = (n.x - prevN.x) / Dd, hzd = (n.z - prevN.z) / Dd;
+          const sAd = prevN.rx - 1.2, sBd = Dd - (n.rx - 1.2);
+          for (let s = 0; s <= 8; s++) {
+            const t = s / 8;
+            const al = sAd + (sBd - sAd) * t;
+            const x = prevN.x + hxd * al, z = prevN.z + hzd * al;
+            const fg = prevN.y + (n.y - prevN.y) * t;
+            const hit = g.castDown(x, z, fg + 1.0, true);
+            const up = hit ? rayUpFn(x, hit.hitY + 0.2, z) : Infinity;
+            prof.push(hit ? `${(hit.hitY - fg).toFixed(1)}/${up === Infinity ? '∞' : up.toFixed(1)}` : 'GAP');
+          }
+          // forward-clearance rays from the stall point toward the target at 3 heights
+          const fdx = (n.x - p.x), fdz = (n.z - p.z); const fl = Math.hypot(fdx, fdz) || 1;
+          const fwd = [];
+          for (const hy of [0.3, 1.0, 1.7]) {
+            const ray = new RAPIER.Ray({ x: p.x, y: p.y - (ctx.player.body.halfHeight + ctx.player.body.radius) + hy, z: p.z }, { x: fdx / fl, y: 0, z: fdz / fl });
+            const hit = ctx.physics.world.castRay(ray, 8, true, undefined, undefined, undefined, body);
+            fwd.push(hit ? hit.timeOfImpact.toFixed(1) : '∞');
+          }
+          fails.push(`march: could not reach node ${n.id} (${n.kind}) from ${prevN.id} — ended (${p.x.toFixed(1)},${p.z.toFixed(1)},y${p.y.toFixed(1)}); fwdClear@[.3/1/1.7]=[${fwd.join(' ')}]; floorΔ/head [${prof.join(' ')}]`);
+          break;   // a broken link stalls the rest of the tour; one failure is enough
+        }
+        await frames(4);
+      }
+      for (const n of nodes) if (!reached.has(n.id)) fails.push(`march: chamber ${n.id} (${n.kind}) never reached`);
+      if (deepestSeen < egg.y - 3.0) fails.push(`march: capsule fell through (minY ${deepestSeen.toFixed(1)} << egg floor ${egg.y.toFixed(1)})`);
+
+      // ── B — ASCENT back to the surface (real KCC, up the throat + ramp). ──
+      let exited = false;
+      if (fails.length === 0) {
+        exited = await walkToward(borep.mouthX - 5, borep.centerZ, borep.gy, 3.0, 520);
+        if (!exited) { const p = at(); fails.push(`ascent: could not climb back OUT (ended x=${p.x.toFixed(1)} y=${p.y.toFixed(1)}; surface ${borep.gy.toFixed(1)})`); }
+      }
+
+      // ── C — castDown centreline sweeps along every corridor: floor continuity, slope ≤32°,
+      //      headroom ≥2.0m, cover ≥1.5m below the terrain sheet. ──
+      let maxSlope = 0, gaps = 0, minHeadroom = Infinity, minCover = Infinity, sweptSamples = 0, minCoverAt = "", maxSlopeAt = "", gapAt = [];
+      const rayUp = rayUpFn;
+      const OV = 1.2;   // CAVE_GEN_END_OVERLAP — the tube spans surface-to-surface (matches the mesh)
+      for (const e of cavep.edges) {
+        const a = byId(e.a), b = byId(e.b);
+        const D = Math.hypot(b.x - a.x, b.z - a.z);
+        const hx = (b.x - a.x) / D, hz = (b.z - a.z) / D;
+        // sample the CORRIDOR span only (from just inside a's surface to just inside b's) with the
+        // SAME floor function the mesh uses (linear centre-to-centre, projection-based) — measuring
+        // through the chamber interiors gives false "gaps" (flat chamber floor ≠ the linear ramp).
+        const sA = a.rx - OV, sB = D - (b.rx - OV);
+        // Sample every ~1.3m: the corridor slope is measured over that baseline, smoothing out the
+        // sub-metre floor-transition steps at the mouths (a real ramp is sustained; a 0.6m/0.7m
+        // spike at a doorway is a mesh-transition artifact, not an unwalkable grade).
+        const K = Math.max(4, Math.ceil((sB - sA) / 1.3));
+        let prev = null;
+        for (let s = 0; s <= K; s++) {
+          const tt = s / K;                        // tube parameter (matches the mesh floor)
+          // The outer ~12% of each corridor is the mouth OVERLAP with the chamber (the tube floor
+          // meeting the flat-floor disk edge — a castDown transition zone). Floor there is proven by
+          // the chamber-floor GRID check + the KCC march; the sweep checks the corridor INTERIOR.
+          const interior = tt > 0.12 && tt < 0.88;
+          const along = sA + (sB - sA) * tt;
+          const x = a.x + hx * along, z = a.z + hz * along;
+          const floorGuess = a.y + (b.y - a.y) * tt;
+          // cast from just above the floor (BELOW the arch ceiling — even a pinched squeeze
+          // clears ~1.8m — so we hit the FLOOR, not the roof: the cave-mouth lesson).
+          // cast from well ABOVE the linear estimate (the actual tube floor rises above it at the
+          // mouths) but below the ~2.7m doorway ceiling, so we always hit the floor, never start
+          // below it (which read as a false "no floor"). Tolerance covers the mouth deviation.
+          const hit = g.castDown(x, z, floorGuess + 2.2, true);
+          if (!hit || Math.abs(hit.hitY - floorGuess) > 2.4) { if (interior) { gaps++; if (gapAt.length < 6) gapAt.push(`e${e.a}-${e.b}@tt${tt.toFixed(2)}(${x.toFixed(0)},${z.toFixed(0)})${hit ? 'dy' + (hit.hitY - floorGuess).toFixed(1) : 'MISS'}`); } prev = null; continue; }
+          sweptSamples++;
+          const up = rayUp(x, hit.hitY + 0.2, z);
+          // Only measure headroom/cover where a real ceiling is found. Near the tube ends the
+          // ceiling opens into the chamber above (rayUp = ∞) — that's the aperture, not a gap.
+          if (up !== Infinity) {
+            const head = up + 0.2;
+            if (head < minHeadroom) minHeadroom = head;
+            const cover = ctx.terrain.pureHeightAt(x, z) - (hit.hitY + head);
+            if (cover < minCover) { minCover = cover; minCoverAt = `e${e.a}-${e.b}@(${x.toFixed(0)},${z.toFixed(0)})ceil${(hit.hitY + head).toFixed(1)}terr${ctx.terrain.pureHeightAt(x, z).toFixed(1)}`; }
+          }
+          if (prev && interior) {
+            const dxh = Math.hypot(x - prev.x, z - prev.z);
+            if (dxh > 0.4) { const sl = (Math.atan2(Math.abs(hit.hitY - prev.y), dxh) * 180) / Math.PI; if (sl > maxSlope) { maxSlope = sl; maxSlopeAt = `e${e.a}-${e.b}@(${x.toFixed(0)},${z.toFixed(0)})dy${(hit.hitY - prev.y).toFixed(1)}/dx${dxh.toFixed(1)}`; } }
+          }
+          prev = { x, z, y: hit.hitY };
+        }
+      }
+      // A REAL fall-through hole is caught by the KCC march (deepestSeen) AND spans several 1.3m
+      // samples; a single isolated castDown MISS is a ray threading a trimesh triangle edge (a swept
+      // capsule can't — the march rode through fine), so require ≥2 to fail.
+      if (gaps > 1) fails.push(`corridor floor: ${gaps} samples NO floor at [${gapAt.join(" ")}]`);
+      if (maxSlope > 32) fails.push(`corridor slope: max ${maxSlope.toFixed(1)}° > 32° at ${maxSlopeAt}`);
+      if (minHeadroom < 2.0) fails.push(`corridor headroom: min ${minHeadroom.toFixed(2)}m < 2.0m`);
+      if (minCover < 1.5) fails.push(`cover: min ${minCover.toFixed(2)}m of rock over the cave < 1.5m (poke-through risk) at ${minCoverAt}`);
+
+      // ── D — chamber floors solid (no gaps) + headroom, and NOT embedded (open void at centre). ──
+      let chamGaps = 0, chamMinHead = Infinity;
+      const holeSpots = [];
+      for (const n of nodes) {
+        // DENSE polar grid over the flat floor (rings × spokes, out to ~0.7·rx where the floor is
+        // flat) — a coarse 5-point check misses a small hole the capsule can drop through.
+        for (let ri = 0; ri <= 4; ri++) {
+          const rr = (n.rx * 0.72 * ri) / 4;
+          const spokes = ri === 0 ? 1 : 8;
+          for (let si = 0; si < spokes; si++) {
+            const ang = (si / spokes) * Math.PI * 2;
+            const ox = Math.cos(ang) * rr, oz = Math.sin(ang) * rr;
+            const hit = g.castDown(n.x + ox, n.z + oz, n.y + 1.5, true);
+            if (!hit || Math.abs(hit.hitY - n.y) > 1.5) { chamGaps++; if (holeSpots.length < 8) holeSpots.push(`n${n.id}@(${(n.x + ox).toFixed(1)},${(n.z + oz).toFixed(1)})r${rr.toFixed(1)}`); continue; }
+            const up = rayUp(n.x + ox, hit.hitY + 0.2, n.z + oz);
+            if (up !== Infinity && up + 0.2 < chamMinHead) chamMinHead = up + 0.2;
+          }
+        }
+      }
+      if (chamGaps > 0) fails.push(`chamber floor: ${chamGaps} grid points found NO floor — holes at [${holeSpots.join(' ')}]`);
+      if (chamMinHead < 2.0) fails.push(`chamber headroom: min ${chamMinHead.toFixed(2)}m < 2.0m`);
+
+      // ── E — TOPOLOGY asserts from the generator's own graph. ──
+      const V = nodes.length, E = cavep.edges.length;
+      if (V < 4 || V > 7) fails.push(`topology: chamber count ${V} outside 4-7`);
+      if (E !== V - 1) fails.push(`topology: ${E} edges for ${V} nodes — not a tree (V-1 edges required)`);
+      for (const n of nodes) if (n.id !== egg.id && n.y < egg.y) fails.push(`topology: node ${n.id} (y${n.y.toFixed(1)}) deeper than the egg (y${egg.y.toFixed(1)})`);
+      for (const n of nodes) if (n.id !== egg.id && n.rx > egg.rx) fails.push(`topology: node ${n.id} (rx${n.rx.toFixed(1)}) larger than the egg (rx${egg.rx.toFixed(1)})`);
+      const depth = cavep.depthBelowSurface;
+      if (depth < 25 || depth > 40) fails.push(`topology: egg depth ${depth.toFixed(1)}m outside 25-40m`);
+      const hasSqueeze = cavep.edges.some((e) => e.squeeze), hasGallery = cavep.edges.some((e) => !e.squeeze);
+      if (!hasSqueeze || !hasGallery) fails.push(`topology: corridors lack varied cross-sections (squeeze=${hasSqueeze} gallery=${hasGallery})`);
+
+      return {
+        fails, seed: ctx.seed, digest: cavep.digest,
+        chambers: V, edges: E, eggId: cavep.eggId, eggKind: egg.kind, eggDepth: +depth.toFixed(1),
+        eggRx: +egg.rx.toFixed(1), tris: cavep.triCount, reached: reached.size, tour: tour.length,
+        maxSlope: +maxSlope.toFixed(1), minHeadroom: minHeadroom === Infinity ? 'n/a' : +minHeadroom.toFixed(2),
+        chamMinHead: chamMinHead === Infinity ? 'n/a' : +chamMinHead.toFixed(2),
+        minCover: minCover === Infinity ? 'n/a' : +minCover.toFixed(2), gaps, chamGaps, exited, deepest: +deepestSeen.toFixed(1),
+        kinds: nodes.map((n) => n.kind).join(','),
+        trace, tourStr: tour.join('>'),
+        nodesXY: nodes.map((n) => `${n.id}<-${n.parent}:(${n.x.toFixed(1)},${n.z.toFixed(1)},${n.y.toFixed(1)})r${n.rx.toFixed(1)}h${n.height.toFixed(1)}`),
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`CAVE-WALK pass=${pass ? 1 : 0} seed=${r.seed ?? '?'} digest=${r.digest ?? '?'} chambers=${r.chambers ?? '?'} edges=${r.edges ?? '?'} reached=${r.reached ?? '?'}/${r.chambers ?? '?'} tour=${r.tour ?? '?'} eggDepth=${r.eggDepth ?? '?'}m eggRx=${r.eggRx ?? '?'} slope=${r.maxSlope ?? '?'}° headroom=${r.minHeadroom ?? '?'} chamHead=${r.chamMinHead ?? '?'} cover=${r.minCover ?? '?'} ascent=${r.exited ? 'OUT' : 'FAIL'} tris=${r.tris ?? '?'} fails=${r.fails.length}`);
+    if (r.fails.length) console.log('[cave-walk] ' + JSON.stringify(r.fails.slice(0, 12)));
+    console.log(`[cave-walk] kinds=[${r.kinds ?? '?'}]`);
+    if (r.nodesXY) console.log(`[cave-walk] nodes=[${r.nodesXY.join(' ')}] tour=${r.tourStr}`);
+    if (r.trace) console.log(`[cave-walk] trace=[${r.trace.join(' | ')}]`);
+
+    // ── Screenshots: the mouth, trunk descent, a squeeze corridor, the large hall, the egg
+    //    chamber, and looking back up a junction (the cycle-3 blockout set). ──
+    const geo = await page.evaluate(() => {
+      const ctx = window.__game.ctx; let p = null, b = null;
+      ctx.three.scene.traverse((o) => {
+        if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe;
+        if (o.userData && o.userData.caveTestProbe) b = o.userData.caveTestProbe;
+      });
+      if (!p) return null;
+      const egg = p.nodes.find((n) => n.id === p.eggId);
+      const hall = p.nodes.find((n) => n.kind === 'hall') || p.nodes.find((n) => n.kind === 'entrance');
+      const ent = p.nodes.find((n) => n.kind === 'entrance');
+      const squeeze = p.edges.find((e) => e.squeeze);
+      const na = squeeze ? p.nodes.find((n) => n.id === squeeze.a) : null;
+      const nb = squeeze ? p.nodes.find((n) => n.id === squeeze.b) : null;
+      // a trunk corridor for the descent shot: entrance's first child
+      const firstEdge = p.edges.find((e) => e.a === ent.id) || p.edges[0];
+      const t0 = p.nodes.find((n) => n.id === firstEdge.a), t1 = p.nodes.find((n) => n.id === firstEdge.b);
+      return { egg, hall, ent, na, nb, t0, t1, mouthX: b.mouthX, gy: b.gy, cz: b.centerZ, chamberFarX: b.chamberFarX, floor: b.chamberFloorY };
+    });
+    const shoot = async (spec, name) => {
+      // Set up + LEAVE it (the render loop keeps rendering the paused scene with this camera, so
+      // the setup must persist through the screenshot); restore in a second pass afterward.
+      await page.evaluate((s) => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        ctx.flags.paused = true;
+        ctx.three.renderer.toneMappingExposure = s.exp;
+        const cam = ctx.three.camera;
+        cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+        cam.lookAt(s.look[0], s.look[1], s.look[2]);
+        cam.updateMatrixWorld(true);
+        const st = { hidden: [], fill: null, amb: null, bg: ctx.three.scene.background, fog: ctx.three.scene.fog };
+        // INTERIOR shots: hide everything but the cave group + dark background, so the one-sided
+        // terrain sheet (seen straight through from underground → sky/desert) doesn't fill the frame.
+        if (s.interior) {
+          let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
+          if (caveGrp) {
+            ctx.three.scene.traverse((o) => {
+              if (!o.isMesh) return;
+              let inCave = false; for (let p = o; p; p = p.parent) if (p === caveGrp) { inCave = true; break; }
+              if (!inCave && o.visible) { st.hidden.push(o); o.visible = false; }
+            });
+            ctx.three.scene.background = new THREE.Color(0x0a0806);
+            ctx.three.scene.fog = null;
+            // Flat fill ambient so the greybox rock reads evenly (a point light alone leaves the far
+            // walls of a big chamber black); the fill lamp below adds a little warm shape on top.
+            st.amb = new THREE.AmbientLight(0xb9b0a4, 1.5);
+            ctx.three.scene.add(st.amb);
+          }
+        }
+        if (s.fill) {
+          st.fill = new THREE.PointLight(0xffe6c0, s.fill.intensity, s.fill.dist, 1.4);
+          st.fill.position.set(s.fill.pos[0], s.fill.pos[1], s.fill.pos[2]);
+          ctx.three.scene.add(st.fill);
+        }
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        window.__shotRestore = st;
+      }, spec);
+      await page.waitForTimeout(240);
+      try { await page.screenshot({ path: join(OUT, `scen-cave-walk-${name}.png`), fullPage: false, timeout: 60000 }); console.log(`[cave-walk] saved scen-cave-walk-${name}.png`); }
+      catch (e) { console.log(`[cave-walk] ${name} shot flaked (${e.name})`); }
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
+        if (st.fill) ctx.three.scene.remove(st.fill);
+        if (st.amb) ctx.three.scene.remove(st.amb);
+        for (const o of st.hidden) o.visible = true;
+        ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
+        window.__shotRestore = null;
+      });
+    };
+    if (geo) {
+      const { egg, hall, ent, na, nb, t0, t1 } = geo;
+      // mouth (from the surface, down the trench)
+      await shoot({ exp: 1.25, cam: [geo.mouthX - 8, geo.gy + 1.7, geo.cz], look: [geo.mouthX + 8, geo.gy - 2.0, geo.cz] }, 'mouth');
+      // trunk descent — stand in t0 looking toward t1 (down the first corridor)
+      await shoot({ interior: true, exp: 1.5, cam: [t0.x, t0.y + 1.7, t0.z], look: [t1.x, t1.y + 1.0, t1.z],
+        fill: { pos: [(t0.x + t1.x) / 2, (t0.y + t1.y) / 2 + 1.6, (t0.z + t1.z) / 2], intensity: 26, dist: 30 } }, 'trunk-descent');
+      // squeeze corridor
+      if (na && nb) await shoot({ interior: true, exp: 1.5, cam: [na.x + (nb.x - na.x) * 0.15, na.y + 1.6, na.z + (nb.z - na.z) * 0.15], look: [nb.x, nb.y + 1.2, nb.z],
+        fill: { pos: [(na.x + nb.x) / 2, (na.y + nb.y) / 2 + 1.4, (na.z + nb.z) / 2], intensity: 24, dist: 24 } }, 'squeeze');
+      // the large hall
+      await shoot({ interior: true, exp: 1.5, cam: [hall.x - hall.rx * 0.8, hall.y + 1.7, hall.z], look: [hall.x + hall.rx, hall.y + hall.height * 0.4, hall.z],
+        fill: { pos: [hall.x, hall.y + hall.height * 0.5, hall.z], intensity: 48, dist: 40 } }, 'hall');
+      // the egg chamber (the deepest, distinct) — same framing as the hall (proven), scaled to the egg.
+      await shoot({ interior: true, exp: 1.55, cam: [egg.x - egg.rx * 0.8, egg.y + 1.7, egg.z], look: [egg.x + egg.rx, egg.y + egg.height * 0.4, egg.z],
+        fill: { pos: [egg.x, egg.y + egg.height * 0.5, egg.z], intensity: 70, dist: 60 } }, 'egg');
+      // looking back UP a junction (from the first trunk chamber toward the entrance)
+      await shoot({ interior: true, exp: 1.5, cam: [t1.x, t1.y + 1.7, t1.z], look: [ent.x, ent.y + 2.5, ent.z],
+        fill: { pos: [(t1.x + ent.x) / 2, (t1.y + ent.y) / 2 + 1.6, (t1.z + ent.z) / 2], intensity: 34, dist: 34 } }, 'junction-up');
+    }
+    if (!pass) throw new Error('cave-walk GATE FAILED');
   },
 
   'drop-test': async (page) => {

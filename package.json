@@ -18,7 +18,7 @@
     "verify:placement": "node scripts/verify-placement.mjs",
     "verify:colliders": "node scripts/verify-colliders.mjs",
     "verify:chunks": "node scripts/verify-chunks.mjs",
-    "verify:cave": "node scripts/rig-shot.mjs --scenario=cave-mouth --port=5210",
+    "verify:cave": "node scripts/rig-shot.mjs --scenario=cave-walk --port=5210",
     "verify:solid": "node scripts/verify-solid.mjs --asset=all",
     "verify:solid:selftest": "node scripts/verify-solid.mjs --asset=selftest",
     "verify:intro": "node scripts/rig-shot.mjs --scenario=smoke-intro",
