@@ -896,10 +896,10 @@ export const Tuning = {
   // byte-identical). Displaced-ring chamber/corridor meshes (irregular rock cross-sections,
   // flat walkable floors) with a single trimesh collider matching the visual (rule 9). Behind
   // FEATURES.caveTest (default OFF). Real cave GENERATION; dressing to hero quality is cycle 4+.
-  CAVE_GEN_CHAMBERS_MIN: 5,            // chambers incl. the entrance hall (tree nodes), inclusive range
-  CAVE_GEN_CHAMBERS_MAX: 7,
-  CAVE_GEN_TRUNK_STEPS_MIN: 3,         // descending trunk corridors from the entrance hall to the egg (egg = trunk end)
-  CAVE_GEN_TRUNK_STEPS_MAX: 4,
+  CAVE_GEN_CHAMBERS_MIN: 8,            // chambers incl. the entrance hall (tree nodes), inclusive range — a LABYRINTH of narrow + larger rooms
+  CAVE_GEN_CHAMBERS_MAX: 11,
+  CAVE_GEN_TRUNK_STEPS_MIN: 4,         // descending trunk corridors from the entrance hall to the egg (egg = trunk end)
+  CAVE_GEN_TRUNK_STEPS_MAX: 5,         // side pockets branch off trunk nodes → natural forks (2-3 children per hub), still a tree
   CAVE_GEN_DEPTH_MIN: 28,              // m below the SURFACE the egg chamber floor reaches (target range; entrance is ~12m)
   CAVE_GEN_DEPTH_MAX: 38,
   CAVE_GEN_MIN_COVER: 3.0,             // m — min rock between any chamber/corridor ceiling and the terrain sheet (no poke-through)
@@ -933,13 +933,25 @@ export const Tuning = {
                                        // the dome above is NEVER carved, so the ceiling can't open to the sky (no see-through)
   // Mesh resolution + rock displacement (greybox — keep tri counts modest, floor bumps < the
   // 0.4m KCC step so the floor stays walkable).
-  CAVE_GEN_CHAMBER_RINGS: 12,          // lat rings per chamber shell
-  CAVE_GEN_CHAMBER_SEGS: 18,           // long segments per chamber shell
-  CAVE_GEN_CORRIDOR_RINGS: 10,         // cross-section rings along a corridor
-  CAVE_GEN_CORRIDOR_SEGS: 14,          // verts per corridor cross-section ring
-  CAVE_GEN_DISP_AMP: 0.24,             // m — rock wall/ceiling displacement amplitude (small so it never dips into the walk path)
-  CAVE_GEN_DISP_FREQ: 0.22,            // 1/m — displacement noise frequency
-  CAVE_GEN_FLOOR_BUMP: 0.07,           // m — flat-floor micro-texture (< the 0.4m step; keeps floors walkable)
+  CAVE_GEN_CHAMBER_RINGS: 16,          // lat rings per chamber shell (finer facets → carved-rock read, not a smooth blob)
+  CAVE_GEN_CHAMBER_SEGS: 24,           // long segments per chamber shell
+  CAVE_GEN_CORRIDOR_RINGS: 14,         // cross-section rings along a corridor
+  CAVE_GEN_CORRIDOR_SEGS: 18,          // verts per corridor cross-section ring
+  // Multi-octave rock displacement (big bulges + medium knobs + fine roughness). OUTWARD excursions
+  // (enlarging the cavity) are free; INWARD excursions are capped small so they never eat the walk
+  // path or the 2.0m headroom. AMP is the max OUTWARD push → it's what clampCover reserves as cover.
+  CAVE_GEN_DISP_AMP: 0.95,             // m — max OUTWARD wall/ceiling displacement (bulges that read as carved stone)
+  CAVE_GEN_DISP_IN: 0.30,             // m — max INWARD displacement (small — protects the walk path + headroom)
+  CAVE_GEN_DISP_FREQ: 0.14,            // 1/m — base (big-bulge) displacement frequency; octaves ×2.7, ×5.9 add knobs + roughness
+  CAVE_GEN_FLOOR_BUMP: 0.10,           // m — flat-floor micro-texture (< the 0.4m step; keeps floors walkable)
+  // Speleothems (stalactites / stalagmites / columns) — the signature cave read. Floor features are
+  // placed BEYOND the 0.72·rx floor-grid the walk gate samples (RING_MIN) and clear of corridor
+  // mouths (MOUTH_CLEAR_DEG), so they never block the walk path or trip the headroom/floor asserts.
+  CAVE_SPELEO_STALACTITE_CLEAR: 2.35,  // m — a stalactite tip must stay at least this high above the floor (keeps ≥2.0m headroom)
+  CAVE_SPELEO_RING_MIN: 0.74,          // fraction of rx — inner radius for FLOOR speleothems (> the 0.72 floor-grid the gate samples)
+  CAVE_SPELEO_RING_MAX: 0.92,          // fraction of rx — outer radius for floor speleothems (near the wall, off the walk path)
+  CAVE_SPELEO_MOUTH_CLEAR_DEG: 32,     // ° — keep this angular sector clear around each corridor mouth (don't wall a doorway)
+  CAVE_SPELEO_DENSITY: 0.9,            // speleothems per 10m² of chamber floor (scaled up in hall/egg, ~0 in squeeze pockets)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

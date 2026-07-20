@@ -31,6 +31,8 @@ import type { Terrain } from './terrain.ts';
 import type { ColliderSpec } from '../physics/bodies.ts';
 import { attachDeclaredColliders } from '../physics/bodies.ts';
 import type { CaveJunction } from './caveGen.ts';
+import { createStoneMaterial } from './stoneMaterial.ts';
+import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 
 /** Deterministic near-origin TEST site — a PURE hash of the world seed (never
@@ -87,12 +89,13 @@ export function caveTestHoleBlock(site: { x: number; z: number }): CaveTestBlock
   };
 }
 
-// Greybox test-bore materials — deliberately mid-grey (NOT the dark cave rock of the
-// real deepCave), so the enabling-tech geometry reads clearly under review lighting.
-// Two tones separate the walkable ramp/floor from the walls/roof. Real cave dressing
-// (dark rock + torch dark-nav) is cycle 4+; this is the cycle-1 blockout.
-const _rock = new THREE.MeshLambertMaterial({ color: 0x9c948a, flatShading: true });
-const _rockDark = new THREE.MeshLambertMaterial({ color: 0x6f685f, flatShading: true });
+// Bore rock — natural cave stone (procedural grain + cracks + sand dust on up-faces so the ramp
+// floor reads as sediment-dusted rock that ties to the desert above). Two tones: a lighter walkable
+// ramp/floor, a darker cool wall/roof. Boulders (below) use the same palette. The mouth is dressed
+// with tumbled rubble to read as a natural wind-exposed sinkhole, not a mine adit.
+const _rock = createStoneMaterial(0x4d4238, { dustColor: 0xb89870, dustStrength: 0.8, crackDensity: 0.5 });
+const _rockDark = createStoneMaterial(0x342c25, { dustColor: 0x9c855e, dustStrength: 0.45, crackDensity: 0.6 });
+const _boulder = createStoneMaterial(0x413730, { dustColor: 0xb89870, dustStrength: 0.7, crackDensity: 0.55 });
 
 export interface CaveTestBore {
   group: THREE.Group;
@@ -234,6 +237,46 @@ export function spawnCaveTestBore(
   addBox(_rockDark,
     { x: THROAT * 0.5 + OVER, y: T * 0.5, z: HW + T },
     { x: (lTrench + lThroat) * 0.5, y: roofUnderY + T * 0.5, z: 0 });
+
+  // ── Natural mouth dressing: tumbled boulders + rubble around the rim, so the opening reads as a
+  //    wind-exposed SINKHOLE (collapse-tapered, broken collar) rather than an engineered adit. All
+  //    NON-colliding decoration (like rock scatter) — the proven box collision + terrain weld are
+  //    untouched, and boulders sit OUTSIDE the clear walk width so they never trip the walk gate. ──
+  {
+    const brand = makeRng(((Math.round(site.x) * 73856093) ^ (Math.round(site.z) * 19349663)) >>> 0);
+    const addBoulder = (wx: number, wz: number, baseR: number, sink: number, y?: number): void => {
+      const yy = y ?? terrain.pureHeightAt(wx, wz);
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(baseR, 0), _boulder);
+      m.position.set(wx - mouthX, yy - sink, wz - cz);
+      m.rotation.set(brand() * 0.8, brand() * Math.PI * 2, brand() * 0.8);
+      m.scale.set(1, 0.55 + brand() * 0.4, 1);
+      m.castShadow = true; m.receiveShadow = true;
+      g.add(m);
+    };
+    const RIM = HW + 0.5;
+    // Rim boulders crowding the two long trench edges (gappy → irregular, breaks the straight lip).
+    for (let s = 0; s <= 15; s++) {
+      const wx = mouthX - 2.6 + (runLocal + 4.5) * (s / 15);
+      for (const sgn of [-1, 1] as const) {
+        if (brand() < 0.18) continue;
+        addBoulder(wx, cz + sgn * (RIM + brand() * 2.0), 0.5 + brand() * 1.1, 0.25 + brand() * 0.45);
+      }
+    }
+    // Broken collar of bigger chunks crowding the wind-exposed near lip (the sinkhole read).
+    for (let s = 0; s <= 8; s++) {
+      if (brand() < 0.18) continue;
+      const wz = cz - HW - 0.8 + (2 * HW + 1.6) * (s / 8);
+      addBoulder(mouthX - 1.6 - brand() * 1.6, wz, 0.65 + brand() * 1.2, 0.3 + brand() * 0.5);
+    }
+    // A few collapse boulders tumbled onto the ramp (biased to the trench SIDES, off the walk line).
+    for (let i = 0; i < 4; i++) {
+      const t = 0.18 + brand() * 0.5;
+      const wx = mouthX + runLocal * t;
+      const wz = cz + (brand() < 0.5 ? -1 : 1) * (HW * 0.55 + brand() * 0.4);
+      const rampY = (gy - 0.2) + (chamberFloorY - (gy - 0.2)) * t;
+      addBoulder(wx, wz, 0.35 + brand() * 0.5, -0.15, rampY);
+    }
+  }
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);

@@ -2831,7 +2831,7 @@ const SCENARIOS = {
 
       // ── E — TOPOLOGY asserts from the generator's own graph. ──
       const V = nodes.length, E = cavep.edges.length;
-      if (V < 4 || V > 7) fails.push(`topology: chamber count ${V} outside 4-7`);
+      if (V < 8 || V > 11) fails.push(`topology: chamber count ${V} outside 8-11 (labyrinth range)`);
       if (E !== V - 1) fails.push(`topology: ${E} edges for ${V} nodes — not a tree (V-1 edges required)`);
       for (const n of nodes) if (n.id !== egg.id && n.y < egg.y) fails.push(`topology: node ${n.id} (y${n.y.toFixed(1)}) deeper than the egg (y${egg.y.toFixed(1)})`);
       for (const n of nodes) if (n.id !== egg.id && n.rx > egg.rx) fails.push(`topology: node ${n.id} (rx${n.rx.toFixed(1)}) larger than the egg (rx${egg.rx.toFixed(1)})`);
@@ -2905,7 +2905,7 @@ const SCENARIOS = {
             ctx.three.scene.fog = null;
             // Flat fill ambient so the greybox rock reads evenly (a point light alone leaves the far
             // walls of a big chamber black); the fill lamp below adds a little warm shape on top.
-            st.amb = new THREE.AmbientLight(0xb9b0a4, 1.5);
+            st.amb = new THREE.AmbientLight(0xb9b0a4, 0.85);
             ctx.three.scene.add(st.amb);
           }
         }
@@ -2935,19 +2935,21 @@ const SCENARIOS = {
       await shoot({ exp: 1.25, cam: [geo.mouthX - 8, geo.gy + 1.7, geo.cz], look: [geo.mouthX + 8, geo.gy - 2.0, geo.cz] }, 'mouth');
       // trunk descent — stand in t0 looking toward t1 (down the first corridor)
       await shoot({ interior: true, exp: 1.5, cam: [t0.x, t0.y + 1.7, t0.z], look: [t1.x, t1.y + 1.0, t1.z],
-        fill: { pos: [(t0.x + t1.x) / 2, (t0.y + t1.y) / 2 + 1.6, (t0.z + t1.z) / 2], intensity: 26, dist: 30 } }, 'trunk-descent');
+        fill: { pos: [(t0.x + t1.x) / 2, (t0.y + t1.y) / 2 + 1.6, (t0.z + t1.z) / 2], intensity: 15, dist: 30 } }, 'trunk-descent');
       // squeeze corridor
       if (na && nb) await shoot({ interior: true, exp: 1.5, cam: [na.x + (nb.x - na.x) * 0.15, na.y + 1.6, na.z + (nb.z - na.z) * 0.15], look: [nb.x, nb.y + 1.2, nb.z],
-        fill: { pos: [(na.x + nb.x) / 2, (na.y + nb.y) / 2 + 1.4, (na.z + nb.z) / 2], intensity: 24, dist: 24 } }, 'squeeze');
+        fill: { pos: [(na.x + nb.x) / 2, (na.y + nb.y) / 2 + 1.4, (na.z + nb.z) / 2], intensity: 14, dist: 24 } }, 'squeeze');
       // the large hall
       await shoot({ interior: true, exp: 1.5, cam: [hall.x - hall.rx * 0.8, hall.y + 1.7, hall.z], look: [hall.x + hall.rx, hall.y + hall.height * 0.4, hall.z],
-        fill: { pos: [hall.x, hall.y + hall.height * 0.5, hall.z], intensity: 48, dist: 40 } }, 'hall');
-      // the egg chamber (the deepest, distinct) — same framing as the hall (proven), scaled to the egg.
-      await shoot({ interior: true, exp: 1.55, cam: [egg.x - egg.rx * 0.8, egg.y + 1.7, egg.z], look: [egg.x + egg.rx, egg.y + egg.height * 0.4, egg.z],
-        fill: { pos: [egg.x, egg.y + egg.height * 0.5, egg.z], intensity: 70, dist: 60 } }, 'egg');
+        fill: { pos: [hall.x, hall.y + hall.height * 0.5, hall.z], intensity: 26, dist: 40 } }, 'hall');
+      // the egg chamber (the deepest, distinct) — framed from a raised corner looking IN + DOWN toward
+      // the central dais (fixes the old black frame: the camera used to sit near/into the far wall and
+      // look across at a dark span). Stronger fill for the tall cathedral ceiling.
+      await shoot({ interior: true, exp: 1.55, cam: [egg.x - egg.rx * 0.6, egg.y + 2.6, egg.z - egg.rx * 0.5], look: [egg.x + egg.rx * 0.25, egg.y + 0.8, egg.z + egg.rx * 0.15],
+        fill: { pos: [egg.x, egg.y + egg.height * 0.55, egg.z], intensity: 44, dist: 70 } }, 'egg');
       // looking back UP a junction (from the first trunk chamber toward the entrance)
       await shoot({ interior: true, exp: 1.5, cam: [t1.x, t1.y + 1.7, t1.z], look: [ent.x, ent.y + 2.5, ent.z],
-        fill: { pos: [(t1.x + ent.x) / 2, (t1.y + ent.y) / 2 + 1.6, (t1.z + ent.z) / 2], intensity: 34, dist: 34 } }, 'junction-up');
+        fill: { pos: [(t1.x + ent.x) / 2, (t1.y + ent.y) / 2 + 1.6, (t1.z + ent.z) / 2], intensity: 20, dist: 34 } }, 'junction-up');
     }
     if (!pass) throw new Error('cave-walk GATE FAILED');
   },
