@@ -88,7 +88,7 @@ export function getHoverWorldPos(): THREE.Vector3 | null {
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'vultures' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders' | 'eggs';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'vultures' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders' | 'eggs' | 'caveFungi';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -216,6 +216,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const sl of ctx.sleds.list) sl.hovered = false;
   for (const st of ctx.stakes.list) st.hovered = false;
   if (ctx.egg) ctx.egg.hovered = false;   // M8 ⑩ (C52)
+  for (const f of ctx.caveFungi.list) f.hovered = false;   // UNDERWORLD cycle 3
   ctx.inventory.hover = null;
   _hoverWorldValid = false;   // ACW F — invalidated until this frame's raycast resolves a hit
   // AAO — default cook bars to hidden each frame; re-shown inside the
@@ -307,6 +308,8 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const j of ctx.journals.list) targets.push(j.mesh);
   // M8 ⑩ (C52) — the cave egg is interactable only while the companion isn't acquired.
   if (ctx.egg && !ctx.flags.companionAcquired) targets.push(ctx.egg.group);
+  // UNDERWORLD cycle 3 — harvestable cave fungi (unharvested clusters only).
+  for (const f of ctx.caveFungi.list) if (!f.harvested) targets.push(f.group);
   // CC-3.1 — speeder seat is interactable when not already mounted; the
   // seat mesh is tagged with userData.interactType='mount' inside
   // makeSpeeder so resolveInteractable picks it up on raycast hit.
@@ -484,6 +487,27 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         harvestCactus(c, ctx.time.elapsed);
         playHarvest();
         ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);
+      }
+      return;
+    }
+
+    case 'caveFungi': {
+      // UNDERWORLD cycle 3 — harvest a glowing cave fungi cluster → 1-2 alien_fruit (the
+      // established weird-flora food; no new craftable output). The cluster hides on harvest.
+      const f = ctx.caveFungi.list.find((c) => c.id === info.id);
+      if (!f || f.harvested) return;
+      f.hovered = true;
+      ctx.inventory.hover = { type: 'harvest', distance: info.distance, promptNoun: 'glowing fungus' };
+      if (ctx.input.pressed.has('KeyE')) {
+        const got = 1 + Math.floor(Math.random() * 2);   // 1-2 yields
+        let added = 0;
+        for (let i = 0; i < got; i++) if (addItem(ctx.inventory, 'alien_fruit', undefined, ctx) >= 0) added++;
+        if (added === 0) { ctx.ui.showToast('your bag is full'); return; }
+        f.harvested = true;
+        f.group.visible = false;
+        f.group.traverse((o) => { delete o.userData.interactType; delete o.userData.interactRegistry; });
+        playHarvest();
+        ctx.ui.showToast(`you pluck ${added} glowing fruit${added > 1 ? 's' : ''}`);
       }
       return;
     }

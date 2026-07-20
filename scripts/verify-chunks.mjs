@@ -167,6 +167,29 @@ for (const seed of DET_SEEDS) {
   rows.push(`dune-slope seed ${seed}: erg@${dm[5]}m windP95=${dm[6]}° slipMed=${dm[7]}° amp=${dm[8]}m border=${dm[9]}°, ${dm[10]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
+// ── 8. THE CAVE (UNDERWORLD, shipped 2026-07-20) — the generated cave is now default-ON, so its
+//      real-KCC full-tree walk is a permanent gate. For BOTH seeds: a full march (surface → mouth →
+//      every chamber depth-first → back out) must PASS, and the flag-on layout+mesh digest must be
+//      STABLE ×2 (same seed twice → identical digest). This replaces the old flag-off digest-identity
+//      proof: with the cave shipped, the invariant is flag-on determinism, not "no surface change".
+let cavePort = 5520;
+for (const seed of DET_SEEDS) {
+  const re = /CAVE-WALK pass=(\d) seed=(\S+) digest=(\S+) chambers=(\d+) .* reached=(\d+)\/(\d+)/;
+  const a = runParsed('cave-walk', seed, cavePort, re, 600000);
+  const b = runParsed('cave-walk', seed, cavePort + 1, re, 600000);
+  cavePort += 3;
+  if (!a || !b) {
+    allPass = false;
+    rows.push(`cave-walk seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`);
+    continue;
+  }
+  const passA = a[1] === '1', passB = b[1] === '1';
+  const stable = a[3] === b[3];
+  const ok = passA && passB && stable;
+  if (!ok) allPass = false;
+  rows.push(`cave-walk seed ${seed}: reached ${a[5]}/${a[6]} chambers, digest ${a[3]}${stable ? ' (stable ×2)' : ` vs ${b[3]} *** DIGEST DRIFT ***`}, pass=${passA ? 1 : 0}/${passB ? 1 : 0}  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass

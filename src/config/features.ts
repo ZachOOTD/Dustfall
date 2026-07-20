@@ -88,15 +88,20 @@ export const FEATURES = {
    *  drop silently per D298's content-id rule). Feature slice: docs/feature-skyfall.md. */
   skyfall: import.meta.env?.VITE_SKYFALL !== '0',
 
-  /** UNDERWORLD cycle 1 (2026-07-19, D307) — the cave ENABLING-TECH test bore: a chunk-local
-   *  heightfield→trimesh collider swap at a designated entrance chunk, carving a real opening in
-   *  the terrain sheet so the player walks DOWN through it into a bored ramp + a roofed chamber
-   *  UNDER the intact heightfield (D307's under-sheet trimesh interior). OFF by default = the
-   *  surface world is byte-identical (the cave code is fully dormant — no site, no swap, no bore).
-   *  ON via VITE_CAVE_TEST=1 spawns ONE deterministic test site near origin (seed-hashed, inside
-   *  tile (0,0)). This is the cycle-1 enabling tech only; real cave GENERATION is cycle 2. The
-   *  cave-mouth probe forces it ON; verify:all runs with it OFF (the zero-impact proof). */
-  caveTest: import.meta.env?.VITE_CAVE_TEST === '1',
+  /** THE CAVE (UNDERWORLD, 2026-07-20 — SHIPPED, default ON). Every world gets ONE seed-derived
+   *  cave near origin (a hash-sited entrance inside tile (0,0), always < ~290m from origin so it's
+   *  findable): a chunk-local heightfield→trimesh collider swap carves a real opening in the terrain
+   *  sheet (D307), a bored ramp/throat welds into it, and a deterministic room-graph cave body lives
+   *  UNDER the intact heightfield — dark, mushroom-lit, and home to the companion EGG on its deep
+   *  dais (the egg objective moved here from the old funnel deepCave). ON by default in every build;
+   *  build with `VITE_CAVE=0` to kill-switch back to the old funnel deepCave (surface + egg then
+   *  byte-identical to pre-Underworld). `VITE_CAVE_TEST=1` still FORCES it on (dev config + probe
+   *  compat) even under VITE_CAVE=0. The cave is a FIXED feature (not streamed content): it touches
+   *  no chunk descriptors, so far-field save chunkDiffs stay valid; only the mouth tile (0,0)'s
+   *  collider changes — a save loads with player/inventory/companionAcquired intact.
+   *  The name stays `caveTest` (the internal key) for git-history continuity; the concept is "the
+   *  cave," gated by VITE_CAVE. */
+  caveTest: import.meta.env?.VITE_CAVE_TEST === '1' || import.meta.env?.VITE_CAVE !== '0',
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

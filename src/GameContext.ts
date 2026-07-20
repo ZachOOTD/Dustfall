@@ -39,6 +39,7 @@ import type { Stake } from './world/stake.ts';
 import type { Companion } from './enemies/companion.ts';
 import type { SarlaccPit } from './enemies/sarlaccPit.ts';
 import type { DeepCave, CaveEgg } from './world/deepCave.ts';
+import type { CaveFungiCluster } from './world/caveGen.ts';
 import type { CaveAtmosphere } from './world/caveAtmosphere.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
@@ -181,8 +182,11 @@ export interface GameContext {
   companion: Companion | null;
   /** Cycle 8 — the wreck-yard Sarlacc pit (one per world; null until placed). */
   sarlaccPit: SarlaccPit | null;
-  /** M8 ⑨ — the deep cave interior + dark-nav (one per world). */
-  deepCave: DeepCave;
+  /** M8 ⑨ — the legacy funnel deep-cave interior + dark-nav. Null when the generated cave is on
+   *  (FEATURES.caveTest / VITE_CAVE): the old funnel is retired and the new cave replaces it. */
+  deepCave: DeepCave | null;
+  /** UNDERWORLD cycle 3 — harvestable cave fungi clusters (E → alien_fruit). Empty with the flag off. */
+  caveFungi: { list: CaveFungiCluster[] };
   /** UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor.
    *  Null unless FEATURES.caveTest is on (the generated cave was spawned). */
   caveAtmosphere: CaveAtmosphere | null;

@@ -239,11 +239,10 @@ export function createTerrain(
         h -= profile * Tuning.SARLACC_PIT_CRATER_DEPTH;
       }
     }
-    // M8 ⑨ (C47) — carve the DEEP CAVE descent funnel (same recessed-funnel
-    // technique: a soft lip at the rim, a steep mid-wall ~39° < the KCC climb
-    // limit, a flat floor). This is the cave MOUTH the player walks down into;
-    // the enclosed roofed interior is a separate module placed at the floor.
-    {
+    // M8 ⑨ (C47) — carve the legacy DEEP CAVE descent funnel. RETIRED when the generated cave is
+    // on (caveTestSite set): the new cave replaces it, so we skip this carve entirely (no orphan
+    // empty pit near origin). Flag OFF (caveTestSite null) → carve exactly as before (byte-identical).
+    if (!caveTestSite) {
       const cdx = x - biomes.caveAnchor.x;
       const cdz = z - biomes.caveAnchor.z;
       const cr = Math.sqrt(cdx * cdx + cdz * cdz);

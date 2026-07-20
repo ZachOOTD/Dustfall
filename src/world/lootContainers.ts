@@ -102,6 +102,24 @@ function makeCrate(rand: Rng): THREE.Group {
   return g;
 }
 
+/** UNDERWORLD (2026-07-20) — place ONE crate at a fixed world position with EXPLICIT contents
+ *  (deep cave caches: contents are pre-rolled from the cave-cache table by the caller, deterministic).
+ *  No terrain snap (the caller knows the cave floor Y), no collider (crates never had one). */
+export function spawnLootContainerAt(
+  scene: THREE.Scene,
+  pos: THREE.Vector3,
+  contents: LootEntry[],
+  rand: Rng,
+): LootContainer {
+  const mesh = makeCrate(rand);
+  mesh.position.copy(pos);
+  mesh.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  const id = _nextId++;
+  tag(mesh, id);
+  scene.add(mesh);
+  return { id, mesh, pos: pos.clone(), contents, opened: false };
+}
+
 /** Spawn standalone loot crates (no dependency on existing landmarks). */
 export function spawnStandaloneLootContainers(
   scene: THREE.Scene,

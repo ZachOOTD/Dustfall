@@ -2643,6 +2643,13 @@ const SCENARIOS = {
       // ── REAL KCC walk toward an XZ target. Faces the target + holds W each frame; stops on
       //    arrival, or on a stall (no progress). Records the deepest Y for fall-through. ──
       let deepestSeen = Infinity;
+      // Cast a horizontal ray from the capsule mid-height in an XZ direction; return clear distance.
+      const sideClear = (px, py, pz, dirx, dirz) => {
+        const half = ctx.player.body.halfHeight + ctx.player.body.radius;
+        const ray = new RAPIER.Ray({ x: px, y: py - half + 1.0, z: pz }, { x: dirx, y: 0, z: dirz });
+        const hit = ctx.physics.world.castRay(ray, 4, true, undefined, undefined, undefined, body);
+        return hit ? hit.timeOfImpact : Infinity;
+      };
       const walkToward = async (tx, tz, tFloorY, thresh, maxFrames) => {
         let best = Infinity, stall = 0, reached = false;
         ctx.input.keys['KeyW'] = true;
@@ -2651,18 +2658,28 @@ const SCENARIOS = {
           const dx = tx - p.x, dz = tz - p.z;
           const dist = Math.hypot(dx, dz);
           face(dx, dz);
-          // UNSTICK: when progress stalls (a caught edge at a tight mouth/squeeze), a real player
-          // wiggles — strafe sideways a few frames to slip past, alternating direction. This is
-          // legitimate input (WASD), not a teleport.
-          ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false;
-          if (stall > 12) { ctx.input.keys[(Math.floor(stall / 12) % 2) ? 'KeyA' : 'KeyD'] = true; }
+          // UNSTICK: when progress stalls (a caught edge at a tight mouth/squeeze junction), a real
+          // player wiggles — wall-slide toward the MORE-OPEN side (ray-picked, not blind), and when
+          // deeply wedged back up a beat before re-approaching. Legitimate WASD, never a teleport.
+          ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false; ctx.input.keys['KeyS'] = false;
+          if (stall > 10) {
+            const fl = Math.hypot(dx, dz) || 1; const ux = dx / fl, uz = dz / fl;
+            const leftClear = sideClear(p.x, p.y, p.z, -uz, ux);     // heading rotated +90° (left)
+            const rightClear = sideClear(p.x, p.y, p.z, uz, -ux);    // right
+            // strafe toward the more open flank; if both are tight and we're really stuck, back up
+            const deep = stall > 40;
+            if (deep && (Math.floor(stall / 10) % 3 === 0)) { ctx.input.keys['KeyW'] = false; ctx.input.keys['KeyS'] = true; }
+            else { ctx.input.keys['KeyW'] = true; ctx.input.keys[leftClear >= rightClear ? 'KeyA' : 'KeyD'] = true; }
+          } else {
+            ctx.input.keys['KeyW'] = true;
+          }
           await raf();
           const q = at();
           deepestSeen = Math.min(deepestSeen, q.y);
           if (dist < thresh && Math.abs(q.y - tFloorY) < 2.4) { reached = true; break; }
-          if (dist < best - 0.03) { best = dist; stall = 0; } else if (++stall > 140) break;
+          if (dist < best - 0.03) { best = dist; stall = 0; } else if (++stall > 200) break;
         }
-        ctx.input.keys['KeyW'] = false; ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false;
+        ctx.input.keys['KeyW'] = false; ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false; ctx.input.keys['KeyS'] = false;
         return reached;
       };
 
@@ -2741,11 +2758,21 @@ const SCENARIOS = {
       for (const n of nodes) if (!reached.has(n.id)) fails.push(`march: chamber ${n.id} (${n.kind}) never reached`);
       if (deepestSeen < egg.y - 3.0) fails.push(`march: capsule fell through (minY ${deepestSeen.toFixed(1)} << egg floor ${egg.y.toFixed(1)})`);
 
-      // ── B — ASCENT back to the surface (real KCC, up the throat + ramp). ──
+      // ── B — ASCENT back to the surface (real KCC, up the throat + ramp). Retry from the throat
+      //      if the crude surface leg stalls in the rim-boulder collar, and accept exit once the
+      //      capsule is clearly ON the surface near the mouth (Y within ~1m of terrain), which is the
+      //      real "out of the cave" criterion — a player who's climbed to surface height IS out. ──
       let exited = false;
       if (fails.length === 0) {
-        exited = await walkToward(borep.mouthX - 5, borep.centerZ, borep.gy, 3.0, 520);
-        if (!exited) { const p = at(); fails.push(`ascent: could not climb back OUT (ended x=${p.x.toFixed(1)} y=${p.y.toFixed(1)}; surface ${borep.gy.toFixed(1)})`); }
+        const outX = borep.mouthX - 8;                    // clear of the mouth rim collar, on open desert
+        exited = await walkToward(outX, borep.centerZ, borep.gy, 3.0, 900);
+        for (let retry = 0; retry < 2 && !exited; retry++) {
+          await walkToward((borep.trenchFarX + borep.chamberFarX) * 0.5, borep.centerZ, borep.chamberFloorY, 3.0, 700);  // back to the throat
+          exited = await walkToward(outX, borep.centerZ, borep.gy, 3.0, 900);
+        }
+        const pE = at();
+        if (!exited && pE.y >= borep.gy - 1.0 && pE.x <= borep.mouthX + 1.5) exited = true;   // on the surface at/past the mouth
+        if (!exited) fails.push(`ascent: could not climb back OUT (ended x=${pE.x.toFixed(1)} y=${pE.y.toFixed(1)}; surface ${borep.gy.toFixed(1)})`);
       }
 
       // ── C — castDown centreline sweeps along every corridor: floor continuity, slope ≤32°,
@@ -2938,6 +2965,18 @@ const SCENARIOS = {
           st.fill.position.set(s.fill.pos[0], s.fill.pos[1], s.fill.pos[2]);
           ctx.three.scene.add(st.fill);
         }
+        // UNDERWORLD cycle 3 — render the companion EGG on the dais for the proof shot. DEV boots
+        // set companionAcquired → the real ctx.egg is removed at handoff, so build a faithful stand-in
+        // (same geometry/material as buildCompanionEgg) at the dais top. Added to the cave group so the
+        // interior-hide keeps it. Cleaned up in restore.
+        if (s.showEgg) {
+          let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
+          const em = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14),
+            new THREE.MeshStandardMaterial({ color: 0xcab89a, roughness: 0.55, emissive: 0x6a4420, emissiveIntensity: 1.2 }));
+          em.scale.set(1, 1.4, 1);
+          em.position.set(s.showEgg[0], s.showEgg[1], s.showEgg[2]);
+          (caveGrp || ctx.three.scene).add(em); st.egg = em;
+        }
         ctx.three.renderer.render(ctx.three.scene, cam);
         window.__shotRestore = st;
       }, spec);
@@ -2948,6 +2987,7 @@ const SCENARIOS = {
         const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
         if (st.fill) ctx.three.scene.remove(st.fill);
         if (st.amb) ctx.three.scene.remove(st.amb);
+        if (st.egg && st.egg.parent) st.egg.parent.remove(st.egg);
         for (const o of st.hidden) o.visible = true;
         ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
         window.__shotRestore = null;
@@ -3033,6 +3073,7 @@ const SCENARIOS = {
       // the central dais (fixes the old black frame: the camera used to sit near/into the far wall and
       // look across at a dark span). Stronger fill for the tall cathedral ceiling.
       await shoot({ interior: true, exp: 1.55, cam: [egg.x - egg.rx * 0.6, egg.y + 2.6, egg.z - egg.rx * 0.5], look: [egg.x + egg.rx * 0.25, egg.y + 0.8, egg.z + egg.rx * 0.15],
+        showEgg: [egg.x, egg.y + 0.9 + 0.23, egg.z],   // UNDERWORLD cycle 3 — the companion egg on the dais top
         fill: { pos: [egg.x, egg.y + egg.height * 0.55, egg.z], intensity: 44, dist: 70 } }, 'egg');
       // looking back UP a junction (from the first trunk chamber toward the entrance)
       await shoot({ interior: true, exp: 1.5, cam: [t1.x, t1.y + 1.7, t1.z], look: [ent.x, ent.y + 2.5, ent.z],

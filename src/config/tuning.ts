@@ -921,12 +921,14 @@ export const Tuning = {
                                        // reach ~0.94·rx so corridors (which connect at rx−overlap) land ON flat floor, not the sloped wall
   // Corridor cross-sections (D-shape: flat tilted floor + arched ceiling). Half-width and clear
   // height per corridor — squeeze vs. gallery chosen per edge for varied cross-sections.
-  CAVE_GEN_SQUEEZE_HALF_W: 1.35,       // m — squeeze corridor half-width (2.7m clear, constant; > the 2.2m min)
+  CAVE_GEN_SQUEEZE_HALF_W: 1.85,       // m — squeeze corridor half-width (3.7m clear; UNDERWORLD cycle 3: 1.55→1.85 for extra steering margin — a climbing backtrack pressed the capsule against the corridor wall and wedged even though the passage was wide; more lateral room lets it recover)
   CAVE_GEN_SQUEEZE_H: 2.8,             // m — squeeze clear height (walkable; > 2.0m min with displacement margin)
-  CAVE_GEN_GALLERY_HALF_W: 2.3,        // m — wide-gallery corridor half-width (~4.6m across)
+  CAVE_GEN_GALLERY_HALF_W: 2.8,        // m — wide-gallery corridor half-width (~5.6m across; UNDERWORLD cycle 3: 2.3→2.8 — the seed-2 wedge pressed the KCC ~2.3m off-axis onto a 2.3m-halfW gallery wall on a climb; widening the tube gives the capsule room to keep progressing instead of catching the wall. Widens the tube only — node positions/slopes/cover unchanged)
   CAVE_GEN_GALLERY_H: 3.4,             // m — gallery clear height
   CAVE_GEN_SQUEEZE_CHANCE: 0.4,        // per-corridor chance of a squeeze (else gallery); trunk always has ≥1 of each
   CAVE_GEN_CORRIDOR_RUN_MIN: 8.0,      // m — min horizontal corridor run (also the level-branch run floor)
+  CAVE_GEN_MIN_SIBLING_ANGLE: 55,      // ° — min angular divergence between two corridors leaving the SAME chamber. Below this their flared mouths (halfW×1.7 ≈ 9.5m for a gallery — wider than a small pocket itself) overlap into a crossing floor/ceiling (seed-42 wedge: pockets ~30° apart off one hub crossed → a 2m step read as 59.6° + a blocking wall; seed-2024: two corridors 51° apart still crowded a rx-4.4 hub). Enforced when placing side pockets + asserted post-build.
+  CAVE_GEN_CORRIDOR_CLEARANCE: 1.5,    // m — extra margin a new side-corridor must keep from any non-adjacent chamber it doesn't connect (segment→centre distance ≥ chamber rx + gallery half-width + this), so a corridor never spears a chamber it isn't linked to
   CAVE_GEN_BRANCH_DROP_MAX: 4.0,       // m — max descent on a side-branch corridor (branches stay shallower than the egg)
   CAVE_GEN_END_OVERLAP: 1.2,           // m — corridor end rings poke this far into each chamber (no gap at the aperture)
   CAVE_GEN_DOORWAY_H: 3.0,             // m — corridor mouths open the chamber wall only up to here (a doorway with a lintel);
@@ -950,7 +952,7 @@ export const Tuning = {
   CAVE_SPELEO_STALACTITE_CLEAR: 2.35,  // m — a stalactite tip must stay at least this high above the floor (keeps ≥2.0m headroom)
   CAVE_SPELEO_RING_MIN: 0.74,          // fraction of rx — inner radius for FLOOR speleothems (> the 0.72 floor-grid the gate samples)
   CAVE_SPELEO_RING_MAX: 0.92,          // fraction of rx — outer radius for floor speleothems (near the wall, off the walk path)
-  CAVE_SPELEO_MOUTH_CLEAR_DEG: 32,     // ° — keep this angular sector clear around each corridor mouth (don't wall a doorway)
+  CAVE_SPELEO_MOUTH_CLEAR_DEG: 42,     // ° — keep this angular sector clear around each corridor mouth (UNDERWORLD cycle 3: 32→42 so no floor stalagmite/column can pinch a junction throat where two mouths sit close)
   CAVE_SPELEO_DENSITY: 0.9,            // speleothems per 10m² of chamber floor (scaled up in hall/egg, ~0 in squeeze pockets)
 
   // ── UNDERWORLD cycle 2 — DARKNESS + the light model (caveAtmosphere.ts). The labyrinth is
