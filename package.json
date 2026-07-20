@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:sled": "cross-env VITE_RIDEABLE_SLED=1 vite",
+    "dev:cave": "cross-env VITE_CAVE_TEST=1 vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "build:intro": "tsc && vite build --mode intro",

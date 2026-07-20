@@ -14,6 +14,12 @@
       "port": 5180
     },
     {
+      "name": "dustfall-cave",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:cave", "--", "--port", "5180", "--strictPort"],
+      "port": 5180
+    },
+    {
       "name": "dustfall-intro-preview",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "preview", "--mode", "intro", "--port", "4173", "--strictPort"],
