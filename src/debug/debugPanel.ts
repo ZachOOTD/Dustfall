@@ -49,6 +49,8 @@ import type { ItemId } from '../inventory/types.ts';
 import { spawnDroppedPickup, despawnPickup, spawnMaterialAt } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook; D299 — despawnPickupById probe hook; Scavenger's Economy — spawnMaterialTest
 import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
+import { FEATURES } from '../config/features.ts';        // Underworld review — gotoCave flag gate
+import { caveTestSite } from '../world/caveTest.ts';     // Underworld review — gotoCave warp target
 
 declare global {
   interface Window {
@@ -251,6 +253,7 @@ interface DebugApi {
    *  graveyard — pale bone scatter). Null if none within range. */
   gotoBoneField: () => { x: number; z: number } | null;
   gotoErg: () => { x: number; z: number } | null;
+  gotoCave: () => { x: number; z: number } | null;
   /** Deep-Desert cycle 5 (D257, sled-ride probe) — spawn a sled at (x,z) with
    *  optional yaw (radians), terrain-snapped. Returns the sled id. Behind no
    *  flag (spawning a sled is always harmless); the RIDE only engages when
@@ -721,6 +724,16 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.player.cameraSnapNextFrame = true;
       ctx.ui.showToast?.('warped to the bone-field graveyard');
       return { x: +c.x.toFixed(0), z: +c.z.toFixed(0) };
+    },
+    gotoCave: () => {
+      // Underworld review (2026-07-20) — warp to the test cave mouth (flag-gated site).
+      if (!FEATURES.caveTest) { ctx.ui.showToast?.('cave test is OFF — start the dustfall-cave config'); return null; }
+      const s = caveTestSite(ctx.seed);
+      const y = ctx.terrain.heightAt(s.x, s.z) + 2;
+      ctx.player.body.body.setTranslation({ x: s.x, y, z: s.z }, true);
+      ctx.player.cameraSnapNextFrame = true;
+      ctx.ui.showToast?.('warped to the cave mouth');
+      return { x: +s.x.toFixed(0), z: +s.z.toFixed(0) };
     },
     gotoErg: () => {
       // erg regions are the rarest + farthest anchors (nearest ~5-10km by seed) — search widest.
