@@ -276,6 +276,26 @@ export function spawnCaveTestBore(
       const rampY = (gy - 0.2) + (chamberFloorY - (gy - 0.2)) * t;
       addBoulder(wx, wz, 0.35 + brand() * 0.5, -0.15, rampY);
     }
+    // UNDERWORLD cycle 2 carry-item — VENEER the two flat trench side-walls to ROCK so they don't
+    // read as engineered planar boxes. Overlapping icosahedron slabs hug the INNER face of each wall,
+    // stacked from the ramp floor up toward the rim at staggered heights + sizes. Non-colliding
+    // decoration (like the rim boulders) — the proven box wall collision behind them is untouched.
+    for (let s = 0; s <= 20; s++) {
+      const tx = s / 20;
+      const wx = mouthX + runLocal * tx;
+      const rampFloorY = (gy - 0.2) + (chamberFloorY - (gy - 0.2)) * tx;   // the ramp floor at this x
+      const rimY = terrain.pureHeightAt(wx, cz + HW);
+      for (const sgn of [-1, 1] as const) {
+        const rows = 3 + Math.floor(brand() * 2);
+        for (let r = 0; r < rows; r++) {
+          if (brand() < 0.12) continue;
+          const wy = rampFloorY + 0.3 + (rimY - rampFloorY - 0.4) * ((r + brand() * 0.6) / rows);
+          const baseR = 0.5 + brand() * 0.85;
+          // protrude off the wall face (z = HW) INTO the trench so the flat box face is broken up
+          addBoulder(wx, cz + sgn * (HW - 0.05 - brand() * 0.35), baseR, 0, wy);
+        }
+      }
+    }
   }
 
   scene.add(g);

@@ -38,6 +38,19 @@ interface ProceduralWind {
   howlGain: GainNode;
 }
 
+// UNDERWORLD cycle 2 — the CAVE BED. Inside the generated cave the desert wind/ambience/music duck
+// OUT and this fades in: a low stone-hush air tone (a lowpass tap off the same noise) + sparse
+// echoing DRIPS (one-shot blips scheduled at a randomized interval, fed through a feedback DELAY for
+// a cheap cave echo — not a reverb engine). Crossfades smoothly at the mouth (via the smoothed inside
+// factor on ctx.caveAtmosphere). Storm-independent — you're sealed in rock.
+interface CaveBed {
+  hushGain: GainNode;      // the low air-tone level (× inside)
+  dripBus: GainNode;       // dry drips + the delay feed
+  dripDelay: DelayNode;    // echo delay line
+  dripFeedback: GainNode;  // delay feedback (decaying repeats)
+  nextDrip: number;        // ctx.currentTime the next drip fires
+}
+
 interface SoundscapeState {
   ctx: AudioContext;
   wind: { calm: StemNodes; mid: StemNodes; storm: StemNodes };
@@ -45,6 +58,7 @@ interface SoundscapeState {
   music: { calm: StemNodes; tense: StemNodes };
   musicBus: GainNode;
   pwind: ProceduralWind | null; // C33 — procedural wind graph
+  cave: CaveBed | null;         // UNDERWORLD cycle 2 — the cave audio bed
   startTime: number;            // ctx.currentTime when startSoundscape ran
   driftPhase: number;           // monotonically increases; used for breeze sin sum
   lastUpdate: number;
@@ -219,6 +233,29 @@ export function startSoundscape(): void {
   noise.start(0);
   const pwind: ProceduralWind = { body, bodyGain, whistle, whistleGain, howl, howlGain };
 
+  // UNDERWORLD cycle 2 — the CAVE BED graph. The HUSH is a very-low lowpass tap off the same wind
+  // noise (a felt airless breath). The DRIPS feed a bus that goes dry to the ambient bus AND into a
+  // feedback delay line (a couple of decaying repeats = a cheap cave echo). Gains start at 0 → the
+  // per-frame update lifts them by the smoothed cave-inside factor.
+  const caveHushFilter = a.ctx.createBiquadFilter();
+  caveHushFilter.type = 'lowpass';
+  caveHushFilter.frequency.value = Tuning.CAVE_BED_HUSH_CUTOFF;
+  caveHushFilter.Q.value = 0.6;
+  const caveHushGain = a.ctx.createGain();
+  caveHushGain.gain.value = 0;
+  noise.connect(caveHushFilter).connect(caveHushGain).connect(a.ambient);
+  const dripBus = a.ctx.createGain();
+  dripBus.gain.value = 1;
+  const dripDelay = a.ctx.createDelay(1.0);
+  dripDelay.delayTime.value = Tuning.CAVE_BED_DRIP_ECHO_S;
+  const dripFeedback = a.ctx.createGain();
+  dripFeedback.gain.value = Tuning.CAVE_BED_DRIP_ECHO_FEEDBACK;
+  dripBus.connect(a.ambient);
+  dripBus.connect(dripDelay);
+  dripDelay.connect(dripFeedback).connect(dripDelay);   // feedback loop → decaying echo
+  dripDelay.connect(a.ambient);
+  const cave: CaveBed = { hushGain: caveHushGain, dripBus, dripDelay, dripFeedback, nextDrip: 0 };
+
   // Build placeholder state first (silent stems) — buffers attach once decode
   // resolves below. This keeps updateSoundscape simple: it never touches null.
   const dummy = (): StemNodes => ({ src: null, gain: a.ctx.createGain(), target: 0 });
@@ -229,6 +266,7 @@ export function startSoundscape(): void {
     music:   { calm:  dummy(), tense: dummy() },
     musicBus,
     pwind,
+    cave,
     startTime: now,
     driftPhase: 0,
     lastUpdate: now,
@@ -287,6 +325,13 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   // ACW E (#134) — muffle the whole mix as the storm engulfs the player.
   setStormMuffle(storm);
 
+  // UNDERWORLD cycle 2 — inside the generated cave the whole DESERT bed (wind + ambient + music)
+  // ducks OUT and the cave bed rises. `caveInside` is the smoothed 0..1 containment factor from the
+  // light model (ctx.caveAtmosphere), so the crossfade tracks the mouth. `caveDuck` multiplies every
+  // desert layer below. null (flag off / not built) → 0 → the desert bed is untouched.
+  const caveInside = clamp01(ctx.caveAtmosphere?.inside ?? 0);
+  const caveDuck = 1 - caveInside * Tuning.CAVE_BED_DESERT_DUCK;
+
   // Deep Desert cycle 7 — the ERG HUSH. Ease the smoothed hush factor toward the
   // erg-core mask at the player, then derive: (a) a CALM duck (the base wind +
   // ambient bed goes quieter inside the dune sea — the awe register), and (b) a
@@ -312,9 +357,9 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   const windLvl = Math.max(storm, drift);
 
   // Wind layer gains
-  const tCalm  = (1 - smoothstep(0.0, 0.35, windLvl)) * WIND_MASTER;
-  const tMid   = smoothstep(0.0, 0.35, windLvl) * (1 - smoothstep(0.45, 0.85, windLvl)) * WIND_MASTER;
-  const tStorm = smoothstep(0.45, 0.85, windLvl) * WIND_MASTER;
+  const tCalm  = (1 - smoothstep(0.0, 0.35, windLvl)) * WIND_MASTER * caveDuck;
+  const tMid   = smoothstep(0.0, 0.35, windLvl) * (1 - smoothstep(0.45, 0.85, windLvl)) * WIND_MASTER * caveDuck;
+  const tStorm = smoothstep(0.45, 0.85, windLvl) * WIND_MASTER * caveDuck;
   setStem(s.wind.calm,  tCalm,  s.ctx);
   setStem(s.wind.mid,   tMid,   s.ctx);
   setStem(s.wind.storm, tStorm, s.ctx);
@@ -338,15 +383,15 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
     // as it engulfs, then fades as it passes. This is the "hear it coming" wind.
     // Deep Desert cycle 7 — the CALM wind components (body + whistle) duck by
     // hushDuck inside an erg; the STORM components are untouched (storm overrides).
-    const bodyLvl = (Tuning.WIND_BODY_MASTER * windLvl * hushDuck + Tuning.STORM_WIND_BODY_MASTER * storm) * gust;
+    const bodyLvl = (Tuning.WIND_BODY_MASTER * windLvl * hushDuck + Tuning.STORM_WIND_BODY_MASTER * storm) * gust * caveDuck;
     const stormRamp = smoothstep(0.12, 0.9, storm);
     // The howl carries the deep storm roar AND the erg's low sand-sigh floor tone
     // (the hush's presence — a felt low breath inside the dune sea, calm-gated).
     const sighLvl = Tuning.ERG_HUSH_SIGH_MASTER * _ergHush * calmGate;
-    const howlLvl = Tuning.STORM_WIND_HOWL_MASTER * stormRamp * gust + sighLvl;
+    const howlLvl = (Tuning.STORM_WIND_HOWL_MASTER * stormRamp * gust + sighLvl) * caveDuck;
     const whistleLvl =
-      Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness)) * hushDuck
-      + Tuning.STORM_WIND_WHISTLE_MASTER * Math.pow(storm, 1.3) * gust;
+      (Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness)) * hushDuck
+        + Tuning.STORM_WIND_WHISTLE_MASTER * Math.pow(storm, 1.3) * gust) * caveDuck;
     const whistleFreq = 760 + windLvl * 220 + storm * 340;
     const t0 = s.ctx.currentTime, tc = 0.3;
     s.pwind.body.frequency.setTargetAtTime(cutoff, t0, tc);
@@ -357,7 +402,7 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   }
 
   // Ambient life — suppressed under sandstorm
-  const lifeMask = (1 - smoothstep(0.15, 0.35, storm)) * hushDuck;   // erg hush ducks the ambient life bed too
+  const lifeMask = (1 - smoothstep(0.15, 0.35, storm)) * hushDuck * caveDuck;   // erg hush + cave duck the ambient life bed too
   setStem(s.ambient.day,   day   * lifeMask * AMBIENT_LIFE_MASTER, s.ctx);
   setStem(s.ambient.night, night * lifeMask * AMBIENT_LIFE_MASTER, s.ctx);
 
@@ -368,8 +413,47 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   // untouched, so a sandstorm overrides the hush.
   const tenseW = smoothstep(0.30, 0.55, storm);
   const musicHush = 1 - _ergHush * Tuning.ERG_HUSH_MUSIC_DUCK * calmGate;
-  setStem(s.music.calm,  (1 - tenseW) * MUSIC_CALM_TARGET * musicHush,  s.ctx);
-  setStem(s.music.tense, tenseW * MUSIC_TENSE_TARGET,        s.ctx);
+  setStem(s.music.calm,  (1 - tenseW) * MUSIC_CALM_TARGET * musicHush * caveDuck,  s.ctx);
+  setStem(s.music.tense, tenseW * MUSIC_TENSE_TARGET * caveDuck,        s.ctx);
+
+  // UNDERWORLD cycle 2 — drive the CAVE BED: the low hush air tone rises with caveInside, and sparse
+  // drips are scheduled at a randomized interval (each fed through the feedback delay for a cave echo).
+  if (s.cave) {
+    const t0 = s.ctx.currentTime;
+    s.cave.hushGain.gain.setTargetAtTime(Tuning.CAVE_BED_HUSH_MASTER * caveInside, t0, 0.4);
+    if (caveInside > 0.15) {
+      if (s.cave.nextDrip === 0) s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S;
+      if (t0 >= s.cave.nextDrip) {
+        scheduleDrip(s.cave, s.ctx, Tuning.CAVE_BED_DRIP_MASTER * caveInside);
+        s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S
+          + Math.random() * (Tuning.CAVE_BED_DRIP_MAX_S - Tuning.CAVE_BED_DRIP_MIN_S);
+      }
+    } else {
+      s.cave.nextDrip = 0;   // reset so the first drip after re-entering isn't immediate
+    }
+  }
+}
+
+/** One water DRIP — a short pitched blip (fast attack, exponential decay) through a bandpass, into
+ *  the drip bus (which feeds the feedback delay → a couple of decaying echoes). Cheap one-shots. */
+function scheduleDrip(cave: CaveBed, ctx: AudioContext, level: number): void {
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  const f0 = 720 + Math.random() * 900;          // varied pitch per drip
+  osc.frequency.setValueAtTime(f0, t);
+  osc.frequency.exponentialRampToValueAtTime(f0 * 0.55, t + 0.09);   // a quick downward "plink"
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = f0;
+  bp.Q.value = 3.0;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, level), t + 0.005);   // sharp attack
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);                     // fast decay
+  osc.connect(bp).connect(g).connect(cave.dripBus);
+  osc.start(t);
+  osc.stop(t + 0.22);
 }
 
 function setStem(stem: StemNodes, target: number, ctx: AudioContext): void {

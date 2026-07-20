@@ -953,6 +953,53 @@ export const Tuning = {
   CAVE_SPELEO_MOUTH_CLEAR_DEG: 32,     // ° — keep this angular sector clear around each corridor mouth (don't wall a doorway)
   CAVE_SPELEO_DENSITY: 0.9,            // speleothems per 10m² of chamber floor (scaled up in hall/egg, ~0 in squeeze pockets)
 
+  // ── UNDERWORLD cycle 2 — DARKNESS + the light model (caveAtmosphere.ts). The labyrinth is
+  //    genuinely DARK: past the throat, ambient/sun/moon fade to a near-black floor over a few
+  //    metres of depth below the surface sheet, so the survival loop is "no light, no cave" (the
+  //    player's own torch/flashlight/lantern is the only real illumination). A warm DAYLIGHT SHAFT
+  //    at the mouth spills down the ramp (time-of-day driven), fading with depth. Only active while
+  //    the player is CONTAINED in the cave AABB + below the surface → the surface world is untouched.
+  CAVE_DARK_DEPTH_FADE: 7.0,           // m — depth below the surface sheet over which darkness ramps 0→1 (a few metres past the throat = full dark)
+  CAVE_DARK_AMBIENT_FLOOR: 0.03,       // ambient intensity multiplier at full dark (near-black; not 0 so torch-lit rock still has a faint base)
+  CAVE_DARK_SUN_FLOOR: 0.0,            // sun/moon intensity multiplier at full dark (the sky can't reach deep rock)
+  CAVE_DARK_AABB_MARGIN: 14,           // m — the cave XZ bounding box is expanded by this before the depth test gates darkness (so standing in a surface valley never darkens)
+  CAVE_FOG_DENSITY: 0.055,             // FogExp2 density at full dark — near walls read, the far end of a hall fades to black (depth cue; base density restored at the mouth)
+  CAVE_FOG_HEX: 0x05060a,              // near-black cool cave fog colour (a sandy desert-fog haze underground reads wrong)
+  CAVE_SHAFT_COLOR_HEX: 0xffd69a,      // warm daylight shaft colour spilling down the mouth ramp
+  CAVE_SHAFT_INTENSITY: 8.5,           // SpotLight intensity at full daylight (scales with sun height; faint at night)
+  CAVE_SHAFT_DIST: 34,                 // m — shaft falloff distance (reaches the ramp + throat + entrance mouth, fades before the deep tree)
+  CAVE_SHAFT_ANGLE_RAD: 0.72,          // shaft cone half-angle (a broad wash down the trench, not a torch beam)
+  CAVE_SHAFT_PENUMBRA: 0.55,           // soft cone edge
+
+  // ── UNDERWORLD cycle 2 — WEIRD MUSHROOMS (the life accent; caveGen.ts). Sparse clusters of pale,
+  //    faintly cool-bioluminescent fungi in 2-4 chambers (denser near floor dips, a few on walls).
+  //    Emissive is LOW — a navigation breadcrumb + eerie accent, NOT a lamp (darkness still dominates).
+  //    Visual-only this cycle (no collider, no loot logic); seed-varied via the caveGen rng.
+  CAVE_FUNGI_CHAMBERS_MIN: 2,          // clusters seeded across this many chambers (min)
+  CAVE_FUNGI_CHAMBERS_MAX: 4,          // (max) — never every chamber
+  CAVE_FUNGI_CLUSTER_MIN: 2,           // fungi clusters per chosen chamber (min)
+  CAVE_FUNGI_CLUSTER_MAX: 4,           // (max)
+  CAVE_FUNGI_PER_CLUSTER_MAX: 6,       // mushrooms per cluster (min 2)
+  CAVE_FUNGI_EMISSIVE_HEX: 0x8fe6d8,   // cool teal-cyan bioluminescence
+  CAVE_FUNGI_EMISSIVE_INT: 0.9,        // emissive intensity on the CAP (low — self-glow breadcrumb, reads in the dark; toneMapped so it never blows out)
+  CAVE_FUNGI_STALK_HEX: 0xc8c2b0,      // pale bone-cream stalk (lit by the torch when near)
+  CAVE_FUNGI_CAP_MAX_R: 0.16,          // m — largest cap radius
+  CAVE_FUNGI_WALL_CHANCE: 0.35,        // chance a chosen chamber also gets a few wall-mounted shelf fungi
+
+  // ── UNDERWORLD cycle 2 — the CAVE AUDIO BED (soundscape.ts). Inside the cave the desert wind/
+  //    ambience/music DUCK out entirely and a cave bed fades in: a low stone-hush air tone + sparse
+  //    echoing drips (randomized interval, quiet, fed through a feedback delay for a cheap echo).
+  //    Crossfades at the mouth. Storm-independent (you're sealed in rock). Smoothed like the erg hush.
+  CAVE_BED_LERP_RATE: 1.6,             // 1/s — how fast the smoothed cave-inside factor eases toward the live containment (mouth crossfade)
+  CAVE_BED_DESERT_DUCK: 1.0,           // fraction the desert wind/ambience/music duck by at full-inside (1 = fully silent)
+  CAVE_BED_HUSH_MASTER: 0.05,          // gain of the low stone-hush air tone at full-inside (a felt low breath, very quiet)
+  CAVE_BED_HUSH_CUTOFF: 240,           // Hz — lowpass cutoff for the hush tone (deep, airless)
+  CAVE_BED_DRIP_MASTER: 0.32,          // peak gain of a single drip blip (quiet)
+  CAVE_BED_DRIP_MIN_S: 1.7,            // s — min interval between drips
+  CAVE_BED_DRIP_MAX_S: 6.5,            // s — max interval between drips (randomized each time → sparse, irregular)
+  CAVE_BED_DRIP_ECHO_S: 0.26,          // s — feedback-delay time for the drip echo
+  CAVE_BED_DRIP_ECHO_FEEDBACK: 0.42,   // delay feedback (a couple of audible repeats, decaying — not a reverb engine)
+
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
   // ACAX — darkened + WARMED from ACAT W5's light grey-tan (0x6a6657/0x5e5a52). User

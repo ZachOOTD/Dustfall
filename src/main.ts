@@ -17,6 +17,7 @@ import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
 import { caveTestSite, spawnCaveTestBore } from './world/caveTest.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
 import { caveGenSeed, spawnCave } from './world/caveGen.ts';             // UNDERWORLD cycle 2 — the generated cave body
+import { createCaveAtmosphere, updateCaveAtmosphere, type CaveAtmosphere } from './world/caveAtmosphere.ts'; // UNDERWORLD cycle 2 — darkness + light model
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
@@ -193,9 +194,12 @@ const caveSite = FEATURES.caveTest ? caveTestSite(worldSeed) : null;
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes, caveSite);
 // The welded bore (ramp + trench + roofed throat) at the carved entrance-chunk hole, then the
 // GENERATED cave body (cycle 2: deterministic room-graph + corridors) hung off the throat junction.
+let caveAtmosphere: CaveAtmosphere | null = null;
 if (caveSite) {
   const bore = spawnCaveTestBore(three.scene, physics.world, terrain, caveSite);
-  spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));
+  const cave = spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));
+  // UNDERWORLD cycle 2 — the light model + darkness + mouth shaft, keyed to the cave's bounds.
+  caveAtmosphere = createCaveAtmosphere(three.scene, bore.probe, cave.graph);
 }
 _mark('terrain');
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
@@ -545,6 +549,7 @@ const ctx: GameContext = {
   companion: null,                   // Session AAE
   sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
   deepCave,                          // M8 ⑨ (C48/C49) — the deep cave interior + dark-nav
+  caveAtmosphere,                    // UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor (null with FEATURES.caveTest off)
   egg: deepCave.egg,                  // M8 ⑩ (C52) — the companion egg on the cave dais (reconciled in handoffToGame)
 
   salvageables,
@@ -1120,6 +1125,7 @@ startLoop(ctx, (c, dt) => {
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateSarlaccPit(c, dt);       // ACAQ Cycle 8 — wreck-yard maw; gapes + pulls + bites near the player
   updateDeepCave(c, deepCave);   // M8 ⑨ (C49) — dark-nav: darken ambient/sun + torch glow when the player is down in the cave (AFTER updateLighting set the surface values)
+  if (caveAtmosphere) updateCaveAtmosphere(c, caveAtmosphere, dt);  // UNDERWORLD cycle 2 — the generated cave's darkness/fog/mouth-shaft (AFTER updateLighting; only with FEATURES.caveTest on)
   updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep

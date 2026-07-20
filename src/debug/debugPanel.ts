@@ -206,6 +206,7 @@ interface DebugApi {
   };
   ctx: GameContext;
   RAPIER: typeof RAPIER;
+  Tuning: typeof Tuning;
   castDown: (x: number, z: number, fromY?: number, excludePlayer?: boolean) => null | {
     hitY: number;
     timeOfImpact: number;
@@ -482,6 +483,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
 
   window.__game = {
     THREE,   // expose the THREE namespace for dev/rig overlays (e.g. the collider wireframe)
+    Tuning,  // expose Tuning for rig probes (e.g. the cave dark-truth shots reading the real light constants)
     setTime: (t) => { ctx.time.dayTime = t; },
     // Escape-pod intro (T0.1) — dev hooks for fast iteration (T0.2+ beats).
     startIntro: () => startEscapePodIntro(ctx, true),

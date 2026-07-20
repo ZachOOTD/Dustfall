@@ -706,6 +706,92 @@ function addSpeleothems(
   }
 }
 
+// ── Weird mushrooms (the life accent) ────────────────────────────────────────
+
+// Pale bone-cream stalk (lit by the torch when the player is near) + a faintly cool-bioluminescent
+// cap. The cap's LOW emissive renders even in pitch black (a navigation breadcrumb + eerie accent),
+// but toneMapped keeps it from blowing out so DARKNESS still dominates — these are NOT lamps. Shared
+// materials → one program for every fungus. Solid primitives (rule 7 — cylinders/spheres are thick).
+const _fungiStalk = new THREE.MeshStandardMaterial({ color: Tuning.CAVE_FUNGI_STALK_HEX, roughness: 0.9, metalness: 0.0, flatShading: true });
+const _fungiCap = new THREE.MeshStandardMaterial({
+  color: 0x243c3a, roughness: 0.6, metalness: 0.0,
+  emissive: Tuning.CAVE_FUNGI_EMISSIVE_HEX, emissiveIntensity: Tuning.CAVE_FUNGI_EMISSIVE_INT,
+});
+
+/** One mushroom (bent stalk + a domed glowing cap) at LOCAL origin, stalk rising +Y. Height `h`,
+ *  cap radius `capR`. Solid — a real capped stalk, not a flat shell. */
+function buildMushroom(h: number, capR: number, rand: () => number): THREE.Group {
+  const grp = new THREE.Group();
+  const stalkR = Math.max(0.012, capR * (0.28 + rand() * 0.12));
+  const bend = (rand() - 0.5) * 0.5;
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(stalkR * 0.8, stalkR, h, 6), _fungiStalk);
+  stalk.position.y = h * 0.5;
+  stalk.rotation.z = bend * 0.6;
+  grp.add(stalk);
+  // Cap — a squashed hemisphere dome sitting on the stalk top (glowing underside + top).
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(capR, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.62), _fungiCap);
+  cap.scale.set(1, 0.72 + rand() * 0.2, 1);
+  cap.position.set(Math.sin(bend) * h * 0.5, h - capR * 0.15, 0);
+  grp.add(cap);
+  grp.traverse((o) => { const mm = o as THREE.Mesh; if (mm.isMesh) mm.receiveShadow = true; });
+  return grp;
+}
+
+/** A cluster of 2..MAX mushrooms of varied height crowded within ~`spread` of a point. */
+function buildFungiCluster(rand: () => number, spread: number): THREE.Group {
+  const cl = new THREE.Group();
+  const n = 2 + Math.floor(rand() * (Tuning.CAVE_FUNGI_PER_CLUSTER_MAX - 1));
+  for (let i = 0; i < n; i++) {
+    const capR = Tuning.CAVE_FUNGI_CAP_MAX_R * (0.42 + rand() * 0.58);
+    const h = capR * (2.2 + rand() * 3.4);
+    const m = buildMushroom(h, capR, rand);
+    const a = rand() * Math.PI * 2, rr = rand() * spread;
+    m.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    m.rotation.y = rand() * Math.PI * 2;
+    cl.add(m);
+  }
+  return cl;
+}
+
+/** Seed the chosen chamber with sparse fungi clusters: floor clusters at mid radii (near the walls
+ *  / floor dips) + optional shelf fungi on the wall. Visual-only decor (no collider) — pushed onto
+ *  `decor` so it never trips the walk/collision gates. Deterministic via the passed rng stream. */
+function addFungi(node: CaveNode, cnoise: Noise3, rand: () => number, group: THREE.Group, decor: THREE.Mesh[]): void {
+  const rx = node.rx, floorY = node.floorY;
+  const nClusters = Tuning.CAVE_FUNGI_CLUSTER_MIN
+    + Math.floor(rand() * (Tuning.CAVE_FUNGI_CLUSTER_MAX - Tuning.CAVE_FUNGI_CLUSTER_MIN + 1));
+  for (let c = 0; c < nClusters; c++) {
+    const ang = rand() * Math.PI * 2;
+    const fr = 0.45 + rand() * 0.42;                    // mid → outer floor (toward the walls)
+    const x = node.x + Math.cos(ang) * rx * fr, z = node.z + Math.sin(ang) * rx * fr;
+    // Sit on the actual bumpy floor (matches the mesh floor micro-bump).
+    const fy = floorY + Math.max(0, cnoise(x * 0.5, 7.3, z * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
+    const cl = buildFungiCluster(rand, 0.35);
+    cl.position.set(x, fy, z);
+    for (const o of cl.children) o.traverse((m) => { (m as THREE.Mesh).receiveShadow = true; });
+    group.add(cl); cl.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
+  }
+  // Optional wall shelf fungi — a few small caps jutting horizontally from the wall at head height.
+  if (rand() < Tuning.CAVE_FUNGI_WALL_CHANCE) {
+    const ry = node.height * 0.6, cyc = floorY + node.height - ry;
+    const shelves = 2 + Math.floor(rand() * 3);
+    for (let s = 0; s < shelves; s++) {
+      const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
+      const hFrac = 0.28 + rand() * 0.34;               // fraction up the wall
+      const wy = floorY + node.height * hFrac;
+      // approx shell radius at this height on the ellipsoid (relative to the vertical centre)
+      const yn = Math.max(-0.98, Math.min(0.98, (wy - cyc) / ry));
+      const wallR = rx * Math.sqrt(Math.max(0.02, 1 - yn * yn)) - 0.05;
+      const x = node.x + ux * wallR, z = node.z + uz * wallR;
+      const m = buildMushroom(0.08 + rand() * 0.1, Tuning.CAVE_FUNGI_CAP_MAX_R * (0.4 + rand() * 0.4), rand);
+      m.position.set(x, wy, z);
+      m.rotation.z = Math.PI * 0.5;                     // lay it horizontal, growing off the wall
+      m.rotation.y = Math.atan2(uz, ux);
+      group.add(m); m.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
+    }
+  }
+}
+
 // Cave rock — dark, slightly cool flat-shaded stone. Colour comes from baked VERTEX colours (strata
 // bands, mineral staining, pooled floor sediment) so ONE program serves every chamber + corridor.
 // The SHELL renders BackSide (we're inside solid rock, seeing its interior face); SPELEOTHEMS + the
@@ -745,6 +831,7 @@ export function spawnCave(
   const noise3 = createNoise3D(makeRng((seed ^ 0x5eed3d) >>> 0));
   const cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));   // colour/dressing noise stream
   const srand = makeRng((seed ^ 0x59e1e0) >>> 0);                   // speleothem placement RNG
+  const frand = makeRng((seed ^ 0xf0091a) >>> 0);                   // fungi placement RNG (own stream — leaves speleothems untouched)
   const depthOf = (n: CaveNode): number =>
     Math.max(0, Math.min(1, (junction.gy - n.floorY) / Math.max(1, graph.depthBelowSurface)));
 
@@ -786,7 +873,17 @@ export function spawnCave(
   { const n0 = byId(0); pushDir(0, n0.x - junction.heading.x, n0.z - junction.heading.z); }
 
   const meshes: THREE.Mesh[] = [];            // baked into the trimesh collider (rule 9)
-  const decor: THREE.Mesh[] = [];             // visual-only (small speleothems; no collider, like scatter)
+  const decor: THREE.Mesh[] = [];             // visual-only (small speleothems + fungi; no collider, like scatter)
+
+  // Weird mushrooms — seed 2-4 chambers (never every one), the egg + hall favoured (the "distinct
+  // landmark" rooms), the rest chosen by rng score. Deterministic (frand stream). Visual-only.
+  const fungiTarget = Tuning.CAVE_FUNGI_CHAMBERS_MIN
+    + Math.floor(frand() * (Tuning.CAVE_FUNGI_CHAMBERS_MAX - Tuning.CAVE_FUNGI_CHAMBERS_MIN + 1));
+  const fungiCandidates = graph.nodes
+    .filter((n) => n.kind !== 'entrance')
+    .map((n) => ({ id: n.id, score: (n.kind === 'egg' || n.kind === 'hall' ? 1 : 0) + frand() }))
+    .sort((a, b) => b.score - a.score);
+  const fungiSet = new Set(fungiCandidates.slice(0, fungiTarget).map((c) => c.id));
 
   for (const node of graph.nodes) {
     const dT = depthOf(node);
@@ -804,6 +901,7 @@ export function spawnCave(
       group.add(dm); meshes.push(dm);
     }
     addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
+    if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor);
   }
   for (const e of graph.edges) {
     const geo = buildCorridorGeometry(byId(e.a), byId(e.b), e, noise3, cnoise, depthOf(byId(e.b)));

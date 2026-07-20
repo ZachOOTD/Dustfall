@@ -39,6 +39,7 @@ import type { Stake } from './world/stake.ts';
 import type { Companion } from './enemies/companion.ts';
 import type { SarlaccPit } from './enemies/sarlaccPit.ts';
 import type { DeepCave, CaveEgg } from './world/deepCave.ts';
+import type { CaveAtmosphere } from './world/caveAtmosphere.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -182,6 +183,9 @@ export interface GameContext {
   sarlaccPit: SarlaccPit | null;
   /** M8 ⑨ — the deep cave interior + dark-nav (one per world). */
   deepCave: DeepCave;
+  /** UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor.
+   *  Null unless FEATURES.caveTest is on (the generated cave was spawned). */
+  caveAtmosphere: CaveAtmosphere | null;
   /** M8 ⑩ — the companion egg on the cave dais. Non-null only while the companion
    *  is NOT yet acquired (re-derived at boot from `flags.companionAcquired`);
    *  hatching it spawns the companion + clears this. */
