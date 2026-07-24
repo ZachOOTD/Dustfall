@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 1,
-  "current_tier": "cycle-2: the watertight remesh build-out (6 seeds, collider, shell-path deletion)",
+  "cycles_completed": 2,
+  "current_tier": "cycle-3: the crevice entrance (D-1) + surface-character fix",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -21,7 +21,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 265000
+    "total": 700000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -54,6 +54,15 @@
       "spend": 265000,
       "commits": ["db8082a", "7af419f"],
       "note": "Diagnosis CORRECTED by measurement: dominant cause is inverted chamber winding (74.6% chamber escape), not shell interpenetration (~15-18%). cave-void gate landed and demonstrated RED (53.59% seed 1337 / 53.11% seed 7, excused=0). Surface-nets prototype takes it to 0.00% with excused=0 and frontEsc=0. Cost 68.4k tris / 814ms at the recommended 0.45m voxel. LOUD FLAG: 814ms sync is ~49 frames of hitch; sliceable on the D296 pattern, but the Rapier trimesh bake cost at 68k tris is UNMEASURED and is the number that could change the plan (cycle 4)."
+    },
+    {
+      "n": 2,
+      "date": "2026-07-24",
+      "focus": "the watertight surface becomes THE cave; shell kit deleted; void gate wired in",
+      "outcome": "SHIPPED",
+      "spend": 435000,
+      "commits": ["c5f0a35", "2c01bd0"],
+      "note": "SDF surface is now the only meshing path; shell kit deleted (caveGen.ts 1176->837). cave-void wired into verify:chunks with TEETH PROVEN two ways (vacuous-pass guard: <40 pts/3840 rays FAILS; puncture proof: --puncture=25 -> 22.51% RED). 32.4 deg corridor root-caused DIFFERENTLY than cycle 1 guessed (displacement attenuated by Prim.floorY=min(fa,fb), so a descending corridor's shallow half took full displacement through its walkable floor) -> 22.3 deg. Rapier trimesh bake measured: 68.2ms at 70k tris = ~6% of build cost, NOT the streaming blocker; the 992ms polygonizer is, and it is the sliceable half. OPEN: 2 of 6 seed probes HUNG (walk 99, void 2024) at 25% CPU after ~30min, twice; read as harness not generator (void 99 passes) but UNPROVEN -- cycle 3 must re-run before the far seeds are trusted. VISUAL REGRESSION logged honestly despite green gate: SDF surface is smooth-shaded where _caveShell was flatShading, so strata/displacement read as soft washes instead of carved rock. Budget blown: 55min brief vs ~3h actual, entirely gate wall-clock + the two hangs."
     }
   ]
 }
