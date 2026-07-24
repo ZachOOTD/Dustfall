@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void') process.env.VITE_CAVE_TEST = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -3104,6 +3104,256 @@ const SCENARIOS = {
       await shootDark({ exp: 1.3, cam: [ent.x, ent.y + 1.7, ent.z], look: [geo.mouthX, geo.floor + 1.2, geo.cz], shaft: true }, 'shaft-inside');
     }
     if (!pass) throw new Error('cave-walk GATE FAILED');
+  },
+
+  // ── cave-void (DEEPER cycle 1) — THE SEE-THROUGH GATE ───────────────────────
+  //   Zach's cave walk-test (docs/campaign/cave-walktest-2026-07-24.md, D-2): "many of the
+  //   interior walls and floors of the cave were invisible, i could see right through under
+  //   the world". `cave-walk` is GREEN on that same cave — it only proves REACHABILITY, so it
+  //   is structurally blind to a hole in the shell. This gate closes the whole class.
+  //
+  //   METHOD — a renderer-faithful void-ray sweep. From N sample points spread across EVERY
+  //   chamber (centre + 4 offsets, at eye height above the floor) and EVERY corridor (points
+  //   along the axis), cast K rays on a Fibonacci sphere with THREE.Raycaster against the cave
+  //   mesh set. THREE.Mesh.raycast honours `material.side`, so a BackSide shell only registers
+  //   BACK-face hits — exactly what the renderer does. A ray that hits nothing within FAR is an
+  //   ESCAPE: from that spot, in that direction, the player sees the void.
+  //
+  //   THE DECLARED-OPENING ALLOWANCE (the leviathan lesson, verify-solid.mjs:268): rays that
+  //   leave through the REAL entrance are the point of the cave, not a defect. They are excused
+  //   by an explicit `userData.intendedOpening = {center,radius}` declaration (caveTest.ts:306),
+  //   NOT by loosening the escape threshold. `open-end` once flagged the leviathan's front door
+  //   and a later pass bricked up the interior — never again.
+  //
+  //   THE DISCRIMINATOR: every escape is re-cast with the cave materials temporarily forced to
+  //   DoubleSide (probe-local, restored immediately — this is diagnosis, never a fix). An escape
+  //   that becomes a HIT means the surface EXISTS but is back-face-culled from this side — the
+  //   interpenetrating-zero-thickness-shell root cause. An escape that still misses means there
+  //   is a genuine HOLE (a carve with no plug). The split localises the defect for the remesh.
+  //
+  //   Run: npm run rig -- --scenario=cave-void --port=5230 [--seed=1337]
+  'cave-void': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+    });
+
+    const r = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+      const FAR = 400;              // far past the cave AABB — no hit inside this = out of the world
+      const K = 96;                 // rays per sample point (Fibonacci sphere)
+      const EYE = 1.68;             // player eye height above the floor
+
+      let caveGroup = null, boreGroup = null, cavep = null;
+      ctx.three.scene.traverse((o) => {
+        if (o.name === 'caveGen') caveGroup = o;
+        if (o.name === 'caveTestBore') boreGroup = o;
+        if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
+      });
+      if (!caveGroup || !cavep) return { fatal: 'no caveGen group / caveGenProbe (cave not built — flag off?)' };
+
+      // The cave mesh set = the generated cave + the entrance bore (so entrance-hall rays can
+      // legitimately terminate on the trench walls rather than false-flagging).
+      const meshes = [];
+      const collect = (root) => { if (!root) return; root.updateMatrixWorld(true); root.traverse((o) => { if (o.isMesh && o.visible) meshes.push(o); }); };
+      collect(caveGroup); collect(boreGroup);
+
+      // Declared openings, WORLD space — verify-solid.mjs:268 precedent.
+      const openings = [];
+      for (const root of [caveGroup, boreGroup]) {
+        if (!root) continue;
+        root.traverse((o) => {
+          const io = o.userData && o.userData.intendedOpening;
+          if (!io) return;
+          const c = new THREE.Vector3(io.center.x, io.center.y, io.center.z).applyMatrix4(o.matrixWorld);
+          const s = new THREE.Vector3().setFromMatrixScale(o.matrixWorld);
+          openings.push({ c, r: io.radius * Math.max(s.x, s.y, s.z), by: o.name || o.type });
+        });
+      }
+      // A ray is EXCUSED iff it passes through a declared opening sphere going FORWARD.
+      const _oc = new THREE.Vector3();
+      const throughOpening = (origin, dir) => {
+        for (const op of openings) {
+          _oc.subVectors(op.c, origin);
+          const t = _oc.dot(dir);
+          if (t <= 0) continue;                             // opening is behind the ray
+          const perp2 = _oc.lengthSq() - t * t;
+          if (perp2 <= op.r * op.r) return op.by;
+        }
+        return null;
+      };
+
+      // Fibonacci sphere — K uniformly-spread directions.
+      const dirs = [];
+      const ga = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < K; i++) {
+        const y = 1 - (i / (K - 1)) * 2;
+        const rr = Math.sqrt(Math.max(0, 1 - y * y));
+        const th = ga * i;
+        dirs.push(new THREE.Vector3(Math.cos(th) * rr, y, Math.sin(th) * rr).normalize());
+      }
+
+      // ── Sample points: every chamber (centre + 4 offsets at 0.5·rx) + every corridor (3 along-axis). ──
+      const nodes = cavep.nodes, byId = (id) => nodes.find((n) => n.id === id);
+      const pts = [];
+      for (const n of nodes) {
+        const eye = Math.min(EYE, Math.max(0.8, n.height * 0.5));
+        pts.push({ label: `chamber${n.id}:${n.kind}:c`, kind: 'chamber', node: n.id, p: new THREE.Vector3(n.x, n.y + eye, n.z) });
+        for (let q = 0; q < 4; q++) {
+          const a = (q / 4) * Math.PI * 2 + n.id * 0.37;
+          pts.push({
+            label: `chamber${n.id}:${n.kind}:o${q}`, kind: 'chamber', node: n.id,
+            p: new THREE.Vector3(n.x + Math.cos(a) * n.rx * 0.5, n.y + eye, n.z + Math.sin(a) * n.rx * 0.5),
+          });
+        }
+      }
+      for (const e of cavep.edges) {
+        const a = byId(e.a), b = byId(e.b);
+        const eye = Math.min(EYE, Math.max(0.7, e.height * 0.45));
+        for (const t of [0.25, 0.5, 0.75]) {
+          pts.push({
+            label: `corridor${e.a}-${e.b}${e.squeeze ? ':sq' : ':gal'}@${t}`, kind: 'corridor', node: e.a,
+            p: new THREE.Vector3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t + eye, a.z + (b.z - a.z) * t),
+          });
+        }
+      }
+
+      const rc = new THREE.Raycaster();
+      rc.far = FAR;
+      const sweep = () => {
+        const res = [];
+        for (const sp of pts) {
+          const esc = [];
+          for (let d = 0; d < dirs.length; d++) {
+            rc.set(sp.p, dirs[d]);
+            const hits = rc.intersectObjects(meshes, false);
+            if (hits.length === 0) esc.push(d);
+          }
+          res.push(esc);
+        }
+        return res;
+      };
+
+      // Pass 1 — renderer-faithful (materials exactly as they ship).
+      const escRender = sweep();
+
+      // Pass 2 + 3 — the DISCRIMINATORS. Re-sweep with every cave material forced DoubleSide, then
+      // FrontSide; restore. DoubleSide separates "the surface exists but is culled from here" from
+      // "there is a genuine hole". FrontSide answers the sharper question: is the SHIPPING side
+      // simply INVERTED relative to the triangle winding? (If FrontSide is near-clean where the
+      // shipping BackSide leaks, the shells are wound normals-inward and BackSide culls exactly the
+      // faces the player is standing behind.) Probe-local, restored immediately — diagnosis, not a fix.
+      const mats = new Set();
+      for (const m of meshes) { const mm = Array.isArray(m.material) ? m.material : [m.material]; for (const x of mm) if (x) mats.add(x); }
+      const saved = [...mats].map((m) => ({ m, side: m.side }));
+      for (const s of saved) s.m.side = THREE.DoubleSide;
+      const escBoth = sweep();
+      for (const s of saved) s.m.side = THREE.FrontSide;
+      const escFront = sweep();
+      for (const s of saved) s.m.side = s.side;
+      let frontEscapes = 0;
+      for (const e of escFront) frontEscapes += e.length;
+
+      // ── Tally ──
+      let totalRays = 0, escapes = 0, excused = 0, culled = 0, holes = 0;
+      const rows = [];
+      for (let i = 0; i < pts.length; i++) {
+        const sp = pts[i];
+        const setBoth = new Set(escBoth[i]);
+        let sEsc = 0, sExc = 0, sCul = 0, sHole = 0;
+        for (const d of escRender[i]) {
+          if (throughOpening(sp.p, dirs[d])) { sExc++; continue; }
+          sEsc++;
+          if (setBoth.has(d)) sHole++; else sCul++;    // still escapes with DoubleSide = real hole
+        }
+        totalRays += dirs.length; escapes += sEsc; excused += sExc; culled += sCul; holes += sHole;
+        let sFront = 0;
+        for (const d of escFront[i]) if (!throughOpening(sp.p, dirs[d])) sFront++;
+        rows.push({
+          label: sp.label, kind: sp.kind, esc: sEsc, exc: sExc, culled: sCul, hole: sHole, front: sFront,
+          pct: +((sEsc / dirs.length) * 100).toFixed(1),
+          p: [+sp.p.x.toFixed(1), +sp.p.y.toFixed(1), +sp.p.z.toFixed(1)],
+          // the worst escape direction from this point (first unexcused), for the visual shot
+          dir: (() => { for (const d of escRender[i]) if (!throughOpening(sp.p, dirs[d])) return [+dirs[d].x.toFixed(3), +dirs[d].y.toFixed(3), +dirs[d].z.toFixed(3)]; return null; })(),
+        });
+      }
+      rows.sort((a, b) => b.esc - a.esc);
+      const chamRows = rows.filter((x) => x.kind === 'chamber'), corRows = rows.filter((x) => x.kind === 'corridor');
+      const sum = (a, k) => a.reduce((s, x) => s + x[k], 0);
+
+      return {
+        seed: ctx.seed, digest: cavep.digest, meshes: meshes.length,
+        points: pts.length, K: dirs.length, totalRays,
+        escapes, excused, culled, holes,
+        frontEscapes, frontRate: +((frontEscapes / totalRays) * 100).toFixed(2),
+        escapeRate: +((escapes / totalRays) * 100).toFixed(2),
+        leakyPoints: rows.filter((x) => x.esc > 0).length,
+        chamberEscapes: sum(chamRows, 'esc'), corridorEscapes: sum(corRows, 'esc'),
+        chamberRays: chamRows.length * dirs.length, corridorRays: corRows.length * dirs.length,
+        chamberFront: sum(chamRows, 'front'), corridorFront: sum(corRows, 'front'),
+        chamberHoles: sum(chamRows, 'hole'), corridorHoles: sum(corRows, 'hole'),
+        openings: openings.map((o) => ({ by: o.by, c: [+o.c.x.toFixed(1), +o.c.y.toFixed(1), +o.c.z.toFixed(1)], r: +o.r.toFixed(1) })),
+        worst: rows.slice(0, 14),
+      };
+    });
+
+    if (r.fatal) { console.log(`CAVE-VOID FAIL ${r.fatal}`); throw new Error('cave-void FAILED'); }
+    const pass = r.escapes === 0;
+    console.log(`CAVE-VOID pass=${pass ? 1 : 0} seed=${r.seed} digest=${r.digest} points=${r.points} rays=${r.totalRays} escapes=${r.escapes} rate=${r.escapeRate}% leakyPoints=${r.leakyPoints}/${r.points} culled=${r.culled} holes=${r.holes} excused=${r.excused} chamberEsc=${r.chamberEscapes} corridorEsc=${r.corridorEscapes} meshes=${r.meshes} frontEsc=${r.frontEscapes} frontRate=${r.frontRate}%`);
+    console.log(`[cave-void] SPLIT chambers ${r.chamberEscapes}/${r.chamberRays} (${(100*r.chamberEscapes/r.chamberRays).toFixed(1)}%) back, ${r.chamberFront}/${r.chamberRays} (${(100*r.chamberFront/r.chamberRays).toFixed(1)}%) front, holes ${r.chamberHoles} | corridors ${r.corridorEscapes}/${r.corridorRays} (${(100*r.corridorEscapes/r.corridorRays).toFixed(1)}%) back, ${r.corridorFront}/${r.corridorRays} (${(100*r.corridorFront/r.corridorRays).toFixed(1)}%) front, holes ${r.corridorHoles}`);
+    console.log(`[cave-void] declared openings: ${JSON.stringify(r.openings)}`);
+    for (const w of r.worst) console.log(`[cave-void] ${w.label.padEnd(28)} esc=${String(w.esc).padStart(3)}/${r.K} (${w.pct}%) culled=${w.culled} hole=${w.hole} front=${w.front} excused=${w.exc} at ${JSON.stringify(w.p)}`);
+
+    // ── The VISUAL: stand at the leakiest sample point, at player eye height, and look down the
+    //    escape direction. Two shots per spot: (a) lit — what the player sees; (b) the same frame
+    //    with the scene background flat MAGENTA and fog off, so every escaping pixel is unmistakable.
+    //    NOTE (declared in the report): the cave ships near-black, so these shots ADD a fill light
+    //    and raise exposure purely for legibility. The geometry/culling is untouched. ──
+    const shots = r.worst.filter((w) => w.dir).slice(0, 3);
+    for (let i = 0; i < shots.length; i++) {
+      const w = shots[i];
+      for (const magenta of [false, true]) {
+        await page.evaluate((s) => {
+          const ctx = window.__game.ctx; const THREE = window.__game.THREE;
+          const cam = ctx.three.camera; const L = ctx.lights;
+          const fg = ctx.three.scene.fog;
+          window.__voidRestore = { bg: ctx.three.scene.background, fog: fg, fogD: fg ? fg.density : 0, amb: L.ambient.intensity, sun: L.sun.intensity, exp: ctx.three.renderer.toneMappingExposure };
+          // Kill fog by DENSITY, not by nulling scene.fog — caveAtmosphere writes fog.density every
+          // frame and a null fog spams "Cannot set properties of null" through the probe log.
+          if (fg && 'density' in fg) fg.density = 0; else ctx.three.scene.fog = null;
+          if (s.magenta) ctx.three.scene.background = new THREE.Color(0xff00ff);
+          L.ambient.intensity = 0.9; L.sun.intensity = 0;
+          ctx.three.renderer.toneMappingExposure = 1.4;
+          let fill = window.__voidFill;
+          if (!fill) { fill = new THREE.PointLight(0xffe6c4, 40, 60); window.__voidFill = fill; ctx.three.scene.add(fill); }
+          fill.position.set(s.p[0], s.p[1] + 0.6, s.p[2]); fill.intensity = 40; fill.visible = true;
+          cam.position.set(s.p[0], s.p[1], s.p[2]);
+          cam.lookAt(s.p[0] + s.d[0] * 10, s.p[1] + s.d[1] * 10, s.p[2] + s.d[2] * 10);
+          cam.updateMatrixWorld(true);
+          ctx.three.renderer.render(ctx.three.scene, cam);
+        }, { p: w.p, d: w.dir, magenta });
+        await page.waitForTimeout(200);
+        const nm = `${i}-${w.label.replace(/[^a-z0-9]+/gi, '_')}${magenta ? '-VOID' : '-lit'}`;
+        try { await page.screenshot({ path: join(OUT, `scen-cave-void-${nm}.png`), fullPage: false, timeout: 60000 }); console.log(`[cave-void] saved scen-cave-void-${nm}.png`); }
+        catch (e) { console.log(`[cave-void] ${nm} shot flaked (${e.name})`); }
+        await page.evaluate(() => {
+          const ctx = window.__game.ctx; const st = window.__voidRestore; if (!st) return;
+          ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
+          if (st.fog && 'density' in st.fog) st.fog.density = st.fogD;
+          ctx.lights.ambient.intensity = st.amb; ctx.lights.sun.intensity = st.sun;
+          ctx.three.renderer.toneMappingExposure = st.exp;
+          if (window.__voidFill) window.__voidFill.visible = false;
+          window.__voidRestore = null;
+        });
+      }
+    }
+
+    if (!pass) throw new Error('cave-void GATE FAILED');
   },
 
   'drop-test': async (page) => {

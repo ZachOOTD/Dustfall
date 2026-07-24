@@ -38,7 +38,37 @@ a crevice in a distinctive rock outcrop that reads from a distance, since it hol
 > *"many of the interior walls and floors of the cave were invisible, i could see right through
 > under the world which is not right."*
 
-**Root cause found — architectural, not a material typo.** The cave is built as **N separate
+> **CORRECTION (DEEPER cycle 1, 2026-07-24) — measured, not reasoned. The diagnosis below is
+> PARTIALLY right and the *dominant* cause is different.** The new `cave-void` gate
+> (`npm run verify:cave:void`) casts 96 rays from 85 eye-height sample points across every chamber
+> and corridor. Seed 1337: **53.6% of rays escape into the void**; 84/85 sample points leak. The
+> chamber/corridor split under forced material sides is the tell:
+>
+> | | shipping `BackSide` | forced `FrontSide` | genuine holes (leak even DoubleSide) |
+> |---|---|---|---|
+> | **chambers** | **74.6% escape** | 18.0% | 287 rays |
+> | **corridors** | 15.1% | **74.0% escape** | 36 rays |
+>
+> The two halves of the kit are wound **opposite ways** and share ONE material. `buildChamberGeometry`
+> emits triangles with **inward-facing normals** (`idx.push(a, c2, b)` — the cross product at the
+> equator points at the chamber centre), so `_caveShell`'s `side: BackSide` culls exactly the faces
+> you are standing behind: **a room's own walls and floor are invisible from inside that room.**
+> The egg-chamber centre leaks 88/96 rays; forced to FrontSide it leaks 3/96. Corridor tubes are
+> wound the other way (outward normals), so BackSide is right for *them* — which is why the cave
+> looked half-plausible instead of totally absent. The trimesh collider is winding-agnostic, so
+> `cave-walk` stays green while the room you are standing in has no visible walls — the exact
+> blindness that let this ship.
+>
+> Only **4.0%** of rays escape even with DoubleSide forced, i.e. the *interpenetration/carve* story
+> below is real but accounts for the ~15-18% residual, not the bulk. **The prescribed fix does not
+> change**: one watertight SDF surface is consistently wound AND has no overlap seams, killing both
+> classes at once. Do NOT "fix" this by flipping the chamber side — that would leave the paper-thin
+> shells and the carve gaps (rule 7), and the gate would still be red.
+>
+> Evidence: `verification/scen-cave-void-*.png` — standing at the egg-chamber **centre**, 21.6m
+> underground, the frame shows sky, the sun, and a dead tree on the surface.
+
+**Root cause (original writeup) — architectural, not a material typo.** The cave is built as **N separate
 zero-thickness shells that interpenetrate**: one closed ellipsoid per chamber, one tube per
 corridor, each its own `THREE.Mesh` (`caveGen.ts` ~1047-1071), all sharing `_caveShell` which is
 `side: THREE.BackSide` (`caveGen.ts:951`).
