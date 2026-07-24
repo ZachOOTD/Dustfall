@@ -84,11 +84,10 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
 if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void') process.env.VITE_CAVE_TEST = '1';
-// DEEPER cycle 1 — `--sdf` selects the watertight SDF remesh prototype (FEATURES.caveSdf) for this
-// probe only; `--sdfbench` additionally polygonizes at the measurement resolutions. Default OFF, so
-// every existing cave probe keeps measuring the SHIPPED path.
-if (argv.sdf) process.env.VITE_CAVE_SDF = '1';
-if (argv.sdfbench) { process.env.VITE_CAVE_SDF = '1'; process.env.VITE_CAVE_SDF_BENCH = '1'; }
+// DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
+// is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
+// the cost table; it changes nothing about what ships.
+if (argv.sdfbench) process.env.VITE_CAVE_SDF_BENCH = '1';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -3148,7 +3147,7 @@ const SCENARIOS = {
       if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
     });
 
-    const r = await page.evaluate(() => {
+    const r = await page.evaluate((PUNCTURE) => {
       const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
       const FAR = 400;              // far past the cave AABB — no hit inside this = out of the world
       const K = 96;                 // rays per sample point (Fibonacci sphere)
@@ -3167,6 +3166,22 @@ const SCENARIOS = {
       const meshes = [];
       const collect = (root) => { if (!root) return; root.updateMatrixWorld(true); root.traverse((o) => { if (o.isMesh && o.visible) meshes.push(o); }); };
       collect(caveGroup); collect(boreGroup);
+
+      // ── THE TEETH PROOF (`--puncture=P`). A gate that can only ever pass is worse than no gate.
+      //    This deliberately deletes P% of the cave body's triangles BEFORE the sweep — a synthetic
+      //    see-through defect. The gate MUST go red. Diagnostic only; never used by verify:*. ──
+      if (PUNCTURE > 0) {
+        for (const m of meshes) {
+          if (!m.userData || !m.userData.caveSdf || !m.geometry.index) continue;
+          const src = m.geometry.index.array;
+          const keep = [];
+          for (let t = 0; t < src.length; t += 3) {
+            if ((t / 3) % Math.max(2, Math.round(100 / PUNCTURE)) === 0) continue;   // drop ~P% of faces
+            keep.push(src[t], src[t + 1], src[t + 2]);
+          }
+          m.geometry.setIndex(keep);
+        }
+      }
 
       // Declared openings, WORLD space — verify-solid.mjs:268 precedent.
       const openings = [];
@@ -3287,6 +3302,13 @@ const SCENARIOS = {
           dir: (() => { for (const d of escRender[i]) if (!throughOpening(sp.p, dirs[d])) return [+dirs[d].x.toFixed(3), +dirs[d].y.toFixed(3), +dirs[d].z.toFixed(3)]; return null; })(),
         });
       }
+      // ── THE VACUOUS-PASS GUARD. The worst possible outcome of this gate is that it goes green
+      //    because it silently sampled NOTHING (a probe that finds no chambers/corridors, or a graph
+      //    read that returns an empty node list, would report escapes=0 and look like a fix). A cave
+      //    always has ≥8 chambers → ≥40 chamber points; refuse to report a pass below that. ──
+      if (pts.length < 40 || totalRays === 0) {
+        return { fatal: `vacuous sweep — ${pts.length} sample points / ${totalRays} rays (expected ≥40 points). The gate would have passed by measuring nothing.` };
+      }
       rows.sort((a, b) => b.esc - a.esc);
       const chamRows = rows.filter((x) => x.kind === 'chamber'), corRows = rows.filter((x) => x.kind === 'corridor');
       const sum = (a, k) => a.reduce((s, x) => s + x[k], 0);
@@ -3294,7 +3316,7 @@ const SCENARIOS = {
       return {
         sdfStats: caveGroup.userData.caveSdfStats || null,
         sdfBench: caveGroup.userData.caveSdfBench || null,
-        shellTris: cavep.triCount,
+        shellTris: cavep.triCount, colliderTris: cavep.colliderTris, msCollider: cavep.msCollider, msMesh: cavep.msMesh,
         seed: ctx.seed, digest: cavep.digest, meshes: meshes.length,
         points: pts.length, K: dirs.length, totalRays,
         escapes, excused, culled, holes,
@@ -3308,13 +3330,14 @@ const SCENARIOS = {
         openings: openings.map((o) => ({ by: o.by, c: [+o.c.x.toFixed(1), +o.c.y.toFixed(1), +o.c.z.toFixed(1)], r: +o.r.toFixed(1) })),
         worst: rows.slice(0, 14),
       };
-    });
+    }, Number(argv.puncture || 0));
 
     if (r.fatal) { console.log(`CAVE-VOID FAIL ${r.fatal}`); throw new Error('cave-void FAILED'); }
     const pass = r.escapes === 0;
     console.log(`CAVE-VOID pass=${pass ? 1 : 0} seed=${r.seed} digest=${r.digest} points=${r.points} rays=${r.totalRays} escapes=${r.escapes} rate=${r.escapeRate}% leakyPoints=${r.leakyPoints}/${r.points} culled=${r.culled} holes=${r.holes} excused=${r.excused} chamberEsc=${r.chamberEscapes} corridorEsc=${r.corridorEscapes} meshes=${r.meshes} frontEsc=${r.frontEscapes} frontRate=${r.frontRate}%`);
     console.log(`[cave-void] SPLIT chambers ${r.chamberEscapes}/${r.chamberRays} (${(100*r.chamberEscapes/r.chamberRays).toFixed(1)}%) back, ${r.chamberFront}/${r.chamberRays} (${(100*r.chamberFront/r.chamberRays).toFixed(1)}%) front, holes ${r.chamberHoles} | corridors ${r.corridorEscapes}/${r.corridorRays} (${(100*r.corridorEscapes/r.corridorRays).toFixed(1)}%) back, ${r.corridorFront}/${r.corridorRays} (${(100*r.corridorFront/r.corridorRays).toFixed(1)}%) front, holes ${r.corridorHoles}`);
     console.log(`[cave-void] declared openings: ${JSON.stringify(r.openings)}`);
+    console.log(`[cave-void] BAKE COST: colliderTris=${r.colliderTris} rapierTrimeshBake=${r.msCollider}ms polygonize=${r.msMesh}ms`);
     if (r.sdfStats) console.log(`[cave-void] SDF remesh: voxel=${r.sdfStats.voxel}m dims=${r.sdfStats.dims.join('x')} evaluated=${r.sdfStats.samples}/${r.sdfStats.gridSamples} verts=${r.sdfStats.verts} tris=${r.sdfStats.tris} | field=${r.sdfStats.msField}ms nets=${r.sdfStats.msNets}ms normals=${r.sdfStats.msNormals}ms TOTAL=${r.sdfStats.msTotal}ms (whole-cave tri incl. dressing=${r.shellTris})`);
     if (r.sdfBench) for (const s of r.sdfBench) console.log(`[cave-void] SDF-BENCH voxel=${String(s.voxel).padEnd(5)} dims=${s.dims.join('x').padEnd(14)} tris=${String(s.tris).padStart(7)} verts=${String(s.verts).padStart(7)} field=${String(s.msField).padStart(7)}ms nets=${String(s.msNets).padStart(6)}ms total=${String(s.msTotal).padStart(7)}ms`);
     for (const w of r.worst) console.log(`[cave-void] ${w.label.padEnd(28)} esc=${String(w.esc).padStart(3)}/${r.K} (${w.pct}%) culled=${w.culled} hole=${w.hole} front=${w.front} excused=${w.exc} at ${JSON.stringify(w.p)}`);

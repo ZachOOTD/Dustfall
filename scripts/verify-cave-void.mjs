@@ -24,20 +24,22 @@
 // PASS CRITERION
 //   ZERO unexcused escapes, on every seed. Nothing softer: any escape is a see-through.
 //
-// STATUS — RED BY DESIGN as of 2026-07-24.
-//   Today's cave is built as N interpenetrating zero-thickness shells (one ellipsoid per chamber,
-//   one tube per corridor, all `side: BackSide`), with chamber walls CARVED open at every corridor
-//   mouth. From inside chamber A the corridor tube's faces are back-face-culled and there is no
-//   second surface behind them → void. This gate is deliberately NOT wired into `verify:all` /
-//   `verify:chunks` yet, because it would break the green baseline before the fix lands.
+// STATUS — GREEN AND PERMANENT since DEEPER cycle 2 (2026-07-24).
+//   It was RED BY DESIGN on the shipped shell cave (seed 1337: 4373/8160 = 53.59% escapes, 84/85
+//   points leaky, excused=0). Cycle 2 replaced the shell kit with ONE watertight SDF surface and
+//   this gate went to 0 escapes on a 6-seed net; it is now a leg of `verify:chunks`, i.e. it runs
+//   in `verify:all` on every session.
 //
-//   *** DEEPER CYCLE 2 TODO — WIRE ME IN. *** Once the watertight SDF remesh lands and this gate
-//   goes green on seeds 1337 + 7, append ` && npm run verify:cave:void` to the `verify:chunks`
-//   script in package.json (or add the leg inline in verify-chunks.mjs next to the cave-walk leg
-//   at ~line 178). Do NOT wire it in while it is red.
+// THIS GATE HAS TEETH — two proofs, because a gate that can only pass is worse than none:
+//   1. VACUOUS-PASS GUARD (both sides): a sweep reporting < 40 sample points / < 3840 rays FAILS
+//      instead of passing. "Green because it measured nothing" is the failure mode this cycle was
+//      explicitly told to make impossible.
+//   2. THE PUNCTURE PROOF: `npm run rig -- --scenario=cave-void --port=52xx --puncture=25` deletes
+//      ~25% of the cave surface's triangles in-page before the sweep. The gate goes RED (thousands
+//      of escapes). Re-run it any time you doubt the gate is live.
 //
-// Run: npm run verify:cave:void            (seeds 1337,7)
-//      npm run verify:cave:void -- --seeds=1337,7,42
+// Run: npm run verify:cave:void            (seeds 1337,7 — the verify:chunks leg)
+//      npm run verify:cave:void -- --seeds=1337,7,42,99,2024,555
 
 import { spawnSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
@@ -66,6 +68,15 @@ for (const seed of SEEDS) {
     continue;
   }
   const f = Object.fromEntries(line.trim().split(/\s+/).slice(1).map((kv) => kv.split('=')));
+  // VACUOUS-PASS GUARD (harness side, mirroring the in-page one): a pass reported off a tiny or
+  // empty sample set is the worst possible outcome of this gate — it would launder a see-through
+  // cave as verified. A cave has ≥8 chambers ⇒ ≥40 chamber points ⇒ ≥3840 rays.
+  const points = Number(f.points), rays = Number(f.totalRays ?? f.rays);
+  if (!(points >= 40) || !(rays >= 3840)) {
+    rows.push(`cave-void seed ${seed}: VACUOUS SWEEP — points=${f.points} rays=${rays} (expected ≥40 / ≥3840)  *** FAIL ***`);
+    allPass = false;
+    continue;
+  }
   const ok = f.pass === '1';
   if (!ok) allPass = false;
   // Echo the worst offenders so a failure names the rooms, not just a number.

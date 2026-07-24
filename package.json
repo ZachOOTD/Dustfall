@@ -19,7 +19,7 @@
     "verify:loot": "node scripts/verify-loot-digest.mjs",
     "verify:placement": "node scripts/verify-placement.mjs",
     "verify:colliders": "node scripts/verify-colliders.mjs",
-    "verify:chunks": "node scripts/verify-chunks.mjs",
+    "verify:chunks": "node scripts/verify-chunks.mjs && node scripts/verify-cave-void.mjs",
     "verify:cave": "node scripts/rig-shot.mjs --scenario=cave-walk --port=5210",
     "verify:cave:void": "node scripts/verify-cave-void.mjs",
     "verify:solid": "node scripts/verify-solid.mjs --asset=all",

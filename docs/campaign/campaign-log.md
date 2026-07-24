@@ -6,6 +6,62 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 2 — the watertight surface is THE cave; the shell kit is deleted (2026-07-24) — SHIPPED
+
+- **Planned:** make cycle 1's SDF remesh the only meshing path · delete the shell kit · re-bake the
+  collider from the same triangles · fix the 32.4° corridor · re-baseline `caveDigest` · 6-seed
+  sweep · wire `verify:cave:void` into `verify:chunks` · measure the Rapier trimesh bake.
+
+- **Switched + deleted.** `FEATURES.caveSdf` is RETIRED (nothing left to select between); the cave
+  body is always `buildCaveSdf`. `VITE_CAVE=0` kill-switches exactly as before. Removed from
+  `caveGen.ts`: `buildChamberGeometry`, `buildCorridorGeometry`, `rockDisp`, the `Carve` interface +
+  `carveByNode`/`addCarve`, the `_caveShell` BackSide material, and the duplicated palette (the one
+  copy now lives in `caveSdf.ts` as the exported `caveVertexColor`, used by the dais + speleothems).
+  Also removed the tuning keys that only the shells read (`CAVE_GEN_CHAMBER_RINGS/SEGS`,
+  `CORRIDOR_RINGS/SEGS`, `END_OVERLAP`, `DOORWAY_H`, `FLOOR_FILL`, `CHAMBER_FLOOR_DROP`) and
+  rig-shot's `--sdf` selector. `caveGen.ts` 1176 → 837 lines. The room-graph layout logic is
+  untouched, as required.
+
+- **THE 32.4° CORRIDOR — root-caused, and it was NOT the smooth-min.** Cycle 1 guessed smooth-min
+  rounding. Measured: cycle 1 attenuated the rock displacement by height above `Prim.floorY`, which
+  for a corridor was `min(fa, fb)`. On a **descending** corridor the shallow half therefore read as
+  "6m above the floor" and took the FULL ±0.95m multi-octave displacement **through its walkable
+  floor** — dy-0.8m over a dx-1.2m sample baseline = 33°, exactly the reported figure. Fixed by
+  keying attenuation to the LOCAL ramp floor (`_localFloor`, a side-channel out of `primDist`).
+  Seed 1337 **32.4° → 22.3°**. The smooth-min blend is ALSO now floor-attenuated
+  (`CAVE_SDF_SMOOTH_FLOOR` / `_BAND`) — belt-and-braces, and correct in its own right. The 32°
+  ceiling was never touched.
+
+- **The gate is permanent AND has teeth.** `verify:cave:void` is now a leg of `verify:chunks`, so it
+  runs in `verify:all` every session. Two anti-laundering guards, because "green because it measured
+  nothing" would have been the worst outcome of this cycle: (1) a **vacuous-pass guard** on both the
+  in-page probe and the harness — under 40 sample points / 3840 rays is a FAIL, not a pass;
+  (2) the **puncture proof** — `--puncture=25` deletes ~25% of the surface's triangles in-page and
+  the gate goes RED (seed 1337: **1837/8160 = 22.51%**, `pass=0`, holes=1806). Re-runnable any time.
+
+- **Collider = the visual triangles, only path** (rule 9): the trimesh is baked from the SDF surface
+  + dais + collider-bearing speleothems, and `colliderTris` is now reported so the identity is
+  visible in the probe line.
+
+- **THE STREAMING NUMBER (cycle 1 deferred this to cycle 4 — measured now).** At voxel 0.45m,
+  seed 1337: 67,418 body tris (70,322 baked incl. dressing). **Rapier trimesh bake = 68.2 ms.**
+  Polygonization = 992 ms (field 553 / nets 410). So the collider is ~6% of the build cost and is
+  NOT the streaming blocker — the polygonizer is, and it is the sliceable half (pure per-block loop,
+  zero cross-block state, the S6/D296 pattern). That materially de-risks cycles 4 and 7.
+
+- **⚠ HONEST VISUAL VERDICT — a partial REGRESSION in surface character, reported despite a green
+  gate.** The fundamental read is enormously better: the egg chamber used to be a dais and
+  speleothems floating in pure black void (that IS D-2), and is now a continuous enclosed cavern
+  with floor, walls, ceiling and a light pool. But the new surface reads **smoother and softer**
+  than the shell kit's: `_caveShell` was `flatShading: true` (crisp carved facets) and the SDF
+  surface is smooth-shaded, so strata banding and the multi-octave knobs read as broad soft washes
+  instead of rock. The flat-shaded dais in the same frame now looks MORE like rock than the cave
+  around it. Not fixed here (cycle 3 is the entrance; cycle 5 is the visual reassess) — logged as
+  the first item of that pass. Evidence: `verification/scen-cave-walk-{egg,hall}.png` vs
+  `verification/baseline-shell/` (same shots, shell path, preserved for the comparison).
+
+- **Commits:** see below. **Next:** cycle 3 — the crevice entrance (D-1).
+
 ## Cycle 1 — D-2 diagnosis + the void-ray gate + the SDF remesh prototype (2026-07-24) — SHIPPED
 
 - **Planned:** confirm the D-2 root cause with a real probe · land a see-through gate demonstrated

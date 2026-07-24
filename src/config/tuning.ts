@@ -916,9 +916,6 @@ export const Tuning = {
   CAVE_GEN_POCKET_H_MAX: 5.4,
   CAVE_GEN_EGG_RX: 9.5,               // m — the egg chamber: largest + most distinct (deepest, a domed cathedral ~19m across)
   CAVE_GEN_EGG_H: 8.5,                // m
-  CAVE_GEN_CHAMBER_FLOOR_DROP: 0.55,   // fraction of height the flat floor sits below the ellipsoid centre (rest is walls+dome)
-  CAVE_GEN_FLOOR_FILL: 0.24,           // fraction of chamber height flattened into the floor disk — makes the flat floor
-                                       // reach ~0.94·rx so corridors (which connect at rx−overlap) land ON flat floor, not the sloped wall
   // Corridor cross-sections (D-shape: flat tilted floor + arched ceiling). Half-width and clear
   // height per corridor — squeeze vs. gallery chosen per edge for varied cross-sections.
   CAVE_GEN_SQUEEZE_HALF_W: 1.85,       // m — squeeze corridor half-width (3.7m clear; UNDERWORLD cycle 3: 1.55→1.85 for extra steering margin — a climbing backtrack pressed the capsule against the corridor wall and wedged even though the passage was wide; more lateral room lets it recover)
@@ -930,15 +927,6 @@ export const Tuning = {
   CAVE_GEN_MIN_SIBLING_ANGLE: 55,      // ° — min angular divergence between two corridors leaving the SAME chamber. Below this their flared mouths (halfW×1.7 ≈ 9.5m for a gallery — wider than a small pocket itself) overlap into a crossing floor/ceiling (seed-42 wedge: pockets ~30° apart off one hub crossed → a 2m step read as 59.6° + a blocking wall; seed-2024: two corridors 51° apart still crowded a rx-4.4 hub). Enforced when placing side pockets + asserted post-build.
   CAVE_GEN_CORRIDOR_CLEARANCE: 1.5,    // m — extra margin a new side-corridor must keep from any non-adjacent chamber it doesn't connect (segment→centre distance ≥ chamber rx + gallery half-width + this), so a corridor never spears a chamber it isn't linked to
   CAVE_GEN_BRANCH_DROP_MAX: 4.0,       // m — max descent on a side-branch corridor (branches stay shallower than the egg)
-  CAVE_GEN_END_OVERLAP: 1.2,           // m — corridor end rings poke this far into each chamber (no gap at the aperture)
-  CAVE_GEN_DOORWAY_H: 3.0,             // m — corridor mouths open the chamber wall only up to here (a doorway with a lintel);
-                                       // the dome above is NEVER carved, so the ceiling can't open to the sky (no see-through)
-  // Mesh resolution + rock displacement (greybox — keep tri counts modest, floor bumps < the
-  // 0.4m KCC step so the floor stays walkable).
-  CAVE_GEN_CHAMBER_RINGS: 16,          // lat rings per chamber shell (finer facets → carved-rock read, not a smooth blob)
-  CAVE_GEN_CHAMBER_SEGS: 24,           // long segments per chamber shell
-  CAVE_GEN_CORRIDOR_RINGS: 14,         // cross-section rings along a corridor
-  CAVE_GEN_CORRIDOR_SEGS: 18,          // verts per corridor cross-section ring
   // Multi-octave rock displacement (big bulges + medium knobs + fine roughness). OUTWARD excursions
   // (enlarging the cavity) are free; INWARD excursions are capped small so they never eat the walk
   // path or the 2.0m headroom. AMP is the max OUTWARD push → it's what clampCover reserves as cover.
@@ -946,10 +934,12 @@ export const Tuning = {
   CAVE_GEN_DISP_IN: 0.30,             // m — max INWARD displacement (small — protects the walk path + headroom)
   CAVE_GEN_DISP_FREQ: 0.14,            // 1/m — base (big-bulge) displacement frequency; octaves ×2.7, ×5.9 add knobs + roughness
   CAVE_GEN_FLOOR_BUMP: 0.10,           // m — flat-floor micro-texture (< the 0.4m step; keeps floors walkable)
-  // ── DEEPER cycle 1 — the SDF → surface-nets WATERTIGHT REMESH (FEATURES.caveSdf / VITE_CAVE_SDF=1).
-  // Replaces the interpenetrating per-chamber/per-corridor shells with ONE consistently-wound surface.
+  // ── DEEPER cycle 2 — the SDF → surface-nets WATERTIGHT SURFACE: the cave's ONLY meshing path.
+  // Replaced the interpenetrating per-chamber/per-corridor shells with ONE consistently-wound surface.
   CAVE_SDF_VOXEL: 0.45,                // m — polygonization grid spacing (the quality/cost dial; see docs)
   CAVE_SDF_SMOOTH: 1.1,                // m — smooth-min blend radius at chamber↔corridor junctions (natural flared mouths)
+  CAVE_SDF_SMOOTH_FLOOR: 0.12,         // × SMOOTH at the floor plane — the blend is attenuated toward the floor so mouth
+  CAVE_SDF_SMOOTH_BAND: 1.8,           // m above the floor to reach the full blend — rounding can't shave the ramp start (cycle 1's 32.4°)
   // Speleothems (stalactites / stalagmites / columns) — the signature cave read. Floor features are
   // placed BEYOND the 0.72·rx floor-grid the walk gate samples (RING_MIN) and clear of corridor
   // mouths (MOUTH_CLEAR_DEG), so they never block the walk path or trip the headroom/floor asserts.

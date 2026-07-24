@@ -43,8 +43,7 @@ import type { Terrain } from './terrain.ts';
 import { makeStaticTrimesh } from '../physics/bodies.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
-import { FEATURES } from '../config/features.ts';
-import { buildCaveSdf } from './caveSdf.ts';
+import { buildCaveSdf, caveVertexColor } from './caveSdf.ts';
 
 /** The hand-off from the entrance bore: the throat's open far end (where the cave body begins). */
 export interface CaveJunction {
@@ -406,239 +405,17 @@ function corridorCrowds(parent: CaveNode, node: CaveNode, nodes: CaveNode[], edg
   return false;
 }
 
-// ── Mesh lofting ─────────────────────────────────────────────────────────────
+// ── Dressing (speleothems, the egg dais, fungi) ──────────────────────────────
+//
+// DEEPER cycle 2 deleted the SHELL MESHING KIT that used to live here — `rockDisp`,
+// `buildChamberGeometry`, `buildCorridorGeometry`, the `Carve` interface + the per-node carve map,
+// and the `_caveShell` BackSide material. The cave BODY is now one watertight surface-nets mesh
+// (`caveSdf.ts`), and its displacement lives inside the SDF. The palette (`caveVertexColor`) moved
+// to caveSdf.ts as the single copy; the dressing below imports it.
 
 type Noise3 = (x: number, y: number, z: number) => number;
 
 const _tmpCol = new THREE.Color();
-
-/** Multi-octave rock displacement (big bulge + medium knob + fine roughness) → a signed value,
- *  then made ASYMMETRIC: OUTWARD (positive → enlarging the cavity) scaled to `ampOut`, INWARD
- *  (negative → into the walk space) capped to the small `ampIn` so the walk path + the 2.0m
- *  headroom are never eaten. Reads as carved stone, not a smoothed blob. */
-function rockDisp(n3: Noise3, wx: number, wy: number, wz: number, freq: number, ampOut: number, ampIn: number): number {
-  let v = n3(wx * freq, wy * freq, wz * freq) * 0.62;
-  v += n3(wx * freq * 2.7 + 19, wy * freq * 2.7, wz * freq * 2.7 + 5) * 0.27;
-  v += n3(wx * freq * 5.9 + 41, wy * freq * 5.9, wz * freq * 5.9 + 13) * 0.13;   // v ≈ [-1,1]
-  return v >= 0 ? v * ampOut : v * ampIn;
-}
-
-/** Cave-rock vertex colour by role + world position + normalized depth `depthT` (0 near the mouth,
- *  1 at the egg). Ceiling/wall/floor read DIFFERENTLY (the brief): walls carry horizontal STRATA
- *  bands + patchy mineral (rust / cool) STAINING; the ceiling is darker + cooler (soot, less light);
- *  the floor blends pooled TAN SAND sediment into its dips (ties to the desert above). Writes `out`. */
-function caveVertexColor(
-  role: 'wall' | 'ceiling' | 'floor',
-  wx: number, wy: number, wz: number,
-  depthT: number, cn: Noise3, out: THREE.Color,
-): void {
-  // Base neutral grey-brown, cooling + darkening with depth.
-  let r = lerp(0.315, 0.235, depthT);
-  let g = lerp(0.285, 0.245, depthT);
-  let b = lerp(0.255, 0.275, depthT);
-  // Horizontal STRATA bands — mineral layering; the band phase wobbles with low-freq noise so bands
-  // aren't ruler-straight.
-  const bandN = cn(wx * 0.02, 0, wz * 0.02) * 1.4;
-  const bandLight = 1 + Math.sin(wy * 0.85 + bandN) * 0.10;
-  r *= bandLight; g *= bandLight; b *= bandLight;
-  // Warm ochre / iron STAINING zones (+ cool mineral in the opposite pockets).
-  const stain = cn(wx * 0.055 + 11, wy * 0.055, wz * 0.055 + 7);   // [-1,1]
-  const warm = Math.max(0, stain) * 0.55;
-  r = lerp(r, 0.40, warm); g = lerp(g, 0.235, warm * 0.85); b = lerp(b, 0.145, warm * 0.9);
-  const cool = Math.max(0, -stain) * 0.32;
-  r = lerp(r, 0.195, cool); g = lerp(g, 0.235, cool); b = lerp(b, 0.30, cool);
-  if (role === 'ceiling') {
-    r *= 0.58; g *= 0.62; b *= 0.72;                 // darker + cooler roof
-  } else if (role === 'floor') {
-    const pool = cn(wx * 0.10 + 5, 3.7, wz * 0.10 + 9);
-    const sand = Math.max(0, pool) * 0.9;            // pooled tan sand sediment in floor patches
-    r = lerp(r, 0.52, sand); g = lerp(g, 0.43, sand); b = lerp(b, 0.28, sand);
-    const gr = cn(wx * 0.9, 1.3, wz * 0.9) * 0.035;  // fine grain
-    r += gr; g += gr; b += gr;
-  }
-  // The picked values are perceptual (sRGB); store them LINEAR so they render as intended dark stone
-  // (a raw sRGB value in the vertex buffer renders far too bright — the pale-plaster look).
-  out.setRGB(Math.max(0.02, r), Math.max(0.02, g), Math.max(0.02, b)).convertSRGBToLinear();
-}
-
-/** A corridor's carve footprint in the chamber shell: the shell is removed exactly where the
- *  (flared) tube passes — within `halfW` of the corridor axis, above the floor, up to `ceilTop` —
- *  so the tube plugs the opening with NO rim gap (a cone aperture left a see-through rim). */
-interface Carve { ux: number; uz: number; halfW: number; ceilTop: number; }
-
-/** Build one chamber's displaced ellipsoid shell (flat floor, domed ceiling, tube-carved portals).
- *  Multi-octave carved-rock walls + baked strata/staining/sediment vertex colours. WORLD space. */
-function buildChamberGeometry(node: CaveNode, carves: Carve[], noise3: Noise3, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
-  const T = Tuning;
-  const R = T.CAVE_GEN_CHAMBER_RINGS, S = T.CAVE_GEN_CHAMBER_SEGS;
-  const ampOut = T.CAVE_GEN_DISP_AMP, ampIn = T.CAVE_GEN_DISP_IN, freq = T.CAVE_GEN_DISP_FREQ;
-  const ry = node.height * 0.6;
-  const cy = node.floorY + node.height - ry;      // ellipsoid centre → top = floorY + height
-  const cx = node.x, cz = node.z;
-  const floorTop = node.floorY + node.height * T.CAVE_GEN_FLOOR_FILL;
-  const stride = S + 1;
-  const pos = new Float32Array((R + 1) * stride * 3);
-  const col = new Float32Array((R + 1) * stride * 3);
-  let vi = 0;
-  for (let i = 0; i <= R; i++) {
-    const theta = (i / R) * Math.PI;
-    const st = Math.sin(theta), ct = Math.cos(theta);
-    for (let j = 0; j <= S; j++) {
-      const phi = (j / S) * Math.PI * 2;
-      const dxu = st * Math.cos(phi), dyu = ct, dzu = st * Math.sin(phi);
-      let bx = dxu * node.rx, by = dyu * ry, bz = dzu * node.rz;
-      const d = rockDisp(noise3, cx + bx, cy + by, cz + bz, freq, ampOut, ampIn);
-      bx += dxu * d; by += dyu * d; bz += dzu * d;
-      let wx = cx + bx, wy = cy + by, wz = cz + bz;
-      // Flatten the lower CAVE_GEN_FLOOR_FILL of the chamber height into a wide flat floor disk (so
-      // it reaches ~0.94·rx and corridors — connecting at rx−overlap — land on flat floor).
-      let role: 'wall' | 'ceiling' | 'floor';
-      if (wy < floorTop) { wy = node.floorY + noise3(wx * 0.5, 7.3, wz * 0.5) * T.CAVE_GEN_FLOOR_BUMP; role = 'floor'; }
-      else role = ct > 0.34 ? 'ceiling' : 'wall';
-      pos[vi * 3] = wx; pos[vi * 3 + 1] = wy; pos[vi * 3 + 2] = wz;
-      caveVertexColor(role, wx, wy, wz, depthT, cnoise, _tmpCol);
-      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
-      vi++;
-    }
-  }
-  const floorGuard = node.floorY + 0.2;                    // never carve the flat floor (drops the player through)
-  // Remove a triangle iff its centroid sits inside a corridor's tube footprint: on the +axis side,
-  // within the flared half-width of the axis, and in the wall band above the floor. The tube's own
-  // (equally-flared) mouth then plugs exactly this opening — coincident edges, no rim gap/see-through.
-  const carved = (a: number, b: number, cc: number): boolean => {
-    const cx = (pos[a * 3] + pos[b * 3] + pos[cc * 3]) / 3;
-    const cyTri = (pos[a * 3 + 1] + pos[b * 3 + 1] + pos[cc * 3 + 1]) / 3;
-    const cz = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[cc * 3 + 2]) / 3;
-    if (cyTri < floorGuard) return false;                  // keep the floor
-    const dx = cx - node.x, dz = cz - node.z;
-    for (const c of carves) {
-      const along = dx * c.ux + dz * c.uz;
-      if (along <= 0) continue;                            // only the wall toward this corridor
-      const perp = Math.hypot(dx - along * c.ux, dz - along * c.uz);
-      if (perp < c.halfW && cyTri < c.ceilTop) return true;
-    }
-    return false;
-  };
-  const idx: number[] = [];
-  for (let i = 0; i < R; i++) {
-    for (let j = 0; j < S; j++) {
-      const a = i * stride + j;
-      const b = a + 1;
-      const c2 = (i + 1) * stride + j;
-      const d2 = c2 + 1;
-      if (!carved(a, c2, b)) idx.push(a, c2, b);
-      if (!carved(b, c2, d2)) idx.push(b, c2, d2);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  return geo;
-}
-
-/** Build one corridor's displaced D-section tube (flat tilted floor + arched ceiling). End rings
- *  overlap into both chambers (no gap at the aperture). Geometry is in WORLD space. */
-function buildCorridorGeometry(a: CaveNode, b: CaveNode, edge: CaveEdge, noise3: Noise3, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
-  const T = Tuning;
-  const M = T.CAVE_GEN_CORRIDOR_RINGS, K = T.CAVE_GEN_CORRIDOR_SEGS;
-  // Corridors take SMALLER displacement than chambers (esp. inward) so a squeeze never pinches below
-  // the 2.2m clear width / 2.0m headroom.
-  const ampOut = T.CAVE_GEN_DISP_AMP * 0.5, ampIn = T.CAVE_GEN_DISP_IN * 0.55, freq = T.CAVE_GEN_DISP_FREQ;
-  const ax = a.x, az = a.z, bx = b.x, bz = b.z;
-  const dx = bx - ax, dz = bz - az;
-  const horiz = Math.hypot(dx, dz) || 1;
-  const hx = dx / horiz, hz = dz / horiz;         // heading (XZ)
-  const rgtx = -hz, rgtz = hx;                     // right = heading rotated +90° (XZ)
-  // CRITICAL (the partition bug): the tube spans SURFACE-to-SURFACE — from just inside a's surface
-  // to just inside b's surface — NOT centre-to-centre. Extending the tube's side walls into the
-  // chamber interiors would wall the chamber off; here it only pokes CAVE_GEN_END_OVERLAP past each
-  // surface to plug the aperture, leaving the chamber interiors fully open.
-  const ov = T.CAVE_GEN_END_OVERLAP;
-  const sx = ax + hx * (a.rx - ov), sz = az + hz * (a.rx - ov);   // tube near end (inside a by ov)
-  const ex = bx - hx * (b.rx - ov), ez = bz - hz * (b.rx - ov);   // tube far end (inside b by ov)
-  const sdx = ex - sx, sdz = ez - sz;
-  const tubeLen = Math.hypot(sdx, sdz) || 1;
-  // Keep the corridor floor FLAT at each chamber's floor across that chamber's flat-floor DISK
-  // (radius ≈0.95·rx; the tube starts/ends at rx−ov, i.e. INSIDE the disk), and ramp only over the
-  // CLEAR span between the two disks. Without this the ramp starts descending while still overlapping
-  // the flat disk → castDown hits the flat disk then the lower ramp a step below (seed-99's 40° read
-  // on a short trunk corridor between two large, close chambers). Coincident floors → no step.
-  const padA = ov / tubeLen;   // flat to a's shell edge (covers a's whole flat-floor disk, radius < rx)
-  const padB = ov / tubeLen;   // flat to b's shell edge
-  const rampSpan = Math.max(1e-3, 1 - padA - padB);
-  const stride = K + 1;
-  const pos = new Float32Array((M + 1) * stride * 3);
-  const col = new Float32Array((M + 1) * stride * 3);
-  let vi = 0;
-  for (let m = 0; m <= M; m++) {
-    const t = m / M;                               // 0..1 ALONG THE TUBE (surface to surface)
-    const px = sx + sdx * t, pz = sz + sdz * t;
-    // Floor descends a.floorY → b.floorY across the TUBE (surface to surface), so it meets each
-    // chamber's flat floor exactly at the mouth (no cliff) and the drop is spread over the tube
-    // length (run was sized so this slope ≤ the target).
-    const tf = Math.max(0, Math.min(1, (t - padA) / rampSpan));   // flat within each disk, ramp between
-    const floorY = lerp(a.floorY, b.floorY, tf);
-    // Mouth FLARE at the ends (both width AND ceiling): near each chamber the tube opens up so it
-    // fully COVERS that chamber's round aperture hole — else the hole's rim (wider than the tube)
-    // is left open and you see straight up to the surface (a see-through / cover gap). In the middle
-    // it's the corridor's own cross-section (a squeeze stays a tight NARROW passage, width constant,
-    // never mid-pinched below the ~2.2m minimum).
-    const endW = Math.max(0, 1 - Math.min(t, 1 - t) / 0.22);   // 1 at the ends → 0 by t≈0.22
-    const Wt = edge.halfW * (1 + endW * 0.7);                  // widen the mouth to plug the carve exactly
-    // At the mouths the ceiling drops to DOORWAY_H above the LOCAL floor (constant headroom — a
-    // fixed CHAMBER-floor lintel pinched the headroom on a descending corridor and bumped the
-    // capsule's head). At the exact mouth the local floor == the chamber floor, so it still meets
-    // the chamber's carved doorway top; the chamber wall above stays closed (no see-through).
-    const doorCeil = floorY + Tuning.CAVE_GEN_DOORWAY_H;
-    const baseCeil = floorY + edge.height;
-    const ceilY = lerp(baseCeil, doorCeil, endW);
-    const Ht = ceilY - floorY;
-    for (let k = 0; k <= K; k++) {
-      const beta = (k / K) * Math.PI * 2;
-      const cb = Math.cos(beta), sb = Math.sin(beta);
-      const horizOff = cb * Wt;
-      let wy: number;
-      let role: 'wall' | 'ceiling' | 'floor';
-      if (sb <= 0) {
-        wy = floorY + noise3(px * 0.5, 3.1, pz * 0.5) * T.CAVE_GEN_FLOOR_BUMP;   // flat floor + micro-bump
-        role = 'floor';
-      } else {
-        wy = floorY + sb * Ht;
-        role = sb > 0.72 ? 'ceiling' : 'wall';
-      }
-      let wx = px + rgtx * horizOff;
-      let wz = pz + rgtz * horizOff;
-      if (sb > 0.15) {                              // displace walls/ceiling only (keep the floor clean)
-        const d = rockDisp(noise3, wx, wy, wz, freq, ampOut, ampIn);
-        wx += rgtx * cb * d; wz += rgtz * cb * d; wy += Math.max(0, sb) * d;
-      }
-      pos[vi * 3] = wx; pos[vi * 3 + 1] = wy; pos[vi * 3 + 2] = wz;
-      caveVertexColor(role, wx, wy, wz, depthT, cnoise, _tmpCol);
-      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
-      vi++;
-    }
-  }
-  const idx: number[] = [];
-  for (let m = 0; m < M; m++) {
-    for (let k = 0; k < K; k++) {
-      const p0 = m * stride + k;
-      const p1 = p0 + 1;
-      const p2 = (m + 1) * stride + k;
-      const p3 = p2 + 1;
-      idx.push(p0, p2, p1, p1, p2, p3);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  return geo;
-}
-
-// ── Speleothems + the egg dais ───────────────────────────────────────────────
 
 /** A raised natural rock PEDESTAL (dais) at the egg-chamber centre — a wide, gently-sloped mound
  *  (sides ≤ the walk grade so the KCC climbs it; top ≤ the floor-grid tolerance so it isn't read as
@@ -946,16 +723,16 @@ function addFungi(node: CaveNode, cnoise: Noise3, rand: () => number, group: THR
   }
 }
 
-// Cave rock — dark, slightly cool flat-shaded stone. Colour comes from baked VERTEX colours (strata
-// bands, mineral staining, pooled floor sediment) so ONE program serves every chamber + corridor.
-// The SHELL renders BackSide (we're inside solid rock, seeing its interior face); SPELEOTHEMS + the
-// dais are solid objects seen from OUTSIDE → FrontSide. white base so vertexColor is the final tint.
-const _caveShell = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.BackSide });
+// Cave rock — dark, slightly cool stone. Colour comes from baked VERTEX colours (strata bands,
+// mineral staining, pooled floor sediment) so ONE program serves the whole cave. White base so the
+// vertex colour is the final tint. SPELEOTHEMS + the dais are solid objects seen from OUTSIDE →
+// FrontSide, flat-shaded (faceted dripstone).
 const _caveSolid = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
-// DEEPER cycle 1 — the SDF remesh surface. ONE watertight mesh, normals wound INTO the cavity, so
-// FrontSide is unambiguously correct everywhere (the whole point: no half of the kit wound the other
-// way). Smooth-shaded — surface nets is a manifold, so computeVertexNormals gives continuous normals
-// and flat shading would only expose the voxel grid.
+// The cave BODY surface (DEEPER cycle 2 — the only path). ONE watertight mesh, normals wound INTO
+// the cavity, so FrontSide is unambiguously correct everywhere (the whole point: no half of the kit
+// wound the other way; the shipped shells were wound both ways under one BackSide material and leaked
+// 53.6% of eye-height rays). Smooth-shaded — surface nets is a manifold, so computeVertexNormals
+// gives continuous normals and flat shading would only expose the voxel grid.
 const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: THREE.FrontSide });
 
 export interface CaveGenProbe {
@@ -963,6 +740,12 @@ export interface CaveGenProbe {
   eggId: number;
   depthBelowSurface: number;
   triCount: number;
+  /** Triangles actually baked into the Rapier trimesh (rule 9 — identical to the visible set). */
+  colliderTris: number;
+  /** ms — the Rapier trimesh bake (the streaming-budget number). */
+  msCollider: number;
+  /** ms — the SDF polygonization (field + nets + normals). */
+  msMesh: number;
   digest: string;
   nodes: Array<{ id: number; x: number; y: number; z: number; rx: number; height: number; kind: CaveNodeKind; parent: number }>;
   edges: Array<{ a: number; b: number; halfW: number; height: number; squeeze: boolean }>;
@@ -1003,30 +786,7 @@ export function spawnCave(
   const group = new THREE.Group();
   group.name = 'caveGen';
 
-  // Per-node CARVE list: one tube-footprint per connected corridor + the entrance's throat opening.
-  // Each carve removes the chamber wall exactly where the (flared) corridor tube passes — a doorway
-  // up to floor+DOORWAY_H, width = the tube's flared mouth — so the tube plugs it with no rim gap and
-  // the dome above stays closed (no see-through). The tube mouth flares to the SAME width (×1.7).
-  const carveByNode = new Map<number, Carve[]>();
-  const addCarve = (id: number, ux: number, uz: number, halfW: number, floorY: number): void => {
-    const list = carveByNode.get(id) ?? [];
-    list.push({ ux, uz, halfW, ceilTop: floorY + Tuning.CAVE_GEN_DOORWAY_H });
-    carveByNode.set(id, list);
-  };
   const byId = (id: number): CaveNode => graph.nodes[id];
-  for (const e of graph.edges) {
-    const na = byId(e.a), nb = byId(e.b);
-    const hl = Math.hypot(nb.x - na.x, nb.z - na.z) || 1;
-    const ux = (nb.x - na.x) / hl, uz = (nb.z - na.z) / hl;
-    const flaredHalf = e.halfW * 1.7;                            // matches the tube's mouth width flare
-    addCarve(e.a, ux, uz, flaredHalf, na.floorY);
-    addCarve(e.b, -ux, -uz, flaredHalf, nb.floorY);
-  }
-  // Entrance node — a carve toward the throat (opposite the cave heading), the throat's width.
-  {
-    const n0 = byId(0);
-    addCarve(0, -junction.heading.x, -junction.heading.z, junction.width * 0.5 + 0.4, n0.floorY);
-  }
 
   // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems).
   const dirsByNode = new Map<number, Array<{ x: number; z: number }>>();
@@ -1051,14 +811,14 @@ export function spawnCave(
     .sort((a, b) => b.score - a.score);
   const fungiSet = new Set(fungiCandidates.slice(0, fungiTarget).map((c) => c.id));
 
-  // ── DEEPER cycle 1 — THE WATERTIGHT REMESH (FEATURES.caveSdf). One SDF built from THIS graph,
-  //    polygonized once into ONE consistently-wound surface, replacing every chamber shell + corridor
-  //    tube. The dressing (dais, speleothems, fungi) is untouched and still rides on the same nodes. ──
-  const sdf = FEATURES.caveSdf
-    ? buildCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL,
-      (y) => Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface))))
-    : null;
-  if (sdf) {
+  // ── THE CAVE BODY (DEEPER cycle 2 — the only meshing path). One SDF built from THIS graph,
+  //    polygonized once into ONE consistently-wound watertight surface: no shells, no interpenetration,
+  //    no carve rims, one material, one winding. The dressing (dais, speleothems, fungi) is untouched
+  //    and still rides on the same nodes. ──
+  const depthOfY = (y: number): number =>
+    Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface)));
+  const sdf = buildCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL, depthOfY);
+  {
     const mesh = new THREE.Mesh(sdf.geometry, _caveSurface);
     mesh.name = 'caveSdfSurface';
     mesh.castShadow = false; mesh.receiveShadow = true;
@@ -1072,8 +832,7 @@ export function spawnCave(
     if (import.meta.env?.VITE_CAVE_SDF_BENCH === '1') {
       const bench = [sdf.stats];
       for (const v of [0.65, 0.35]) {
-        const r = buildCaveSdf(graph, junction, noise3, cnoise, v,
-          (y) => Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface))));
+        const r = buildCaveSdf(graph, junction, noise3, cnoise, v, depthOfY);
         bench.push(r.stats); r.geometry.dispose();
       }
       bench.sort((a, b) => b.voxel - a.voxel);
@@ -1084,15 +843,6 @@ export function spawnCave(
 
   for (const node of graph.nodes) {
     const dT = depthOf(node);
-    if (!sdf) {
-      const geo = buildChamberGeometry(node, carveByNode.get(node.id) ?? [], noise3, cnoise, dT);
-      const mesh = new THREE.Mesh(geo, _caveShell);
-      mesh.castShadow = false; mesh.receiveShadow = true;
-      mesh.userData.caveNode = node.id;
-      if (node.kind === 'egg') mesh.userData.eggChamber = true;
-      group.add(mesh);
-      meshes.push(mesh);
-    }
     // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
     if (node.kind === 'egg') {
       const dm = new THREE.Mesh(buildDais(node, cnoise, dT), _caveSolid);
@@ -1102,30 +852,29 @@ export function spawnCave(
     addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
     if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
   }
-  if (!sdf) {
-    for (const e of graph.edges) {
-      const geo = buildCorridorGeometry(byId(e.a), byId(e.b), e, noise3, cnoise, depthOf(byId(e.b)));
-      const mesh = new THREE.Mesh(geo, _caveShell);
-      mesh.castShadow = false; mesh.receiveShadow = true;
-      group.add(mesh);
-      meshes.push(mesh);
-    }
-  }
-
   scene.add(group);
 
-  // ONE trimesh collider baked from the exact visual triangles (rule 9): the shells, corridors,
+  // ONE trimesh collider baked from the EXACT visual triangles (rule 9): the SDF body surface, the
   // dais + the player-scale (collider-bearing) speleothems in `meshes`. Small decor speleothems are
   // visual-only (no collider, like scatter). Meshes are world-space (identity group) → body at origin.
+  // The bake is TIMED and reported (`msCollider`): at ~68k body triangles the Rapier trimesh build is
+  // the streaming-budget unknown cycle 1 flagged, so the number is measured, not assumed.
+  const tCol = performance.now();
   const body = makeStaticTrimesh(world, meshes, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }, new THREE.Matrix4());
+  const msCollider = +(performance.now() - tCol).toFixed(1);
 
   // Triangle count (perf report) — the full visual set incl. decor.
   const allMeshes = meshes.concat(decor);
   let triCount = 0;
   for (const m of allMeshes) triCount += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
 
+  // Collider triangle count = exactly what was baked (rule 9: collision IS the visible geometry).
+  let colliderTris = 0;
+  for (const m of meshes) colliderTris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
+
   const probe: CaveGenProbe = {
     seed, eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
+    colliderTris, msCollider, msMesh: sdf.stats.msTotal,
     digest: caveDigest(graph, allMeshes),
     nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
     edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),

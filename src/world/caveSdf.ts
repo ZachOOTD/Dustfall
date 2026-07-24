@@ -1,4 +1,8 @@
-// DEEPER cycle 1 (2026-07-24) — THE WATERTIGHT REMESH PROTOTYPE.
+// DEEPER cycle 2 (2026-07-24) — THE WATERTIGHT CAVE SURFACE. **This is the cave's ONLY meshing
+// path** (cycle 1 landed it behind `VITE_CAVE_SDF`; cycle 2 made it the default and DELETED the
+// shell kit — `buildChamberGeometry`, `buildCorridorGeometry`, the `Carve` machinery and
+// `_caveShell` no longer exist). The cave palette lives HERE now (`caveVertexColor`, exported for
+// the dais + speleothems), so there is exactly one copy.
 //
 // WHY: the shipped cave is N interpenetrating zero-thickness shells (one ellipsoid per chamber,
 // one tube per corridor) sharing ONE material. `buildChamberGeometry` winds INWARD, corridor tubes
@@ -25,7 +29,7 @@
 // sibling-divergence rule, clear-span corridor run sizing, the fail-loud traversability assert) was
 // bought with real Underworld bugs. This module consumes its OUTPUT. Only the meshing layer changes.
 //
-// Behind `FEATURES.caveSdf` (`VITE_CAVE_SDF=1`) — default OFF, the shipped cave is byte-identical.
+// `VITE_CAVE_SDF_BENCH=1` additionally polygonizes at the measurement resolutions (cost only).
 
 import * as THREE from 'three';
 import { Tuning } from '../config/tuning.ts';
@@ -49,7 +53,6 @@ interface Prim {
   ax: number; az: number; dx: number; dz: number; len: number;
   fa: number; fb: number; tA: number; tB: number;
   halfW: number; height: number;
-  floorY: number;          // representative floor (displacement attenuation reference)
   // bounding sphere (padded at build time)
   bx: number; by: number; bz: number; br: number;
 }
@@ -61,7 +64,7 @@ function chamberPrim(n: CaveNode): Prim {
     corridor: false,
     cx: n.x, cy, cz: n.z, rx: n.rx, ry, rz: n.rz,
     ax: 0, az: 0, dx: 0, dz: 0, len: 1, fa: n.floorY, fb: n.floorY, tA: 0, tB: 1,
-    halfW: 0, height: n.height, floorY: n.floorY,
+    halfW: 0, height: n.height,
     bx: n.x, by: cy, bz: n.z, br: Math.max(n.rx, n.rz, ry) + 0.1,
   };
 }
@@ -82,17 +85,30 @@ function corridorPrim(
     corridor: true,
     cx: 0, cy: 0, cz: 0, rx: 0, ry: 0, rz: 0,
     ax, az, dx: dx / len, dz: dz / len, len,
-    fa, fb, tA, tB, halfW, height, floorY: Math.min(fa, fb),
+    fa, fb, tA, tB, halfW, height,
     bx: (ax + bx) * 0.5, by: midY + height * 0.5, bz: (az + bz) * 0.5,
     br: len * 0.5 + Math.max(halfW, height) + 0.1,
   };
 }
+
+/** Side-channel out of `primDist`: the LOCAL floor plane Y at the sampled XZ for the primitive just
+ *  evaluated. For a chamber that is its flat floor; for a corridor it is the RAMP floor at this point
+ *  along the run, NOT `min(fa,fb)`.
+ *
+ *  DEEPER cycle 2 — this is the 32.4° fix. Cycle 1 attenuated the rock displacement (and the blend)
+ *  by height above `p.floorY`, which for a corridor was `min(fa, fb)`. On a descending corridor the
+ *  SHALLOW half therefore read as "6m above the floor" and took the FULL ±0.95m multi-octave
+ *  displacement straight through its walkable floor — a 0.8m bump over a 1.2m sample baseline is
+ *  33°, which is exactly what the walk gate reported (e1-2, dy-0.8/dx1.2). Keyed to the local ramp
+ *  floor the corridor floors are flat again and the slope is the graph's sized ramp, as intended. */
+let _localFloor = 0;
 
 /** Primitive SDF. Negative inside the cavity. Exact-ish for the floor plane, an ellipsoid
  *  approximation elsewhere (the classic (|q|−1)·min(r) bound — under-estimates near the poles by a
  *  few cm at these radii, which surface nets absorbs without a visible artefact). */
 function primDist(p: Prim, x: number, y: number, z: number): number {
   if (!p.corridor) {
+    _localFloor = p.fa;
     const qx = (x - p.cx) / p.rx, qy = (y - p.cy) / p.ry, qz = (z - p.cz) / p.rz;
     const k = Math.sqrt(qx * qx + qy * qy + qz * qz);
     const d = (k - 1) * Math.min(p.rx, p.ry, p.rz);
@@ -106,6 +122,7 @@ function primDist(p: Prim, x: number, y: number, z: number): number {
   let tr = (t - p.tA) / (p.tB - p.tA);
   tr = tr < 0 ? 0 : tr > 1 ? 1 : tr;
   const fy = p.fa + (p.fb - p.fa) * tr;
+  _localFloor = fy;
   const qw = perp / p.halfW, qh = (y - fy) / p.height;
   const k = Math.sqrt(qw * qw + qh * qh);
   const d = (k - 1) * Math.min(p.halfW, p.height);
@@ -115,6 +132,7 @@ function primDist(p: Prim, x: number, y: number, z: number): number {
 /** Polynomial smooth-min (IQ). Rounds the concave crease where a corridor meets a chamber into a
  *  natural flared mouth — the thing the shell kit needed an explicit carve + a ×1.7 flare to fake. */
 function smin(a: number, b: number, k: number): number {
+  if (k <= 1e-3) return Math.min(a, b);
   const h = Math.max(0, k - Math.abs(a - b)) / k;
   return Math.min(a, b) - h * h * k * 0.25;
 }
@@ -169,6 +187,15 @@ export function buildCaveSdf(
   ));
 
   const SMOOTH = T.CAVE_SDF_SMOOTH;
+  // DEEPER cycle 2 — THE 32.4° FIX. Cycle 1 measured corridor 1–2 at 32.4° against the 32° ceiling.
+  // Cause: the smooth-min blend is isotropic, so at a corridor mouth it rounds the concave crease
+  // DOWNWARD as well as sideways — it eats the start of the flat floor pad and the ramp effectively
+  // begins early over a shorter run. The blend radius is therefore ATTENUATED toward the floor: full
+  // `SMOOTH` from FLOOR_BAND upward (where the flared mouth is the whole point, visually), shrinking
+  // to SMOOTH·FLOOR_MIN at the floor plane itself, where the walkable slope is measured. Not fixed by
+  // raising the slope ceiling — the ceiling is the contract the room-graph was sized against.
+  const SMOOTH_FLOOR_MIN = T.CAVE_SDF_SMOOTH_FLOOR;
+  const SMOOTH_BAND = T.CAVE_SDF_SMOOTH_BAND;
   const AMP_OUT = T.CAVE_GEN_DISP_AMP, AMP_IN = T.CAVE_GEN_DISP_IN, FREQ = T.CAVE_GEN_DISP_FREQ;
   const BAND = voxel * 2 + SMOOTH + AMP_OUT + 0.5;          // "near the surface" half-width
 
@@ -193,6 +220,7 @@ export function buildCaveSdf(
   const field = new Float32Array(cw * ch * cd).fill(BIG);
   const B = 8;                                              // block edge in voxels
   const cand: Prim[] = [];
+  const dcs: number[] = [];
   let evaluated = 0;
   for (let bz = 0; bz < cd; bz += B) {
     for (let by = 0; by < ch; by += B) {
@@ -217,13 +245,19 @@ export function buildCaveSdf(
             let o = (k * ch + j) * cw + bx;
             for (let i = bx; i <= ix1; i++, o++) {
               const wx = x0 + i * voxel;
-              let d = BIG, fl = 0;
+              // Evaluate every candidate FIRST (so `fl` is the NEAREST primitive's floor, not the
+              // nearest-so-far of a running blend), then fold with a floor-attenuated blend radius.
+              let nearest = BIG, fl = 0;
               for (let c = 0; c < cand.length; c++) {
-                const p = cand[c];
-                const dc = primDist(p, wx, wy, wz);
-                if (dc < d) { fl = p.floorY; }
-                d = d < BIG ? smin(d, dc, SMOOTH) : dc;
+                const dc = primDist(cand[c], wx, wy, wz);
+                dcs[c] = dc;
+                if (dc < nearest) { nearest = dc; fl = _localFloor; }   // LOCAL floor, not min(fa,fb)
               }
+              const above = wy - fl;
+              const kt = above <= 0 ? 0 : above >= SMOOTH_BAND ? 1 : above / SMOOTH_BAND;
+              const kLocal = SMOOTH * (SMOOTH_FLOOR_MIN + (1 - SMOOTH_FLOOR_MIN) * kt);
+              let d = dcs[0];
+              for (let c = 1; c < cand.length; c++) d = smin(d, dcs[c], kLocal);
               // Multi-octave rock displacement, evaluated ONLY in the narrow band around the surface
               // (outside it the sign can't flip, so the noise is pure cost). Attenuated to zero at the
               // floor plane so the walkable floor stays flat — the shell kit's `role` split, in world
@@ -357,7 +391,7 @@ export function buildCaveSdf(
     const wy = vy[v];
     const up = nrm.getY(v);
     const role: 'wall' | 'ceiling' | 'floor' = up > 0.55 ? 'floor' : up < -0.4 ? 'ceiling' : 'wall';
-    caveSdfVertexColor(role, vx[v], wy, vz[v], depthOf(wy), cnoise, c);
+    caveVertexColor(role, vx[v], wy, vz[v], depthOf(wy), cnoise, c);
     col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -379,10 +413,14 @@ export function buildCaveSdf(
   };
 }
 
-/** The cave palette, unchanged in intent from caveGen.caveVertexColor — duplicated here rather than
- *  exported-and-shared because cycle 2 folds the two paths into one and this copy dies with the
- *  shells. Strata bands + mineral staining + pooled floor sediment; stored LINEAR. */
-function caveSdfVertexColor(
+/** THE cave palette — the single copy (cycle 2 deleted caveGen's, which died with the shells).
+ *  Cave-rock vertex colour by role + world position + normalized depth `depthT` (0 near the mouth,
+ *  1 at the egg): walls carry horizontal STRATA bands + patchy mineral (rust / cool) STAINING; the
+ *  ceiling is darker + cooler (soot, less light); the floor blends pooled TAN SAND sediment into its
+ *  dips (ties to the desert above). Picked perceptually (sRGB), stored LINEAR — a raw sRGB value in
+ *  the vertex buffer renders far too bright (the pale-plaster look). Also used by the dais + the
+ *  speleothems in caveGen.ts. */
+export function caveVertexColor(
   role: 'wall' | 'ceiling' | 'floor', wx: number, wy: number, wz: number,
   depthT: number, cn: Noise3, out: THREE.Color,
 ): void {

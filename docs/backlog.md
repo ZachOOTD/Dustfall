@@ -10,6 +10,21 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
+### DEEPER residuals (campaign 2026-07-24)
+- `[polish]` **The watertight cave surface reads SMOOTHER than the shell kit it replaced** (DEEPER
+  cycle 2, reported against a green `cave-void`). The shells used `flatShading: true` — crisp carved
+  facets; the SDF surface is smooth-shaded (surface nets is a manifold, so `computeVertexNormals`
+  gives continuous normals), and the strata banding + multi-octave knobs now read as broad soft
+  washes rather than rock. The flat-shaded dais reads MORE like stone than the cavern around it.
+  Candidates: `flatShading: true` on `_caveSurface` (one line — risk: exposes the 0.45m voxel quads
+  as a regular grid, must be shot before keeping); a triplanar/derivative-based facet term; more
+  high-octave amplitude in the SDF narrow band. **Owned by cycle 5 (the visual reassess).**
+  Comparison shots: `verification/scen-cave-walk-{egg,hall}.png` vs `verification/baseline-shell/`.
+- `[debt]` **`caveGen.ts:146` comment still names `buildCorridorGeometry`** (deleted in cycle 2).
+  The `runFor` clear-span reasoning is still correct — it now describes `corridorPrim`'s tA/tB pads
+  in `caveSdf.ts`. One-line comment fix, deferred out of cycle 2 only to avoid an HMR reload
+  mid-gate-sweep.
+
 ### verify:solid gaps (found in the SOLID campaign)
 - `[debt]` **No gate catches inter-mesh sliver gaps / sub-1%-silhouette hairlines.** The Skyfall
   stern crack (#28, 2026-07-17) was a bright daylight hairline along a rim, but it was <1% of the
