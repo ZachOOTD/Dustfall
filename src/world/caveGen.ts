@@ -43,6 +43,8 @@ import type { Terrain } from './terrain.ts';
 import { makeStaticTrimesh } from '../physics/bodies.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
+import { FEATURES } from '../config/features.ts';
+import { buildCaveSdf } from './caveSdf.ts';
 
 /** The hand-off from the entrance bore: the throat's open far end (where the cave body begins). */
 export interface CaveJunction {
@@ -950,6 +952,11 @@ function addFungi(node: CaveNode, cnoise: Noise3, rand: () => number, group: THR
 // dais are solid objects seen from OUTSIDE → FrontSide. white base so vertexColor is the final tint.
 const _caveShell = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.BackSide });
 const _caveSolid = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
+// DEEPER cycle 1 — the SDF remesh surface. ONE watertight mesh, normals wound INTO the cavity, so
+// FrontSide is unambiguously correct everywhere (the whole point: no half of the kit wound the other
+// way). Smooth-shaded — surface nets is a manifold, so computeVertexNormals gives continuous normals
+// and flat shading would only expose the voxel grid.
+const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: THREE.FrontSide });
 
 export interface CaveGenProbe {
   seed: number;
@@ -1044,15 +1051,48 @@ export function spawnCave(
     .sort((a, b) => b.score - a.score);
   const fungiSet = new Set(fungiCandidates.slice(0, fungiTarget).map((c) => c.id));
 
-  for (const node of graph.nodes) {
-    const dT = depthOf(node);
-    const geo = buildChamberGeometry(node, carveByNode.get(node.id) ?? [], noise3, cnoise, dT);
-    const mesh = new THREE.Mesh(geo, _caveShell);
+  // ── DEEPER cycle 1 — THE WATERTIGHT REMESH (FEATURES.caveSdf). One SDF built from THIS graph,
+  //    polygonized once into ONE consistently-wound surface, replacing every chamber shell + corridor
+  //    tube. The dressing (dais, speleothems, fungi) is untouched and still rides on the same nodes. ──
+  const sdf = FEATURES.caveSdf
+    ? buildCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL,
+      (y) => Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface))))
+    : null;
+  if (sdf) {
+    const mesh = new THREE.Mesh(sdf.geometry, _caveSurface);
+    mesh.name = 'caveSdfSurface';
     mesh.castShadow = false; mesh.receiveShadow = true;
-    mesh.userData.caveNode = node.id;
-    if (node.kind === 'egg') mesh.userData.eggChamber = true;
+    mesh.userData.caveSdf = true;
+    // The cut entrance rim is a DECLARED opening (verify-solid.mjs:268 precedent) — never a loosened
+    // gate threshold. Past it lies the throat box, whose own walls bound everything beyond.
+    mesh.userData.intendedOpening = { center: sdf.opening.center.clone(), radius: sdf.opening.radius };
     group.add(mesh);
     meshes.push(mesh);
+    group.userData.caveSdfStats = sdf.stats;
+    if (import.meta.env?.VITE_CAVE_SDF_BENCH === '1') {
+      const bench = [sdf.stats];
+      for (const v of [0.65, 0.35]) {
+        const r = buildCaveSdf(graph, junction, noise3, cnoise, v,
+          (y) => Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface))));
+        bench.push(r.stats); r.geometry.dispose();
+      }
+      bench.sort((a, b) => b.voxel - a.voxel);
+      group.userData.caveSdfBench = bench;
+      console.log('CAVE-SDF-BENCH ' + JSON.stringify(bench));
+    }
+  }
+
+  for (const node of graph.nodes) {
+    const dT = depthOf(node);
+    if (!sdf) {
+      const geo = buildChamberGeometry(node, carveByNode.get(node.id) ?? [], noise3, cnoise, dT);
+      const mesh = new THREE.Mesh(geo, _caveShell);
+      mesh.castShadow = false; mesh.receiveShadow = true;
+      mesh.userData.caveNode = node.id;
+      if (node.kind === 'egg') mesh.userData.eggChamber = true;
+      group.add(mesh);
+      meshes.push(mesh);
+    }
     // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
     if (node.kind === 'egg') {
       const dm = new THREE.Mesh(buildDais(node, cnoise, dT), _caveSolid);
@@ -1062,12 +1102,14 @@ export function spawnCave(
     addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
     if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
   }
-  for (const e of graph.edges) {
-    const geo = buildCorridorGeometry(byId(e.a), byId(e.b), e, noise3, cnoise, depthOf(byId(e.b)));
-    const mesh = new THREE.Mesh(geo, _caveShell);
-    mesh.castShadow = false; mesh.receiveShadow = true;
-    group.add(mesh);
-    meshes.push(mesh);
+  if (!sdf) {
+    for (const e of graph.edges) {
+      const geo = buildCorridorGeometry(byId(e.a), byId(e.b), e, noise3, cnoise, depthOf(byId(e.b)));
+      const mesh = new THREE.Mesh(geo, _caveShell);
+      mesh.castShadow = false; mesh.receiveShadow = true;
+      group.add(mesh);
+      meshes.push(mesh);
+    }
   }
 
   scene.add(group);

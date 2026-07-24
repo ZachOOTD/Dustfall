@@ -84,6 +84,11 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
 if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void') process.env.VITE_CAVE_TEST = '1';
+// DEEPER cycle 1 — `--sdf` selects the watertight SDF remesh prototype (FEATURES.caveSdf) for this
+// probe only; `--sdfbench` additionally polygonizes at the measurement resolutions. Default OFF, so
+// every existing cave probe keeps measuring the SHIPPED path.
+if (argv.sdf) process.env.VITE_CAVE_SDF = '1';
+if (argv.sdfbench) { process.env.VITE_CAVE_SDF = '1'; process.env.VITE_CAVE_SDF_BENCH = '1'; }
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -3287,6 +3292,9 @@ const SCENARIOS = {
       const sum = (a, k) => a.reduce((s, x) => s + x[k], 0);
 
       return {
+        sdfStats: caveGroup.userData.caveSdfStats || null,
+        sdfBench: caveGroup.userData.caveSdfBench || null,
+        shellTris: cavep.triCount,
         seed: ctx.seed, digest: cavep.digest, meshes: meshes.length,
         points: pts.length, K: dirs.length, totalRays,
         escapes, excused, culled, holes,
@@ -3307,6 +3315,8 @@ const SCENARIOS = {
     console.log(`CAVE-VOID pass=${pass ? 1 : 0} seed=${r.seed} digest=${r.digest} points=${r.points} rays=${r.totalRays} escapes=${r.escapes} rate=${r.escapeRate}% leakyPoints=${r.leakyPoints}/${r.points} culled=${r.culled} holes=${r.holes} excused=${r.excused} chamberEsc=${r.chamberEscapes} corridorEsc=${r.corridorEscapes} meshes=${r.meshes} frontEsc=${r.frontEscapes} frontRate=${r.frontRate}%`);
     console.log(`[cave-void] SPLIT chambers ${r.chamberEscapes}/${r.chamberRays} (${(100*r.chamberEscapes/r.chamberRays).toFixed(1)}%) back, ${r.chamberFront}/${r.chamberRays} (${(100*r.chamberFront/r.chamberRays).toFixed(1)}%) front, holes ${r.chamberHoles} | corridors ${r.corridorEscapes}/${r.corridorRays} (${(100*r.corridorEscapes/r.corridorRays).toFixed(1)}%) back, ${r.corridorFront}/${r.corridorRays} (${(100*r.corridorFront/r.corridorRays).toFixed(1)}%) front, holes ${r.corridorHoles}`);
     console.log(`[cave-void] declared openings: ${JSON.stringify(r.openings)}`);
+    if (r.sdfStats) console.log(`[cave-void] SDF remesh: voxel=${r.sdfStats.voxel}m dims=${r.sdfStats.dims.join('x')} evaluated=${r.sdfStats.samples}/${r.sdfStats.gridSamples} verts=${r.sdfStats.verts} tris=${r.sdfStats.tris} | field=${r.sdfStats.msField}ms nets=${r.sdfStats.msNets}ms normals=${r.sdfStats.msNormals}ms TOTAL=${r.sdfStats.msTotal}ms (whole-cave tri incl. dressing=${r.shellTris})`);
+    if (r.sdfBench) for (const s of r.sdfBench) console.log(`[cave-void] SDF-BENCH voxel=${String(s.voxel).padEnd(5)} dims=${s.dims.join('x').padEnd(14)} tris=${String(s.tris).padStart(7)} verts=${String(s.verts).padStart(7)} field=${String(s.msField).padStart(7)}ms nets=${String(s.msNets).padStart(6)}ms total=${String(s.msTotal).padStart(7)}ms`);
     for (const w of r.worst) console.log(`[cave-void] ${w.label.padEnd(28)} esc=${String(w.esc).padStart(3)}/${r.K} (${w.pct}%) culled=${w.culled} hole=${w.hole} front=${w.front} excused=${w.exc} at ${JSON.stringify(w.p)}`);
 
     // ── The VISUAL: stand at the leakiest sample point, at player eye height, and look down the

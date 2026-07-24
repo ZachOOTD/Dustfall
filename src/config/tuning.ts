@@ -946,6 +946,10 @@ export const Tuning = {
   CAVE_GEN_DISP_IN: 0.30,             // m — max INWARD displacement (small — protects the walk path + headroom)
   CAVE_GEN_DISP_FREQ: 0.14,            // 1/m — base (big-bulge) displacement frequency; octaves ×2.7, ×5.9 add knobs + roughness
   CAVE_GEN_FLOOR_BUMP: 0.10,           // m — flat-floor micro-texture (< the 0.4m step; keeps floors walkable)
+  // ── DEEPER cycle 1 — the SDF → surface-nets WATERTIGHT REMESH (FEATURES.caveSdf / VITE_CAVE_SDF=1).
+  // Replaces the interpenetrating per-chamber/per-corridor shells with ONE consistently-wound surface.
+  CAVE_SDF_VOXEL: 0.45,                // m — polygonization grid spacing (the quality/cost dial; see docs)
+  CAVE_SDF_SMOOTH: 1.1,                // m — smooth-min blend radius at chamber↔corridor junctions (natural flared mouths)
   // Speleothems (stalactites / stalagmites / columns) — the signature cave read. Floor features are
   // placed BEYOND the 0.72·rx floor-grid the walk gate samples (RING_MIN) and clear of corridor
   // mouths (MOUTH_CLEAR_DEG), so they never block the walk path or trip the headroom/floor asserts.

@@ -102,6 +102,16 @@ export const FEATURES = {
    *  The name stays `caveTest` (the internal key) for git-history continuity; the concept is "the
    *  cave," gated by VITE_CAVE. */
   caveTest: import.meta.env?.VITE_CAVE_TEST === '1' || import.meta.env?.VITE_CAVE !== '0',
+
+  /** DEEPER cycle 1 (2026-07-24) — the WATERTIGHT CAVE REMESH prototype. OFF = the shipped cave
+   *  (N interpenetrating zero-thickness BackSide shells; `cave-void` 53.6% escape on seed 1337).
+   *  ON = the cave body is ONE surface-nets mesh polygonized from an SDF built out of the SAME
+   *  room-graph (`caveSdf.ts`), consistently wound normals-into-the-cavity, `side: FrontSide`.
+   *  Default OFF so `verify:all` stays green on the proven path and the shipped cave is unchanged;
+   *  cycle 2 does the switchover (collider re-bake from the same triangles, 6-seed gates).
+   *  `VITE_CAVE_SDF=1` selects it; `VITE_CAVE_SDF_BENCH=1` additionally polygonizes at the
+   *  measurement resolutions and prints a CAVE-SDF line (build cost, not shipped). */
+  caveSdf: import.meta.env?.VITE_CAVE_SDF === '1',
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */
