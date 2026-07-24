@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 0,
-  "current_tier": "cycle-1: D-2 spike + the see-through (void-ray) gate",
+  "cycles_completed": 1,
+  "current_tier": "cycle-2: the watertight remesh build-out (6 seeds, collider, shell-path deletion)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -21,7 +21,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 0
+    "total": 265000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -45,5 +45,15 @@
       "note": "Final descent walk-test — the whole system."
     }
   ],
-  "cycles": []
+  "cycles": [
+    {
+      "n": 1,
+      "date": "2026-07-24",
+      "focus": "D-2 diagnosis + void-ray gate + SDF remesh prototype",
+      "outcome": "SHIPPED",
+      "spend": 265000,
+      "commits": ["db8082a", "7af419f"],
+      "note": "Diagnosis CORRECTED by measurement: dominant cause is inverted chamber winding (74.6% chamber escape), not shell interpenetration (~15-18%). cave-void gate landed and demonstrated RED (53.59% seed 1337 / 53.11% seed 7, excused=0). Surface-nets prototype takes it to 0.00% with excused=0 and frontEsc=0. Cost 68.4k tris / 814ms at the recommended 0.45m voxel. LOUD FLAG: 814ms sync is ~49 frames of hitch; sliceable on the D296 pattern, but the Rapier trimesh bake cost at 68k tris is UNMEASURED and is the number that could change the plan (cycle 4)."
+    }
+  ]
 }
