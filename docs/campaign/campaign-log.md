@@ -60,7 +60,30 @@ Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
   the first item of that pass. Evidence: `verification/scen-cave-walk-{egg,hall}.png` vs
   `verification/baseline-shell/` (same shots, shell path, preserved for the comparison).
 
-- **Commits:** see below. **Next:** cycle 3 — the crevice entrance (D-1).
+- **THE 6-SEED SWEEP** (the widened net the cycle demanded — Underworld hid two generator defects
+  behind 2 seeds):
+
+  | seed | `cave-void` | `cave-walk` | max corridor slope |
+  |---|---|---|---|
+  | 1337 | 0 / 8160 escapes (0.00%) | PASS 11/11 chambers, ascent=OUT | 22.3° |
+  | 7 | 0 / 7392 (0.00%) | PASS 10/10, ascent=OUT | 22.5° |
+  | 42 | 0 / 6624 (0.00%) | PASS 9/9, ascent=OUT | 21.0° |
+  | 99 | 0 / 7392 (0.00%) | not completed (probe hang, see below) | — |
+  | 2024 | not completed (probe hang) | not completed | — |
+  | 555 | 0 / 5856 (0.00%) | not completed | — |
+
+  `excused` is 0 or 1 everywhere — nothing is laundered through the declared-opening allowance.
+  **⚠ OPEN: two probe runs (walk 99 / void 2024) hung** with the machine at 25% CPU after ~30 min,
+  twice, including once alone on a reaped machine. Not reproduced as a *generator* fault — the same
+  seeds pass the other gate (void 99 = 0.00%) — so the current read is probe/harness, not cave. It
+  is NOT proven, and it is the first thing cycle 3 should re-run before trusting the far seeds.
+
+- **`caveDigest` re-baselined** (the SDF changes it by construction): 1337 `fe884530`, 7 `da185721`,
+  42 `ac136278` — same-seed **stable ×2** (`verify:chunks` runs each seed twice), cross-seed distinct.
+- **`npm run verify:all`: GREEN**, every leg, including the new `cave-void` leg inside
+  `verify:chunks` (seeds 1337 + 7, 0 escapes each).
+
+- **Commit:** `c5f0a35`. **Next:** cycle 3 — the crevice entrance (D-1).
 
 ## Cycle 1 — D-2 diagnosis + the void-ray gate + the SDF remesh prototype (2026-07-24) — SHIPPED
 
