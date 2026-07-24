@@ -1,75 +1,49 @@
 {
-  "campaign": "Underworld",
-  "status": "paused",
-  "started": "2026-07-19",
-  "branch": "campaign/2026-07-19-underworld",
-  "cycles_completed": 5,
-  "current_tier": "PAUSED:descent-walk-test (build complete)",
-  "awaiting_approval": true,
-  "stop_reasons": [
-    "feel-review"
-  ],
-  "self_author": "none",
+  "campaign": "DEEPER",
+  "status": "active",
+  "started": "2026-07-24",
+  "branch": "campaign/2026-07-24-deeper",
+  "cycles_completed": 0,
+  "current_tier": "cycle-1: D-2 spike + the see-through (void-ray) gate",
+  "awaiting_approval": false,
+  "stop_reasons": [],
+  "self_author": "propose",
   "checkpoint": "milestone",
   "verify_cmd": "npm run verify:all",
   "visual_gate": "auto",
-  "until": "milestone:underworld-shipped",
+  "until": "milestone:deeper-shipped",
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": {
-    "max_cycles": 16,
-    "total": 6000000,
+    "max_cycles": 20,
+    "total": 10000000,
     "per_cycle": null,
     "unit": "tokens"
   },
   "spend": {
-    "total": 2900000
+    "total": 0
   },
-  "charter": "docs/campaign/campaign-underworld.md",
-  "cycles": [
+  "charter": "docs/campaign/campaign-deeper.md",
+  "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
+  "milestones": [
     {
-      "n": 1,
-      "date": "2026-07-19",
-      "focus": "entrance collider-swap tech",
-      "outcome": "SHIPPED",
-      "spend": 450000,
-      "note": "trimesh-from-heightfield-samples swap + welded greybox bore; real KCC walk proof; flag-off digests identical to master"
+      "after_cycle": 5,
+      "name": "repair-complete",
+      "kind": "walk-test",
+      "note": "Zach's repair descent — are D-1..D-4 actually fixed? New content is BLOCKED until this passes."
     },
     {
-      "n": 2,
-      "date": "2026-07-20",
-      "focus": "cave-gen core (greybox)",
-      "outcome": "SHIPPED",
-      "spend": 600000,
-      "commit": "955c6f9",
-      "note": "room-graph tree, 7 chambers, egg deepest; full-tree KCC march 7/7; digests identical flag-off; PAUSED blockout checkpoint"
+      "before_cycle": 9,
+      "name": "hazard-spec-review",
+      "kind": "doc-review",
+      "note": "Environmental hazard spec (NO creature). A doc, not a walk-test."
     },
     {
-      "n": 3,
-      "date": "2026-07-20",
-      "focus": "hero cave geometry",
-      "outcome": "SHIPPED",
-      "spend": 400000,
-      "commit": "803c2ea",
-      "note": "26 MINUTES (speed rules proven); rock displacement, speleothems, sinkhole mouth, egg dais"
-    },
-    {
-      "n": 4,
-      "date": "2026-07-20",
-      "focus": "darkness/light/mushrooms/audio",
-      "outcome": "SHIPPED",
-      "spend": 500000,
-      "commit": "1fc2d29",
-      "note": "true darkness, teal fungi breadcrumbs, drips; red-cube proven a distant POI beacon"
-    },
-    {
-      "n": 5,
-      "date": "2026-07-20",
-      "focus": "integration + 2 generator bug-fixes + flag ON",
-      "outcome": "SHIPPED",
-      "spend": 950000,
-      "commit": "265270d",
-      "note": "egg on the dais; corridor-crossing + junction-step defects fixed structurally + fail-loud assert; 6/6 seeds traversable; integration agent stalled on a watcher AGAIN -- orchestrator completed verification"
+      "after_cycle": 12,
+      "name": "deeper-shipped",
+      "kind": "walk-test",
+      "note": "Final descent walk-test — the whole system."
     }
-  ]
+  ],
+  "cycles": []
 }
