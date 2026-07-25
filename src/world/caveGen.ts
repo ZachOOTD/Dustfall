@@ -45,12 +45,25 @@ import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { buildCaveSdf, caveVertexColor } from './caveSdf.ts';
 
-/** The hand-off from the entrance bore: the throat's open far end (where the cave body begins). */
+/** One station on the crevice's descent centreline (DEEPER cycle 4). The entrance hands the WHOLE
+ *  polyline to the cave's SDF so the descent is built as part of the cave's own watertight
+ *  surface — not welded onto it. */
+export interface CreviceStation {
+  x: number; z: number;
+  floorY: number;
+  halfW: number;      // clear half-width of the TOR's fissure here (the SDF slot is wider)
+  height: number;     // clear height of the roofed slot here
+}
+
+/** The hand-off from the crevice entrance: the bottom of the descent slot, where the cave body
+ *  begins, plus the slot polyline that got you there. */
 export interface CaveJunction {
-  x: number; y: number; z: number;   // throat-far floor point (cave node 0 sits just past it)
+  x: number; y: number; z: number;   // slot-bottom floor point (cave node 0 sits just past it)
   gy: number;                        // surface height at the mouth (depth reference)
-  width: number;                     // throat clear width
-  heading: { x: number; z: number }; // unit XZ heading into the cave (+X from the bore)
+  width: number;                     // slot clear width at the hand-off
+  heading: { x: number; z: number }; // unit XZ heading into the cave
+  slot?: CreviceStation[];           // mouth → junction, world space
+  slotMargin?: number;               // m the SDF slot is wider/taller than the tor's fissure
 }
 
 export type CaveNodeKind = 'entrance' | 'pocket' | 'hall' | 'egg';
@@ -120,8 +133,8 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
   const h0x = junction.heading.x, h0z = junction.heading.z;
   const n0: CaveNode = {
     id: 0,
-    x: junction.x + h0x * T.CAVE_GEN_ENTRANCE_RX * 0.5,
-    z: junction.z + h0z * T.CAVE_GEN_ENTRANCE_RX * 0.5,
+    x: junction.x + h0x * T.CAVE_GEN_ENTRANCE_OFFSET,
+    z: junction.z + h0z * T.CAVE_GEN_ENTRANCE_OFFSET,
     floorY: junction.y,
     rx: T.CAVE_GEN_ENTRANCE_RX, rz: T.CAVE_GEN_ENTRANCE_RX * 0.92,
     height: T.CAVE_GEN_ENTRANCE_H,
@@ -737,6 +750,9 @@ const _caveSolid = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors
 // read as a soft brown wash — the flat-shaded dais out-read the whole cavern. R1 tests the direct
 // analogue: full flat shading at 0.45m voxels.
 const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
+/** DEEPER cycle 4 — the crevice TOR uses the SAME material (one program, one rock read; the tor's
+ *  sun-bleached exterior tone is carried in its vertex colours, not a second shader). */
+export const caveSurfaceMaterial = _caveSurface;
 
 // DEEPER cycle 3 R4 — ROCK MICRO-RELIEF, in the shader. R1-R3 established the ceiling: at
 // CAVE_SDF_VOXEL = 0.45m the polygonized surface simply CANNOT carry detail below ~1.2m — the third
@@ -759,9 +775,15 @@ const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColo
 // ⚠ PERF: this is ~8 value-noise evaluations (64 hashes) per cave fragment. It is confined to the one
 // cave-surface program and rolled off hard with distance, but it is the cycle's one real perf risk
 // and is flagged as such rather than assumed free.
+// DEEPER cycle 4 — the strength is per-MATERIAL (not one shared uniform object) because the
+// crevice tor needs a far weaker perturbation: 1.15 was tuned for torch-lit interior rock at ~2m,
+// and on a sunlit exterior under a directional sun the same value reads as violent camouflage
+// mottling (round 1: the tor looked leopard-spotted from 13m). `customProgramCacheKey` is the same
+// constant on both, so this is still ONE compiled program — a uniform doing a uniform's job.
 const _caveBumpU = { value: Tuning.CAVE_ROCK_BUMP };
-_caveSurface.onBeforeCompile = (shader): void => {
-  shader.uniforms.uCaveBump = _caveBumpU;
+_caveSurface.userData.bumpU = _caveBumpU;
+function caveRockBumpPatch(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.uniforms.uCaveBump = (this.userData.bumpU as { value: number }) ?? _caveBumpU;
   shader.vertexShader = 'varying vec3 vCaveWPos;\n' + shader.vertexShader.replace(
     '#include <begin_vertex>',
     '#include <begin_vertex>\n  vCaveWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
@@ -807,8 +829,19 @@ _caveSurface.onBeforeCompile = (shader): void => {
       normal = normalize(normal - (gg - normal * dot(gg, normal)));
     }`,
   );
-};
+}
+_caveSurface.onBeforeCompile = caveRockBumpPatch;
 _caveSurface.customProgramCacheKey = (): string => 'caveRockBump-v1';
+
+/** A cave-rock surface material with its OWN bump strength (same program, different uniform).
+ *  Used by the crevice tor, whose sunlit exterior needs a fraction of the interior's relief. */
+export function makeCaveRockMaterial(bump: number): THREE.MeshLambertMaterial {
+  const m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
+  m.userData.bumpU = { value: bump };
+  m.onBeforeCompile = caveRockBumpPatch;
+  m.customProgramCacheKey = (): string => 'caveRockBump-v1';
+  return m;
+}
 
 export interface CaveGenProbe {
   seed: number;
@@ -892,7 +925,8 @@ export function spawnCave(
   //    and still rides on the same nodes. ──
   const depthOfY = (y: number): number =>
     Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface)));
-  const sdf = buildCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL, depthOfY);
+  const surfaceY = (x: number, z: number): number => terrain.pureHeightAt(x, z);
+  const sdf = buildCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL, depthOfY, surfaceY);
   {
     const mesh = new THREE.Mesh(sdf.geometry, _caveSurface);
     mesh.name = 'caveSdfSurface';
@@ -907,7 +941,7 @@ export function spawnCave(
     if (import.meta.env?.VITE_CAVE_SDF_BENCH === '1') {
       const bench = [sdf.stats];
       for (const v of [0.65, 0.35]) {
-        const r = buildCaveSdf(graph, junction, noise3, cnoise, v, depthOfY);
+        const r = buildCaveSdf(graph, junction, noise3, cnoise, v, depthOfY, surfaceY);
         bench.push(r.stats); r.geometry.dispose();
       }
       bench.sort((a, b) => b.voxel - a.voxel);

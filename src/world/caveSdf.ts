@@ -47,6 +47,12 @@ const RY_FACTOR = 1 / (1 + Math.sqrt(1 - FLOOR_DISK * FLOOR_DISK));   // ry = he
  *  profile the shell corridor used — so the ≤ MAX_SLOPE guarantee the graph bought still holds. */
 interface Prim {
   corridor: boolean;
+  /** DEEPER cycle 4 — extrapolate the ramp floor beyond the segment ends instead of holding it flat.
+   *  A corridor's clamped floor makes a FLAT PAD of radius halfW at each endpoint (correct where a
+   *  corridor meets a chamber's flat floor disk — wrong for a chain of ramp segments, where each
+   *  pad becomes a ~1.5m STEP. The crevice could be walked down and not climbed back up because of
+   *  exactly this: `ascent=FAIL` with the capsule standing on the pad below the ramp.) */
+  extA: boolean; extB: boolean;
   // chamber
   cx: number; cy: number; cz: number; rx: number; ry: number; rz: number;
   // corridor (XZ segment + endpoint floors + the flat-disk pads)
@@ -61,7 +67,7 @@ function chamberPrim(n: CaveNode): Prim {
   const ry = n.height * RY_FACTOR;
   const cy = n.floorY + n.height - ry;
   return {
-    corridor: false,
+    corridor: false, extA: false, extB: false,
     cx: n.x, cy, cz: n.z, rx: n.rx, ry, rz: n.rz,
     ax: 0, az: 0, dx: 0, dz: 0, len: 1, fa: n.floorY, fb: n.floorY, tA: 0, tB: 1,
     halfW: 0, height: n.height,
@@ -72,7 +78,7 @@ function chamberPrim(n: CaveNode): Prim {
 function corridorPrim(
   ax: number, az: number, fa: number, aRx: number,
   bx: number, bz: number, fb: number, bRx: number,
-  halfW: number, height: number,
+  halfW: number, height: number, extA = false, extB = false,
 ): Prim {
   const dx = bx - ax, dz = bz - az;
   const len = Math.hypot(dx, dz) || 1;
@@ -82,7 +88,7 @@ function corridorPrim(
   const tB = Math.max(0.55, 1 - (bRx * FLOOR_DISK) / len);
   const midY = (fa + fb) * 0.5;
   return {
-    corridor: true,
+    corridor: true, extA, extB,
     cx: 0, cy: 0, cz: 0, rx: 0, ry: 0, rz: 0,
     ax, az, dx: dx / len, dz: dz / len, len,
     fa, fb, tA, tB, halfW, height,
@@ -114,13 +120,18 @@ function primDist(p: Prim, x: number, y: number, z: number): number {
     const d = (k - 1) * Math.min(p.rx, p.ry, p.rz);
     return Math.max(d, p.fa - y);                       // intersect with the halfspace above the floor
   }
-  let t = ((x - p.ax) * p.dx + (z - p.az) * p.dz) / p.len;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const tRaw = ((x - p.ax) * p.dx + (z - p.az) * p.dz) / p.len;
+  const t = tRaw < 0 ? 0 : tRaw > 1 ? 1 : tRaw;
   const s = t * p.len;
   const px = p.ax + p.dx * s, pz = p.az + p.dz * s;
   const perp = Math.hypot(x - px, z - pz);
-  let tr = (t - p.tA) / (p.tB - p.tA);
-  tr = tr < 0 ? 0 : tr > 1 ? 1 : tr;
+  // Extrapolate the ramp floor past an end ONLY where the chain continues (interior joints); at the
+  // chain's two real ends it clamps, exactly like a corridor meeting a chamber floor. Extrapolating
+  // the FAR end of the last slot segment carved a 1.6m pit at the cave hand-off.
+  const tUse = (tRaw < 0 && p.extA) || (tRaw > 1 && p.extB) ? tRaw : t;
+  let tr = (tUse - p.tA) / (p.tB - p.tA);
+  const trLo = p.extA ? -0.75 : 0, trHi = p.extB ? 1.75 : 1;
+  tr = tr < trLo ? trLo : tr > trHi ? trHi : tr;
   const fy = p.fa + (p.fb - p.fa) * tr;
   _localFloor = fy;
   const qw = perp / p.halfW, qh = (y - fy) / p.height;
@@ -162,6 +173,7 @@ export interface CaveSdfResult {
 export function buildCaveSdf(
   graph: CaveGraph, junction: CaveJunction, noise3: Noise3, cnoise: Noise3,
   voxel: number, depthOf: (floorY: number) => number,
+  surfaceY?: (x: number, z: number) => number,
 ): CaveSdfResult {
   const T = Tuning;
   const t0 = performance.now();
@@ -173,18 +185,35 @@ export function buildCaveSdf(
     const a = graph.nodes[e.a], b = graph.nodes[e.b];
     prims.push(corridorPrim(a.x, a.z, a.floorY, a.rx, b.x, b.z, b.floorY, b.rx, e.halfW, e.height));
   }
-  // The ENTRANCE slot: one more primitive, unioned into the same field — so there is no weld seam
-  // between the entrance and the cave at all (the thing the shell kit could never have). It runs from
-  // inside the throat (past the junction plane, so the cut below lands in open throat air) to node 0.
+  // THE CREVICE (DEEPER cycle 4): the whole descent slot is unioned into THIS field, primitive by
+  // primitive, from the mouth at the surface all the way to node 0 — so there is no weld seam
+  // between the entrance and the cave at all (the thing the shell kit could never have, and the
+  // thing cycle 1's junction-plane cut only faked). The slot is CREVICE_SDF_MARGIN wider and taller
+  // than the tor's fissure that sits inside it, so the tor's rock is always the nearer surface and a
+  // backface void at the hand-off is impossible (caveEntrance.ts, the non-leak invariant).
   const n0 = graph.nodes[0];
-  const hx = junction.heading.x, hz = junction.heading.z;
-  const ENTRY_BACK = 2.4;                                   // m back into the throat past the junction
-  const entryHalfW = Math.max(1.0, junction.width * 0.5 - 0.35);
-  const entryH = Math.max(2.2, T.CAVE_TEST_THROAT_H - 0.45);
-  prims.push(corridorPrim(
-    junction.x - hx * ENTRY_BACK, junction.z - hz * ENTRY_BACK, junction.y, 0.1,
-    n0.x, n0.z, n0.floorY, n0.rx, entryHalfW, entryH,
-  ));
+  const ent = junction.slot ?? [];
+  const eMargin = junction.slotMargin ?? 0.6;
+  for (let i = 1; i < ent.length; i++) {
+    const a = ent[i - 1], b = ent[i];
+    prims.push(corridorPrim(
+      a.x, a.z, a.floorY, 0, b.x, b.z, b.floorY, 0,
+      Math.max(a.halfW, b.halfW) + eMargin, Math.max(a.height, b.height) + eMargin * 0.6,
+      i > 1, i < ent.length - 1,
+    ));
+  }
+  const entryHalfW = Math.max(1.0, junction.width * 0.5 + eMargin);
+  const entryH = Math.max(2.2, T.CREVICE_HEIGHT);
+  // Start this one PAST its own end-cap radius, so its flat floor never reaches back behind the
+  // junction and swallows the crevice's climb-out ramp (the same pad bug, one prim over).
+  {
+    const jhx = junction.heading.x, jhz = junction.heading.z;
+    const off = entryHalfW * 0.5 + 0.3;
+    prims.push(corridorPrim(
+      junction.x + jhx * off, junction.z + jhz * off, junction.y, 0,
+      n0.x, n0.z, n0.floorY, n0.rx, entryHalfW, entryH + eMargin * 0.6,
+    ));
+  }
 
   const SMOOTH = T.CAVE_SDF_SMOOTH;
   // DEEPER cycle 2 — THE 32.4° FIX. Cycle 1 measured corridor 1–2 at 32.4° against the 32° ceiling.
@@ -291,8 +320,86 @@ export function buildCaveSdf(
   }
   const t1 = performance.now();
 
-  // ── SURFACE NETS. One vertex per sign-changing cell (average of its edge crossings), one quad per
-  //    sign-changing edge, wound so the normal points −∇f = into the cavity. ──
+  // ── SURFACE NETS (the shared polygonizer — also builds the entrance tor, caveEntrance.ts). ──
+  const { vx, vy, vz, idx } = surfaceNets(field, cw, ch, cd, x0, y0, z0, voxel);
+  const t2 = performance.now();
+
+  // ── CUT the sky rim: drop every triangle above the terrain surface, so the entrance slot genuinely
+  //    OPENS to the sky instead of doming itself shut (cycle 1 cut at the junction plane instead —
+  //    a placeholder, since there was no entrance geometry in the field to cut). Only triangles that
+  //    could possibly be near the surface are tested: `pureHeightAt` is multi-octave simplex and this
+  //    runs over ~10^5 triangles. Everything else in the cave is ≥ MIN_COVER below the sheet. ──
+  const kept: number[] = [];
+  const cutFrom = surfaceY ? junction.gy - 14 : Infinity;
+  for (let t = 0; t < idx.length; t += 3) {
+    const ay = vy[idx[t]], by = vy[idx[t + 1]], cy2 = vy[idx[t + 2]];
+    if (ay > cutFrom || by > cutFrom || cy2 > cutFrom) {
+      const cx = (vx[idx[t]] + vx[idx[t + 1]] + vx[idx[t + 2]]) / 3;
+      const cyy = (ay + by + cy2) / 3;
+      const cz = (vz[idx[t]] + vz[idx[t + 1]] + vz[idx[t + 2]]) / 3;
+      if (cyy > surfaceY!(cx, cz) + 0.02) continue;
+    }
+    kept.push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+
+  // ── Vertex colours: the SAME strata / staining / sediment read, evaluated in WORLD space per
+  //    vertex. Role is inferred from the local surface orientation instead of the shell's parametric
+  //    lat-long — see the cycle-2 note in the header of caveGen.ts. ──
+  const nv = vx.length;
+  const pos = new Float32Array(nv * 3);
+  for (let v = 0; v < nv; v++) { pos[v * 3] = vx[v]; pos[v * 3 + 1] = vy[v]; pos[v * 3 + 2] = vz[v]; }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setIndex(kept);
+  const t3a = performance.now();
+  geo.computeVertexNormals();
+  const t3 = performance.now();
+
+  // Role from the (now-known) normal: normals point INTO the cavity, so a floor faces +Y, a ceiling
+  // faces −Y. Colour is the existing palette, applied to the unified surface.
+  const nrm = geo.attributes.normal as THREE.BufferAttribute;
+  const col = new Float32Array(nv * 3);
+  const c = new THREE.Color();
+  for (let v = 0; v < nv; v++) {
+    const wy = vy[v];
+    const up = nrm.getY(v);
+    // DEEPER cycle 3 — pass the RAW normal Y, not a hard-thresholded role: the threshold flipped
+    // adjacent vertices between wall and ceiling across the displaced surface and produced the
+    // smoke-mottle (see caveVertexColor). The role argument is now only the no-`up` fallback.
+    caveVertexColor('wall', vx[v], wy, vz[v], depthOf(wy), cnoise, c, up);
+    col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+
+  const t4 = performance.now();
+  // The DECLARED opening now lives at the sky end of the crevice (caveEntrance.ts declares the same
+  // rim on the tor); the junction is no longer a cut, it is continuous rock.
+  const skyPt = ent.length ? ent[Math.min(1, ent.length - 1)] : { x: junction.x, z: junction.z, floorY: junction.y };
+  const opening = {
+    center: new THREE.Vector3(skyPt.x, junction.gy + 1.1, skyPt.z),
+    radius: 4.2,
+  };
+  return {
+    geometry: geo,
+    opening,
+    stats: {
+      voxel, dims: [nx, ny, nz], samples: evaluated, gridSamples: cw * ch * cd,
+      tris: kept.length / 3, verts: nv,
+      msField: +(t1 - t0).toFixed(1), msNets: +(t2 - t1).toFixed(1),
+      msNormals: +(t3 - t3a).toFixed(1), msTotal: +(t4 - t0).toFixed(1),
+    },
+  };
+}
+
+/** SURFACE NETS — one vertex per sign-changing cell (average of its edge crossings), one quad per
+ *  sign-changing edge, wound so the normal points −∇f, i.e. out of the solid / into the cavity.
+ *  Shared by the cave body and the entrance tor so there is exactly one polygonizer.
+ *  `field` is corner-major [(k*ch + j)*cw + i], negative = air. */
+export function surfaceNets(
+  field: Float32Array, cw: number, ch: number, cd: number,
+  x0: number, y0: number, z0: number, voxel: number,
+): { vx: number[]; vy: number[]; vz: number[]; idx: number[] } {
+  const nx = cw - 1, ny = ch - 1, nz = cd - 1;
   const cellIdx = new Int32Array(nx * ny * nz).fill(-1);
   const vx: number[] = [], vy: number[] = [], vz: number[] = [];
   const CORNER = [
@@ -364,65 +471,7 @@ export function buildCaveSdf(
       }
     }
   }
-  const t2 = performance.now();
-
-  // ── CUT the entrance rim: drop every triangle on the throat side of the junction plane, so the
-  //    cavity genuinely OPENS into the throat instead of sealing itself into an unreachable bubble
-  //    (a sealed cave would pass the void gate while being the exact "gate measuring the wrong thing"
-  //    failure the project's driving lesson names). The rim lands inside the throat box, whose own
-  //    walls/roof/floor bound everything past it. Declared as an intendedOpening. ──
-  const kept: number[] = [];
-  for (let t = 0; t < idx.length; t += 3) {
-    const cx = (vx[idx[t]] + vx[idx[t + 1]] + vx[idx[t + 2]]) / 3;
-    const cz = (vz[idx[t]] + vz[idx[t + 1]] + vz[idx[t + 2]]) / 3;
-    if ((cx - junction.x) * hx + (cz - junction.z) * hz < 0) continue;
-    kept.push(idx[t], idx[t + 1], idx[t + 2]);
-  }
-
-  // ── Vertex colours: the SAME strata / staining / sediment read, evaluated in WORLD space per
-  //    vertex. Role is inferred from the local surface orientation instead of the shell's parametric
-  //    lat-long — see the cycle-2 note in the header of caveGen.ts. ──
-  const nv = vx.length;
-  const pos = new Float32Array(nv * 3);
-  for (let v = 0; v < nv; v++) { pos[v * 3] = vx[v]; pos[v * 3 + 1] = vy[v]; pos[v * 3 + 2] = vz[v]; }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setIndex(kept);
-  const t3a = performance.now();
-  geo.computeVertexNormals();
-  const t3 = performance.now();
-
-  // Role from the (now-known) normal: normals point INTO the cavity, so a floor faces +Y, a ceiling
-  // faces −Y. Colour is the existing palette, applied to the unified surface.
-  const nrm = geo.attributes.normal as THREE.BufferAttribute;
-  const col = new Float32Array(nv * 3);
-  const c = new THREE.Color();
-  for (let v = 0; v < nv; v++) {
-    const wy = vy[v];
-    const up = nrm.getY(v);
-    // DEEPER cycle 3 — pass the RAW normal Y, not a hard-thresholded role: the threshold flipped
-    // adjacent vertices between wall and ceiling across the displaced surface and produced the
-    // smoke-mottle (see caveVertexColor). The role argument is now only the no-`up` fallback.
-    caveVertexColor('wall', vx[v], wy, vz[v], depthOf(wy), cnoise, c, up);
-    col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-
-  const t4 = performance.now();
-  const opening = {
-    center: new THREE.Vector3(junction.x, junction.y + entryH * 0.45, junction.z),
-    radius: Math.max(entryHalfW, entryH) + 0.9,
-  };
-  return {
-    geometry: geo,
-    opening,
-    stats: {
-      voxel, dims: [nx, ny, nz], samples: evaluated, gridSamples: cw * ch * cd,
-      tris: kept.length / 3, verts: nv,
-      msField: +(t1 - t0).toFixed(1), msNets: +(t2 - t1).toFixed(1),
-      msNormals: +(t3 - t3a).toFixed(1), msTotal: +(t4 - t0).toFixed(1),
-    },
-  };
+  return { vx, vy, vz, idx };
 }
 
 /** THE cave palette — the single copy (cycle 2 deleted caveGen's, which died with the shells).

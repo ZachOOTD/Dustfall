@@ -15,7 +15,7 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
-import { caveTestSite, spawnCaveTestBore } from './world/caveTest.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
+import { caveEntranceSite, spawnCaveEntrance } from './world/caveEntrance.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
 import { caveGenSeed, spawnCave, type CaveFungiCluster } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
 import { createCaveAtmosphere, updateCaveAtmosphere, type CaveAtmosphere } from './world/caveAtmosphere.ts'; // UNDERWORLD cycle 2 — darkness + light model
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
@@ -192,7 +192,7 @@ const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
 // (VITE_CAVE_TEST=1, default OFF). A pure hash of the world seed (does NOT consume
 // the procgen rand stream → seeded world unchanged). null when the flag is off, so
 // createTerrain builds every tile exactly as before (surface world byte-identical).
-const caveSite = FEATURES.caveTest ? caveTestSite(worldSeed) : null;
+const caveSite = FEATURES.caveTest ? caveEntranceSite(worldSeed) : null;
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes, caveSite);
 // The welded bore (ramp + trench + roofed throat) at the carved entrance-chunk hole, then the
 // GENERATED cave body (cycle 2: deterministic room-graph + corridors) hung off the throat junction.
@@ -201,7 +201,7 @@ let caveEgg: CaveEgg | null = null;                       // UNDERWORLD cycle 3 
 let caveFungiList: CaveFungiCluster[] = [];               // harvestable fungi (E → alien_fruit)
 const caveLootCaches: LootContainer[] = [];              // deep loot caches (battery/wiring-rich)
 if (caveSite) {
-  const bore = spawnCaveTestBore(three.scene, physics.world, terrain, caveSite);
+  const bore = spawnCaveEntrance(three.scene, physics.world, terrain, caveSite, worldSeed);
   const cave = spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));
   // UNDERWORLD cycle 2 — the light model + darkness + mouth shaft, keyed to the cave's bounds.
   caveAtmosphere = createCaveAtmosphere(three.scene, bore.probe, cave.graph);

@@ -50,7 +50,7 @@ import { spawnDroppedPickup, despawnPickup, spawnMaterialAt } from '../pickups/p
 import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 import { FEATURES } from '../config/features.ts';        // Underworld review — gotoCave flag gate
-import { caveTestSite } from '../world/caveTest.ts';     // Underworld review — gotoCave warp target
+import { caveEntranceSite } from '../world/caveEntrance.ts';     // Underworld review — gotoCave warp target
 
 declare global {
   interface Window {
@@ -730,7 +730,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     gotoCave: () => {
       // Underworld review (2026-07-20) — warp to the test cave mouth (flag-gated site).
       if (!FEATURES.caveTest) { ctx.ui.showToast?.('cave test is OFF — start the dustfall-cave config'); return null; }
-      const s = caveTestSite(ctx.seed);
+      const s = caveEntranceSite(ctx.seed);
       const y = ctx.terrain.heightAt(s.x, s.z) + 2;
       ctx.player.body.body.setTranslation({ x: s.x, y, z: s.z }, true);
       ctx.player.cameraSnapNextFrame = true;

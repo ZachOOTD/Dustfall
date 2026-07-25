@@ -863,31 +863,55 @@ export const Tuning = {
   CAVE_TORCH_INTENSITY: 2.4,           // the player's torch glow (point light, no shadows) when in the cave
   CAVE_TORCH_DIST: 11,                 // m — torch falloff distance
 
-  // UNDERWORLD cycle 1 (2026-07-19, D307) — the ENABLING-TECH test bore. Behind
-  // FEATURES.caveTest / VITE_CAVE_TEST=1 (default OFF → surface world byte-identical).
-  // The designated ENTRANCE CHUNK swaps its heightfield collider for an equivalent
-  // TRIMESH with a carved rectangular hole (the trench), and a welded box bore (a
-  // walkable ramp down to a roofed chamber UNDER the intact terrain sheet — proving
-  // D307's under-sheet trimesh interior). Dimensions snap to the terrain grid
-  // (TERRAIN_CHUNK_SIZE/TERRAIN_CHUNK_CELLS ≈ 4.17m cells) so the hole boundary and
-  // the bore weld share exact grid vertices (no seam gap — the hab_dome/leviathan lesson).
-  // Site: a pure hash of the world seed, kept inside tile (0,0) near origin so the whole
-  // bore streams with the boot ring (no straddle). NOT a shipping feature — greybox, dev-only.
-  CAVE_TEST_SITE_BOX_X0: 120,          // m — hashed site X range [X0, X0+SPAN] (bore extends +X, stays < tile edge 400)
-  CAVE_TEST_SITE_SPAN_X: 140,
-  CAVE_TEST_SITE_BOX_Z: 120,           // m — hashed site Z range [-Z, +Z]
-  CAVE_TEST_WIDTH: 8.34,               // m — trench + chamber clear width (~2 terrain cells); >> the 2.2m min
-  CAVE_TEST_RAMP_RUN: 29.2,            // m — horizontal ramp length (~7 cells); with DEPTH 12 → slope ~22.4° (< 30°)
-  CAVE_TEST_DEPTH: 12,                 // m — descent from the surface to the chamber floor (below the sheet)
-  CAVE_TEST_CHAMBER_LEN: 8.34,         // m — roofed chamber length past the ramp bottom (~2 cells)
-  CAVE_TEST_CEIL_H: 3.0,               // m — chamber interior clear height (headroom ≥ 2m)
-  CAVE_TEST_WALL_T: 0.4,               // m — box wall/floor/roof thickness (rule 7 — real solid volumes)
-  CAVE_TEST_KERB: 0.3,                 // m — trench-wall top rises this far above local terrain max (guarantees no seam gap)
-  // UNDERWORLD cycle 2 — the entrance THROAT: a short roofed box tunnel that welds the open
-  // descending trench (cycle 1) to the first ROUND cave chamber (the generated body). Reuses the
-  // proven box-weld discipline for the hard seam; the round cave hangs off its far (open) end.
-  CAVE_TEST_THROAT_LEN: 4.0,           // m — throat length past the trench far edge (roofed, under the intact sheet)
-  CAVE_TEST_THROAT_H: 3.0,             // m — throat interior clear height (matches CEIL_H; ≥2m headroom)
+  // DEEPER cycle 4 (2026-07-25) — THE CREVICE ENTRANCE. This REPLACES the UNDERWORLD cycle-1
+  // greybox bore (CAVE_TEST_WIDTH 8.34m × CAVE_TEST_RAMP_RUN 29.2m — an 8m-wide, 29m-long open
+  // trench, i.e. a two-lane haul road; Zach's walk-test D-1: "more like a massive ramp… i want
+  // the entrance to be more like a small opening like a crevice in a rock that leads you down").
+  // Those keys are DELETED, not deprecated.
+  //
+  // What ships instead: a rock OUTCROP (a whaleback tor, a landmark from distance) split by a
+  // narrow FISSURE ~2.3-2.5m clear at the mouth, pinching to ~2.1m where the rock closes over
+  // your head, then a bent, steep (~30°) slot descending under the intact terrain sheet to the
+  // cave. The descent slot is a set of primitives in the SAME SDF field as the cave (so there is
+  // no weld seam at all) cut against the terrain surface; the tor is its own watertight
+  // surface-nets solid whose footprint covers the whole carved terrain hole (the D307 mechanism
+  // is unchanged — the hole just got smaller).
+  //
+  // Site: a pure hash of the world seed, SNAPPED to a terrain grid vertex so the carved hole is
+  // a fixed 3×2 cells (12.5 × 8.33m) on every seed and the tor can be sized to cover it exactly.
+  CAVE_SITE_BOX_X0: 120,               // m — hashed site X range [X0, X0+SPAN] (the crevice runs +X, stays < tile edge 400)
+  CAVE_SITE_SPAN_X: 140,
+  CAVE_SITE_BOX_Z: 120,                // m — hashed site Z range [-Z, +Z]
+  CREVICE_HOLE_CELLS_X: 3,             // terrain cells carved along X (mouth-1 cell … sky-open run) — 12.5m
+  CREVICE_HOLE_CELLS_Z: 2,             // terrain cells carved across Z — 8.33m
+  CREVICE_DEPTH: 12,                   // m — junction (cave hand-off) depth below the mouth
+  CREVICE_SLOPE_DEG: 27,               // ° — nominal descent slope; each leg's run is sized from its drop
+  CREVICE_BEND_DEG: 26,                // ° — heading bend at the first knee (mirrored by seed parity)
+  CREVICE_BEND2_DEG: 18,               // ° — heading bend back at the second knee
+  CREVICE_HALF_W_MOUTH: 1.25,          // m — half clear width at the mouth (2.5m — a person + a pack, no more)
+  CREVICE_HALF_W_PINCH: 1.32,          // m — the tightest point, right where the rock closes overhead (2.64m clear). Was 1.05
+                                       //     (2.1m): the KCC could walk DOWN it but wedged on the climb back out on
+                                       //     3 of 6 gate seeds. Same lesson as CAVE_GEN_GALLERY_HALF_W 2.3→2.8 in
+                                       //     Underworld — a climbing capsule needs lateral room to recover.
+  CREVICE_HALF_W_DEEP: 2.5,            // m — widens as it approaches the cave (3.6m)
+  CREVICE_HEIGHT: 3.0,                 // m — clear height of the roofed slot
+  CREVICE_SDF_MARGIN: 0.62,            // m — the cave-SDF slot is this much WIDER than the tor fissure, so the
+                                       //     tor's walls are always the nearer surface (never a backface void)
+  CREVICE_SKY_RUN: 6.5,                // m — run over which the fissure is open to the sky (the rest is roofed)
+  CREVICE_SKY_TAPER: 2.6,              // m — the roof closes over this distance (the "committing" beat)
+  CREVICE_WALL_NOISE: 0.30,            // m — 3D rock noise on the fissure walls (full value above head height)
+  CREVICE_WALL_NOISE_FLOOR: 0.10,      // × the above, at floor level — keeps the walkable width honest
+  CREVICE_TOR_FIN_H: 5.2,              // m — the tor's rock fin, above local terrain (the landmark read)
+  CREVICE_TOR_FIN_PLATEAU: 3.6,        // m — the fin holds full height this far either side of the crack (a blocky
+                                       //     bedrock plateau; round 1's squared falloff gave two Fuji-shaped cones)
+  CREVICE_TOR_FIN_SPREAD: 7.4,         // m — perpendicular distance over which the fin falls to the apron
+  CREVICE_TOR_BUMP: 0.05,              // shader normal-perturbation for the tor (cf. CAVE_ROCK_BUMP 1.15 — that is
+                                       //     tuned for torch-lit interior rock and reads as camouflage in sunlight)
+  CREVICE_TOR_NOISE: 1.15,             // m — multi-octave relief on the tor's top surface
+  CREVICE_APRON_RISE: 0.55,             // m — the rock apron sits this far proud of the terrain over the carved hole
+  CREVICE_APRON_MARGIN: 0.9,           // m — apron holds full height this far outside the hole rect
+  CREVICE_APRON_FALL: 2.3,             // m — then ramps down into the sand over this distance (~30°, walkable)
+  CREVICE_TOR_VOXEL: 0.32,             // m — the tor's own surface-nets grid spacing (finer than the cave's 0.45)
 
   // UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE. A deterministic room-graph +
   // corridor branching-tree cave (greybox trimesh) hung off the entrance bore's throat,
@@ -906,6 +930,13 @@ export const Tuning = {
   CAVE_GEN_MAX_SLOPE: 26,              // ° — corridor floor slope ceiling (runs are sized from the drop to guarantee this; < probe 32°)
   // Chamber sizes (horizontal radii rx/rz + interior clear height). The egg is the largest +
   // most distinct; the hall is the big gallery; pockets are the small chambers.
+  CAVE_GEN_ENTRANCE_OFFSET: 5.7,       // m — node 0's centre, measured from the entrance junction along the
+                                       //     heading. DEEPER cycle 4: was ENTRANCE_RX*0.5 = 2.4m, which put the
+                                       //     hall's FLAT floor disk (radius rx*0.94) 2.4m BACK PAST the junction —
+                                       //     it swallowed the first 2.4m of the crevice's climb-out ramp and left
+                                       //     the remaining rise at ~50°, right at the KCC's limit. The capsule
+                                       //     could walk in and not climb out (`ascent=FAIL`). At 5.7m the disk
+                                       //     edge lands ~1.2m PAST the junction and the ramp is intact.
   CAVE_GEN_ENTRANCE_RX: 4.8,           // m — entrance hall horizontal radius
   CAVE_GEN_ENTRANCE_H: 4.8,            // m — entrance hall clear height (taller than any corridor so the dome guard leaves room)
   CAVE_GEN_HALL_RX: 8.0,               // m — the large hall (~16m across)

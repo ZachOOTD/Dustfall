@@ -25,7 +25,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import type { CaveGraph } from './caveGen.ts';
-import type { CaveTestProbe } from './caveTest.ts';
+import type { CaveEntranceProbe } from './caveEntrance.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 
@@ -59,7 +59,7 @@ export function caveDarknessAt(atmo: CaveAtmosphere, x: number, y: number, z: nu
 
 /** Build the cave atmosphere: compute the XZ bounding box from the graph + bore trench, and place
  *  the warm daylight shaft above the open trench aimed down the ramp. */
-export function createCaveAtmosphere(scene: THREE.Scene, bore: CaveTestProbe, graph: CaveGraph): CaveAtmosphere {
+export function createCaveAtmosphere(scene: THREE.Scene, bore: CaveEntranceProbe, graph: CaveGraph): CaveAtmosphere {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const n of graph.nodes) {
     const r = Math.max(n.rx, n.rz) + Tuning.CAVE_GEN_DISP_AMP;

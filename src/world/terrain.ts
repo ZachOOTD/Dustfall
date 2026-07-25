@@ -27,7 +27,7 @@ import type { Rng } from '../core/rng.ts';
 import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createTerrainMaterial } from './terrainMaterial.ts';
-import { caveTestHoleBlock, type CaveTestBlock } from './caveTest.ts';
+import { caveEntranceHoleBlock, type CaveHoleBlock } from './caveEntrance.ts';
 
 // Per-biome ground colors (Session P). Punchier than first-pass so the
 // regions read clearly from a distance: dune = saturated orange-sand,
@@ -190,7 +190,7 @@ export function createTerrain(
   // TRIMESH with a grid-aligned hole carved (the cave mouth), and its visual mesh
   // loses the same triangles. null (the default, flag OFF) → every tile builds
   // EXACTLY as before, so the surface world is byte-identical.
-  caveTestSite: { x: number; z: number } | null = null,
+  caveSite: { x: number; z: number } | null = null,
 ): Terrain {
   const noise = createNoise2D(rand);
 
@@ -240,9 +240,9 @@ export function createTerrain(
       }
     }
     // M8 ⑨ (C47) — carve the legacy DEEP CAVE descent funnel. RETIRED when the generated cave is
-    // on (caveTestSite set): the new cave replaces it, so we skip this carve entirely (no orphan
-    // empty pit near origin). Flag OFF (caveTestSite null) → carve exactly as before (byte-identical).
-    if (!caveTestSite) {
+    // on (caveSite set): the new cave replaces it, so we skip this carve entirely (no orphan
+    // empty pit near origin). Flag OFF (caveSite null) → carve exactly as before (byte-identical).
+    if (!caveSite) {
       const cdx = x - biomes.caveAnchor.x;
       const cdz = z - biomes.caveAnchor.z;
       const cr = Math.sqrt(cdx * cdx + cdz * cdz);
@@ -415,15 +415,15 @@ export function createTerrain(
     }
   }
 
-  // ── UNDERWORLD cycle 1 (D307) — the entrance-chunk hole. When caveTestSite is set,
+  // ── UNDERWORLD cycle 1 (D307) — the entrance-chunk hole. When caveSite is set,
   //    compute the grid-aligned block of cells to carve (the SINGLE source of truth
   //    shared with caveTest.ts's bore weld) and a holed index buffer (the shared
   //    indices minus those cells' triangles). The holed tile also gets a TRIMESH
   //    collider (built from the same positions + holed indices) instead of the
   //    heightfield — a heightfield can't have a hole, and the sheet is two-sided, so
   //    the opening must be real collider geometry. Everything here is skipped when
-  //    caveTestSite is null → identical build → byte-identical world. ──
-  const caveBlock: CaveTestBlock | null = caveTestSite ? caveTestHoleBlock(caveTestSite) : null;
+  //    caveSite is null → identical build → byte-identical world. ──
+  const caveBlock: CaveHoleBlock | null = caveSite ? caveEntranceHoleBlock(caveSite) : null;
   let _caveHoledIndices: number[] | null = null;
   let _caveHoledIndicesU32: Uint32Array | null = null;
   if (caveBlock) {
