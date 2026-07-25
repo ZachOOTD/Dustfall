@@ -80,6 +80,15 @@ Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
   was described from the rig-lit shots only.
 - **Constraints held:** entrance untouched (cycle 4) · room-graph layout logic untouched · collider
   still baked from the same triangles.
+- **GATES.** `npm run verify:all` **GREEN**, every leg. `cave-void` **0/8160 (0.00%)** seed 1337 and
+  **0/7392 (0.00%)** seed 7, **`excused=0` on both** (cycle 2 was 0-1). `cave-walk` 11/11 and 10/10,
+  `ascent=OUT`. **Max corridor slope 1337: 22.3° → 24.8°** — the micro-relief costs ~2.5°, inside the
+  ~6° it was sized for, and leaves **7.2° of margin** under the 32° ceiling. Named, not buried: the
+  budget for future un-attenuated relief is now smaller than it was.
+- **`caveDigest` re-baselined by construction** (the micro-relief moves vertices): 1337
+  `fe884530` → **`82a66e57`**, 7 `da185721` → **`3eb21a1a`** — both **stable ×2**, cross-seed
+  distinct. Body tris 1337: 67,418 → 89,199 whole-cave (the micro-relief adds sign changes).
+- **Commit:** `e0ed864`. **Next:** cycle 4 — the crevice entrance (D-1).
 
 ## Cycle 2 — the watertight surface is THE cave; the shell kit is deleted (2026-07-24) — SHIPPED
 
