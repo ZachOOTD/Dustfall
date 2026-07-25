@@ -57,3 +57,30 @@ written down the SAME DAY (the 4-day gap that produced this campaign's cycle 1 w
 ---
 
 ## Notes
+
+### 2026-07-25 — Zach: run the whole remaining ladder unattended
+> *"ok keep working through all of the remaining cycles. I am going to be gone all day so want to
+> see significant progress when i return"*
+
+**Effect:** the campaign runs cycles back-to-back without pausing for him. This OVERRIDES the
+charter's "new content is BLOCKED until the repair descent" gate — he has explicitly asked for
+progress rather than a day spent waiting on his walk-test.
+
+**What this does NOT override:**
+- His descent walk-test is still OWED and still the real verdict on the repair. Content built
+  after it is built on an unverified base — say so plainly in the final summary rather than
+  presenting the repair as signed off.
+- **No creature underground** — still decided, still not relitigable.
+- Anything that can DAMAGE OR KILL the player (cycle 10 hazards) is a feel call with real
+  consequences. Write the spec; build only the conservative, telegraphed subset, and flag the
+  rest for his review. Do not ship a hazard that can end a run without him having seen it.
+- Push stays HELD. Master stays untouched. Nothing merges without him.
+
+**Priority order if the day runs out** (highest first): finish the REPAIR (crevice → preload →
+reassess), then WATER (he asked for it by name), then density, then kinds. Hazards, light budget,
+and the return-reason are the tail and may be left unstarted — an honest "not reached" beats a
+rushed cycle.
+
+**Budget realism** (cycles 2 and 3 both ran 2-3× over their briefs): size briefs to what the work
+actually takes. A 4-8 round visual loop is ~2 hours. Stating 50 minutes and blowing it is worse
+than stating 2 hours, because it hides where the time went.
