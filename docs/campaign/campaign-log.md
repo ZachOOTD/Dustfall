@@ -110,10 +110,25 @@ Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 - **Constraints held:** room-graph layout logic untouched · collider still baked from the same
   triangles · `VITE_CAVE=0` still kills the whole feature (now gate-proven) · determinism (D290)
   preserved and digest-verified · no `git stash`, push held.
-- **GATES.** `npm run verify:all` **GREEN**, every leg, run end-to-end once at the end.
-  `cave-void` **0.00%** both seeds. `cave-walk` PASS both seeds, `ascent=OUT`, digest stable ×2.
-- **Commit:** `PENDING`. **Next:** cycle 6 — water pools (the first new-content cycle; Zach asked
-  for it by name).
+- **GATES — `npm run verify:all` GREEN, every leg, run end-to-end once at the end.** The new rows:
+  - `cave-build`: preload 1305.5ms (tor 145 / body 1160.5) · **8 sliced builds in 699 steps** ·
+    divisible slice **17.1ms** / atomic **81.9ms (`finalize`)** / worst observed frame **80.6ms** ·
+    residents 3 · **6 evictions, occupied-blocked 3, occupied cave survived** · 0 fails.
+  - `cave-preload` flag ON: boot 4349.9ms, cave preload 1332.8ms (tor 157.1 / body 1175.7),
+    94,927 tris, digest `a5d75db9`, 0 fails.
+  - `cave-preload` **`VITE_CAVE=0`**: boot **2523.5ms**, no preload record, 0 residents, 0 fails —
+    the kill-switch path is intact. Note the honest delta: the cave-off boot is **1826ms** shorter,
+    not 1333ms — the extra ~490ms is the entrance-chunk heightfield→trimesh swap and the carved-hole
+    terrain path, i.e. **the cave's true boot cost is ~40% of boot, not 29%.**
+  - `cave-walk` 1337 **11/11 chambers, digest `a5d75db9` stable ×2** · seed 7 **10/10, `ff8162e8`
+    stable ×2** · `cave-void` **0/8160 (0.00%)** and **0/7392 (0.00%)**, `excused=0`, `holes=0`.
+  - The pre-existing legs are unmoved: terrain `perf` slice 30.4ms / 812 steps, streaming
+    bodies 378→378, skyfall / leviathan / ribcage / dune-slope all OK.
+- **Commit:** `f7450fe` (code) + `1501bc8` (bookkeeping). **Next:** cycle 6 — water pools (the first
+  new-content cycle; Zach asked for it by name).
+- **⚠ DOC GAP NOTED, not fixed here:** cycle 4 never wrote a `campaign-log.md` entry (it updated
+  `campaign-state.json` only), so this file jumps cycle 3 → cycle 5. The cycle-4 record lives in the
+  state file's `cycles[3].note`.
 
 ## Cycle 3 — surface character restored; the seed net proven 6/6 (2026-07-25) — SHIPPED
 
