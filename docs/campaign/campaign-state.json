@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 4,
-  "current_tier": "cycle-5: preload + generation budget (D-4)",
+  "cycles_completed": 5,
+  "current_tier": "cycle-6: water pools (first new-content cycle)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resumed": "2026-07-24 — resumed after Zach's pause at cycle 2. Ladder re-numbered: cycle 3 is now the seed-probe hangs + the surface-character fix (cycle 2's honest residual); the D-1 crevice entrance moves to cycle 4, preload to 5, visual reassess to 6. The repair-complete walk-test milestone moves accordingly.",
@@ -22,7 +22,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 1400000
+    "total": 1750000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -53,7 +53,10 @@
       "focus": "D-2 diagnosis + void-ray gate + SDF remesh prototype",
       "outcome": "SHIPPED",
       "spend": 265000,
-      "commits": ["db8082a", "7af419f"],
+      "commits": [
+        "db8082a",
+        "7af419f"
+      ],
       "note": "Diagnosis CORRECTED by measurement: dominant cause is inverted chamber winding (74.6% chamber escape), not shell interpenetration (~15-18%). cave-void gate landed and demonstrated RED (53.59% seed 1337 / 53.11% seed 7, excused=0). Surface-nets prototype takes it to 0.00% with excused=0 and frontEsc=0. Cost 68.4k tris / 814ms at the recommended 0.45m voxel. LOUD FLAG: 814ms sync is ~49 frames of hitch; sliceable on the D296 pattern, but the Rapier trimesh bake cost at 68k tris is UNMEASURED and is the number that could change the plan (cycle 4)."
     },
     {
@@ -62,7 +65,10 @@
       "focus": "the watertight surface becomes THE cave; shell kit deleted; void gate wired in",
       "outcome": "SHIPPED",
       "spend": 435000,
-      "commits": ["c5f0a35", "2c01bd0"],
+      "commits": [
+        "c5f0a35",
+        "2c01bd0"
+      ],
       "note": "SDF surface is now the only meshing path; shell kit deleted (caveGen.ts 1176->837). cave-void wired into verify:chunks with TEETH PROVEN two ways (vacuous-pass guard: <40 pts/3840 rays FAILS; puncture proof: --puncture=25 -> 22.51% RED). 32.4 deg corridor root-caused DIFFERENTLY than cycle 1 guessed (displacement attenuated by Prim.floorY=min(fa,fb), so a descending corridor's shallow half took full displacement through its walkable floor) -> 22.3 deg. Rapier trimesh bake measured: 68.2ms at 70k tris = ~6% of build cost, NOT the streaming blocker; the 992ms polygonizer is, and it is the sliceable half. OPEN: 2 of 6 seed probes HUNG (walk 99, void 2024) at 25% CPU after ~30min, twice; read as harness not generator (void 99 passes) but UNPROVEN -- cycle 3 must re-run before the far seeds are trusted. VISUAL REGRESSION logged honestly despite green gate: SDF surface is smooth-shaded where _caveShell was flatShading, so strata/displacement read as soft washes instead of carved rock. Budget blown: 55min brief vs ~3h actual, entirely gate wall-clock + the two hangs."
     },
     {
@@ -71,7 +77,10 @@
       "focus": "surface character restored (the cycle-2 regression) + the two hung seed probes",
       "outcome": "SHIPPED",
       "spend": 230000,
-      "commits": ["e0ed864", "77a03d6"],
+      "commits": [
+        "e0ed864",
+        "77a03d6"
+      ],
       "note": "Seed net now 6/6 — cave-walk 99 PASS (10/10, ascent=OUT, 21.1 deg) and cave-void 2024 0/8160, both first try on an unprepared machine. The cycle-2 hangs are logged as an unexplained FLAKE, not a fix. Regression root-caused to THREE causes, only one being shading: (1) lost flatShading; (2) THE SMOKE MOTTLE — a real bug: caveVertexColor picked role by HARD normal threshold, and on a displaced SDF surface adjacent vertices flipped wall/ceiling, applying a random x0.58 value step per vertex that interpolated into grey fog; (3) at 0.45m voxels the surface cannot carry detail below ~1.2m (3rd octave under Nyquist), so at torch range the wall was featureless regardless of the SDF. Shipped flatShading + CAVE_SDF_MICRO relief + smooth role weights + two-scale strata + CAVE_ROCK_BUMP (sub-voxel normal perturbation in onBeforeCompile — zero tris, zero collider change; halving the voxel was rejected on cycle 1's cost numbers). 8 iteration rounds; R4's sine-wave bump failed as zebra banding and is recorded in-source so it is not retried. New fast cave-look scenario (skips the 4-min march) is what made 8 rounds affordable; it also FIXED the dark-torch framings, which previously aimed the torch across open space and shot near-black — i.e. cycle 2 judged the regression from rig-lit shots only. HONEST VERDICT: near/mid field better than the shell baseline, CEILINGS still ~80% (dark smoky band at 8-15m); global value contrast still below shell. Void 0.00% both seeds with excused=0 (better than cycle 2). Max slope 22.3 -> 24.8 deg, 7.2 deg margin under the ceiling, named. caveDigest re-baselined stable x2. verify:all GREEN. Budget overrun again: 50min brief vs ~110min actual — the brief was unrealistic for a 4-8 round visual loop, not agent thrash."
     },
     {
@@ -80,8 +89,21 @@
       "focus": "D-1: the greybox ramp is deleted; the crevice entrance replaces it",
       "outcome": "SHIPPED",
       "spend": 470000,
-      "commits": ["e4b6429"],
+      "commits": [
+        "e4b6429"
+      ],
       "note": "NEW src/world/caveEntrance.ts; src/world/caveTest.ts DELETED entirely along with its tuning keys and the 228-line cave-mouth rig scenario. A rock tor ~19x13m, 5.2m proud, split by a fissure: mouth 2.50m clear pinching to 2.64m where rock closes overhead 6.5m in, widening to 5.0m only at the cave hand-off. Descent is a 3-leg polyline with two knees at 27.0 deg on every seed, mirrored by seed parity. The slot is unioned into buildCaveSdf as primitives -> entrance and cave are ONE continuous surface, no weld; cut against terrain.pureHeightAt instead of cycle 1's junction plane. D307 preserved and the carved hole SHRANK 29.2x8.34m -> 12.5x8.33m. Non-leak invariant by construction: the tor's fissure is always 0.62m narrower/lower than the enclosing SDF slot. 6/6 seeds cave-walk with ascent=OUT; cave-void 0.00% with excused=0 (the declaration is present but zero rays need it). THREE structural KCC bugs found ONLY by the ascent, each of which would have shipped under descent-only testing: corridorPrim held its ramp floor flat past segment ends (~1.5m step at every joint); the entrance hall's flat floor disk reached 2.4m back past the junction and swallowed the climb-out ramp (~50 deg, at the KCC limit); the tor carved its fissure floor 45cm BELOW the SDF floor, making a 45cm gutter down both walls that wedged the capsule on the way out. Round 5 disproved a shadow-acne hypothesis (frame byte-identical, recorded in code); round 6 found the real blotching cause — CAVE_ROCK_BUMP 1.15, tuned for torch-lit interior rock at 2m, applied to sunlit exterior under a directional sun. HONEST: reads as a crevice at near/threshold/descent; at 78m it is a small dark bump, marginal. Budget 2.5h stated vs ~5.5h actual — entirely the three ascent bugs; the visual loop and traversal loop were sequenced wrong (one cave-walk after round 1 would have caught them early)."
+    },
+    {
+      "n": 5,
+      "date": "2026-07-25",
+      "focus": "D-4: origin-cave boot preload + frame-budgeted slicing for streamed caves + the resident cap",
+      "outcome": "SHIPPED",
+      "spend": 350000,
+      "commits": [
+        "f7450fe"
+      ],
+      "note": "FIRST FINDING INVERTS HALF THE TICKET: the origin cave was ALREADY built at boot (spawnCave runs at main.ts module scope, before the first presented frame) so it never could hitch play — what was missing was the LOADING SCREEN. Shipped #boot-overlay (inline-styled so it paints before the module bundle, whose CSS arrives too late). Measured boot 4562.6ms, cave 1311.9ms of it (tor 152.3 + body 1159.5) = 28.7%, now instrumented. THE SLICER is one code path with two drivers: buildCaveSdf/spawnCave are thin wrappers driving startCaveSdf/startSpawnCave at an infinite budget, the sliced driver runs the SAME job at CAVE_BUILD_SLICE_MS=8ms — so sync and sliced cannot diverge by construction. Divisible: SDF field (linearized 8^3 blocks), both surface-nets passes (per k-plane), sky-rim cut, vertex colours. Indivisible: computeVertexNormals, the dressing kit, the Rapier trimesh bake. FINALIZE IS ATOMIC (bake + scene.add same step) so a cave is never visible without being solid. Worst frame of a streamed build 1160ms -> 90.5ms observed; worst divisible slice 17.7ms; worst indivisible 97.6ms (finalize). HONEST CEILING STATED: ~90-100ms is the floor, a single ColliderDesc.trimesh over ~70k tris cannot be chopped — one dropped frame instead of seventy, a 13x cut not a fix. Levers not taken: coarser far-cave voxel, decomposed collider, off-thread bake. RESIDENT CAP 3, farthest-first, never evicts a pinned cave / the occupied cave / anything within 260m; a soft cap because a hard one could drop the player through the floor. GATE: chunk-perf extended + a new boot-only cave-preload leg at BOTH flag states, with tripwires against the 'green because nothing built' failure — builds==N with >0 visual AND collider tris, steps>=100 (a sync revert reports 1), divisible <=20ms, indivisible <=170ms named by stage, worst observed rAF gap measured independently of the counters, cap must evict, pinned + occupied caves must survive, occupiedEvictionsBlocked must have incremented, and the DIGEST CONTRACT (the origin junction+seed rebuilt through the sliced path must match). Gate PROVEN able to fail: first run RED on the digest-clone tripwire (clone evicted in its finalize frame). caveDigest UNCHANGED and measured against a worktree at 5433227: a5d75db9 / 94927 tris before and after, and the sliced rebuild too. HONEST READ on several caves during travel: fine on foot (~1.4s + one stutter per cave), noticeable at speeder/sled pace if caves arrive every few seconds; the cheap first lever is a coarser far-cave voxel, and only after that does the clustered 'cave country' scope-cut apply — NOT taken, it is Zach's call. Budget: 2h brief vs ~2h50m actual, the overrun almost entirely gate wall-clock."
     }
   ]
 }

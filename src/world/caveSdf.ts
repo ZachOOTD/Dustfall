@@ -359,9 +359,9 @@ export function startCaveSdf(
           }
         }
       }
-      // Budget check every 16 blocks: `performance.now()` is ~50ns and there are ~30k blocks, so
-      // per-block polling would itself cost ~1.5ms of the build; 16 active blocks overshoot the
-      // deadline by ~0.3ms worst case.
+      // Budget check every 8 blocks: `performance.now()` is ~50ns and there are ~30k blocks, so
+      // per-block polling would itself cost ~1.5ms of the build; 8 active blocks overshoot the
+      // deadline by ~0.15ms worst case.
       if ((bi & 7) === 0 && performance.now() >= deadline) break;
     }
     return bi >= nBlocks;
