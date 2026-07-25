@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 3,
-  "current_tier": "cycle-4: the crevice entrance (D-1)",
+  "cycles_completed": 4,
+  "current_tier": "cycle-5: preload + generation budget (D-4)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resumed": "2026-07-24 — resumed after Zach's pause at cycle 2. Ladder re-numbered: cycle 3 is now the seed-probe hangs + the surface-character fix (cycle 2's honest residual); the D-1 crevice entrance moves to cycle 4, preload to 5, visual reassess to 6. The repair-complete walk-test milestone moves accordingly.",
@@ -22,7 +22,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 930000
+    "total": 1400000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -73,6 +73,15 @@
       "spend": 230000,
       "commits": ["e0ed864", "77a03d6"],
       "note": "Seed net now 6/6 — cave-walk 99 PASS (10/10, ascent=OUT, 21.1 deg) and cave-void 2024 0/8160, both first try on an unprepared machine. The cycle-2 hangs are logged as an unexplained FLAKE, not a fix. Regression root-caused to THREE causes, only one being shading: (1) lost flatShading; (2) THE SMOKE MOTTLE — a real bug: caveVertexColor picked role by HARD normal threshold, and on a displaced SDF surface adjacent vertices flipped wall/ceiling, applying a random x0.58 value step per vertex that interpolated into grey fog; (3) at 0.45m voxels the surface cannot carry detail below ~1.2m (3rd octave under Nyquist), so at torch range the wall was featureless regardless of the SDF. Shipped flatShading + CAVE_SDF_MICRO relief + smooth role weights + two-scale strata + CAVE_ROCK_BUMP (sub-voxel normal perturbation in onBeforeCompile — zero tris, zero collider change; halving the voxel was rejected on cycle 1's cost numbers). 8 iteration rounds; R4's sine-wave bump failed as zebra banding and is recorded in-source so it is not retried. New fast cave-look scenario (skips the 4-min march) is what made 8 rounds affordable; it also FIXED the dark-torch framings, which previously aimed the torch across open space and shot near-black — i.e. cycle 2 judged the regression from rig-lit shots only. HONEST VERDICT: near/mid field better than the shell baseline, CEILINGS still ~80% (dark smoky band at 8-15m); global value contrast still below shell. Void 0.00% both seeds with excused=0 (better than cycle 2). Max slope 22.3 -> 24.8 deg, 7.2 deg margin under the ceiling, named. caveDigest re-baselined stable x2. verify:all GREEN. Budget overrun again: 50min brief vs ~110min actual — the brief was unrealistic for a 4-8 round visual loop, not agent thrash."
+    },
+    {
+      "n": 4,
+      "date": "2026-07-25",
+      "focus": "D-1: the greybox ramp is deleted; the crevice entrance replaces it",
+      "outcome": "SHIPPED",
+      "spend": 470000,
+      "commits": ["e4b6429"],
+      "note": "NEW src/world/caveEntrance.ts; src/world/caveTest.ts DELETED entirely along with its tuning keys and the 228-line cave-mouth rig scenario. A rock tor ~19x13m, 5.2m proud, split by a fissure: mouth 2.50m clear pinching to 2.64m where rock closes overhead 6.5m in, widening to 5.0m only at the cave hand-off. Descent is a 3-leg polyline with two knees at 27.0 deg on every seed, mirrored by seed parity. The slot is unioned into buildCaveSdf as primitives -> entrance and cave are ONE continuous surface, no weld; cut against terrain.pureHeightAt instead of cycle 1's junction plane. D307 preserved and the carved hole SHRANK 29.2x8.34m -> 12.5x8.33m. Non-leak invariant by construction: the tor's fissure is always 0.62m narrower/lower than the enclosing SDF slot. 6/6 seeds cave-walk with ascent=OUT; cave-void 0.00% with excused=0 (the declaration is present but zero rays need it). THREE structural KCC bugs found ONLY by the ascent, each of which would have shipped under descent-only testing: corridorPrim held its ramp floor flat past segment ends (~1.5m step at every joint); the entrance hall's flat floor disk reached 2.4m back past the junction and swallowed the climb-out ramp (~50 deg, at the KCC limit); the tor carved its fissure floor 45cm BELOW the SDF floor, making a 45cm gutter down both walls that wedged the capsule on the way out. Round 5 disproved a shadow-acne hypothesis (frame byte-identical, recorded in code); round 6 found the real blotching cause — CAVE_ROCK_BUMP 1.15, tuned for torch-lit interior rock at 2m, applied to sunlit exterior under a directional sun. HONEST: reads as a crevice at near/threshold/descent; at 78m it is a small dark bump, marginal. Budget 2.5h stated vs ~5.5h actual — entirely the three ascent bugs; the visual loop and traversal loop were sequenced wrong (one cave-walk after round 1 would have caught them early)."
     }
   ]
 }
