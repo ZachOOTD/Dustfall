@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 2,
-  "current_tier": "cycle-3: the crevice entrance (D-1) + surface-character fix",
+  "cycles_completed": 3,
+  "current_tier": "cycle-4: the crevice entrance (D-1)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resumed": "2026-07-24 — resumed after Zach's pause at cycle 2. Ladder re-numbered: cycle 3 is now the seed-probe hangs + the surface-character fix (cycle 2's honest residual); the D-1 crevice entrance moves to cycle 4, preload to 5, visual reassess to 6. The repair-complete walk-test milestone moves accordingly.",
@@ -22,7 +22,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 700000
+    "total": 930000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -64,6 +64,15 @@
       "spend": 435000,
       "commits": ["c5f0a35", "2c01bd0"],
       "note": "SDF surface is now the only meshing path; shell kit deleted (caveGen.ts 1176->837). cave-void wired into verify:chunks with TEETH PROVEN two ways (vacuous-pass guard: <40 pts/3840 rays FAILS; puncture proof: --puncture=25 -> 22.51% RED). 32.4 deg corridor root-caused DIFFERENTLY than cycle 1 guessed (displacement attenuated by Prim.floorY=min(fa,fb), so a descending corridor's shallow half took full displacement through its walkable floor) -> 22.3 deg. Rapier trimesh bake measured: 68.2ms at 70k tris = ~6% of build cost, NOT the streaming blocker; the 992ms polygonizer is, and it is the sliceable half. OPEN: 2 of 6 seed probes HUNG (walk 99, void 2024) at 25% CPU after ~30min, twice; read as harness not generator (void 99 passes) but UNPROVEN -- cycle 3 must re-run before the far seeds are trusted. VISUAL REGRESSION logged honestly despite green gate: SDF surface is smooth-shaded where _caveShell was flatShading, so strata/displacement read as soft washes instead of carved rock. Budget blown: 55min brief vs ~3h actual, entirely gate wall-clock + the two hangs."
+    },
+    {
+      "n": 3,
+      "date": "2026-07-25",
+      "focus": "surface character restored (the cycle-2 regression) + the two hung seed probes",
+      "outcome": "SHIPPED",
+      "spend": 230000,
+      "commits": ["e0ed864", "77a03d6"],
+      "note": "Seed net now 6/6 — cave-walk 99 PASS (10/10, ascent=OUT, 21.1 deg) and cave-void 2024 0/8160, both first try on an unprepared machine. The cycle-2 hangs are logged as an unexplained FLAKE, not a fix. Regression root-caused to THREE causes, only one being shading: (1) lost flatShading; (2) THE SMOKE MOTTLE — a real bug: caveVertexColor picked role by HARD normal threshold, and on a displaced SDF surface adjacent vertices flipped wall/ceiling, applying a random x0.58 value step per vertex that interpolated into grey fog; (3) at 0.45m voxels the surface cannot carry detail below ~1.2m (3rd octave under Nyquist), so at torch range the wall was featureless regardless of the SDF. Shipped flatShading + CAVE_SDF_MICRO relief + smooth role weights + two-scale strata + CAVE_ROCK_BUMP (sub-voxel normal perturbation in onBeforeCompile — zero tris, zero collider change; halving the voxel was rejected on cycle 1's cost numbers). 8 iteration rounds; R4's sine-wave bump failed as zebra banding and is recorded in-source so it is not retried. New fast cave-look scenario (skips the 4-min march) is what made 8 rounds affordable; it also FIXED the dark-torch framings, which previously aimed the torch across open space and shot near-black — i.e. cycle 2 judged the regression from rig-lit shots only. HONEST VERDICT: near/mid field better than the shell baseline, CEILINGS still ~80% (dark smoky band at 8-15m); global value contrast still below shell. Void 0.00% both seeds with excused=0 (better than cycle 2). Max slope 22.3 -> 24.8 deg, 7.2 deg margin under the ceiling, named. caveDigest re-baselined stable x2. verify:all GREEN. Budget overrun again: 50min brief vs ~110min actual — the brief was unrealistic for a 4-8 round visual loop, not agent thrash."
     }
   ]
 }
