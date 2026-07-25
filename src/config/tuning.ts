@@ -1008,6 +1008,17 @@ export const Tuning = {
   CAVE_SHAFT_ANGLE_RAD: 0.72,          // shaft cone half-angle (a broad wash down the trench, not a torch beam)
   CAVE_SHAFT_PENUMBRA: 0.55,           // soft cone edge
 
+  // ── DEEPER cycle 5 — CAVE BUILD BUDGET + the RESIDENT CAP (caveStream.ts; walk-test D-4:
+  //    "preload the caves on the starting loading screen so it doesn't slow down the game as much
+  //    when it loads in"). The origin cave is built SYNCHRONOUSLY at boot behind the loading screen
+  //    (main.ts) — it can never hitch play. Every OTHER cave builds through the frame-budgeted
+  //    slicer, the S6/D296 terrain-tile pattern: stage-steps of CAVE_BUILD_SLICE_MS, atomic finalize,
+  //    never visible or collidable until complete.
+  CAVE_BUILD_SLICE_MS: 8,              // ms — per-frame budget for the sliced cave build (terrain tiles use row batches at a comparable cost)
+  CAVE_RESIDENT_MAX: 3,                // max cave INTERIORS resident at once (each is ~70k collider tris + ~90k visual tris)
+  CAVE_EVICT_MARGIN_M: 45,             // m — a cave whose padded bounds contain the player is OCCUPIED and is NEVER evicted, cap or no cap
+  CAVE_EVICT_MIN_DIST_M: 260,          // m — never evict a cave nearer than this either (you can see the mouth from here)
+
   // ── UNDERWORLD cycle 2 — WEIRD MUSHROOMS (the life accent; caveGen.ts). Sparse clusters of pale,
   //    faintly cool-bioluminescent fungi in 2-4 chambers (denser near floor dips, a few on walls).
   //    Emissive is LOW — a navigation breadcrumb + eerie accent, NOT a lamp (darkness still dominates).

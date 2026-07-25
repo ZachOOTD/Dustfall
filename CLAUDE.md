@@ -39,6 +39,7 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 3. **Per-frame tick order in `main.ts` matters.** Current order:
    ```
    physics.step → updateWeather → updateLighting → updateSky → updatePlayer →
+   caveStream.update → updateChunks →
    updateShelter → updateStats → updateSoundscape → bobPickups → updateRaiders →
    updateLizards → updateShrews → updateFires → updateInteraction → updateInventoryInput →
    updateCombat → updateViewModel → updateHud → updateHotbar →

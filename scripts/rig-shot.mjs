@@ -88,6 +88,10 @@ if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
 if (argv.sdfbench) process.env.VITE_CAVE_SDF_BENCH = '1';
+// DEEPER cycle 5 — `--cave=0` boots with the whole cave feature OFF (the shipped kill-switch). Used by
+// the cave-preload gate's FLAG-OFF leg: the boot preload must not exist and must not have regressed
+// the no-cave world.
+if (String(argv.cave) === '0') process.env.VITE_CAVE = '0';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
 
@@ -4027,6 +4031,53 @@ const SCENARIOS = {
   // machine-load flake-resistant (D291) — the sharp assert is
   // syncBuilds === 0: a contiguous walk must never hit the synchronous
   // (anchor-teleport) path.
+  // DEEPER cycle 5 (walk-test D-4) — THE ORIGIN-CAVE PRELOAD gate. Boot-only (no walk), so it is
+  //   cheap enough to run at BOTH flag states. Asserts, with the cave ON: the origin cave was built
+  //   during module init (i.e. behind the boot loading screen, before the first presented frame), is
+  //   adopted as a PINNED resident with real triangles, and the boot overlay came back down. With
+  //   `--cave=0`: no preload happened at all and the flag-off world still boots — the kill-switch
+  //   path cannot be regressed by the preload wiring.
+  //   Run: npm run rig -- --scenario=cave-preload --port=5231   (add --cave=0 for the off leg)
+  'cave-preload': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const fails = [];
+      const on = !!ctx.caveStream;
+      const p = g.cavePerf();
+      const boot = window.__bootT || [];
+      const bootTotal = boot.length > 1 ? boot[boot.length - 1][1] - boot[0][1] : -1;
+      if (document.getElementById('boot-overlay')) fails.push('#boot-overlay still present after boot — the loading screen never came down');
+      let digest = '-';
+      if (on) {
+        if (!p.preload) fails.push('cave flag ON but no __cavePreloadMs record — the origin cave was NOT preloaded at boot');
+        const o = p.residents.find((x) => x.key === 'origin');
+        if (!o) fails.push('cave flag ON but no origin resident — the preload was not adopted');
+        else {
+          digest = o.digest;
+          if (!o.pinned) fails.push('the origin resident is NOT pinned — the resident cap could evict the egg cave');
+          if (!(o.tris > 0)) fails.push('the origin resident carries 0 triangles');
+          if (!(o.colliderTris > 0)) fails.push('the origin resident carries 0 COLLIDER triangles');
+        }
+        if (p.preload && !(p.preload.body > 0)) fails.push('the preload record reports 0ms of cave-body build — nothing was measured');
+      } else {
+        if (p.preload) fails.push('cave flag OFF but a preload record exists — the cave built anyway');
+        if (p.residents.length) fails.push(`cave flag OFF but ${p.residents.length} cave residents exist`);
+        if (!ctx.terrain.meshes.length) fails.push('flag-off boot produced no terrain — the kill-switch path regressed');
+      }
+      return {
+        fails, on, bootTotal: +bootTotal.toFixed(1), digest,
+        ent: p.preload ? p.preload.entrance : -1,
+        body: p.preload ? p.preload.body : -1,
+        total: p.preload ? p.preload.total : -1,
+        tris: on && p.residents[0] ? p.residents[0].tris : 0,
+      };
+    });
+    const pass = r.fails.length === 0;
+    console.log(`CAVE-PRELOAD pass=${pass ? 1 : 0} flag=${r.on ? 1 : 0} boot=${r.bootTotal}ms preload=${r.total}ms(ent=${r.ent}/body=${r.body}) tris=${r.tris} digest=${r.digest} fails=${r.fails.length}`);
+    console.log(`[cave-preload] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+    if (!pass) throw new Error('cave-preload GATE FAILED');
+  },
+
   'chunk-perf': async (page) => {
     const r = await page.evaluate(async () => {
       const g = window.__game; const ctx = g.ctx;
@@ -4133,7 +4184,148 @@ const SCENARIOS = {
     const pass = r.fails.length === 0;
     console.log(`CHUNK-PERF pass=${pass ? 1 : 0} slice=${r.maxSliceMs}ms(fill=${r.stages.fill}/geo=${r.stages.geometry}/fin=${r.stages.finalize}) steps=${r.sliceSteps} load=${r.maxLoadMs}ms lm=${r.maxLandmarkLoadMs}ms draw=${r.baseDraw}->${r.maxDraw} bodies=${r.baseBodies}->${r.maxBodies}->${r.endBodies} fails=${r.fails.length}`);
     console.log(`[chunk-perf] route=${r.route} ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
+
+    // ── DEEPER cycle 5 (walk-test D-4) — THE CAVE BUILD BUDGET + THE RESIDENT CAP.
+    //    Caves are not placed by the streamer yet (that is cycle 8); this leg drives the SAME
+    //    machinery cycle 8 will consume — `__game.requestCave(x, z, seed)` queues a real cave body
+    //    at a real far-field site and the scheduler builds it in CAVE_BUILD_SLICE_MS stage-steps.
+    //
+    //    THE TRIPWIRES, because "green because nothing built" is this project's recurring failure:
+    //      · `builds` must equal the number requested and every new resident must carry triangles —
+    //        a cave that silently didn't build cannot pass.
+    //      · `steps` must be large — a build that reverted to ONE synchronous call would report 1
+    //        step and a ~1200ms max, so slicing cannot be silently lost.
+    //      · the divisible slice budget and the ATOMIC finalize (Rapier trimesh bake, unsliceable)
+    //        are asserted SEPARATELY so neither launders the other.
+    //      · the observed worst rAF gap is measured independently of the counters — a cost the
+    //        counters miss still shows up here.
+    //      · the cap must actually evict, and the cave the player is STANDING IN must survive it.
+    const cv = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const fails = [];
+      if (!ctx.caveStream) { fails.push('ctx.caveStream is null — the cave scheduler did not boot'); return { fails, skipped: true }; }
+      const pre = g.cavePerf();
+      if (!pre.preload) fails.push('no __cavePreloadMs record — the ORIGIN cave was not preloaded at boot');
+      const originRes = pre.residents.find((x) => x.key === 'origin');
+      if (!originRes) fails.push('the origin cave is not a resident — the boot preload was not adopted');
+      else if (!originRes.pinned) fails.push('the origin cave is NOT pinned — the cap could evict the egg cave');
+      else if (!(originRes.tris > 0)) fails.push('the origin cave resident carries 0 triangles');
+
+      const CAP = 3;                                    // Tuning.CAVE_RESIDENT_MAX
+      const N = CAP + 1;                                // one more than the cap, so eviction MUST fire
+      g.resetCavePerf();
+      const sites = [];
+      for (let i = 0; i < N; i++) sites.push({ x: 4000 + i * 700, z: 4000 });
+      for (const st of sites) g.requestCave(st.x, st.z, 1337 + st.x);
+
+      // Drive frames until every requested cave is built (bounded), sampling the observed frame gap.
+      let worstFrameMs = 0, framesRun = 0;
+      let last = performance.now();
+      for (let f = 0; f < 6000; f++) {
+        await raf();
+        const now = performance.now();
+        const gap = now - last; last = now;
+        if (f > 2 && gap > worstFrameMs) worstFrameMs = gap;
+        framesRun++;
+        const st = g.cavePerf();
+        if (st.stream.builds >= N && st.queued === 0 && !st.pending) break;
+      }
+      const mid = g.cavePerf();
+      if (mid.stream.builds !== N) fails.push(`only ${mid.stream.builds}/${N} caves BUILT in ${framesRun} frames — the sliced build never completed (tripwire)`);
+      if (mid.stream.steps < 100) fails.push(`only ${mid.stream.steps} cave slice steps for ${N} caves — the build is not sliced (reverted to sync?)`);
+      if (mid.stream.maxSliceMs > 20) fails.push(`DIVISIBLE cave slice step ${mid.stream.maxSliceMs.toFixed(1)}ms > 20ms tripwire (budget is 8ms)`);
+      if (mid.stream.maxAtomicMs > 170) fails.push(`INDIVISIBLE cave step ${mid.stream.maxAtomicMs.toFixed(1)}ms (${mid.stream.worstAtomicStage}) > 170ms tripwire`);
+      if (worstFrameMs > 260) fails.push(`worst observed frame gap ${worstFrameMs.toFixed(1)}ms > 260ms during the cave builds`);
+      // Every NEW resident must be a real cave (non-empty, collider == visual body, rule 9).
+      for (const r of mid.residents) {
+        if (r.key === 'origin') continue;
+        if (!(r.tris > 0)) fails.push(`resident ${r.key} has 0 visual triangles`);
+        if (!(r.colliderTris > 0)) fails.push(`resident ${r.key} has 0 COLLIDER triangles — nothing was baked`);
+      }
+      // The cap evicted: origin (pinned) + CAP-1 far caves would be over, so residents must equal CAP.
+      if (mid.residents.length > CAP) fails.push(`${mid.residents.length} residents > cap ${CAP} — the resident cap did not evict`);
+      if (mid.stream.evictions < 1) fails.push('no evictions ran despite exceeding the cap (tripwire)');
+      if (!mid.residents.some((x) => x.key === 'origin')) fails.push('the PINNED origin cave was evicted — the pin does not hold');
+
+      // ── NEVER EVICT THE OCCUPIED CAVE. Stand the player INSIDE a resident far cave, then request
+      //    more caves so the cap fires every frame. That cave must still be resident afterwards.
+      const far = ctx.caveStream.residents().filter((r) => !r.pinned);
+      let occKey = null, occSurvived = true, occBlocked = 0;
+      if (far.length) {
+        const target = far[0];
+        occKey = target.key;
+        const c = target.center;
+        for (let i = 0; i < 3; i++) g.requestCave(9000 + i * 700, 9000, 4242 + i);
+        for (let f = 0; f < 6000; f++) {
+          // Hold the capsule inside the occupied cave (gravity would otherwise drop it out of the box).
+          ctx.player.body.body.setTranslation({ x: c.x, y: c.y, z: c.z }, true);
+          ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          await raf();
+          const st = g.cavePerf();
+          if (st.stream.builds >= N + 3 && st.queued === 0 && !st.pending) break;
+        }
+        const post = g.cavePerf();
+        occBlocked = post.stream.occupiedEvictionsBlocked;
+        occSurvived = post.residents.some((x) => x.key === occKey);
+        if (!occSurvived) fails.push(`the OCCUPIED cave ${occKey} was evicted while the player stood in it — fall-through risk`);
+        if (post.stream.evictions < 2) fails.push('the second eviction round never ran — the cap test is vacuous');
+        if (occBlocked < 1) fails.push('occupiedEvictionsBlocked never incremented — the occupancy guard was never exercised (vacuous)');
+        const occNow = ctx.caveStream.occupied(ctx.player.body.body.translation());
+        if (!occNow || occNow.key !== occKey) fails.push(`occupancy test does not report the player inside ${occKey} (got ${occNow ? occNow.key : 'null'})`);
+      } else {
+        fails.push('no non-pinned resident to run the occupied-eviction test against');
+      }
+      // -- THE DIGEST CONTRACT. Slicing must change only WHEN work runs, never WHAT it computes.
+      //    Rebuild the ORIGIN cave's exact junction + seed through the SLICED path and require a
+      //    byte-identical caveDigest against the synchronously-preloaded original. This is the
+      //    tripwire that makes "the digest moved" a bug report rather than a re-baseline.
+      let cloneDigest = '-', originDigest = '-';
+      {
+        const org = ctx.caveStream.residents().find((x) => x.key === 'origin');
+        if (org) {
+          originDigest = org.cave.probe.digest;
+          // Stand at the origin cave first: the clone lands on the SAME site, so the near-distance
+          // guard keeps the cap from evicting it in the very frame it finalizes (it did, first run).
+          ctx.player.body.body.setTranslation({ x: org.center.x, y: org.center.y, z: org.center.z }, true);
+          ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          ctx.caveStream.request('digest-clone', org.cave.probe.junction, org.cave.probe.seed);
+          for (let f = 0; f < 6000; f++) {
+            await raf();
+            if (!ctx.caveStream.pending() && !ctx.caveStream.queued()) break;
+          }
+          const cl = ctx.caveStream.residents().find((x) => x.key === 'digest-clone');
+          if (!cl) fails.push('the sliced digest-clone cave never built (tripwire)');
+          else {
+            cloneDigest = cl.cave.probe.digest;
+            if (cloneDigest !== originDigest)
+              fails.push(`SLICED build digest ${cloneDigest} != SYNC preload digest ${originDigest} — slicing altered the geometry`);
+          }
+        } else {
+          fails.push('no origin resident to run the sliced-vs-sync digest check against');
+        }
+      }
+      const end = g.cavePerf();
+      return {
+        fails, skipped: false, cloneDigest, originDigest,
+        preload: pre.preload, originTris: originRes ? originRes.tris : 0,
+        builds: end.stream.builds, steps: end.stream.steps,
+        maxSliceMs: +end.stream.maxSliceMs.toFixed(1),
+        maxAtomicMs: +end.stream.maxAtomicMs.toFixed(1),
+        worstAtomicStage: end.stream.worstAtomicStage,
+        maxStepMs: +end.stream.maxStepMs.toFixed(1),
+        worstFrameMs: +worstFrameMs.toFixed(1),
+        residents: end.residents.length, evictions: end.stream.evictions,
+        refused: end.stream.evictionsRefused, occBlocked, occKey, occSurvived,
+        framesRun,
+      };
+    });
+    const cvPass = cv.fails.length === 0;
+    console.log(`CAVE-BUILD pass=${cvPass ? 1 : 0} preload=${cv.preload ? cv.preload.total : -1}ms(ent=${cv.preload ? cv.preload.entrance : -1}/body=${cv.preload ? cv.preload.body : -1}) builds=${cv.builds} steps=${cv.steps} slice=${cv.maxSliceMs}ms atomic=${cv.maxAtomicMs}ms(${cv.worstAtomicStage}) frame=${cv.worstFrameMs}ms residents=${cv.residents} evict=${cv.evictions} occBlocked=${cv.occBlocked} occSurvived=${cv.occSurvived ? 1 : 0} fails=${cv.fails.length}`);
+    console.log(`[cave-build] sync-digest=${cv.originDigest} sliced-digest=${cv.cloneDigest} ${cvPass ? 'PASS' : 'FAIL'} ${JSON.stringify(cv.fails)}`);
+
     if (!pass) throw new Error('chunk-perf GATE FAILED');
+    if (!cvPass) throw new Error('cave-build GATE FAILED');
   },
 
   // Infinite Sands S1 — VISUAL sanity shots for the streamed world (the

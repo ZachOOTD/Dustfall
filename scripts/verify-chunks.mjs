@@ -32,22 +32,26 @@ const DET_SEEDS = [1337, 7];
 // KILLS the child mid-probe, which both reads as the boot-failure signature
 // ("no probe line") AND leaks the child's dev server (rig-shot's taskkill
 // teardown never runs). 15 min is a give-up deadline, not a wait.
-function run(scenario, seed, port, timeout) {
-  const r = spawnSync('node', ['scripts/rig-shot.mjs', `--scenario=${scenario}`, `--seed=${seed}`, `--port=${port}`], {
+function run(scenario, seed, port, timeout, extraArgs = []) {
+  const r = spawnSync('node', ['scripts/rig-shot.mjs', `--scenario=${scenario}`, `--seed=${seed}`, `--port=${port}`, ...extraArgs], {
     cwd: ROOT, encoding: 'utf8', shell: false, timeout,
   });
   return `${r.stdout || ''}${r.stderr || ''}`;
 }
 
 /** Run + parse with one bounded retry on the no-line boot-race signature. */
-function runParsed(scenario, seed, port, regex, timeout = 420000) {
-  let out = run(scenario, seed, port, timeout);
+function runParsed(scenario, seed, port, regex, timeout = 420000, extraArgs = []) {
+  let out = run(scenario, seed, port, timeout, extraArgs);
   let m = out.match(regex);
   if (!m) {
     console.log(`  transient boot failure (${scenario} seed ${seed}) — retrying (1/1)…`);
-    out = run(scenario, seed, port + 37, timeout);
+    out = run(scenario, seed, port + 37, timeout, extraArgs);
     m = out.match(regex);
   }
+  // DEEPER cycle 5 — a single scenario run can print SEVERAL probe lines (chunk-perf now prints both
+  // CHUNK-PERF and CAVE-BUILD). Carry the raw stdout so a second regex can be applied to the SAME run
+  // instead of paying for a second 15-minute walk.
+  if (m) m.raw = out;
   return m;
 }
 
@@ -98,6 +102,23 @@ if (!pm) {
   const ok = pm[1] === '1';
   if (!ok) allPass = false;
   rows.push(`perf: slice ${pm[2]}ms (fill ${pm[3]} / geo ${pm[4]} / fin ${pm[5]}), ${pm[6]} steps, load ${pm[7]}ms, landmark-piece ${pm[8]}ms, draw ${pm[9]}→${pm[10]}, bodies ${pm[11]}→${pm[12]}→${pm[13]}, ${pm[14]} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
+// ── 3b. DEEPER cycle 5 (walk-test D-4) — CAVE BUILD BUDGET + RESIDENT CAP. Printed by the SAME
+//      chunk-perf run (no extra boot). Asserts the streamed-cave build is SLICED (not one ~1.2s
+//      synchronous hitch), that the divisible slice budget and the ATOMIC Rapier trimesh bake each
+//      sit inside their own tripwire, that the caves ACTUALLY BUILT (a gate that passes because
+//      nothing built is the failure mode this project keeps hitting), that the resident cap evicts,
+//      and that the cave the player is standing INSIDE is never the one evicted.
+const cbRe = /CAVE-BUILD pass=(\d) preload=([-\d.]+)ms\(ent=([-\d.]+)\/body=([-\d.]+)\) builds=(\d+) steps=(\d+) slice=([\d.]+)ms atomic=([\d.]+)ms\((\S+)\) frame=([\d.]+)ms residents=(\d+) evict=(\d+) occBlocked=(\d+) occSurvived=(\d) fails=(\d+)/;
+const cb = pm && pm.raw ? pm.raw.match(cbRe) : null;
+if (!cb) {
+  allPass = false;
+  rows.push('cave-build: NO PROBE LINE (the cave-build leg of chunk-perf did not report)  *** FAIL ***');
+} else {
+  const okCb = cb[1] === '1';
+  if (!okCb) allPass = false;
+  rows.push(`cave-build: preload ${cb[2]}ms (tor ${cb[3]} / body ${cb[4]}), ${cb[5]} sliced builds in ${cb[6]} steps, divisible slice ${cb[7]}ms / atomic ${cb[8]}ms (${cb[9]}) / worst frame ${cb[10]}ms, residents ${cb[11]}, ${cb[12]} evictions (occupied-blocked ${cb[13]}, survived=${cb[14]}), ${cb[15]} fails  ${okCb ? 'OK' : '*** FAIL ***'}`);
 }
 
 // ── 4. M7-S2 — the Skyfall interior walk (rule 9 real-motion: enter through
@@ -188,6 +209,30 @@ for (const seed of DET_SEEDS) {
   const ok = passA && passB && stable;
   if (!ok) allPass = false;
   rows.push(`cave-walk seed ${seed}: reached ${a[5]}/${a[6]} chambers, digest ${a[3]}${stable ? ' (stable ×2)' : ` vs ${b[3]} *** DIGEST DRIFT ***`}, pass=${passA ? 1 : 0}/${passB ? 1 : 0}  ${ok ? 'OK' : '*** FAIL ***'}`);
+}
+
+// ── 9. DEEPER cycle 5 — the ORIGIN-CAVE PRELOAD, at BOTH flag states. Boot-only (no walk), so it
+//      is cheap enough to run twice. ON: the cave was built during module init — i.e. behind the boot
+//      loading screen, before the first presented frame — and adopted as a PINNED resident with real
+//      visual AND collider triangles. OFF (`--cave=0`): no preload record, no residents, and the
+//      flag-off world still boots — the shipped kill-switch path cannot be regressed by the preload.
+{
+  const preRe = /CAVE-PRELOAD pass=(\d) flag=(\d) boot=([-\d.]+)ms preload=([-\d.]+)ms\(ent=([-\d.]+)\/body=([-\d.]+)\) tris=(\d+) digest=(\S+) fails=(\d+)/;
+  const legsCfg = [
+    { label: 'flag ON ', args: [], port: 5540 },
+    { label: 'VITE_CAVE=0', args: ['--cave=0'], port: 5543 },
+  ];
+  for (const leg of legsCfg) {
+    const m = runParsed('cave-preload', 1337, leg.port, preRe, 420000, leg.args);
+    if (!m) {
+      allPass = false;
+      rows.push(`cave-preload ${leg.label}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`);
+      continue;
+    }
+    const okPl = m[1] === '1';
+    if (!okPl) allPass = false;
+    rows.push(`cave-preload ${leg.label}: boot ${m[3]}ms, cave preload ${m[4]}ms (tor ${m[5]} / body ${m[6]}), ${m[7]} tris, digest ${m[8]}, ${m[9]} fails  ${okPl ? 'OK' : '*** FAIL ***'}`);
+  }
 }
 
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');

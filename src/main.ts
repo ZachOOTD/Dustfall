@@ -17,6 +17,8 @@ import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
 import { caveEntranceSite, spawnCaveEntrance } from './world/caveEntrance.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
 import { caveGenSeed, spawnCave, type CaveFungiCluster } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
+import { getPlayerPos } from './util/playerPos.ts';   // canonical player position (speeder/sled-aware)
+import { createCaveStream, type CaveStream } from './world/caveStream.ts';   // DEEPER cycle 5 (D-4) — cave build budget + resident cap
 import { createCaveAtmosphere, updateCaveAtmosphere, type CaveAtmosphere } from './world/caveAtmosphere.ts'; // UNDERWORLD cycle 2 — darkness + light model
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
@@ -200,9 +202,25 @@ let caveAtmosphere: CaveAtmosphere | null = null;
 let caveEgg: CaveEgg | null = null;                       // UNDERWORLD cycle 3 — the egg on the cave dais
 let caveFungiList: CaveFungiCluster[] = [];               // harvestable fungi (E → alien_fruit)
 const caveLootCaches: LootContainer[] = [];              // deep loot caches (battery/wiring-rich)
+// DEEPER cycle 5 (walk-test D-4) — the cave build scheduler. Created unconditionally-with-the-flag so
+// cycle 8's streamed caves have somewhere to go; the ORIGIN cave is built synchronously right below,
+// i.e. during module init, behind the boot loading screen and before the first presented frame, then
+// adopted PINNED. That is the literal "preload the caves on the starting loading screen".
+let caveStream: CaveStream | null = null;
 if (caveSite) {
+  caveStream = createCaveStream(three.scene, physics.world, terrain);
+  const tEnt = performance.now();
   const bore = spawnCaveEntrance(three.scene, physics.world, terrain, caveSite, worldSeed);
+  _mark('cave:entrance');
+  const tBody = performance.now();
   const cave = spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));
+  _mark('cave:body');
+  caveStream.adopt('origin', bore.junction, caveGenSeed(worldSeed), cave, true);
+  (window as unknown as { __cavePreloadMs: { entrance: number; body: number; total: number } }).__cavePreloadMs = {
+    entrance: +(tBody - tEnt).toFixed(1),
+    body: +(performance.now() - tBody).toFixed(1),
+    total: +(performance.now() - tEnt).toFixed(1),
+  };
   // UNDERWORLD cycle 2 — the light model + darkness + mouth shaft, keyed to the cave's bounds.
   caveAtmosphere = createCaveAtmosphere(three.scene, bore.probe, cave.graph);
   // UNDERWORLD cycle 3 — the companion EGG moves onto the generated cave's egg-chamber dais
@@ -572,6 +590,7 @@ const ctx: GameContext = {
   sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
   deepCave,                          // M8 ⑨ — legacy funnel deep cave (null when the generated cave is on)
   caveFungi: { list: caveFungiList },  // UNDERWORLD cycle 3 — harvestable fungi (empty with the flag off)
+  caveStream,                        // DEEPER cycle 5 (D-4) — cave build budget + resident cap (null with the cave flag off)
   caveAtmosphere,                    // UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor (null with FEATURES.caveTest off)
   egg: caveSite ? caveEgg : (deepCave ? deepCave.egg : null),   // M8 ⑩ — egg from the generated cave dais (flag on) or the legacy funnel (flag off); reconciled in handoffToGame
 
@@ -1120,6 +1139,7 @@ startLoop(ctx, (c, dt) => {
   //   game's survival density DURING the fall (blendDescentFog), so the world is already at plain
   //   game fog at the crash/exit — nothing to ease. (updateIntroFogEase was removed with the pin.)
   updatePlayer(c, dt);           // movement + camera + advance dayTime
+  if (c.caveStream) c.caveStream.update(getPlayerPos(c));   // DEEPER cycle 5 (D-4) — advance the sliced cave build + enforce the resident cap (AFTER updatePlayer, like updateChunks)
   updateChunks(c);               // Infinite Sands S1 — terrain tile ring + content chunks follow the player (AFTER updatePlayer so this-frame's position is committed; no-op during the intro)
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateCameraShake(c, dt);      // ACBE (D1) — trauma shake (stacks on the anchored camera, like stamina wobble)
@@ -1182,3 +1202,10 @@ startLoop(ctx, (c, dt) => {
     ? { scene: title.scene, camera: title.camera }
     : { scene: ctx.three.scene, camera: ctx.three.camera },
 );
+
+// DEEPER cycle 5 (D-4) — boot is DONE: drop the loading screen that covered it. Everything above ran
+// synchronously during module init, including the origin cave's ~1.2s SDF polygonization + Rapier
+// trimesh bake, so the preload cost is paid behind this overlay and never inside a played frame.
+// `__bootT` carries the per-phase marks (`cave:entrance` / `cave:body`) and `__cavePreloadMs` the
+// cave's share of it — both read by the chunk-perf gate.
+document.getElementById('boot-overlay')?.remove();

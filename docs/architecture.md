@@ -56,7 +56,12 @@ src/
     wormHorizonCrossing.ts — the distant sandworm-crossing horizon spectacle (silhouette color tuned 2026-07-15).
     crashLog.ts           — the pilot's crash-log journal content (Skyfall).
     -- Other world systems --
-    deepCave.ts           — the single deep-cave chamber (the companion egg's home; D255).
+    deepCave.ts           — the LEGACY single deep-cave chamber (retired while FEATURES.caveTest is on).
+    caveEntrance.ts       — the crevice entrance: rock tor + fissure + the carved-terrain-hole block (DEEPER cycle 4; replaced caveTest.ts).
+    caveGen.ts            — the cave room-graph generator + dressing (dais / speleothems / fungi) + spawnCave / startSpawnCave.
+    caveSdf.ts            — the ONE watertight cave surface: SDF -> surface nets, sliceable (buildCaveSdf / startCaveSdf).
+    caveStream.ts         — DEEPER cycle 5 (D-4): the frame-budgeted cave build scheduler + the resident cap (never evicts the occupied cave).
+    caveAtmosphere.ts     — cave darkness / fog / mouth light shaft.
     speeder.ts            — hover speeder vehicle (mount, chase cam, seated rig).
     sled.ts               — placeable scrap sled + inextensible tow rope (deploySled; `FEATURES.rideableSled` exists but is INERT — zero code readers, the ride mechanic is unbuilt).
     salvage.ts            — salvage-panel pry → per-component extract; condition tiers; WYSIWYG depletion.

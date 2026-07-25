@@ -40,6 +40,7 @@ import type { Companion } from './enemies/companion.ts';
 import type { SarlaccPit } from './enemies/sarlaccPit.ts';
 import type { DeepCave, CaveEgg } from './world/deepCave.ts';
 import type { CaveFungiCluster } from './world/caveGen.ts';
+import type { CaveStream } from './world/caveStream.ts';
 import type { CaveAtmosphere } from './world/caveAtmosphere.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
@@ -190,6 +191,10 @@ export interface GameContext {
   /** UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor.
    *  Null unless FEATURES.caveTest is on (the generated cave was spawned). */
   caveAtmosphere: CaveAtmosphere | null;
+  /** DEEPER cycle 5 (D-4) — the cave build SCHEDULER + resident cap. The origin/egg cave is built
+   *  synchronously at boot (behind the loading screen) and adopted here PINNED; every other cave
+   *  builds through the frame-budgeted slicer. Null with FEATURES.caveTest off. */
+  caveStream: CaveStream | null;
   /** M8 ⑩ — the companion egg on the cave dais. Non-null only while the companion
    *  is NOT yet acquired (re-derived at boot from `flags.companionAcquired`);
    *  hatching it spawns the companion + clears this. */

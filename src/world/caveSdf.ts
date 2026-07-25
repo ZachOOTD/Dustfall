@@ -168,15 +168,48 @@ export interface CaveSdfResult {
   opening: { center: THREE.Vector3; radius: number };
 }
 
+/** DEEPER cycle 5 — the SLICED build's stage names, in run order. `field` and `cells`/`quads`/`cut`/
+ *  `color` are all resumable at sub-stage granularity; `geom` (BufferGeometry + computeVertexNormals)
+ *  is INDIVISIBLE — it is one pass over the whole index buffer inside three.js. */
+export type CaveSdfStage = 'field' | 'cells' | 'quads' | 'cut' | 'geom' | 'color' | 'done';
+
+/** A resumable cave-SDF build. `step(budgetMs)` runs until the frame budget is consumed (an
+ *  indivisible stage always runs to its end) and returns true when the build is COMPLETE.
+ *
+ *  THE INVARIANT THAT MAKES THIS SAFE (D290 determinism / the cycle-5 digest contract): slicing
+ *  changes only WHEN work runs, never WHAT it computes. Every loop keeps its original iteration
+ *  order and arithmetic; the budget check only decides where to suspend. `buildCaveSdf` below is the
+ *  same job driven with an infinite budget, so the sync and sliced drivers are the SAME CODE and
+ *  cannot diverge — a `caveDigest` change would mean a real geometry bug, never a re-baseline. */
+export interface CaveSdfJob {
+  step(budgetMs: number): boolean;
+  stage(): CaveSdfStage;
+  /** Valid only once `step` has returned true. */
+  result(): CaveSdfResult;
+}
+
 /** Build the whole cave as ONE watertight surface-nets mesh from the room-graph.
- *  `voxel` = grid spacing in metres (the quality/cost dial). */
+ *  `voxel` = grid spacing in metres (the quality/cost dial). Synchronous driver — see `startCaveSdf`. */
 export function buildCaveSdf(
   graph: CaveGraph, junction: CaveJunction, noise3: Noise3, cnoise: Noise3,
   voxel: number, depthOf: (floorY: number) => number,
   surfaceY?: (x: number, z: number) => number,
 ): CaveSdfResult {
+  const job = startCaveSdf(graph, junction, noise3, cnoise, voxel, depthOf, surfaceY);
+  while (!job.step(Infinity)) { /* run to completion */ }
+  return job.result();
+}
+
+/** The resumable driver. See `CaveSdfJob`. */
+export function startCaveSdf(
+  graph: CaveGraph, junction: CaveJunction, noise3: Noise3, cnoise: Noise3,
+  voxel: number, depthOf: (floorY: number) => number,
+  surfaceY?: (x: number, z: number) => number,
+): CaveSdfJob {
   const T = Tuning;
-  const t0 = performance.now();
+  /** Accumulated CPU time actually spent in `step()` — for a sliced build this is the sum of the
+   *  slices, NOT the wall-clock span across the frames they were spread over. */
+  let msWork = 0;
 
   // ── Primitives from the graph (layout logic consumed, never re-derived). ──
   const prims: Prim[] = [];
@@ -252,21 +285,31 @@ export function buildCaveSdf(
   const cand: Prim[] = [];
   const dcs: number[] = [];
   let evaluated = 0;
-  for (let bz = 0; bz < cd; bz += B) {
-    for (let by = 0; by < ch; by += B) {
-      for (let bx = 0; bx < cw; bx += B) {
-        // Block AABB (corner space, inclusive of the shared +1 boundary corner).
-        const wx0 = x0 + bx * voxel, wx1 = x0 + Math.min(bx + B, cw - 1) * voxel;
-        const wy0 = y0 + by * voxel, wy1 = y0 + Math.min(by + B, ch - 1) * voxel;
-        const wz0 = z0 + bz * voxel, wz1 = z0 + Math.min(bz + B, cd - 1) * voxel;
-        cand.length = 0;
-        for (const p of prims) {
-          const ddx = p.bx < wx0 ? wx0 - p.bx : p.bx > wx1 ? p.bx - wx1 : 0;
-          const ddy = p.by < wy0 ? wy0 - p.by : p.by > wy1 ? p.by - wy1 : 0;
-          const ddz = p.bz < wz0 ? wz0 - p.bz : p.bz > wz1 ? p.bz - wz1 : 0;
-          if (ddx * ddx + ddy * ddy + ddz * ddz <= p.br * p.br) cand.push(p);
-        }
-        if (!cand.length) continue;
+  // DEEPER cycle 5 — SLICING. The block loop is LINEARIZED so it can suspend and resume at a block
+  // boundary. Iteration order is unchanged (bz outer, by, bx inner) and so is every value computed:
+  // slicing decides only WHEN work runs. A block is 8³ voxels (~0.02ms), so the resume granularity is
+  // two orders of magnitude finer than the frame budget.
+  const nbx = Math.ceil(cw / B), nby = Math.ceil(ch / B), nbz = Math.ceil(cd / B);
+  const nBlocks = nbx * nby * nbz;
+  let bi = 0;
+  const fieldStep = (deadline: number): boolean => {
+    while (bi < nBlocks) {
+      const bx = (bi % nbx) * B;
+      const by = (Math.floor(bi / nbx) % nby) * B;
+      const bz = Math.floor(bi / (nbx * nby)) * B;
+      bi++;
+      // Block AABB (corner space, inclusive of the shared +1 boundary corner).
+      const wx0 = x0 + bx * voxel, wx1 = x0 + Math.min(bx + B, cw - 1) * voxel;
+      const wy0 = y0 + by * voxel, wy1 = y0 + Math.min(by + B, ch - 1) * voxel;
+      const wz0 = z0 + bz * voxel, wz1 = z0 + Math.min(bz + B, cd - 1) * voxel;
+      cand.length = 0;
+      for (const p of prims) {
+        const ddx = p.bx < wx0 ? wx0 - p.bx : p.bx > wx1 ? p.bx - wx1 : 0;
+        const ddy = p.by < wy0 ? wy0 - p.by : p.by > wy1 ? p.by - wy1 : 0;
+        const ddz = p.bz < wz0 ? wz0 - p.bz : p.bz > wz1 ? p.bz - wz1 : 0;
+        if (ddx * ddx + ddy * ddy + ddz * ddz <= p.br * p.br) cand.push(p);
+      }
+      if (cand.length) {
         const ix1 = Math.min(bx + B, cw - 1), iy1 = Math.min(by + B, ch - 1), iz1 = Math.min(bz + B, cd - 1);
         for (let k = bz; k <= iz1; k++) {
           const wz = z0 + k * voxel;
@@ -316,77 +359,139 @@ export function buildCaveSdf(
           }
         }
       }
+      // Budget check every 16 blocks: `performance.now()` is ~50ns and there are ~30k blocks, so
+      // per-block polling would itself cost ~1.5ms of the build; 16 active blocks overshoot the
+      // deadline by ~0.3ms worst case.
+      if ((bi & 7) === 0 && performance.now() >= deadline) break;
     }
-  }
-  const t1 = performance.now();
-
-  // ── SURFACE NETS (the shared polygonizer — also builds the entrance tor, caveEntrance.ts). ──
-  const { vx, vy, vz, idx } = surfaceNets(field, cw, ch, cd, x0, y0, z0, voxel);
-  const t2 = performance.now();
-
-  // ── CUT the sky rim: drop every triangle above the terrain surface, so the entrance slot genuinely
-  //    OPENS to the sky instead of doming itself shut (cycle 1 cut at the junction plane instead —
-  //    a placeholder, since there was no entrance geometry in the field to cut). Only triangles that
-  //    could possibly be near the surface are tested: `pureHeightAt` is multi-octave simplex and this
-  //    runs over ~10^5 triangles. Everything else in the cave is ≥ MIN_COVER below the sheet. ──
-  const kept: number[] = [];
-  const cutFrom = surfaceY ? junction.gy - 14 : Infinity;
-  for (let t = 0; t < idx.length; t += 3) {
-    const ay = vy[idx[t]], by = vy[idx[t + 1]], cy2 = vy[idx[t + 2]];
-    if (ay > cutFrom || by > cutFrom || cy2 > cutFrom) {
-      const cx = (vx[idx[t]] + vx[idx[t + 1]] + vx[idx[t + 2]]) / 3;
-      const cyy = (ay + by + cy2) / 3;
-      const cz = (vz[idx[t]] + vz[idx[t + 1]] + vz[idx[t + 2]]) / 3;
-      if (cyy > surfaceY!(cx, cz) + 0.02) continue;
-    }
-    kept.push(idx[t], idx[t + 1], idx[t + 2]);
-  }
-
-  // ── Vertex colours: the SAME strata / staining / sediment read, evaluated in WORLD space per
-  //    vertex. Role is inferred from the local surface orientation instead of the shell's parametric
-  //    lat-long — see the cycle-2 note in the header of caveGen.ts. ──
-  const nv = vx.length;
-  const pos = new Float32Array(nv * 3);
-  for (let v = 0; v < nv; v++) { pos[v * 3] = vx[v]; pos[v * 3 + 1] = vy[v]; pos[v * 3 + 2] = vz[v]; }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setIndex(kept);
-  const t3a = performance.now();
-  geo.computeVertexNormals();
-  const t3 = performance.now();
-
-  // Role from the (now-known) normal: normals point INTO the cavity, so a floor faces +Y, a ceiling
-  // faces −Y. Colour is the existing palette, applied to the unified surface.
-  const nrm = geo.attributes.normal as THREE.BufferAttribute;
-  const col = new Float32Array(nv * 3);
-  const c = new THREE.Color();
-  for (let v = 0; v < nv; v++) {
-    const wy = vy[v];
-    const up = nrm.getY(v);
-    // DEEPER cycle 3 — pass the RAW normal Y, not a hard-thresholded role: the threshold flipped
-    // adjacent vertices between wall and ceiling across the displaced surface and produced the
-    // smoke-mottle (see caveVertexColor). The role argument is now only the no-`up` fallback.
-    caveVertexColor('wall', vx[v], wy, vz[v], depthOf(wy), cnoise, c, up);
-    col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-
-  const t4 = performance.now();
-  // The DECLARED opening now lives at the sky end of the crevice (caveEntrance.ts declares the same
-  // rim on the tor); the junction is no longer a cut, it is continuous rock.
-  const skyPt = ent.length ? ent[Math.min(1, ent.length - 1)] : { x: junction.x, z: junction.z, floorY: junction.y };
-  const opening = {
-    center: new THREE.Vector3(skyPt.x, junction.gy + 1.1, skyPt.z),
-    radius: 4.2,
+    return bi >= nBlocks;
   };
+
+  // ── STAGE MACHINE. Each stage is resumable except `geom` (three.js computeVertexNormals is one
+  //    indivisible pass) — see the honest per-stage cost in the cycle-5 campaign-log entry. ──
+  let stage: CaveSdfStage = 'field';
+  let nets: SurfaceNetsJob | null = null;
+  let vx: number[] = [], vy: number[] = [], vz: number[] = [], idx: number[] = [];
+  const kept: number[] = [];
+  let cutAt = 0;
+  const cutFrom = surfaceY ? junction.gy - 14 : Infinity;
+  let geo: THREE.BufferGeometry | null = null;
+  let col: Float32Array | null = null;
+  let colAt = 0;
+  const c = new THREE.Color();
+  let msField = 0, msNets = 0, msNormals = 0;
+  let result: CaveSdfResult | null = null;
+
+  const step = (budgetMs: number): boolean => {
+    const sT = performance.now();
+    const deadline = budgetMs === Infinity ? Infinity : sT + budgetMs;
+    const fin = (v: boolean): boolean => { msWork += performance.now() - sT; return v; };
+    while (stage !== 'done') {
+      const ts = performance.now();
+      if (stage === 'field') {
+        const done = fieldStep(deadline);
+        msField += performance.now() - ts;
+        if (!done) return fin(false);
+        nets = startSurfaceNets(field, cw, ch, cd, x0, y0, z0, voxel);
+        stage = 'cells';
+      } else if (stage === 'cells') {
+        const done = nets!.stepCells(deadline);
+        msNets += performance.now() - ts;
+        if (!done) return fin(false);
+        stage = 'quads';
+      } else if (stage === 'quads') {
+        const done = nets!.stepQuads(deadline);
+        msNets += performance.now() - ts;
+        if (!done) return fin(false);
+        ({ vx, vy, vz, idx } = nets!.out);
+        stage = 'cut';
+      } else if (stage === 'cut') {
+        // ── CUT the sky rim: drop every triangle above the terrain surface, so the entrance slot
+        //    genuinely OPENS to the sky instead of doming itself shut. Only triangles that could
+        //    possibly be near the surface are tested: `pureHeightAt` is multi-octave simplex and this
+        //    runs over ~10^5 triangles. Everything else is ≥ MIN_COVER below the sheet.
+        const CHUNK = 9000;                             // index entries per budget poll (3k triangles)
+        while (cutAt < idx.length) {
+          const end = Math.min(idx.length, cutAt + CHUNK);
+          for (let t = cutAt; t < end; t += 3) {
+            const ay = vy[idx[t]], by = vy[idx[t + 1]], cy2 = vy[idx[t + 2]];
+            if (ay > cutFrom || by > cutFrom || cy2 > cutFrom) {
+              const cx = (vx[idx[t]] + vx[idx[t + 1]] + vx[idx[t + 2]]) / 3;
+              const cyy = (ay + by + cy2) / 3;
+              const cz = (vz[idx[t]] + vz[idx[t + 1]] + vz[idx[t + 2]]) / 3;
+              if (cyy > surfaceY!(cx, cz) + 0.02) continue;
+            }
+            kept.push(idx[t], idx[t + 1], idx[t + 2]);
+          }
+          cutAt = end;
+          if (performance.now() >= deadline) break;
+        }
+        if (cutAt < idx.length) return fin(false);
+        stage = 'geom';
+      } else if (stage === 'geom') {
+        // INDIVISIBLE: positions + index + computeVertexNormals in one pass.
+        const nv0 = vx.length;
+        const pos = new Float32Array(nv0 * 3);
+        for (let v = 0; v < nv0; v++) { pos[v * 3] = vx[v]; pos[v * 3 + 1] = vy[v]; pos[v * 3 + 2] = vz[v]; }
+        geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setIndex(kept);
+        const tN = performance.now();
+        geo.computeVertexNormals();
+        msNormals += performance.now() - tN;
+        col = new Float32Array(nv0 * 3);
+        stage = 'color';
+      } else if (stage === 'color') {
+        // Role from the (now-known) normal: normals point INTO the cavity, so a floor faces +Y, a
+        // ceiling faces −Y. Colour is the existing palette, applied to the unified surface.
+        const nrm = geo!.attributes.normal as THREE.BufferAttribute;
+        const nv0 = vx.length;
+        const CHUNK = 7000;
+        while (colAt < nv0) {
+          const end = Math.min(nv0, colAt + CHUNK);
+          for (let v = colAt; v < end; v++) {
+            const wy = vy[v];
+            const up = nrm.getY(v);
+            // DEEPER cycle 3 — pass the RAW normal Y, not a hard-thresholded role: the threshold
+            // flipped adjacent vertices between wall and ceiling across the displaced surface and
+            // produced the smoke-mottle (see caveVertexColor). `role` is only the no-`up` fallback.
+            caveVertexColor('wall', vx[v], wy, vz[v], depthOf(wy), cnoise, c, up);
+            col![v * 3] = c.r; col![v * 3 + 1] = c.g; col![v * 3 + 2] = c.b;
+          }
+          colAt = end;
+          if (performance.now() >= deadline) break;
+        }
+        if (colAt < nv0) return fin(false);
+        geo!.setAttribute('color', new THREE.BufferAttribute(col!, 3));
+        // The DECLARED opening lives at the sky end of the crevice (caveEntrance.ts declares the same
+        // rim on the tor); the junction is no longer a cut, it is continuous rock.
+        const skyPt = ent.length ? ent[Math.min(1, ent.length - 1)] : { x: junction.x, z: junction.z, floorY: junction.y };
+        result = {
+          geometry: geo!,
+          opening: { center: new THREE.Vector3(skyPt.x, junction.gy + 1.1, skyPt.z), radius: 4.2 },
+          stats: {
+            voxel, dims: [nx, ny, nz], samples: evaluated, gridSamples: cw * ch * cd,
+            tris: kept.length / 3, verts: nv0,
+            msField: +msField.toFixed(1), msNets: +msNets.toFixed(1),
+            msNormals: +msNormals.toFixed(1), msTotal: 0,   // patched by `fin` on the completing step
+          },
+        };
+        stage = 'done';
+      }
+      if (performance.now() >= deadline) break;
+    }
+    const done = stage === 'done';
+    const r = fin(done);
+    if (done && result) result.stats.msTotal = +msWork.toFixed(1);
+    return r;
+  };
+
   return {
-    geometry: geo,
-    opening,
-    stats: {
-      voxel, dims: [nx, ny, nz], samples: evaluated, gridSamples: cw * ch * cd,
-      tris: kept.length / 3, verts: nv,
-      msField: +(t1 - t0).toFixed(1), msNets: +(t2 - t1).toFixed(1),
-      msNormals: +(t3 - t3a).toFixed(1), msTotal: +(t4 - t0).toFixed(1),
+    step,
+    stage: () => stage,
+    result: () => {
+      if (!result) throw new Error('caveSdf: result() before the build completed');
+      return result;
     },
   };
 }
@@ -399,6 +504,28 @@ export function surfaceNets(
   field: Float32Array, cw: number, ch: number, cd: number,
   x0: number, y0: number, z0: number, voxel: number,
 ): { vx: number[]; vy: number[]; vz: number[]; idx: number[] } {
+  const j = startSurfaceNets(field, cw, ch, cd, x0, y0, z0, voxel);
+  while (!j.stepCells(Infinity)) { /* run to completion */ }
+  while (!j.stepQuads(Infinity)) { /* run to completion */ }
+  return j.out;
+}
+
+/** DEEPER cycle 5 — the RESUMABLE surface-nets driver. Two passes, each suspendable on a whole
+ *  k-plane boundary (a plane is ~0.2ms at the cave's grid size). `surfaceNets` above is this job run
+ *  with an infinite budget, so there is exactly one implementation and the sliced output is the
+ *  synchronous output by construction. */
+export interface SurfaceNetsJob {
+  /** Pass 1 — one vertex per sign-changing cell. Returns true when complete. */
+  stepCells(deadline: number): boolean;
+  /** Pass 2 — quads across sign-changing corner edges. Returns true when complete. */
+  stepQuads(deadline: number): boolean;
+  readonly out: { vx: number[]; vy: number[]; vz: number[]; idx: number[] };
+}
+
+export function startSurfaceNets(
+  field: Float32Array, cw: number, ch: number, cd: number,
+  x0: number, y0: number, z0: number, voxel: number,
+): SurfaceNetsJob {
   const nx = cw - 1, ny = ch - 1, nz = cd - 1;
   const cellIdx = new Int32Array(nx * ny * nz).fill(-1);
   const vx: number[] = [], vy: number[] = [], vz: number[] = [];
@@ -409,7 +536,10 @@ export function surfaceNets(
     [0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7],
   ] as const;
   const fv = new Float32Array(8);
-  for (let k = 0; k < nz; k++) {
+  let ck = 0;
+  const stepCells = (deadline: number): boolean => {
+  for (; ck < nz; ck++) {
+    const k = ck;
     for (let j = 0; j < ny; j++) {
       for (let i = 0; i < nx; i++) {
         let neg = 0;
@@ -437,7 +567,10 @@ export function surfaceNets(
         vz.push(z0 + (k + sz / n) * voxel);
       }
     }
+    if (performance.now() >= deadline) { ck++; break; }
   }
+  return ck >= nz;
+  };
 
   // Quads across sign-changing corner edges. Axis u with perpendicular pair (v,w) in right-handed
   // cyclic order — the loop (0,0)→(1,0)→(1,1)→(0,1) is CCW in (v,w), i.e. normal +u; so we KEEP that
@@ -446,8 +579,12 @@ export function surfaceNets(
   const cellAt = (i: number, j: number, k: number): number =>
     (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) ? -1 : cellIdx[(k * ny + j) * nx + i];
   // per-axis: [strideCorner, cell-offset basis for v and w]
-  for (let axis = 0; axis < 3; axis++) {
-    for (let k = 0; k < cd; k++) {
+  // Resumable over the linearized (axis, k) pair — the (axis outer, k inner) order is unchanged.
+  let qi = 0;
+  const stepQuads = (deadline: number): boolean => {
+  for (; qi < 3 * cd; qi++) {
+    {
+      const axis = Math.floor(qi / cd), k = qi % cd;
       for (let j = 0; j < ch; j++) {
         for (let i = 0; i < cw; i++) {
           const i1 = axis === 0 ? i + 1 : i, j1 = axis === 1 ? j + 1 : j, k1 = axis === 2 ? k + 1 : k;
@@ -470,8 +607,12 @@ export function surfaceNets(
         }
       }
     }
+    if (performance.now() >= deadline) { qi++; break; }
   }
-  return { vx, vy, vz, idx };
+  return qi >= 3 * cd;
+  };
+
+  return { stepCells, stepQuads, out: { vx, vy, vz, idx } };
 }
 
 /** THE cave palette — the single copy (cycle 2 deleted caveGen's, which died with the shells).

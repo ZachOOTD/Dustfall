@@ -43,7 +43,7 @@ import type { Terrain } from './terrain.ts';
 import { makeStaticTrimesh } from '../physics/bodies.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
-import { buildCaveSdf, caveVertexColor } from './caveSdf.ts';
+import { startCaveSdf, buildCaveSdf, caveVertexColor, type CaveSdfJob } from './caveSdf.ts';
 
 /** One station on the crevice's descent centreline (DEEPER cycle 4). The entrance hands the WHOLE
  *  polyline to the cave's SDF so the descent is built as part of the cave's own watertight
@@ -874,8 +874,24 @@ export interface SpawnedCave {
   lootAnchors: THREE.Vector3[];
 }
 
-/** Build + place the generated cave body: chamber + corridor meshes welded to the throat junction,
- *  one trimesh collider matching the visual (rule 9). Attaches a `caveGenProbe` on the group. */
+/** DEEPER cycle 5 — a RESUMABLE cave spawn. `step(budgetMs)` advances the build and returns true
+ *  when it is complete; `spawnCave` below is the same job driven with an infinite budget, so the
+ *  synchronous (boot-preload) and sliced (streamed) paths are the SAME CODE and cannot diverge.
+ *
+ *  ATOMIC FINALIZE (the terrain-tile precedent, S6/D296): nothing is added to the scene and no
+ *  collider exists until the last step, so a half-built cave is never visible and never collidable.
+ *  The Rapier trimesh bake and `scene.add` land in the SAME step, so "visible but not solid" cannot
+ *  exist for even one frame (rule 9). */
+export interface CaveSpawnJob {
+  step(budgetMs: number): boolean;
+  stage(): string;
+  /** Valid only once `step` has returned true. */
+  result(): SpawnedCave;
+}
+
+/** Build + place the generated cave body: one watertight SDF surface + the dressing, one trimesh
+ *  collider matching the visual (rule 9). Attaches a `caveGenProbe` on the group.
+ *  SYNCHRONOUS driver — the boot preload (main.ts) and every gate use this. */
 export function spawnCave(
   scene: THREE.Scene,
   world: RAPIER.World,
@@ -883,51 +899,90 @@ export function spawnCave(
   junction: CaveJunction,
   seed: number,
 ): SpawnedCave {
-  const graph = generateCaveGraph(seed, junction, terrain);
-  const noise3 = createNoise3D(makeRng((seed ^ 0x5eed3d) >>> 0));
-  const cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));   // colour/dressing noise stream
-  const srand = makeRng((seed ^ 0x59e1e0) >>> 0);                   // speleothem placement RNG
-  const frand = makeRng((seed ^ 0xf0091a) >>> 0);                   // fungi placement RNG (own stream — leaves speleothems untouched)
+  const job = startSpawnCave(scene, world, terrain, junction, seed);
+  while (!job.step(Infinity)) { /* run to completion */ }
+  return job.result();
+}
+
+/** The resumable driver. See `CaveSpawnJob`. */
+export function startSpawnCave(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  junction: CaveJunction,
+  seed: number,
+): CaveSpawnJob {
+  type Stage = 'graph' | 'sdf' | 'dress' | 'finalize' | 'done';
+  let stage: Stage = 'graph';
+
+  let graph!: CaveGraph;
+  let cnoise!: Noise3;
+  let srand!: () => number;
+  let frand!: () => number;
+  let group!: THREE.Group;
+  let dirsByNode!: Map<number, Array<{ x: number; z: number }>>;
+  let fungiSet!: Set<number>;
+  let sdfJob: CaveSdfJob | null = null;
+  let meshes: THREE.Mesh[] = [];            // baked into the trimesh collider (rule 9)
+  let decor: THREE.Mesh[] = [];             // visual-only (small speleothems + fungi; no collider, like scatter)
+  let fungi: CaveFungiCluster[] = [];       // UNDERWORLD cycle 3 — harvestable fungi clusters (E -> alien_fruit)
+  let msMesh = 0;
+  let out: SpawnedCave | null = null;
+  // VITE_CAVE_SDF_BENCH=1 only — re-polygonizes at the measurement resolutions (cost numbers).
+  let benchNoise: Noise3 | null = null;
+  let benchDepthY: ((y: number) => number) | null = null;
+  let benchSurfaceY: ((x: number, z: number) => number) | null = null;
+
   const depthOf = (n: CaveNode): number =>
     Math.max(0, Math.min(1, (junction.gy - n.floorY) / Math.max(1, graph.depthBelowSurface)));
 
-  const group = new THREE.Group();
-  group.name = 'caveGen';
+  // -- Stage 1: the room graph + the RNG streams (cheap; the layout logic is consumed, never re-derived).
+  const doGraph = (): void => {
+    graph = generateCaveGraph(seed, junction, terrain);
+    const noise3 = createNoise3D(makeRng((seed ^ 0x5eed3d) >>> 0));
+    cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));   // colour/dressing noise stream
+    srand = makeRng((seed ^ 0x59e1e0) >>> 0);                   // speleothem placement RNG
+    frand = makeRng((seed ^ 0xf0091a) >>> 0);                   // fungi placement RNG (own stream)
 
-  const byId = (id: number): CaveNode => graph.nodes[id];
+    group = new THREE.Group();
+    group.name = 'caveGen';
+    meshes = []; decor = []; fungi = [];
 
-  // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems).
-  const dirsByNode = new Map<number, Array<{ x: number; z: number }>>();
-  const pushDir = (id: number, tx: number, tz: number): void => {
-    const n = byId(id); const d = Math.hypot(tx - n.x, tz - n.z) || 1;
-    (dirsByNode.get(id) ?? dirsByNode.set(id, []).get(id)!).push({ x: (tx - n.x) / d, z: (tz - n.z) / d });
+    const byId = (id: number): CaveNode => graph.nodes[id];
+    // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems).
+    dirsByNode = new Map<number, Array<{ x: number; z: number }>>();
+    const pushDir = (id: number, tx: number, tz: number): void => {
+      const n = byId(id); const d = Math.hypot(tx - n.x, tz - n.z) || 1;
+      (dirsByNode.get(id) ?? dirsByNode.set(id, []).get(id)!).push({ x: (tx - n.x) / d, z: (tz - n.z) / d });
+    };
+    for (const e of graph.edges) { pushDir(e.a, byId(e.b).x, byId(e.b).z); pushDir(e.b, byId(e.a).x, byId(e.a).z); }
+    { const n0 = byId(0); pushDir(0, n0.x - junction.heading.x, n0.z - junction.heading.z); }
+
+    // Weird mushrooms — seed 2-4 chambers (never every one), the egg + hall favoured (the "distinct
+    // landmark" rooms), the rest chosen by rng score. Deterministic (frand stream). Visual-only.
+    const fungiTarget = Tuning.CAVE_FUNGI_CHAMBERS_MIN
+      + Math.floor(frand() * (Tuning.CAVE_FUNGI_CHAMBERS_MAX - Tuning.CAVE_FUNGI_CHAMBERS_MIN + 1));
+    const fungiCandidates = graph.nodes
+      .filter((n) => n.kind !== 'entrance')
+      .map((n) => ({ id: n.id, score: (n.kind === 'egg' || n.kind === 'hall' ? 1 : 0) + frand() }))
+      .sort((a, b) => b.score - a.score);
+    fungiSet = new Set(fungiCandidates.slice(0, fungiTarget).map((c) => c.id));
+
+    // -- THE CAVE BODY (DEEPER cycle 2 — the only meshing path). One SDF built from THIS graph,
+    //    polygonized once into ONE consistently-wound watertight surface: no shells, no
+    //    interpenetration, no carve rims, one material, one winding. The dressing (dais, speleothems,
+    //    fungi) is untouched and still rides on the same nodes.
+    const depthOfY = (y: number): number =>
+      Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface)));
+    const surfaceY = (x: number, z: number): number => terrain.pureHeightAt(x, z);
+    sdfJob = startCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL, depthOfY, surfaceY);
+    benchNoise = noise3; benchDepthY = depthOfY; benchSurfaceY = surfaceY;
   };
-  for (const e of graph.edges) { pushDir(e.a, byId(e.b).x, byId(e.b).z); pushDir(e.b, byId(e.a).x, byId(e.a).z); }
-  { const n0 = byId(0); pushDir(0, n0.x - junction.heading.x, n0.z - junction.heading.z); }
 
-  const meshes: THREE.Mesh[] = [];            // baked into the trimesh collider (rule 9)
-  const decor: THREE.Mesh[] = [];             // visual-only (small speleothems + fungi; no collider, like scatter)
-  const fungi: CaveFungiCluster[] = [];       // UNDERWORLD cycle 3 — harvestable fungi clusters (E → alien_fruit)
-
-  // Weird mushrooms — seed 2-4 chambers (never every one), the egg + hall favoured (the "distinct
-  // landmark" rooms), the rest chosen by rng score. Deterministic (frand stream). Visual-only.
-  const fungiTarget = Tuning.CAVE_FUNGI_CHAMBERS_MIN
-    + Math.floor(frand() * (Tuning.CAVE_FUNGI_CHAMBERS_MAX - Tuning.CAVE_FUNGI_CHAMBERS_MIN + 1));
-  const fungiCandidates = graph.nodes
-    .filter((n) => n.kind !== 'entrance')
-    .map((n) => ({ id: n.id, score: (n.kind === 'egg' || n.kind === 'hall' ? 1 : 0) + frand() }))
-    .sort((a, b) => b.score - a.score);
-  const fungiSet = new Set(fungiCandidates.slice(0, fungiTarget).map((c) => c.id));
-
-  // ── THE CAVE BODY (DEEPER cycle 2 — the only meshing path). One SDF built from THIS graph,
-  //    polygonized once into ONE consistently-wound watertight surface: no shells, no interpenetration,
-  //    no carve rims, one material, one winding. The dressing (dais, speleothems, fungi) is untouched
-  //    and still rides on the same nodes. ──
-  const depthOfY = (y: number): number =>
-    Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface)));
-  const surfaceY = (x: number, z: number): number => terrain.pureHeightAt(x, z);
-  const sdf = buildCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL, depthOfY, surfaceY);
-  {
+  // -- Stage 3: the surface mesh + the dressing (dais / speleothems / fungi). Built OFF-SCENE.
+  const doDress = (): void => {
+    const sdf = sdfJob!.result();
+    msMesh = sdf.stats.msTotal;
     const mesh = new THREE.Mesh(sdf.geometry, _caveSurface);
     mesh.name = 'caveSdfSurface';
     mesh.castShadow = false; mesh.receiveShadow = true;
@@ -941,76 +996,103 @@ export function spawnCave(
     if (import.meta.env?.VITE_CAVE_SDF_BENCH === '1') {
       const bench = [sdf.stats];
       for (const v of [0.65, 0.35]) {
-        const r = buildCaveSdf(graph, junction, noise3, cnoise, v, depthOfY, surfaceY);
+        const r = buildCaveSdf(graph, junction, benchNoise!, cnoise, v, benchDepthY!, benchSurfaceY!);
         bench.push(r.stats); r.geometry.dispose();
       }
       bench.sort((a, b) => b.voxel - a.voxel);
       group.userData.caveSdfBench = bench;
       console.log('CAVE-SDF-BENCH ' + JSON.stringify(bench));
     }
-  }
 
-  for (const node of graph.nodes) {
-    const dT = depthOf(node);
-    // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
-    if (node.kind === 'egg') {
-      const dm = new THREE.Mesh(buildDais(node, cnoise, dT), _caveSolid);
-      dm.castShadow = false; dm.receiveShadow = true; dm.userData.eggDais = true;
-      group.add(dm); meshes.push(dm);
+    for (const node of graph.nodes) {
+      const dT = depthOf(node);
+      // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
+      if (node.kind === 'egg') {
+        const dm = new THREE.Mesh(buildDais(node, cnoise, dT), _caveSolid);
+        dm.castShadow = false; dm.receiveShadow = true; dm.userData.eggDais = true;
+        group.add(dm); meshes.push(dm);
+      }
+      addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
+      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
     }
-    addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
-    if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
-  }
-  scene.add(group);
-
-  // ONE trimesh collider baked from the EXACT visual triangles (rule 9): the SDF body surface, the
-  // dais + the player-scale (collider-bearing) speleothems in `meshes`. Small decor speleothems are
-  // visual-only (no collider, like scatter). Meshes are world-space (identity group) → body at origin.
-  // The bake is TIMED and reported (`msCollider`): at ~68k body triangles the Rapier trimesh build is
-  // the streaming-budget unknown cycle 1 flagged, so the number is measured, not assumed.
-  const tCol = performance.now();
-  const body = makeStaticTrimesh(world, meshes, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }, new THREE.Matrix4());
-  const msCollider = +(performance.now() - tCol).toFixed(1);
-
-  // Triangle count (perf report) — the full visual set incl. decor.
-  const allMeshes = meshes.concat(decor);
-  let triCount = 0;
-  for (const m of allMeshes) triCount += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
-
-  // Collider triangle count = exactly what was baked (rule 9: collision IS the visible geometry).
-  let colliderTris = 0;
-  for (const m of meshes) colliderTris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
-
-  const probe: CaveGenProbe = {
-    seed, eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
-    colliderTris, msCollider, msMesh: sdf.stats.msTotal,
-    digest: caveDigest(graph, allMeshes),
-    nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
-    edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),
-    tour: graph.tour,
-    junction,
   };
-  group.userData.caveGenProbe = probe;
 
-  // UNDERWORLD cycle 3 — egg dais top (where main.ts sets the companion egg) + deep loot-cache
-  // anchors. The egg chamber's dais rises 0.9m (buildDais H); the egg centre sits on top. Loot
-  // caches go on the floor of the egg chamber + the big hall (+ the deepest pocket if any) — the
-  // deepest, most dangerous rooms, so the cave EARNS its danger (battery-rich, per scarcity design).
-  const eggNode = graph.nodes[graph.eggId];
-  const eggDaisTop = new THREE.Vector3(eggNode.x, eggNode.floorY + 0.9 + 0.23, eggNode.z);
-  const lootAnchors: THREE.Vector3[] = [];
-  const floorAnchor = (n: CaveNode, frac: number, angOff: number): THREE.Vector3 => {
-    // A deterministic floor point offset from the chamber centre (clear of the central dais / mouths).
-    const ang = (n.id * 1.7 + angOff);
-    return new THREE.Vector3(n.x + Math.cos(ang) * n.rx * frac, n.floorY + 0.02, n.z + Math.sin(ang) * n.rx * frac);
+  // -- Stage 4: FINALIZE, atomic. ONE trimesh collider baked from the EXACT visual triangles (rule 9):
+  //    the SDF body surface, the dais + the player-scale (collider-bearing) speleothems in `meshes`.
+  //    Small decor speleothems are visual-only (no collider, like scatter). Meshes are world-space
+  //    (identity group) -> body at origin. The bake is TIMED and reported (`msCollider`): at ~68k body
+  //    triangles it is the streaming budget's one INDIVISIBLE cost, so it is measured, not assumed.
+  const doFinalize = (): void => {
+    const tCol = performance.now();
+    const body = makeStaticTrimesh(world, meshes, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }, new THREE.Matrix4());
+    const msCollider = +(performance.now() - tCol).toFixed(1);
+    scene.add(group);
+
+    // Triangle count (perf report) — the full visual set incl. decor.
+    const allMeshes = meshes.concat(decor);
+    let triCount = 0;
+    for (const m of allMeshes) triCount += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
+
+    // Collider triangle count = exactly what was baked (rule 9: collision IS the visible geometry).
+    let colliderTris = 0;
+    for (const m of meshes) colliderTris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
+
+    const probe: CaveGenProbe = {
+      seed, eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
+      colliderTris, msCollider, msMesh,
+      digest: caveDigest(graph, allMeshes),
+      nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
+      edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),
+      tour: graph.tour,
+      junction,
+    };
+    group.userData.caveGenProbe = probe;
+
+    // UNDERWORLD cycle 3 — egg dais top (where main.ts sets the companion egg) + deep loot-cache
+    // anchors. The egg chamber's dais rises 0.9m (buildDais H); the egg centre sits on top. Loot
+    // caches go on the floor of the egg chamber + the big hall (+ the deepest pocket if any) — the
+    // deepest, most dangerous rooms, so the cave EARNS its danger (battery-rich, per scarcity design).
+    const eggNode = graph.nodes[graph.eggId];
+    const eggDaisTop = new THREE.Vector3(eggNode.x, eggNode.floorY + 0.9 + 0.23, eggNode.z);
+    const lootAnchors: THREE.Vector3[] = [];
+    const floorAnchor = (n: CaveNode, frac: number, angOff: number): THREE.Vector3 => {
+      // A deterministic floor point offset from the chamber centre (clear of the central dais / mouths).
+      const ang = (n.id * 1.7 + angOff);
+      return new THREE.Vector3(n.x + Math.cos(ang) * n.rx * frac, n.floorY + 0.02, n.z + Math.sin(ang) * n.rx * frac);
+    };
+    lootAnchors.push(floorAnchor(eggNode, 0.6, 0));                       // egg chamber (deepest)
+    const hallNode = graph.nodes.find((n) => n.kind === 'hall');
+    if (hallNode) lootAnchors.push(floorAnchor(hallNode, 0.55, 1.3));     // the big gallery
+    const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
+    if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
+
+    out = { group, body, graph, probe, fungi, eggDaisTop, lootAnchors };
   };
-  lootAnchors.push(floorAnchor(eggNode, 0.6, 0));                       // egg chamber (deepest)
-  const hallNode = graph.nodes.find((n) => n.kind === 'hall');
-  if (hallNode) lootAnchors.push(floorAnchor(hallNode, 0.55, 1.3));     // the big gallery
-  const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
-  if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
 
-  return { group, body, graph, probe, fungi, eggDaisTop, lootAnchors };
+  const step = (budgetMs: number): boolean => {
+    const deadline = budgetMs === Infinity ? Infinity : performance.now() + budgetMs;
+    while (stage !== 'done') {
+      if (stage === 'graph') { doGraph(); stage = 'sdf'; }
+      else if (stage === 'sdf') { if (!sdfJob!.step(budgetMs)) return false; stage = 'dress'; }
+      else if (stage === 'dress') { doDress(); stage = 'finalize'; }
+      else if (stage === 'finalize') { doFinalize(); stage = 'done'; }
+      if (performance.now() >= deadline) break;
+    }
+    return stage === 'done';
+  };
+
+  return {
+    step,
+    // The SDF sub-stage is exposed (`sdf:field`, `sdf:geom`, …) so the scheduler can classify a step
+    // as DIVISIBLE (budgetable) or INDIVISIBLE (`sdf:geom` = computeVertexNormals, `dress`, and
+    // `finalize` = the Rapier trimesh bake). Reporting one blended "slice" number would let a 90ms
+    // atomic bake hide inside the slice budget.
+    stage: () => (stage === 'sdf' && sdfJob ? `sdf:${sdfJob.stage()}` : stage),
+    result: () => {
+      if (!out) throw new Error('caveGen: result() before the spawn completed');
+      return out;
+    },
+  };
 }
 
 /** Determinism digest: FNV-1a over the graph (rounded node/edge fields + egg) AND a checksum of

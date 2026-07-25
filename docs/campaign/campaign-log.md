@@ -6,6 +6,115 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 5 — the cave build stops hitching: boot preload + frame-budgeted slicing (2026-07-25) — SHIPPED
+
+- **Planned:** walk-test **D-4** — preload the origin cave behind the loading screen; slice streamed
+  cave builds on the S6/D296 pattern; add a resident-interior cap that never unloads the cave the
+  player is standing in; gate all three inside `chunk-perf` with real tripwires.
+
+- **⚠ THE FIRST FINDING INVERTS HALF THE TICKET.** The origin/egg cave was **already built at boot**
+  — `spawnCave` runs at `main.ts` module scope, before the first frame is ever presented — so it has
+  never been able to hitch gameplay. What was missing was not the preload but the **loading screen**:
+  the browser showed a blank page for the whole ~4.6s boot, so the 1.3s of cave build read as "the
+  game is slow to load in". Shipped `#boot-overlay` in `index.html` — inline-styled so it paints
+  BEFORE the module bundle (whose CSS arrives too late to cover boot) and removed on the last line of
+  `main.ts`. Measured: **boot 4562.6ms, of which the cave is 1311.9ms (tor 152.3 + body 1159.5) =
+  28.7%.** The cost is real, it is covered, and it is now instrumented (`__cavePreloadMs`, the
+  `cave:entrance` / `cave:body` marks in `__bootT`).
+
+- **THE SLICER — one code path, two drivers.** `buildCaveSdf` and `spawnCave` are now thin wrappers
+  that drive `startCaveSdf` / `startSpawnCave` with an infinite budget. The sliced driver runs the
+  SAME job with `CAVE_BUILD_SLICE_MS` (8ms). Nothing was re-implemented, so the synchronous and
+  sliced outputs cannot diverge by construction — and the gate proves it rather than trusting it.
+  Stages, in run order:
+
+  | stage | divisible? | resume granularity |
+  |---|---|---|
+  | `graph` | no (~1ms) | — |
+  | `sdf:field` | **yes** | one 8³-voxel block (~0.02ms), loop linearized, order unchanged |
+  | `sdf:cells` | **yes** | one k-plane of the surface-nets vertex pass |
+  | `sdf:quads` | **yes** | one (axis, k) plane of the quad pass |
+  | `sdf:cut` | **yes** | 3k triangles of the sky-rim cut |
+  | `sdf:geom` | **no** | `computeVertexNormals` is one pass inside three.js |
+  | `sdf:color` | **yes** | 7k vertices |
+  | `dress` | no | the speleothem/fungi kit |
+  | `finalize` | **no** | the Rapier trimesh bake **+ `scene.add` in the SAME step** |
+
+  **Atomic finalize** (the terrain-tile precedent): nothing enters the scene and no collider exists
+  until the last step, so a half-built cave is never visible and never collidable, and "visible but
+  not solid" cannot exist for even one frame (rule 9).
+
+- **MEASURED, before → after** (seed 1337, GPU headless, the `chunk-perf` walk):
+
+  | | before (sync) | after (sliced) |
+  |---|---|---|
+  | worst frame of a streamed cave build | **~1160ms** (the whole body build, ~70 frames of hitch) | **90.5ms observed** |
+  | worst DIVISIBLE slice step | n/a | **17.7ms** (budget 8ms) |
+  | worst INDIVISIBLE step | n/a | **97.6ms — `finalize`, the Rapier trimesh bake** |
+  | steps per build | 1 | ~84 (671 steps / 8 caves) |
+
+  **The honest ceiling, stated plainly: ~90-100ms is the floor and no slicer can lower it.** A
+  `ColliderDesc.trimesh` call over ~70k triangles cannot be chopped — it is one call into WASM. So a
+  streamed cave costs **one dropped frame (~5-6 frames at 60fps), not seventy.** That is a 13× cut,
+  not a fix. The remaining levers, none taken this cycle: a coarser voxel for far caves (0.65m was
+  ~2.4× cheaper in cycle 1's table and would cut the collider triangles with it), a convex-decomposed
+  or heightfield-per-chamber collider instead of one trimesh, or building the collider off-thread.
+  The two budgets are reported and gated **separately** so the 97ms bake can never hide inside the
+  slice budget, and the divisible tripwire (20ms) is deliberately above the 8ms budget: a stage step
+  always finishes the chunk it started, and the coarsest chunk is ~10ms of `pureHeightAt`.
+
+- **THE RESIDENT CAP.** `CAVE_RESIDENT_MAX` = 3 interiors (each ~95k visual tris + a ~70k-tri static
+  trimesh). Eviction is farthest-first, and **three things are never evicted**: a `pinned` cave (the
+  origin/egg cave, which owns the carved terrain hole and the companion egg), the cave whose padded
+  bounds contain the player (`CAVE_EVICT_MARGIN_M`), and anything inside `CAVE_EVICT_MIN_DIST_M`
+  (260m — you can see the mouth from there). If every resident is protected the cap is simply not
+  enforced that frame: **a soft cap can never cause a fall-through, and a hard one could.** Teardown
+  disposes geometries and removes the rigid body (rule 9 — no orphaned collider under vanished rock).
+
+- **THE GATE — `chunk-perf` extended, plus a new boot-only `cave-preload` leg** (both in
+  `verify:chunks`, so both run in `verify:all` every session). What it asserts, and the tripwire
+  behind each — because "green because nothing built" is the failure mode this project keeps hitting:
+  - `builds === N` and every new resident has **>0 visual AND >0 collider triangles** — a cave that
+    silently didn't build cannot pass.
+  - `steps ≥ 100` for 4 caves — a build that reverted to one synchronous call reports **1** step and
+    a ~1160ms max, so slicing cannot be quietly lost.
+  - divisible slice ≤ 20ms · **indivisible ≤ 170ms, named by stage** · worst **observed rAF gap**
+    ≤ 260ms, measured independently of the counters so a cost they miss still shows.
+  - the cap **evicted** (`evictions ≥ 1`, `residents ≤ 3`), the **pinned** origin cave survived, and
+    with the player held INSIDE a far cave: that cave is still resident, `occupiedEvictionsBlocked`
+    actually incremented (else the guard was never exercised — a vacuous pass), and a second eviction
+    round really ran.
+  - **the digest contract**: the origin cave's exact junction+seed is rebuilt through the SLICED path
+    and its `caveDigest` must equal the synchronously-preloaded original's.
+  - `cave-preload` runs at BOTH flag states: ON → preload record exists, origin resident is pinned
+    with real triangles, `#boot-overlay` came down; **`--cave=0` → no preload record, no residents,
+    and the flag-off world still boots** (the shipped kill-switch cannot be regressed by the preload).
+  - **Proven able to fail**: the first `chunk-perf` run went RED on the digest-clone tripwire
+    (`the sliced digest-clone cave never built`) — the clone was evicted by the cap in the same frame
+    it finalized. Real bug in the probe, caught by the gate, fixed by standing the player at the site.
+
+- **`caveDigest` UNCHANGED — measured, not asserted.** A git worktree at the pre-cycle-5 commit
+  (`5433227`) reports seed 1337 `digest=a5d75db9 nodes=11 tris=94927`; after the refactor the same
+  scenario reports **`a5d75db9`, 94927 tris**, and the sliced rebuild of the same junction reports
+  `a5d75db9` too. Slicing changed when work runs, nothing about what it computes.
+
+- **HONEST READ — can several caves build during travel?** At the cycle-8 density: **yes, with a
+  caveat.** One in-flight build at a time, ~84 sliced steps at ≤18ms plus one ~97ms finalize frame
+  ≈ 1.4s of wall clock per cave with a single visible stutter. Three caves entering the ring
+  back-to-back queue up and cost three stutters over ~4s — noticeable on a fast traverse (speeder,
+  sled), acceptable on foot. **What would break it is a cave building every few seconds**, i.e.
+  uniform density at speed. If Zach's playtest finds the stutter objectionable the cheap fix is a
+  coarser far-cave voxel (fewer collider triangles → a smaller atomic bake), and only after that does
+  the clustered "cave country" scope-cut come into play. **Not taken here — it is Zach's call.**
+
+- **Constraints held:** room-graph layout logic untouched · collider still baked from the same
+  triangles · `VITE_CAVE=0` still kills the whole feature (now gate-proven) · determinism (D290)
+  preserved and digest-verified · no `git stash`, push held.
+- **GATES.** `npm run verify:all` **GREEN**, every leg, run end-to-end once at the end.
+  `cave-void` **0.00%** both seeds. `cave-walk` PASS both seeds, `ascent=OUT`, digest stable ×2.
+- **Commit:** `PENDING`. **Next:** cycle 6 — water pools (the first new-content cycle; Zach asked
+  for it by name).
+
 ## Cycle 3 — surface character restored; the seed net proven 6/6 (2026-07-25) — SHIPPED
 
 - **Planned:** re-run the two cycle-2 probe hangs · restore the carved-rock read the shell kit had,

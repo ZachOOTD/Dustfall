@@ -51,6 +51,7 @@ import { addItem } from '../inventory/inventory.ts';   // crafting rework — gi
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 import { FEATURES } from '../config/features.ts';        // Underworld review — gotoCave flag gate
 import { caveEntranceSite } from '../world/caveEntrance.ts';     // Underworld review — gotoCave warp target
+import { farCaveJunction } from '../world/caveStream.ts';        // DEEPER cycle 5 — streamed-cave probe hook
 
 declare global {
   interface Window {
@@ -465,6 +466,23 @@ interface DebugApi {
     chunks: { loads: number; maxLoadMs: number; maxPoiLoadMs: number; maxLandmarkLoadMs: number };
   };
   resetChunkPerf: () => void;
+  /** DEEPER cycle 5 (D-4) — cave build-budget + resident-cap probe hooks. */
+  cavePerf: () => {
+    stream: {
+      steps: number; builds: number; maxSliceMs: number; maxAtomicMs: number;
+      worstAtomicStage: string; maxStepMs: number;
+      evictions: number; evictionsRefused: number; occupiedEvictionsBlocked: number;
+    } | null;
+    residents: Array<{ key: string; pinned: boolean; x: number; z: number; tris: number; colliderTris: number; digest: string }>;
+    pending: { key: string; stage: string } | null;
+    queued: number;
+    /** Boot preload cost of the ORIGIN cave (entrance tor + cave body), ms. */
+    preload: { entrance: number; body: number; total: number } | null;
+  };
+  resetCavePerf: () => void;
+  /** Queue a STREAMED cave build at a world site (cycle 8 supplies real sites; this is the hook the
+   *  chunk-perf gate drives). Returns the resident key, or null with the cave flag off. */
+  requestCave: (x: number, z: number, seed: number) => string | null;
 }
 
 /** Hooks main.ts supplies for actions that need its boot-scope closures
@@ -1054,6 +1072,22 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     chunkPerf: () => ({ terrain: ctx.terrain.perfStats(), chunks: ctx.chunks.stats().perf }),
     resetChunkPerf: () => { ctx.terrain.resetPerf(); ctx.chunks.resetPerf(); },
+    cavePerf: () => ({
+      stream: ctx.caveStream ? ctx.caveStream.perf() : null,
+      residents: (ctx.caveStream?.residents() ?? []).map((r) => ({
+        key: r.key, pinned: r.pinned,
+        x: +r.center.x.toFixed(1), z: +r.center.z.toFixed(1),
+        tris: r.cave.probe.triCount, colliderTris: r.cave.probe.colliderTris, digest: r.cave.probe.digest,
+      })),
+      pending: ctx.caveStream?.pending() ?? null,
+      queued: ctx.caveStream?.queued() ?? 0,
+      preload: (window as unknown as { __cavePreloadMs?: { entrance: number; body: number; total: number } }).__cavePreloadMs ?? null,
+    }),
+    resetCavePerf: () => { ctx.caveStream?.resetPerf(); },
+    requestCave: (x, z, seed) => {
+      if (!ctx.caveStream) return null;
+      return ctx.caveStream.request(`far:${Math.round(x)},${Math.round(z)}`, farCaveJunction(ctx.terrain, x, z), seed >>> 0);
+    },
     castDown(x, z, fromY = 100, excludePlayer = false) {
       // excludePlayer (M7-S2 walk probe): a ray cast from the capsule's own
       // center otherwise hits the capsule at TOI 0 — the S1 probe lesson.

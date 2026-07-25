@@ -7,6 +7,16 @@
     <title>Dustfall</title>
   </head>
   <body>
+    <!-- DEEPER cycle 5 (walk-test D-4: "preload the caves on the starting loading screen") — the BOOT
+         loading screen. Painted by the browser BEFORE /src/main.ts executes, so it covers the whole
+         synchronous boot: terrain ring, the entrance tor, and the ~1.2s origin-cave polygonization +
+         collider bake. main.ts removes it on the last line of module init. Styles are INLINE on
+         purpose: the stylesheet is injected by the module bundle, i.e. too late to cover boot. -->
+    <div id="boot-overlay" style="position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at 50% 55%,#2b2118 0%,#140f0b 70%,#0b0806 100%);color:#e8d9c0;font-family:'Courier New',monospace;letter-spacing:0.32em">
+      <div style="font-size:34px;font-weight:700">DUSTFALL</div>
+      <div style="font-size:12px;opacity:0.55;letter-spacing:0.22em">carving the underworld</div>
+    </div>
+
     <div id="hud">
       <div id="stats">
         <div class="stat-block">
