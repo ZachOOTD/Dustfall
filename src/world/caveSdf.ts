@@ -197,6 +197,7 @@ export function buildCaveSdf(
   const SMOOTH_FLOOR_MIN = T.CAVE_SDF_SMOOTH_FLOOR;
   const SMOOTH_BAND = T.CAVE_SDF_SMOOTH_BAND;
   const AMP_OUT = T.CAVE_GEN_DISP_AMP, AMP_IN = T.CAVE_GEN_DISP_IN, FREQ = T.CAVE_GEN_DISP_FREQ;
+  const MAMP = T.CAVE_SDF_MICRO_AMP, MFREQ = T.CAVE_SDF_MICRO_FREQ;
   const BAND = voxel * 2 + SMOOTH + AMP_OUT + 0.5;          // "near the surface" half-width
 
   // ── Grid AABB from the padded primitive bounds. ──
@@ -270,6 +271,15 @@ export function buildCaveSdf(
                   v += noise3(wx * FREQ * 5.9 + 41, wy * FREQ * 5.9, wz * FREQ * 5.9 + 13) * 0.13;
                   d -= (v >= 0 ? v * AMP_OUT : v * AMP_IN) * at;
                 }
+                // DEEPER cycle 3 — MICRO-RELIEF, deliberately NOT floor-attenuated. See the tuning
+                // note: the big octaves are attenuated to zero on walkable floors (the 32.4° fix),
+                // which leaves them perfectly planar — a flat-shaded plane has one normal and reads
+                // as brown mud. This term is sized so its own worst-case gradient is ~6°, so it
+                // cannot push a 22° ramp near the 32° ceiling, and its wavelength is ~5.5 voxels so
+                // the grid resolves it as facets rather than aliasing into noise.
+                const mv = noise3(wx * MFREQ + 71, wy * MFREQ * 1.35, wz * MFREQ + 29) * 0.68
+                         + noise3(wx * MFREQ * 2.2 + 7, wy * MFREQ * 2.2, wz * MFREQ * 2.2 + 53) * 0.32;
+                d -= mv * MAMP;
               }
               field[o] = d;
               evaluated++;
@@ -390,8 +400,10 @@ export function buildCaveSdf(
   for (let v = 0; v < nv; v++) {
     const wy = vy[v];
     const up = nrm.getY(v);
-    const role: 'wall' | 'ceiling' | 'floor' = up > 0.55 ? 'floor' : up < -0.4 ? 'ceiling' : 'wall';
-    caveVertexColor(role, vx[v], wy, vz[v], depthOf(wy), cnoise, c);
+    // DEEPER cycle 3 — pass the RAW normal Y, not a hard-thresholded role: the threshold flipped
+    // adjacent vertices between wall and ceiling across the displaced surface and produced the
+    // smoke-mottle (see caveVertexColor). The role argument is now only the no-`up` fallback.
+    caveVertexColor('wall', vx[v], wy, vz[v], depthOf(wy), cnoise, c, up);
     col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -422,23 +434,56 @@ export function buildCaveSdf(
  *  speleothems in caveGen.ts. */
 export function caveVertexColor(
   role: 'wall' | 'ceiling' | 'floor', wx: number, wy: number, wz: number,
-  depthT: number, cn: Noise3, out: THREE.Color,
+  depthT: number, cn: Noise3, out: THREE.Color, up?: number,
 ): void {
   const L = (a: number, b: number, t: number): number => a + (b - a) * t;
   let r = L(0.315, 0.235, depthT), g = L(0.285, 0.245, depthT), b = L(0.255, 0.275, depthT);
+  // DEEPER cycle 3 — SHARPER STRATA. Cycle 2's band was one ±10% sine at a 7.4m vertical wavelength,
+  // which across a smooth surface interpolates into an invisible gradient. Two scales now (a broad
+  // 7.4m formation + a 2.0m bedding set), each pushed through a `sharp` power curve so the sine reads
+  // as a LAYER with an edge rather than a soft wash, and the contrast is roughly doubled. The bands
+  // are wobbled by low-frequency noise so they don't read as a machined stripe pattern.
+  const sharp = (s: number): number => (s < 0 ? -1 : 1) * Math.pow(Math.abs(s), 0.5);
   const bandN = cn(wx * 0.02, 0, wz * 0.02) * 1.4;
-  const bl = 1 + Math.sin(wy * 0.85 + bandN) * 0.10;
+  const bandM = cn(wx * 0.045 + 31, wy * 0.01, wz * 0.045 + 17) * 2.2;
+  const bl = 1 + sharp(Math.sin(wy * 0.85 + bandN)) * 0.17
+               + sharp(Math.sin(wy * 3.1 + bandM)) * 0.10;
   r *= bl; g *= bl; b *= bl;
+  // Fine rock GRAIN everywhere (cycle 2 had this on the floor only). High-frequency value noise —
+  // at 0.45m vertex spacing it lands roughly per-facet, so it breaks the large flat panels the
+  // faceted surface would otherwise show as single uniform values.
+  const grain = cn(wx * 0.8 + 3, wy * 0.8 + 61, wz * 0.8 + 23) * 0.045;
+  r += grain; g += grain; b += grain;
   const stain = cn(wx * 0.055 + 11, wy * 0.055, wz * 0.055 + 7);
   const warm = Math.max(0, stain) * 0.55;
   r = L(r, 0.40, warm); g = L(g, 0.235, warm * 0.85); b = L(b, 0.145, warm * 0.9);
   const cool = Math.max(0, -stain) * 0.32;
   r = L(r, 0.195, cool); g = L(g, 0.235, cool); b = L(b, 0.30, cool);
-  if (role === 'ceiling') { r *= 0.58; g *= 0.62; b *= 0.72; }
-  else if (role === 'floor') {
-    const sand = Math.max(0, cn(wx * 0.10 + 5, 3.7, wz * 0.10 + 9)) * 0.9;
+  // DEEPER cycle 3 — THE SMOKE ARTEFACT. Cycle 2 picked `role` with a HARD threshold on the surface
+  // normal (`up > 0.55` floor / `up < -0.4` ceiling). On the SDF surface the normal carries the rock
+  // displacement, so across a bumpy ceiling adjacent vertices flip between 'wall' and 'ceiling' —
+  // a ×0.58 value step applied per-vertex at random, which interpolates into exactly the grey-brown
+  // MOTTLE that made the cycle-2 shots read as smoke rather than rock. Fixed two ways: the caller
+  // now passes the raw normal Y and the role weights ramp SMOOTHLY over it, and the ceiling
+  // darkening is shallower (a ceiling is dimmer, not a different rock). The role names survive for
+  // the dais/speleothem callers, which pass a fixed face role.
+  const ss = (e0: number, e1: number, x: number): number => {
+    const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+    return t * t * (3 - 2 * t);
+  };
+  const cwt = up === undefined ? (role === 'ceiling' ? 1 : 0) : ss(-0.10, -0.85, up);
+  const fwt = up === undefined ? (role === 'floor' ? 1 : 0) : ss(0.25, 0.85, up);
+  if (cwt > 0) { r *= 1 - cwt * 0.30; g *= 1 - cwt * 0.27; b *= 1 - cwt * 0.20; }
+  if (fwt > 0) {
+    // DEEPER cycle 3 — the floor sediment was ONE 10m-wavelength blob at 0.9 strength, which on a
+    // geometrically flat floor rendered as an enormous featureless beige wash (the "mudflat" read in
+    // the cycle-2 shots). Same pooled-sand idea, now weaker overall and broken by a 3m octave so it
+    // reads as drifts between exposed rock instead of a fog bank.
+    let sand = Math.max(0, cn(wx * 0.10 + 5, 3.7, wz * 0.10 + 9)) * 0.72;
+    sand *= 0.62 + 0.38 * Math.max(0, cn(wx * 0.33 + 27, 8.1, wz * 0.33 + 4) + 0.35);
+    sand = Math.min(1, sand) * fwt;
     r = L(r, 0.52, sand); g = L(g, 0.43, sand); b = L(b, 0.28, sand);
-    const gr = cn(wx * 0.9, 1.3, wz * 0.9) * 0.035;
+    const gr = cn(wx * 1.6, 1.3, wz * 1.6) * 0.05 * fwt;
     r += gr; g += gr; b += gr;
   }
   out.setRGB(Math.max(0.02, r), Math.max(0.02, g), Math.max(0.02, b)).convertSRGBToLinear();

@@ -731,9 +731,84 @@ const _caveSolid = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors
 // The cave BODY surface (DEEPER cycle 2 — the only path). ONE watertight mesh, normals wound INTO
 // the cavity, so FrontSide is unambiguously correct everywhere (the whole point: no half of the kit
 // wound the other way; the shipped shells were wound both ways under one BackSide material and leaked
-// 53.6% of eye-height rays). Smooth-shaded — surface nets is a manifold, so computeVertexNormals
-// gives continuous normals and flat shading would only expose the voxel grid.
-const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side: THREE.FrontSide });
+// 53.6% of eye-height rays).
+// DEEPER cycle 3 R1 — SURFACE CHARACTER. Cycle 2 shipped this smooth-shaded and reported the honest
+// regression: the shell kit was `flatShading: true` (crisp carved facets) and the smooth SDF surface
+// read as a soft brown wash — the flat-shaded dais out-read the whole cavern. R1 tests the direct
+// analogue: full flat shading at 0.45m voxels.
+const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
+
+// DEEPER cycle 3 R4 — ROCK MICRO-RELIEF, in the shader. R1-R3 established the ceiling: at
+// CAVE_SDF_VOXEL = 0.45m the polygonized surface simply CANNOT carry detail below ~1.2m — the third
+// displacement octave sits under Nyquist and surface nets smooths it away — so at torch range (the
+// player's real read, `scen-*-dark-torch-hall.png`) the wall was a featureless soft-focus blob no
+// matter what the SDF did. Halving the voxel was rejected: cycle 1 measured 0.35m at 113.6k tris /
+// 1509ms against a streaming budget that is already the campaign's flagged risk, for detail that is
+// still only ~0.9m. So the sub-metre read is done as a normal perturbation instead: zero triangles,
+// zero collider change (rule 9 stays trivially satisfied — the collider is baked from geometry this
+// never touches), no new material program beyond this one, and it works at ANY view distance.
+//
+// R4 TRIED a sum of directional sine waves (exact analytic gradient, ~7 trig ops — far cheaper than a
+// hashed noise). It FAILED visibly and is recorded here so it isn't retried: even domain-warped, six
+// waves resolve into oriented ZEBRA BANDING across a large curved surface — the r4 shots read as wood
+// grain, not rock. A bump field for rock has to be genuinely isotropic, so R5 uses a hashed 3D value
+// noise with a forward-difference gradient. Two octaves at 0.6m and 0.22m — the band between "what
+// the 0.45m voxel grid already carries" and "finer than the player can resolve at torch range".
+// `uCaveBump` is a uniform so strength is tunable without a second program (D-note: don't compile a
+// new shader for something a uniform can do).
+// ⚠ PERF: this is ~8 value-noise evaluations (64 hashes) per cave fragment. It is confined to the one
+// cave-surface program and rolled off hard with distance, but it is the cycle's one real perf risk
+// and is flagged as such rather than assumed free.
+const _caveBumpU = { value: Tuning.CAVE_ROCK_BUMP };
+_caveSurface.onBeforeCompile = (shader): void => {
+  shader.uniforms.uCaveBump = _caveBumpU;
+  shader.vertexShader = 'varying vec3 vCaveWPos;\n' + shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    '#include <begin_vertex>\n  vCaveWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+  );
+  shader.fragmentShader = `
+    varying vec3 vCaveWPos;
+    uniform float uCaveBump;
+    float caveHash(vec3 p) {
+      p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
+      p *= 17.0;
+      return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+    }
+    float caveVN(vec3 x) {
+      vec3 i = floor(x), f = fract(x);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(caveHash(i + vec3(0,0,0)), caveHash(i + vec3(1,0,0)), f.x),
+                     mix(caveHash(i + vec3(0,1,0)), caveHash(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(caveHash(i + vec3(0,0,1)), caveHash(i + vec3(1,0,1)), f.x),
+                     mix(caveHash(i + vec3(0,1,1)), caveHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+    }
+    // Two octaves: 0.6m grit over 0.22m tooth. Amplitudes chosen so the finer octave contributes
+    // roughly the same SLOPE as the coarser (a·f near-constant), which is the fBm-for-rock case.
+    float caveRockH(vec3 p) {
+      return caveVN(p * 1.65) * 0.62 + caveVN(p * 4.60 + 31.7) * 0.24;
+    }
+    vec3 caveRockGrad(vec3 p) {
+      const float E = 0.035;
+      float h = caveRockH(p);
+      return vec3(caveRockH(p + vec3(E,0.0,0.0)) - h,
+                  caveRockH(p + vec3(0.0,E,0.0)) - h,
+                  caveRockH(p + vec3(0.0,0.0,E)) - h) / E;
+    }
+  ` + shader.fragmentShader.replace(
+    '#include <normal_fragment_begin>',
+    `#include <normal_fragment_begin>
+    {
+      // Distance fade: past a few metres the finest octaves alias into shimmer, so the perturbation
+      // is rolled off by the on-screen world-space footprint. Big forms keep reading at range; the
+      // grit only exists where the player can actually resolve it.
+      float foot = length(fwidth(vCaveWPos));
+      float fade = 1.0 / (1.0 + foot * 24.0);
+      vec3 gg = caveRockGrad(vCaveWPos) * (uCaveBump * fade);
+      normal = normalize(normal - (gg - normal * dot(gg, normal)));
+    }`,
+  );
+};
+_caveSurface.customProgramCacheKey = (): string => 'caveRockBump-v1';
 
 export interface CaveGenProbe {
   seed: number;

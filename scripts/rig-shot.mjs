@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-mouth' || SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -2914,201 +2914,30 @@ const SCENARIOS = {
     });
     console.log(`[cave-walk] MOUTH-AREA MESH SCAN: ${JSON.stringify(redScan)}`);
 
-    // ── Screenshots: the mouth, trunk descent, a squeeze corridor, the large hall, the egg
-    //    chamber, and looking back up a junction (the cycle-3 blockout set). ──
-    const geo = await page.evaluate(() => {
-      const ctx = window.__game.ctx; let p = null, b = null;
-      ctx.three.scene.traverse((o) => {
-        if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe;
-        if (o.userData && o.userData.caveTestProbe) b = o.userData.caveTestProbe;
-      });
-      if (!p) return null;
-      const egg = p.nodes.find((n) => n.id === p.eggId);
-      const hall = p.nodes.find((n) => n.kind === 'hall') || p.nodes.find((n) => n.kind === 'entrance');
-      const ent = p.nodes.find((n) => n.kind === 'entrance');
-      const squeeze = p.edges.find((e) => e.squeeze);
-      const na = squeeze ? p.nodes.find((n) => n.id === squeeze.a) : null;
-      const nb = squeeze ? p.nodes.find((n) => n.id === squeeze.b) : null;
-      // a trunk corridor for the descent shot: entrance's first child
-      const firstEdge = p.edges.find((e) => e.a === ent.id) || p.edges[0];
-      const t0 = p.nodes.find((n) => n.id === firstEdge.a), t1 = p.nodes.find((n) => n.id === firstEdge.b);
-      return { egg, hall, ent, na, nb, t0, t1, mouthX: b.mouthX, gy: b.gy, cz: b.centerZ, chamberFarX: b.chamberFarX, floor: b.chamberFloorY };
-    });
-    const shoot = async (spec, name) => {
-      // Set up + LEAVE it (the render loop keeps rendering the paused scene with this camera, so
-      // the setup must persist through the screenshot); restore in a second pass afterward.
-      await page.evaluate((s) => {
-        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
-        ctx.flags.paused = true;
-        ctx.three.renderer.toneMappingExposure = s.exp;
-        const cam = ctx.three.camera;
-        cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
-        cam.lookAt(s.look[0], s.look[1], s.look[2]);
-        cam.updateMatrixWorld(true);
-        const st = { hidden: [], fill: null, amb: null, bg: ctx.three.scene.background, fog: ctx.three.scene.fog };
-        // INTERIOR shots: hide everything but the cave group + dark background, so the one-sided
-        // terrain sheet (seen straight through from underground → sky/desert) doesn't fill the frame.
-        if (s.interior) {
-          let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
-          if (caveGrp) {
-            ctx.three.scene.traverse((o) => {
-              if (!o.isMesh) return;
-              let inCave = false; for (let p = o; p; p = p.parent) if (p === caveGrp) { inCave = true; break; }
-              if (!inCave && o.visible) { st.hidden.push(o); o.visible = false; }
-            });
-            ctx.three.scene.background = new THREE.Color(0x0a0806);
-            ctx.three.scene.fog = null;
-            // Flat fill ambient so the greybox rock reads evenly (a point light alone leaves the far
-            // walls of a big chamber black); the fill lamp below adds a little warm shape on top.
-            st.amb = new THREE.AmbientLight(0xb9b0a4, 0.85);
-            ctx.three.scene.add(st.amb);
-          }
-        }
-        if (s.fill) {
-          st.fill = new THREE.PointLight(0xffe6c0, s.fill.intensity, s.fill.dist, 1.4);
-          st.fill.position.set(s.fill.pos[0], s.fill.pos[1], s.fill.pos[2]);
-          ctx.three.scene.add(st.fill);
-        }
-        // UNDERWORLD cycle 3 — render the companion EGG on the dais for the proof shot. DEV boots
-        // set companionAcquired → the real ctx.egg is removed at handoff, so build a faithful stand-in
-        // (same geometry/material as buildCompanionEgg) at the dais top. Added to the cave group so the
-        // interior-hide keeps it. Cleaned up in restore.
-        if (s.showEgg) {
-          let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
-          const em = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14),
-            new THREE.MeshStandardMaterial({ color: 0xcab89a, roughness: 0.55, emissive: 0x6a4420, emissiveIntensity: 1.2 }));
-          em.scale.set(1, 1.4, 1);
-          em.position.set(s.showEgg[0], s.showEgg[1], s.showEgg[2]);
-          (caveGrp || ctx.three.scene).add(em); st.egg = em;
-        }
-        ctx.three.renderer.render(ctx.three.scene, cam);
-        window.__shotRestore = st;
-      }, spec);
-      await page.waitForTimeout(240);
-      try { await page.screenshot({ path: join(OUT, `scen-cave-walk-${name}.png`), fullPage: false, timeout: 60000 }); console.log(`[cave-walk] saved scen-cave-walk-${name}.png`); }
-      catch (e) { console.log(`[cave-walk] ${name} shot flaked (${e.name})`); }
-      await page.evaluate(() => {
-        const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
-        if (st.fill) ctx.three.scene.remove(st.fill);
-        if (st.amb) ctx.three.scene.remove(st.amb);
-        if (st.egg && st.egg.parent) st.egg.parent.remove(st.egg);
-        for (const o of st.hidden) o.visible = true;
-        ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
-        window.__shotRestore = null;
-      });
-    };
-    // UNDERWORLD cycle 2 — DARK-TRUTH shots. Unlike the geometry shots above (rig-only flat fill so
-    // the greybox reads), these prove the REAL darkness + light model: NO rig fill/ambient. Instead
-    // they drive the SHIPPING light objects at their real tuning — the cave darkness floors on
-    // ambient/sun/moon, the near-black cave fog, the player's real torch (heldPointLight) for the
-    // torch-lit shot, and the atmosphere's mouth SHAFT SpotLight. So a torch-lit hall shows the warm
-    // pool + speleothem shadows; an unlit corridor is near-black; the shaft shot shows daylight down
-    // the ramp. These use ONLY objects that ship (no probe-invented lights).
-    const shootDark = async (spec, name) => {
-      await page.evaluate((s) => {
-        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
-        ctx.flags.paused = true;
-        ctx.three.renderer.toneMappingExposure = s.exp;
-        const cam = ctx.three.camera;
-        cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
-        cam.lookAt(s.look[0], s.look[1], s.look[2]);
-        cam.updateMatrixWorld(true);
-        const L = ctx.lights; const T = g.Tuning;
-        const st = {
-          hidden: [], bg: ctx.three.scene.background, fog: ctx.three.scene.fog,
-          amb: L.ambient.intensity, sun: L.sun.intensity, moon: L.moon.intensity,
-          torchI: ctx.player.viewModel ? ctx.player.viewModel.heldPointLight.intensity : 0,
-          shaftI: ctx.caveAtmosphere ? ctx.caveAtmosphere.shaft.intensity : 0,
-          shaftV: ctx.caveAtmosphere ? ctx.caveAtmosphere.shaft.visible : false,
-        };
-        // Hide everything but the cave group (the one-sided terrain sheet seen from underground would
-        // fill the frame with sky/desert). Near-black background so unlit rock reads as black.
-        let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
-        const boreGrp = []; ctx.three.scene.traverse((o) => { if (o.name === 'caveTestBore') boreGrp.push(o); });
-        ctx.three.scene.traverse((o) => {
-          if (!o.isMesh) return;
-          let keep = false; for (let p = o; p; p = p.parent) { if (p === caveGrp || p.name === 'caveTestBore') { keep = true; break; } }
-          if (!keep && o.visible) { st.hidden.push(o); o.visible = false; }
-        });
-        ctx.three.scene.background = new THREE.Color(0x020304);
-        // REAL cave darkness — the shipping floors (near-black), + the near-black cave fog.
-        L.ambient.intensity = T.AMBIENT_BASE * T.CAVE_DARK_AMBIENT_FLOOR;
-        L.sun.intensity = 0; L.moon.intensity = 0;
-        ctx.three.scene.fog = new THREE.FogExp2(new THREE.Color(T.CAVE_FOG_HEX), T.CAVE_FOG_DENSITY);
-        // The player's REAL torch, at the given position (proves the held light works underground).
-        if (s.torch && ctx.player.viewModel) {
-          const tl = ctx.player.viewModel.heldPointLight;
-          tl.color.setHex(T.TORCH_LIGHT_COLOR_HEX); tl.distance = T.TORCH_LIGHT_DISTANCE;
-          tl.intensity = T.TORCH_LIGHT_INTENSITY; tl.position.set(s.torch[0], s.torch[1], s.torch[2]);
-        }
-        // The REAL mouth shaft (daylight down the ramp) at full daytime intensity.
-        if (s.shaft && ctx.caveAtmosphere) { ctx.caveAtmosphere.shaft.visible = true; ctx.caveAtmosphere.shaft.intensity = T.CAVE_SHAFT_INTENSITY; }
-        ctx.three.renderer.render(ctx.three.scene, cam);
-        window.__shotRestore = st;
-      }, spec);
-      await page.waitForTimeout(240);
-      try { await page.screenshot({ path: join(OUT, `scen-cave-walk-${name}.png`), fullPage: false, timeout: 60000 }); console.log(`[cave-walk] saved scen-cave-walk-${name}.png`); }
-      catch (e) { console.log(`[cave-walk] ${name} shot flaked (${e.name})`); }
-      await page.evaluate(() => {
-        const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
-        const L = ctx.lights;
-        for (const o of st.hidden) o.visible = true;
-        ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
-        L.ambient.intensity = st.amb; L.sun.intensity = st.sun; L.moon.intensity = st.moon;
-        if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
-        if (ctx.caveAtmosphere) { ctx.caveAtmosphere.shaft.intensity = st.shaftI; ctx.caveAtmosphere.shaft.visible = st.shaftV; }
-        window.__shotRestore = null;
-      });
-    };
-    if (geo) {
-      const { egg, hall, ent, na, nb, t0, t1 } = geo;
-      // mouth (from the surface, down the trench)
-      await shoot({ exp: 1.25, cam: [geo.mouthX - 8, geo.gy + 1.7, geo.cz], look: [geo.mouthX + 8, geo.gy - 2.0, geo.cz] }, 'mouth');
-      // trunk descent — stand in t0 looking toward t1 (down the first corridor)
-      await shoot({ interior: true, exp: 1.5, cam: [t0.x, t0.y + 1.7, t0.z], look: [t1.x, t1.y + 1.0, t1.z],
-        fill: { pos: [(t0.x + t1.x) / 2, (t0.y + t1.y) / 2 + 1.6, (t0.z + t1.z) / 2], intensity: 15, dist: 30 } }, 'trunk-descent');
-      // squeeze corridor
-      if (na && nb) await shoot({ interior: true, exp: 1.5, cam: [na.x + (nb.x - na.x) * 0.15, na.y + 1.6, na.z + (nb.z - na.z) * 0.15], look: [nb.x, nb.y + 1.2, nb.z],
-        fill: { pos: [(na.x + nb.x) / 2, (na.y + nb.y) / 2 + 1.4, (na.z + nb.z) / 2], intensity: 14, dist: 24 } }, 'squeeze');
-      // the large hall
-      await shoot({ interior: true, exp: 1.5, cam: [hall.x - hall.rx * 0.8, hall.y + 1.7, hall.z], look: [hall.x + hall.rx, hall.y + hall.height * 0.4, hall.z],
-        fill: { pos: [hall.x, hall.y + hall.height * 0.5, hall.z], intensity: 26, dist: 40 } }, 'hall');
-      // the egg chamber (the deepest, distinct) — framed from a raised corner looking IN + DOWN toward
-      // the central dais (fixes the old black frame: the camera used to sit near/into the far wall and
-      // look across at a dark span). Stronger fill for the tall cathedral ceiling.
-      await shoot({ interior: true, exp: 1.55, cam: [egg.x - egg.rx * 0.6, egg.y + 2.6, egg.z - egg.rx * 0.5], look: [egg.x + egg.rx * 0.25, egg.y + 0.8, egg.z + egg.rx * 0.15],
-        showEgg: [egg.x, egg.y + 0.9 + 0.23, egg.z],   // UNDERWORLD cycle 3 — the companion egg on the dais top
-        fill: { pos: [egg.x, egg.y + egg.height * 0.55, egg.z], intensity: 44, dist: 70 } }, 'egg');
-      // looking back UP a junction (from the first trunk chamber toward the entrance)
-      await shoot({ interior: true, exp: 1.5, cam: [t1.x, t1.y + 1.7, t1.z], look: [ent.x, ent.y + 2.5, ent.z],
-        fill: { pos: [(t1.x + ent.x) / 2, (t1.y + ent.y) / 2 + 1.6, (t1.z + ent.z) / 2], intensity: 20, dist: 34 } }, 'junction-up');
-
-      // ── UNDERWORLD cycle 2 DARK-TRUTH + LIFE shots (real light model, no rig fill) ──
-      // Find a glowing fungus cap (its emissive teal material) to frame the mushroom shot.
-      const fungi = await page.evaluate(() => {
-        const ctx = window.__game.ctx; const T = window.__game.Tuning;
-        const want = new (window.__game.THREE.Color)(T.CAVE_FUNGI_EMISSIVE_HEX).getHexString();
-        const wp = new (window.__game.THREE.Vector3)(); let found = null;
-        ctx.three.scene.traverse((o) => {
-          if (found || !o.isMesh || !o.material || !o.material.emissive) return;
-          if (o.material.emissive.getHexString() === want) { o.getWorldPosition(wp); found = { x: +wp.x.toFixed(2), y: +wp.y.toFixed(2), z: +wp.z.toFixed(2) }; }
-        });
-        return found;
-      });
-      console.log(`[cave-walk] fungi cap for shot: ${fungi ? JSON.stringify(fungi) : 'NONE FOUND (no glowing fungi in the scene!)'}`);
-      // torch-lit hall — the player's real torch throws a warm pool; speleothems cast shadows.
-      await shootDark({ exp: 1.25, cam: [hall.x - hall.rx * 0.7, hall.y + 1.7, hall.z], look: [hall.x + hall.rx * 0.5, hall.y + 1.0, hall.z],
-        torch: [hall.x - hall.rx * 0.6, hall.y + 1.6, hall.z] }, 'dark-torch-hall');
-      // unlit corridor — no torch: near-black (darkness dominates; the survival stakes).
-      await shootDark({ exp: 1.35, cam: [na.x + (nb.x - na.x) * 0.18, na.y + 1.6, na.z + (nb.z - na.z) * 0.18], look: [nb.x, nb.y + 1.2, nb.z] }, 'dark-unlit-corridor');
-      // mushroom cluster — torch-lit so stalks read + the caps glow their cool bioluminescence.
-      if (fungi) await shootDark({ exp: 1.2, cam: [fungi.x + 1.4, fungi.y + 0.7, fungi.z + 1.4], look: [fungi.x, fungi.y, fungi.z],
-        torch: [fungi.x + 1.2, fungi.y + 0.7, fungi.z + 1.2] }, 'mushrooms');
-      // mouth light-shaft from INSIDE — stand in the entrance hall, look back up toward the daylight.
-      await shootDark({ exp: 1.3, cam: [ent.x, ent.y + 1.7, ent.z], look: [geo.mouthX, geo.floor + 1.2, geo.cz], shaft: true }, 'shaft-inside');
-    }
+    await caveShotSet(page, 'cave-walk');
     if (!pass) throw new Error('cave-walk GATE FAILED');
   },
+
+  // ── cave-look (DEEPER cycle 3) — the FAST visual-iteration scenario. Exactly the `cave-walk`
+  //    shot set (same 11 framings, same lighting, same names) with the ~4-minute KCC march and the
+  //    topology asserts SKIPPED. This is the rule-8 iteration loop: build → shoot → critique →
+  //    adjust, without paying for the traversability gate on every round. The gate itself
+  //    (`cave-walk`) still runs once at the end of a batch, per the SPEED RULES.
+  //    Run: npm run rig -- --scenario=cave-look --port=5243 [--seed=1337] [--tag=r1]
+  'cave-look': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+    });
+    const tag = argv.tag ? `cave-look-${argv.tag}` : 'cave-look';
+    await caveShotSet(page, tag);
+  },
+
 
   // ── cave-void (DEEPER cycle 1) — THE SEE-THROUGH GATE ───────────────────────
   //   Zach's cave walk-test (docs/campaign/cave-walktest-2026-07-24.md, D-2): "many of the
@@ -15058,3 +14887,213 @@ async function main() {
 // Force a clean exit — on win32 a lingering child handle can otherwise keep the
 // event loop alive even after teardown completes.
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+
+/** The cave interior shot set — the mouth, trunk descent, a squeeze corridor, the large hall, the
+ *  egg chamber, a junction looking back up, plus the DARK-TRUTH set (real light model, no rig fill).
+ *  Shared by the `cave-walk` gate and the fast `cave-look` iteration scenario so both frame the
+ *  IDENTICAL views — the A/B against `verification/baseline-shell/` is only meaningful if the camera
+ *  setups are byte-identical between rounds. Writes `verification/scen-<prefix>-<name>.png`. */
+async function caveShotSet(page, prefix) {
+  {
+    const geo = await page.evaluate(() => {
+      const ctx = window.__game.ctx; let p = null, b = null;
+      ctx.three.scene.traverse((o) => {
+        if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe;
+        if (o.userData && o.userData.caveTestProbe) b = o.userData.caveTestProbe;
+      });
+      if (!p) return null;
+      const egg = p.nodes.find((n) => n.id === p.eggId);
+      const hall = p.nodes.find((n) => n.kind === 'hall') || p.nodes.find((n) => n.kind === 'entrance');
+      const ent = p.nodes.find((n) => n.kind === 'entrance');
+      const squeeze = p.edges.find((e) => e.squeeze);
+      const na = squeeze ? p.nodes.find((n) => n.id === squeeze.a) : null;
+      const nb = squeeze ? p.nodes.find((n) => n.id === squeeze.b) : null;
+      // a trunk corridor for the descent shot: entrance's first child
+      const firstEdge = p.edges.find((e) => e.a === ent.id) || p.edges[0];
+      const t0 = p.nodes.find((n) => n.id === firstEdge.a), t1 = p.nodes.find((n) => n.id === firstEdge.b);
+      return { egg, hall, ent, na, nb, t0, t1, mouthX: b.mouthX, gy: b.gy, cz: b.centerZ, chamberFarX: b.chamberFarX, floor: b.chamberFloorY };
+    });
+    const shoot = async (spec, name) => {
+      // Set up + LEAVE it (the render loop keeps rendering the paused scene with this camera, so
+      // the setup must persist through the screenshot); restore in a second pass afterward.
+      await page.evaluate((s) => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        ctx.flags.paused = true;
+        ctx.three.renderer.toneMappingExposure = s.exp;
+        const cam = ctx.three.camera;
+        cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+        cam.lookAt(s.look[0], s.look[1], s.look[2]);
+        cam.updateMatrixWorld(true);
+        const st = { hidden: [], fill: null, amb: null, bg: ctx.three.scene.background, fog: ctx.three.scene.fog };
+        // INTERIOR shots: hide everything but the cave group + dark background, so the one-sided
+        // terrain sheet (seen straight through from underground → sky/desert) doesn't fill the frame.
+        if (s.interior) {
+          let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
+          if (caveGrp) {
+            ctx.three.scene.traverse((o) => {
+              if (!o.isMesh) return;
+              let inCave = false; for (let p = o; p; p = p.parent) if (p === caveGrp) { inCave = true; break; }
+              if (!inCave && o.visible) { st.hidden.push(o); o.visible = false; }
+            });
+            ctx.three.scene.background = new THREE.Color(0x0a0806);
+            ctx.three.scene.fog = null;
+            // Flat fill ambient so the greybox rock reads evenly (a point light alone leaves the far
+            // walls of a big chamber black); the fill lamp below adds a little warm shape on top.
+            st.amb = new THREE.AmbientLight(0xb9b0a4, 0.85);
+            ctx.three.scene.add(st.amb);
+          }
+        }
+        if (s.fill) {
+          st.fill = new THREE.PointLight(0xffe6c0, s.fill.intensity, s.fill.dist, 1.4);
+          st.fill.position.set(s.fill.pos[0], s.fill.pos[1], s.fill.pos[2]);
+          ctx.three.scene.add(st.fill);
+        }
+        // UNDERWORLD cycle 3 — render the companion EGG on the dais for the proof shot. DEV boots
+        // set companionAcquired → the real ctx.egg is removed at handoff, so build a faithful stand-in
+        // (same geometry/material as buildCompanionEgg) at the dais top. Added to the cave group so the
+        // interior-hide keeps it. Cleaned up in restore.
+        if (s.showEgg) {
+          let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
+          const em = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14),
+            new THREE.MeshStandardMaterial({ color: 0xcab89a, roughness: 0.55, emissive: 0x6a4420, emissiveIntensity: 1.2 }));
+          em.scale.set(1, 1.4, 1);
+          em.position.set(s.showEgg[0], s.showEgg[1], s.showEgg[2]);
+          (caveGrp || ctx.three.scene).add(em); st.egg = em;
+        }
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        window.__shotRestore = st;
+      }, spec);
+      await page.waitForTimeout(240);
+      try { await page.screenshot({ path: join(OUT, `scen-${prefix}-${name}.png`), fullPage: false, timeout: 60000 }); console.log(`[cave-walk] saved scen-${prefix}-${name}.png`); }
+      catch (e) { console.log(`[${prefix}] ${name} shot flaked (${e.name})`); }
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
+        if (st.fill) ctx.three.scene.remove(st.fill);
+        if (st.amb) ctx.three.scene.remove(st.amb);
+        if (st.egg && st.egg.parent) st.egg.parent.remove(st.egg);
+        for (const o of st.hidden) o.visible = true;
+        ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
+        window.__shotRestore = null;
+      });
+    };
+    // UNDERWORLD cycle 2 — DARK-TRUTH shots. Unlike the geometry shots above (rig-only flat fill so
+    // the greybox reads), these prove the REAL darkness + light model: NO rig fill/ambient. Instead
+    // they drive the SHIPPING light objects at their real tuning — the cave darkness floors on
+    // ambient/sun/moon, the near-black cave fog, the player's real torch (heldPointLight) for the
+    // torch-lit shot, and the atmosphere's mouth SHAFT SpotLight. So a torch-lit hall shows the warm
+    // pool + speleothem shadows; an unlit corridor is near-black; the shaft shot shows daylight down
+    // the ramp. These use ONLY objects that ship (no probe-invented lights).
+    const shootDark = async (spec, name) => {
+      await page.evaluate((s) => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        ctx.flags.paused = true;
+        ctx.three.renderer.toneMappingExposure = s.exp;
+        const cam = ctx.three.camera;
+        cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+        cam.lookAt(s.look[0], s.look[1], s.look[2]);
+        cam.updateMatrixWorld(true);
+        const L = ctx.lights; const T = g.Tuning;
+        const st = {
+          hidden: [], bg: ctx.three.scene.background, fog: ctx.three.scene.fog,
+          amb: L.ambient.intensity, sun: L.sun.intensity, moon: L.moon.intensity,
+          torchI: ctx.player.viewModel ? ctx.player.viewModel.heldPointLight.intensity : 0,
+          shaftI: ctx.caveAtmosphere ? ctx.caveAtmosphere.shaft.intensity : 0,
+          shaftV: ctx.caveAtmosphere ? ctx.caveAtmosphere.shaft.visible : false,
+        };
+        // Hide everything but the cave group (the one-sided terrain sheet seen from underground would
+        // fill the frame with sky/desert). Near-black background so unlit rock reads as black.
+        let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
+        const boreGrp = []; ctx.three.scene.traverse((o) => { if (o.name === 'caveTestBore') boreGrp.push(o); });
+        ctx.three.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          let keep = false; for (let p = o; p; p = p.parent) { if (p === caveGrp || p.name === 'caveTestBore') { keep = true; break; } }
+          if (!keep && o.visible) { st.hidden.push(o); o.visible = false; }
+        });
+        ctx.three.scene.background = new THREE.Color(0x020304);
+        // REAL cave darkness — the shipping floors (near-black), + the near-black cave fog.
+        L.ambient.intensity = T.AMBIENT_BASE * T.CAVE_DARK_AMBIENT_FLOOR;
+        L.sun.intensity = 0; L.moon.intensity = 0;
+        ctx.three.scene.fog = new THREE.FogExp2(new THREE.Color(T.CAVE_FOG_HEX), T.CAVE_FOG_DENSITY);
+        // The player's REAL torch, at the given position (proves the held light works underground).
+        if (s.torch && ctx.player.viewModel) {
+          const tl = ctx.player.viewModel.heldPointLight;
+          tl.color.setHex(T.TORCH_LIGHT_COLOR_HEX); tl.distance = T.TORCH_LIGHT_DISTANCE;
+          tl.intensity = T.TORCH_LIGHT_INTENSITY; tl.position.set(s.torch[0], s.torch[1], s.torch[2]);
+        }
+        // The REAL mouth shaft (daylight down the ramp) at full daytime intensity.
+        if (s.shaft && ctx.caveAtmosphere) { ctx.caveAtmosphere.shaft.visible = true; ctx.caveAtmosphere.shaft.intensity = T.CAVE_SHAFT_INTENSITY; }
+        ctx.three.renderer.render(ctx.three.scene, cam);
+        window.__shotRestore = st;
+      }, spec);
+      await page.waitForTimeout(240);
+      try { await page.screenshot({ path: join(OUT, `scen-${prefix}-${name}.png`), fullPage: false, timeout: 60000 }); console.log(`[cave-walk] saved scen-${prefix}-${name}.png`); }
+      catch (e) { console.log(`[${prefix}] ${name} shot flaked (${e.name})`); }
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
+        const L = ctx.lights;
+        for (const o of st.hidden) o.visible = true;
+        ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
+        L.ambient.intensity = st.amb; L.sun.intensity = st.sun; L.moon.intensity = st.moon;
+        if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
+        if (ctx.caveAtmosphere) { ctx.caveAtmosphere.shaft.intensity = st.shaftI; ctx.caveAtmosphere.shaft.visible = st.shaftV; }
+        window.__shotRestore = null;
+      });
+    };
+    if (geo) {
+      const { egg, hall, ent, na, nb, t0, t1 } = geo;
+      // mouth (from the surface, down the trench)
+      await shoot({ exp: 1.25, cam: [geo.mouthX - 8, geo.gy + 1.7, geo.cz], look: [geo.mouthX + 8, geo.gy - 2.0, geo.cz] }, 'mouth');
+      // trunk descent — stand in t0 looking toward t1 (down the first corridor)
+      await shoot({ interior: true, exp: 1.5, cam: [t0.x, t0.y + 1.7, t0.z], look: [t1.x, t1.y + 1.0, t1.z],
+        fill: { pos: [(t0.x + t1.x) / 2, (t0.y + t1.y) / 2 + 1.6, (t0.z + t1.z) / 2], intensity: 15, dist: 30 } }, 'trunk-descent');
+      // squeeze corridor
+      if (na && nb) await shoot({ interior: true, exp: 1.5, cam: [na.x + (nb.x - na.x) * 0.15, na.y + 1.6, na.z + (nb.z - na.z) * 0.15], look: [nb.x, nb.y + 1.2, nb.z],
+        fill: { pos: [(na.x + nb.x) / 2, (na.y + nb.y) / 2 + 1.4, (na.z + nb.z) / 2], intensity: 14, dist: 24 } }, 'squeeze');
+      // the large hall
+      await shoot({ interior: true, exp: 1.5, cam: [hall.x - hall.rx * 0.8, hall.y + 1.7, hall.z], look: [hall.x + hall.rx, hall.y + hall.height * 0.4, hall.z],
+        fill: { pos: [hall.x, hall.y + hall.height * 0.5, hall.z], intensity: 26, dist: 40 } }, 'hall');
+      // the egg chamber (the deepest, distinct) — framed from a raised corner looking IN + DOWN toward
+      // the central dais (fixes the old black frame: the camera used to sit near/into the far wall and
+      // look across at a dark span). Stronger fill for the tall cathedral ceiling.
+      await shoot({ interior: true, exp: 1.55, cam: [egg.x - egg.rx * 0.6, egg.y + 2.6, egg.z - egg.rx * 0.5], look: [egg.x + egg.rx * 0.25, egg.y + 0.8, egg.z + egg.rx * 0.15],
+        showEgg: [egg.x, egg.y + 0.9 + 0.23, egg.z],   // UNDERWORLD cycle 3 — the companion egg on the dais top
+        fill: { pos: [egg.x, egg.y + egg.height * 0.55, egg.z], intensity: 44, dist: 70 } }, 'egg');
+      // looking back UP a junction (from the first trunk chamber toward the entrance)
+      await shoot({ interior: true, exp: 1.5, cam: [t1.x, t1.y + 1.7, t1.z], look: [ent.x, ent.y + 2.5, ent.z],
+        fill: { pos: [(t1.x + ent.x) / 2, (t1.y + ent.y) / 2 + 1.6, (t1.z + ent.z) / 2], intensity: 20, dist: 34 } }, 'junction-up');
+
+      // ── UNDERWORLD cycle 2 DARK-TRUTH + LIFE shots (real light model, no rig fill) ──
+      // Find a glowing fungus cap (its emissive teal material) to frame the mushroom shot.
+      const fungi = await page.evaluate(() => {
+        const ctx = window.__game.ctx; const T = window.__game.Tuning;
+        const want = new (window.__game.THREE.Color)(T.CAVE_FUNGI_EMISSIVE_HEX).getHexString();
+        const wp = new (window.__game.THREE.Vector3)(); let found = null;
+        ctx.three.scene.traverse((o) => {
+          if (found || !o.isMesh || !o.material || !o.material.emissive) return;
+          if (o.material.emissive.getHexString() === want) { o.getWorldPosition(wp); found = { x: +wp.x.toFixed(2), y: +wp.y.toFixed(2), z: +wp.z.toFixed(2) }; }
+        });
+        return found;
+      });
+      console.log(`[cave-walk] fungi cap for shot: ${fungi ? JSON.stringify(fungi) : 'NONE FOUND (no glowing fungi in the scene!)'}`);
+      // torch-lit hall — the player's real torch throws a warm pool; speleothems cast shadows.
+      // DEEPER cycle 3: the torch used to sit AT the camera aimed across the hall's open middle, so
+      // the pool fell past the far wall and out of frame — the shot was near-black and could not
+      // judge anything. It is the cave's REAL in-game read (torch light on rock), so it now frames
+      // the near WALL at torch range: camera 1.2m off the wall, torch 1.5m ahead of it. This is the
+      // shot that decides whether the surface reads as carved rock to a player.
+      await shootDark({ exp: 1.25, cam: [hall.x - hall.rx * 0.72, hall.y + 1.7, hall.z], look: [hall.x - hall.rx * 1.05, hall.y + 1.3, hall.z + hall.rx * 0.45],
+        torch: [hall.x - hall.rx * 0.84, hall.y + 1.6, hall.z + hall.rx * 0.16] }, 'dark-torch-hall');
+      // torch on the FLOOR — the walkable surface at grazing torch light, the read the player spends
+      // the most time looking at (and the one the floor attenuation flattens).
+      await shootDark({ exp: 1.25, cam: [hall.x, hall.y + 1.7, hall.z], look: [hall.x + hall.rx * 0.55, hall.y - 0.4, hall.z + hall.rx * 0.2],
+        torch: [hall.x + hall.rx * 0.2, hall.y + 1.1, hall.z + hall.rx * 0.08] }, 'dark-torch-floor');
+      // unlit corridor — no torch: near-black (darkness dominates; the survival stakes).
+      await shootDark({ exp: 1.35, cam: [na.x + (nb.x - na.x) * 0.18, na.y + 1.6, na.z + (nb.z - na.z) * 0.18], look: [nb.x, nb.y + 1.2, nb.z] }, 'dark-unlit-corridor');
+      // mushroom cluster — torch-lit so stalks read + the caps glow their cool bioluminescence.
+      if (fungi) await shootDark({ exp: 1.2, cam: [fungi.x + 1.4, fungi.y + 0.7, fungi.z + 1.4], look: [fungi.x, fungi.y, fungi.z],
+        torch: [fungi.x + 1.2, fungi.y + 0.7, fungi.z + 1.2] }, 'mushrooms');
+      // mouth light-shaft from INSIDE — stand in the entrance hall, look back up toward the daylight.
+      await shootDark({ exp: 1.3, cam: [ent.x, ent.y + 1.7, ent.z], look: [geo.mouthX, geo.floor + 1.2, geo.cz], shaft: true }, 'shaft-inside');
+    }
+  }
+}

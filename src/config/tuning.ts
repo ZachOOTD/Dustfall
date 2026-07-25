@@ -940,6 +940,16 @@ export const Tuning = {
   CAVE_SDF_SMOOTH: 1.1,                // m — smooth-min blend radius at chamber↔corridor junctions (natural flared mouths)
   CAVE_SDF_SMOOTH_FLOOR: 0.12,         // × SMOOTH at the floor plane — the blend is attenuated toward the floor so mouth
   CAVE_SDF_SMOOTH_BAND: 1.8,           // m above the floor to reach the full blend — rounding can't shave the ramp start (cycle 1's 32.4°)
+  // ── DEEPER cycle 3 — SURFACE CHARACTER. The cycle-2 surface read as a soft brown wash: the big
+  // displacement octaves are floor-attenuated to zero (correct — they were driving a 32.4° corridor),
+  // which leaves walkable floors GEOMETRICALLY FLAT, so a flat-shaded floor has no facets at all and
+  // only the vertex colour carries it. MICRO is a separate, deliberately tiny relief that is NOT
+  // floor-attenuated: amplitude small enough that its worst-case gradient (AMP·2π·FREQ ≈ 6°) can't
+  // approach the 32° corridor ceiling even stacked on a 22° ramp, wavelength long enough (≥4 voxels)
+  // that the 0.45m grid actually resolves it instead of aliasing.
+  CAVE_SDF_MICRO_AMP: 0.075,           // m — un-attenuated micro-relief amplitude (gives flat floors facets)
+  CAVE_SDF_MICRO_FREQ: 0.40,           // 1/m — ~2.5m wavelength (≈5.5 voxels — resolved, not aliased)
+  CAVE_ROCK_BUMP: 1.15,                // normal-perturbation strength for the cave surface's sub-voxel rock relief (0 = off)
   // Speleothems (stalactites / stalagmites / columns) — the signature cave read. Floor features are
   // placed BEYOND the 0.72·rx floor-grid the walk gate samples (RING_MIN) and clear of corridor
   // mouths (MOUTH_CLEAR_DEG), so they never block the walk path or trip the headroom/floor asserts.

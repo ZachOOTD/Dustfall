@@ -6,6 +6,81 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 3 — surface character restored; the seed net proven 6/6 (2026-07-25) — SHIPPED
+
+- **Planned:** re-run the two cycle-2 probe hangs · restore the carved-rock read the shell kit had,
+  iterating on the REAL torch-lit view, without regressing the void gate or the 32° slope ceiling.
+
+- **TASK A — the two hangs did NOT reproduce; the seed net is 6/6.** `cave-walk` seed 99 = PASS,
+  10/10 chambers, full Euler tour, `ascent=OUT`, **max slope 21.1°**, fails=0, digest `a6e21544`.
+  `cave-void` seed 2024 = **0/8160 escapes (0.00%)**, 85/85 points clean, `excused=1`, `frontEsc=1`.
+  Both ran first-try on a machine with no special preparation. Cycle 2's read ("harness, not
+  generator") is now supported by evidence rather than inference. Recorded as a **flake**, not a fix:
+  nothing was changed that would explain it, so if it recurs it is still unexplained.
+
+- **THE DIAGNOSIS BEHIND THE REGRESSION, measured.** Cycle 2 called the new surface "smoother and
+  softer". The real causes were three, and only one was the shading model:
+  1. **Flat vs smooth shading** — real, and the smallest of the three.
+  2. **THE SMOKE MOTTLE (the actual reason the cave read as fog).** `caveVertexColor` picked its role
+     with a HARD threshold on the surface normal (`up > 0.55` floor / `up < -0.4` ceiling). On the
+     SDF surface the normal carries the rock displacement, so adjacent vertices across a bumpy
+     ceiling flipped between 'wall' and 'ceiling' — a **×0.58 value step applied per-vertex at
+     random**, interpolated into grey-brown smoke. This was a genuine bug, not a taste issue.
+  3. **The 0.45m voxel floor on detail.** The third displacement octave (1.2m) sits under Nyquist for
+     a 0.45m grid, so surface nets smooths it away: **the surface cannot carry ANY detail below
+     ~1.2m**, and at torch range (1-2m) the wall was a featureless blob no matter what the SDF did.
+
+- **What shipped**, in the order the shots forced it:
+  - `_caveSurface` is **`flatShading: true`** again (the direct analogue of `_caveShell`).
+  - **`CAVE_SDF_MICRO_*`** — a small un-attenuated relief term (0.075m at ~2.5m ≈ 5.5 voxels). The
+    big octaves are floor-attenuated to zero (cycle 2's 32.4° fix, preserved), which left walkable
+    floors *geometrically planar* — a flat-shaded plane has one normal and reads as brown mud. Sized
+    so its own worst-case gradient is ~6° and it cannot approach the 32° ceiling on a 22° ramp.
+  - **Smooth role weights** — `caveVertexColor` takes the raw normal Y and ramps the ceiling/floor
+    contributions with a smoothstep; the ceiling darkening went ×0.58 → ×0.70. Kills the mottle.
+  - **Sharper strata** — two band scales (7.4m formation + 2.0m bedding), each through a power curve
+    so a band reads as a layer with an edge; contrast roughly doubled; fine grain added everywhere.
+  - **Floor sediment rebalanced** — one 10m blob at 0.9 strength (the "mudflat") → 0.72 broken by a
+    3m octave, so it reads as drifts between exposed rock.
+  - **`CAVE_ROCK_BUMP` — sub-voxel rock relief as a normal perturbation** in `_caveSurface`'s
+    `onBeforeCompile` (hashed 3D value noise, 2 octaves at 0.6m/0.22m, forward-difference gradient,
+    world-space, rolled off by `fwidth` footprint). **Zero triangles, zero collider change, one
+    program, one uniform.** Halving the voxel was the alternative and was rejected on cycle 1's own
+    numbers: 0.35m = 113.6k tris / 1509ms against a streaming budget that is already the campaign's
+    flagged risk — for detail still only ~0.9m.
+
+- **ROUND-BY-ROUND** (all on seed 1337; the fast `cave-look` scenario — see below):
+  | round | change | what the shot showed |
+  |---|---|---|
+  | R1 | `flatShading: true` | Walls/ceilings got facets — real gain. **Floor still a featureless wash**, and now inconsistent with the faceted walls. |
+  | R2 | micro-relief + sharper strata + sediment rebalance | Floor gained relief and value break-up. Still read as smoke — and the shot showed *why*: blotchy grey mottling on the upper walls. |
+  | R3 | smooth role weights + **re-framed the torch shots** | Mottle gone. The re-framed `dark-torch-hall` (the real in-game read) exposed the actual problem: **at torch range the wall is completely featureless.** |
+  | R4 | shader bump v1 — sum of directional sine waves | **FAILED loudly.** Even domain-warped, six waves resolve into oriented **zebra banding**; it read as wood grain. Recorded in the source so it isn't retried. |
+  | R5 | replaced with hashed value noise, strength 0.16 | Isotropic — but invisible. Over-corrected. |
+  | R6 | strength 0.50 | Still barely there. |
+  | R7 | strength 2.20 (diagnostic) | Works, clearly too strong: splotchy dark blobs, speckle at range. |
+  | R8 | **strength 1.15 — landed** | Floor has genuine grain and drift structure; the torch-lit wall has real ledges and recesses; the dais no longer out-reads the cavern. |
+
+- **⚠ HONEST VERDICT vs the shell baseline — better in the near field, still weakest on ceilings.**
+  The near/mid read (floors, walls at torch range, the dais surround) is **better than the shell
+  baseline**, and it is better on a surface that is also watertight, which the shell never was. The
+  **ceiling is still the weak element**: it reads as a dark smoky band rather than as rock with
+  structure — the mottle bug is fixed, but a ceiling seen at 8-15m through the distance roll-off has
+  little left to look at, and the finest bump octave still speckles slightly at range. Call it
+  **~80% there on ceilings**, good on everything else. Also unresolved: the overall value contrast is
+  still lower than the shell kit's, most visible in the wide diagnostic shots.
+- **⚠ PERF RISK, flagged not assumed away:** the bump is ~8 value-noise evaluations (≈64 hashes) per
+  cave fragment. Confined to one program and distance-faded, but unmeasured on a low-end GPU.
+  `CAVE_ROCK_BUMP: 0` disables it with no other change.
+- **Harness:** new **`cave-look`** rig scenario — the `cave-walk` shot set (now a shared
+  `caveShotSet`, so the framings are byte-identical) with the ~4-minute KCC march skipped. That is
+  what made 8 rounds affordable inside one cycle. The two `dark-torch-*` framings were fixed: the
+  torch used to sit at the camera aimed across the hall's open middle, so its pool fell out of frame
+  and the shot was near-black — **it could not judge anything**, which is why cycle 2's regression
+  was described from the rig-lit shots only.
+- **Constraints held:** entrance untouched (cycle 4) · room-graph layout logic untouched · collider
+  still baked from the same triangles.
+
 ## Cycle 2 — the watertight surface is THE cave; the shell kit is deleted (2026-07-24) — SHIPPED
 
 - **Planned:** make cycle 1's SDF remesh the only meshing path · delete the shell kit · re-bake the
