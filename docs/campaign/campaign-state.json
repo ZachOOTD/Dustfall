@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 5,
-  "current_tier": "cycle-6: underground water — VOLUME tier (pools + jerrycan)",
+  "cycles_completed": 6,
+  "current_tier": "cycle-7: the displaced D-3 visual reassess + CAVE_* taste pass",
   "awaiting_approval": false,
   "stop_reasons": [],
   "paused_note": "(historical) Zach paused after cycle 5 (2026-07-25) with the repair complete and unwalked; resumed 2026-07-26. Carried residuals for cycle 7 (D-3 reassess): cave ceilings ~80% (dark smoky band at 8-15m), global value contrast below the old shell kit, the tor marginal at 78m, sawtooth spikes on the fissure's upper walls, CAVE_ROCK_BUMP perf unmeasured on low-end GPUs.",
@@ -23,7 +23,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 1750000
+    "total": 3650000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -94,6 +94,18 @@
         "e4b6429"
       ],
       "note": "NEW src/world/caveEntrance.ts; src/world/caveTest.ts DELETED entirely along with its tuning keys and the 228-line cave-mouth rig scenario. A rock tor ~19x13m, 5.2m proud, split by a fissure: mouth 2.50m clear pinching to 2.64m where rock closes overhead 6.5m in, widening to 5.0m only at the cave hand-off. Descent is a 3-leg polyline with two knees at 27.0 deg on every seed, mirrored by seed parity. The slot is unioned into buildCaveSdf as primitives -> entrance and cave are ONE continuous surface, no weld; cut against terrain.pureHeightAt instead of cycle 1's junction plane. D307 preserved and the carved hole SHRANK 29.2x8.34m -> 12.5x8.33m. Non-leak invariant by construction: the tor's fissure is always 0.62m narrower/lower than the enclosing SDF slot. 6/6 seeds cave-walk with ascent=OUT; cave-void 0.00% with excused=0 (the declaration is present but zero rays need it). THREE structural KCC bugs found ONLY by the ascent, each of which would have shipped under descent-only testing: corridorPrim held its ramp floor flat past segment ends (~1.5m step at every joint); the entrance hall's flat floor disk reached 2.4m back past the junction and swallowed the climb-out ramp (~50 deg, at the KCC limit); the tor carved its fissure floor 45cm BELOW the SDF floor, making a 45cm gutter down both walls that wedged the capsule on the way out. Round 5 disproved a shadow-acne hypothesis (frame byte-identical, recorded in code); round 6 found the real blotching cause — CAVE_ROCK_BUMP 1.15, tuned for torch-lit interior rock at 2m, applied to sunlit exterior under a directional sun. HONEST: reads as a crevice at near/threshold/descent; at 78m it is a small dark bump, marginal. Budget 2.5h stated vs ~5.5h actual — entirely the three ascent bugs; the visual loop and traversal loop were sequenced wrong (one cave-walk after round 1 would have caught them early)."
+    },
+    {
+      "n": 6,
+      "date": "2026-07-26",
+      "focus": "UNDERGROUND WATER, VOLUME tier (Zach's kickoff call): pools + the jerrycan",
+      "outcome": "SHIPPED",
+      "spend": 1900000,
+      "commits": [
+        "d717a9a",
+        "f388194"
+      ],
+      "note": "Systems: cavePools.ts (seed-pure on the shared caveFloorSediment signal, 1-3/cave, >=1 guaranteed, egg-dais + corridor-mouth exclusions — a real seed-1337 dais-overlap defect fixed by construction), water surface colliderless over the visible SDF bottom (delta 0.0000m), pool sources detach before disposeResident, jerrycan craft-only (recipe 24) 4x canteen fills ONLY at pools, loot baseline untouched, SAVE_VERSION 18. Hero visual: 13 rounds + a 5-critic adversarial panel in two waves. The panel FAILED round 11 with measurements (pool up to 16x brighter than rock; ripple at 0.14 of one 8-bit level; nothing mirrored; rig shooting 19-29% over shipping exposure while claiming honesty) — the fix rounds killed the diffuse term, moved ripple onto specular, added post-sRGB dither, and built K=8 per-cave emissive glint reflections; visual verify PASS, then a final integrity round for the code critic's 4 sev-2s: per-cave materials (streaming cave stole the live cave's reflections), pixel gate wired into verify:chunks with unconditional throws, a TEMPORAL ripple metric with proven teeth (the mandated spatial re-normalization was measured TOOTHLESS — flat scored higher than rippled on one framing — and not shipped as a gate), GPU-anchored leg 4b (the CPU==CPU tautology removed), f32-faithful CPU twins with measured 0.70m tolerance, anchor guards on all 9 shader injections, seed-7 de-overfit of two gate assertions. All gates green on the final tree. Residuals: pool motion needs the walk-test; water is a genuinely DARK mirror at real exposure (taste dials named); pool2-rim weakest framing; dark-shard root cause unnamed (diagnostic in place); balance numbers flagged for Zach, not baked. Cost honesty: ~1.9M — the hero bar costs a panel plus three build rounds."
     },
     {
       "n": 5,

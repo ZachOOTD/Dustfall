@@ -1,24 +1,39 @@
-# Next session — the campaign is PAUSED awaiting Zach's economy approval
+# Next session — campaign DEEPER, cycle 7: the D-3 visual reassess + cave taste pass
 
-**State:** campaign "Scavenger's Economy (setup)" **paused** on `campaign/2026-07-17-economy`
-(4/16 cycles, ~1.0M/6M). `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`.
-**Do not build anything until the approval is given.**
+**State:** campaign DEEPER **active** on `campaign/2026-07-24-deeper` (6/20 cycles, ~3.65M/10M,
+push HELD). Cycle 6 (underground water, VOLUME tier — pools + jerrycan) SHIPPED at `d717a9a` +
+`f388194`, all gates green. Boot from `docs/campaign/campaign-state.json` + `steering.md` as
+always; this file is the hint, the state file is the truth.
 
-## Read first
-1. `docs/campaign/morning-summary-2026-07-18.md` — what shipped overnight + what needs eyes.
-2. `docs/campaign/economy-proposal.md` — the decision sheet (Q1-Q6 with defaults + the 5-cycle
-   build ladder in §7).
+## Cycle 7 — the displaced D-3 reassess (charter cycle 5, moved by two resumes)
 
-## On approval (`/campaign-approve`, then `/loop /campaign-cycle`)
-Run the §7 ladder in order, one cycle each, gates as listed:
-1. Loot-registry unification (LOOT-PRESERVING; 1000-roll digest old=new is the gate).
-2. The 4 ItemIds + pickup meshes + ground scatter.
-3. The drop matrix live + hero-wreck richness.
-4. The 8 new recipes + discovery auto-unlock + UX-S items.
-5. Balance pass + walk-test prep + morning summary.
-Honor any Q1-Q6 edits Zach gives at approval; unanswered = the proposal's defaults.
+Full adversarial player-eye visual audit across the WHOLE cave tree by fresh critics (not the
+builders), + `CAVE_*` taste tuning. Named residuals to carry in:
+
+- Cave ceilings ~80% quality — dark smoky band at 8-15m.
+- Global value contrast still below the old shell kit.
+- The entrance tor marginal at 78m (reads as a small dark bump).
+- Sawtooth spikes on the fissure's upper walls.
+- `CAVE_ROCK_BUMP` perf unmeasured on low-end GPUs; its leopard-print mottle is now the loudest
+  texture in every pool frame and competes with the water for attention (critic finding).
+- Rock 8-bit contour banding under amplification (the water got dither; the rock didn't).
+- Pool taste dials if the darkness read needs lifting: `CAVE_POOL_GLINT_STRENGTH` (2.2) then
+  `CAVE_POOL_ALPHA_MIN` (0.16). pool2-rim is the weakest pool framing — recheck it.
+- Dither crosshatch: one look in MOTION (screen-space pattern; invisible in stills at 1×).
+
+## Owed to Zach (surface at every checkpoint)
+
+- **The repair descent walk-test (D-1..D-4) is STILL OWED** — cycles 6+ build on a gate-green but
+  human-unwalked base (his 2026-07-25 "run the remaining ladder" directive covers this).
+- **Pool motion** (ripple/glint crawl while walking) is untestable in stills — walk-test item.
+- **Balance flags, not baked:** jerrycan recipe (scrap ×3 + metal_pipe ×1 + cloth ×1), capacity
+  4× canteen, pools 1-3/cave ~0.3m deep.
+- Milestone ahead: **hazard-spec-review before cycle 9 is built** (a doc review, not a walk-test).
 
 ## Standing rules (unchanged)
-Fable plans / Opus executes (subagent `model: opus`) · one code-writing agent at a time · never
-`git stash` here · push HELD (commit to the campaign branch; master untouched) · trust the
-playtest over a green gate · new materials are ADDITIVE-ONLY save-wise.
+
+Fable plans / Opus executes · one code-writing agent at a time · never `git stash` · push HELD ·
+SPEED RULES (probes via `npm run rig -- --scenario=… --port=52xx`; full gate suite ONCE per
+batch; no watchers; wall-clock budgets stated honestly — visual loops are ~2h+) · rule 8 for
+anything visual · trust the playtest over a green gate · NO creature underground · determinism
+D290 · the pool pixel gate now lives inside `verify:chunks` and throws unconditionally.

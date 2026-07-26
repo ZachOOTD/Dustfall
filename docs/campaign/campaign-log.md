@@ -6,6 +6,65 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 6 — UNDERGROUND WATER, volume tier: pools + the jerrycan (2026-07-26) — SHIPPED
+
+- **Planned:** the charter's cycle-6 spec at the VOLUME tier (Zach's kickoff call): seed-pure pools
+  in chamber floor dips + a larger vessel that only fills at real bodies of water.
+
+- **Systems (`d717a9a`):** `src/world/cavePools.ts` (new) — pools scored on the SAME
+  `caveFloorSediment` signal the floor tint uses (extracted so placement and the visual read can
+  never drift), 1-3 per cave, ≥1 guaranteed, excluded from corridor mouths and the egg dais (a
+  real seed-1337 defect: a pool overlapped the dais — fixed by construction, `eggDaisRadius` now
+  shared). Water surface has NO collider; the collider is the visible SDF bottom (probe: delta
+  0.0000m, 0 frames standing on water). Pool sources publish via `caveStream.setPoolSink`, detach
+  before `disposeResident`. **Jerrycan**: craft-only (recipe 24: scrap ×3 + metal_pipe ×1 +
+  cloth ×1), 4× canteen capacity, fills ONLY at pools — wells refuse diegetically. Pool audio:
+  splash-tailed drips + a proximity lapping bed. Loot registry untouched (digest baseline intact);
+  SAVE_VERSION stays 18.
+
+- **Hero visual (rounds 1-13, `f388194`):** the builder's 11-round pass was then FAILED by a
+  3-critic adversarial panel (identity, craft, code) with measured findings — the surface shaded
+  as a lit diffuse pan up to 16× brighter than the rock, ripple at 0.14 of one 8-bit level,
+  nothing mirrored, banding, and the rig shooting 19-29% over shipping exposure while claiming
+  honesty. The fix rounds killed the diffuse term (raw-linear albedo + real F0 via r184's
+  `specularColorBlended`), moved the ripple onto the specular lobe (6 octaves), added post-sRGB
+  dither, and built K=8 seed-pure emissive glint reflections — the fungi framing is now a broken
+  teal glitter column down near-black water. Verify critics: visual **PASS** (all 9 failures
+  resolved; the 2 remaining metric reds ruled false positives from a mis-normalized denominator),
+  code FAIL → a final integrity round: per-cave pool materials (a streaming cave could steal the
+  live cave's reflections — proven fixed by uniform snapshot), the pixel gate wired into
+  `verify:chunks` with unconditional throws, a TEMPORAL ripple metric (proven 0.00 on a flat
+  surface after the spatial metric measured toothless — flat pool2-rim scored HIGHER than
+  rippled), leg 4b re-anchored in GPU readPixels truth, f32-faithful CPU twins with a measured
+  0.70m tolerance, all 9 shader-injection anchors guarded and gate-asserted, seed-7 de-overfit of
+  two gate assertions.
+
+- **Verify:** tsc + loot + placement + colliders + `verify:chunks` (cave-walk 11/11 + 10/10,
+  cave-void 0 escapes ×2 seeds, chunk-perf, cave-preload, the new pool pixel legs) ALL GREEN on
+  the final tree. `pool-fill`: refill rules proven both ways, phantom-annulus 8/8 bearings,
+  determinism stable + matchesLive (digests c54885f7 / 74da41c5).
+
+- **Visual iteration:** 13 rounds total + a 5-agent adversarial panel across two waves. Honest
+  residuals: pool motion (ripple/glint crawl) untestable in stills — needs Zach's walk-test;
+  wet-collar gloss strip invisible in all poses (harmless); the r11 dark shard gone but root
+  cause unnamed (a locating diagnostic now lives in pool-fill); at shipping exposure the water is
+  a genuinely DARK mirror (median 2-5/255 near, taste dials `CAVE_POOL_GLINT_STRENGTH` /
+  `CAVE_POOL_ALPHA_MIN`); pool2-rim is the weakest framing — recheck at cycle 7; dither
+  crosshatch worth one motion look.
+
+- **FLAGGED FOR ZACH (balance, not baked):** jerrycan recipe scrap ×3 + metal_pipe ×1 + cloth ×1 ·
+  capacity 4× canteen (16 gulps) · pools 1-3/cave ~0.3m deep · the "fill everything at a real
+  body of water" purpose lands fully when cave density (cycle 7+) makes descents routine.
+
+- **Spend:** ~1.9M this cycle (campaign ~3.65M / 10M; cycle 6/20). Heavier than a normal cycle —
+  the 3+2-critic adversarial panel and three build rounds are what the hero bar costs.
+- **Commits:** `d717a9a` (systems) + `f388194` (hero visual + gate integrity).
+- **Next (cycle 7):** the displaced D-3 visual reassess + CAVE_* taste pass, carrying the named
+  residuals: ceilings ~80% (dark smoky band 8-15m), global value contrast below the old shell
+  kit, the tor marginal at 78m, sawtooth spikes on the fissure's upper walls, CAVE_ROCK_BUMP perf
+  unmeasured on low-end GPUs + its leopard-print mottle competing with the pools for attention,
+  rock 8-bit banding under amplification, and the pool taste dials above.
+
 ## Resume + cycle-6 kickoff (2026-07-26)
 
 Zach: "pick up where we left off" — campaign unpaused at `31a6de9` (tree clean, verify:all green).
