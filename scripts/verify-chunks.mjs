@@ -241,6 +241,21 @@ for (const seed of DET_SEEDS) {
 //       invisible wall and without the feet ever rising onto the water plane; E fills the canteen
 //       AND the jerrycan at a pool; a WELL fills the canteen and REFUSES the jerrycan with a
 //       diegetic prompt; and the placement is byte-stable when re-derived from the seed.
+//
+//       ROUND-13 additions, all inside the same `pool-fill` run (≈+7s per seed, ≈+14s on this gate):
+//         · THE PIXEL GATE. `pool-look`'s pixel verdict was wired to NOTHING — it printed FAIL lines
+//           and exited 0 — so the entire visual contract had no permanent gate. A three-framing
+//           subset (rim / fungi / unlit) now runs here through the SAME shared verdict function
+//           `pool-look` uses: water darker than the lit rock, a LIVE ripple (measured temporally, so
+//           a flat surface scores exactly 0), no 8-bit banding plateaus, and the unlit canary in
+//           both directions — the pool must not GLOW, and it must still MIRROR the fungi.
+//         · THE GPU-ANCHORED WATERLINE. The refill-annulus leg used to march the same CPU predicate
+//           the raycast rejects on, so it could not fail. It now unprojects the water's RENDERED
+//           edge (an A/B readPixels mask in a top-down ortho pose) and asserts the CPU twin tracks
+//           it within a measured tolerance.
+//         · THE PER-CAVE EMITTER PROOF. Each cave owns its water material; building a second cave's
+//           material must not disturb the live cave's mirrored-emitter slots.
+//         · THE SHADER-ANCHOR GUARD. All nine GLSL injection anchors must have matched.
 {
   const poolRe = /POOL-FILL pass=(\d) seed=(\S+) digest=(\S+) pools=(\d+) fails=(\d+)/;
   let poolPort = 5550;

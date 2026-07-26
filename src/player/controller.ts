@@ -341,7 +341,7 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
 
   for (let i = 0; i < stepsThisFrame; i++) {
     const tr = body.translation();
-    const wet = nearWaterSource(ctx, tr.x, tr.z);
+    const wet = nearWaterSource(ctx, tr.x, tr.y, tr.z);
     const biome = ctx.biomes.biomeAt(tr.x, tr.z);
     if (wet) {
       playFootstepWet();
@@ -584,10 +584,18 @@ function syncCameraToBody(ctx: GameContext): void {
   );
 }
 
-function nearWaterSource(ctx: GameContext, x: number, z: number): boolean {
+/** Is the player standing close enough to open water for the step to squelch?
+ *
+ *  THE Y GATE (DEEPER cycle 6, round 12). This used to be an XZ-only test, which was harmless while
+ *  wells were the only water source — a well and the player are always on the same sheet of terrain.
+ *  Cave POOLS broke that assumption: a pool sits 15-40m UNDERGROUND, so walking across the desert
+ *  directly above one made the surface squelch. Water is only underfoot if it is at your FEET. */
+function nearWaterSource(ctx: GameContext, x: number, y: number, z: number): boolean {
   const r = Tuning.FOOTSTEP_WET_RADIUS;
   const r2 = r * r;
+  const dyMax = Tuning.FOOTSTEP_WET_DY_M;
   for (const w of ctx.waterSources.list) {
+    if (Math.abs(w.pos.y - y) > dyMax) continue;
     const dx = w.pos.x - x;
     const dz = w.pos.z - z;
     if (dx * dx + dz * dz <= r2) return true;

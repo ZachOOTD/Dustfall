@@ -28,6 +28,7 @@ import type { CaveGraph } from './caveGen.ts';
 import type { CaveEntranceProbe } from './caveEntrance.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
+import { updateCavePoolWater } from './cavePools.ts';   // DEEPER cycle 6 — the pool ripple clock
 
 export interface CaveAtmosphere {
   /** Cave XZ bounding box (node footprints + the bore trench), pre-expanded by the AABB margin. */
@@ -97,6 +98,9 @@ export function createCaveAtmosphere(scene: THREE.Scene, bore: CaveEntranceProbe
  *  Call AFTER updateLighting + updatePlayer (the deepCave slot). Pause-safe (tick pause-gate skips). */
 export function updateCaveAtmosphere(ctx: GameContext, atmo: CaveAtmosphere, dt: number): void {
   const p = getPlayerPos(ctx);                    // D297 — speeder-aware effective player pos
+  // DEEPER cycle 6 — the pool ripple clock. ONE uniform write for every pool in the world (the shared
+  // water material), on the cave's own pause-gated tick, so the surface animates only where it exists.
+  updateCavePoolWater(ctx.time.elapsed);
   const d = caveDarknessAt(atmo, p.x, p.y, p.z, ctx.terrain);
   atmo.darkness = d;
   // Smooth the audio-facing factor toward the live darkness (mouth crossfade — no pop).

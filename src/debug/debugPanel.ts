@@ -52,6 +52,7 @@ import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts
 import { FEATURES } from '../config/features.ts';        // Underworld review — gotoCave flag gate
 import { caveEntranceSite } from '../world/caveEntrance.ts';     // Underworld review — gotoCave warp target
 import { farCaveJunction } from '../world/caveStream.ts';        // DEEPER cycle 5 — streamed-cave probe hook
+import { cavePoolLiveMaterials } from '../world/cavePools.ts';   // DEEPER cycle 6 round-13 — per-cave water-material leak canary
 
 declare global {
   interface Window {
@@ -444,6 +445,13 @@ interface DebugApi {
     totalShrews: number;
     totalPickups: number;
     totalWells: number;
+    /** DEEPER cycle 6 — water sources of kind 'pool' (cave pools). Counted SEPARATELY from wells:
+     *  `totalWells` filters by kind, so folding pools into it would have hidden a pool-source leak
+     *  behind a wells-only number, and the streaming leak canary would have stopped watching them. */
+    totalPools: number;
+    /** Live per-cave pool-water MATERIAL instances (round-13). Bounded by CAVE_RESIDENT_MAX; a count
+     *  that climbs across a streaming round trip means an evicted cave's material was never released. */
+    totalPoolMaterials: number;
     totalCacti: number;
     terrainTileKeys: string[];
     worldBodies: number;
@@ -1056,7 +1064,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         totalLizards: ctx.lizards.length,
         totalShrews: ctx.shrews.list.length,
         totalPickups: ctx.pickups.list.length,
-        totalWells: ctx.waterSources.list.length,
+        totalWells: ctx.waterSources.list.filter((w) => w.kind === 'well').length,   // WELLS only — cycle 6 added 'pool' to the same registry and this counter is labelled wells
+        totalPools: ctx.waterSources.list.filter((w) => w.kind === 'pool').length,   // …and pools get their OWN counter, so the leak canary still covers the whole registry
+        totalPoolMaterials: cavePoolLiveMaterials(),
         totalCacti: ctx.cacti.list.length,
         terrainTileKeys: ctx.terrain.tileKeys().sort(),
         worldBodies: ctx.physics.world.bodies.len(),

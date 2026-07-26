@@ -35,6 +35,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { Tuning } from '../config/tuning.ts';
 import { startSpawnCave, type CaveJunction, type CaveSpawnJob, type SpawnedCave } from './caveGen.ts';
+import { releaseCavePoolMaterial } from './cavePools.ts';   // per-cave water material — disposed on eviction
 import type { Terrain } from './terrain.ts';
 
 export interface CaveResident {
@@ -124,7 +125,14 @@ function disposeResident(scene: THREE.Scene, world: RAPIER.World, r: CaveResiden
   scene.remove(r.cave.group);
   r.cave.group.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (m.isMesh && m.geometry) m.geometry.dispose();     // materials are module-shared — never disposed
+    if (!m.isMesh || !m.geometry) return;
+    m.geometry.dispose();
+    // Materials here are module-shared and must NEVER be disposed — with ONE exception: the pool
+    // water material is a PER-CAVE instance (round-13; its mirrored-emitter uniforms are this cave's
+    // fungi, so it cannot be shared). Leaving it live would leak a material + its uniform arrays per
+    // evicted cave and keep a dead cave in the per-frame ripple-clock loop forever. The release is
+    // idempotent, which matters because several pools in one cave share the one instance.
+    if (m.userData.cavePool) releaseCavePoolMaterial(m.material);
   });
   if (r.cave.body) world.removeRigidBody(r.cave.body);
 }

@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'pool-fill') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -2806,8 +2806,35 @@ const SCENARIOS = {
       // ── 1. EXISTENCE ───────────────────────────────────────────────────────
       const pools = cavep.pools || [];
       notes.poolCount = pools.length;
+      // The one cost this feature adds to the ATOMIC dress stage (cycle-5 hitch budget): measured.
+      notes.msPoolSampler = cavep.msPoolSampler;
       notes.pools = pools.map((p) => `n${p.node}@(${p.x.toFixed(1)},${p.y.toFixed(2)},${p.z.toFixed(1)})r${p.r.toFixed(1)}`);
       if (!pools.length) return { fails: ['origin cave has NO water pools (the cycle-6 guarantee is ≥1)'], notes };
+
+      // ── 1a. THE SHADER-ANCHOR GUARD (round-13 fix 6a). `applyPoolShader` injects at nine three
+      //     chunk names; `String.replace` is SILENT on a miss, so a renamed chunk on a three upgrade
+      //     would leave a surface that still draws but has (say) no waterline discard or no ripple
+      //     normal — and every other assertion in this file would stay green on it. The builder now
+      //     records a match flag per material; the gate reads it.
+      //     Also: EVERY cave gets its own material instance (the emitter uniforms are per-cave), so
+      //     the pool meshes must NOT all share one module-level material.
+      {
+        const mats = [];
+        ctx.three.scene.traverse((o) => { if (o.isMesh && o.name === 'cavePoolWater' && mats.indexOf(o.material) < 0) mats.push(o.material); });
+        notes.poolMaterials = mats.length;
+        notes.poolShaderAnchors = mats.map((mm) => mm.userData.poolShaderAnchorsOk);
+        for (const mm of mats) {
+          if (mm.userData.poolShaderAnchorsOk !== true) {
+            fails.push(`pool water shader ANCHOR MISS: ${JSON.stringify(mm.userData.poolShaderMisses || [])} — three's chunk names moved and the surface is no longer the one this feature gates`);
+          }
+          if (!mm.userData.poolShaders || !mm.userData.poolShaders.length) {
+            fails.push('pool water material exposes no compiled shader refs — the ripple clock has nothing to write to (updateCavePoolWater is a no-op)');
+          }
+        }
+        // One material for the ONE resident cave here. More than one ⇒ a stray instance; zero ⇒ the
+        // meshes are not using a registered pool material at all.
+        if (mats.length !== 1) fails.push(`expected exactly 1 per-cave pool material in a single-cave world, found ${mats.length}`);
+      }
 
       // The registry must carry one 'pool' source per placed pool, all with the large-vessel rule
       // set the right way round — and every well must have it set the other way.
@@ -2973,6 +3000,207 @@ const SCENARIOS = {
       if (canteenAfterPool < 0.999) fails.push(`canteen did not fill at the pool (fillLevel ${canteenAfterPool})`);
       if (jerryAfterPool < 0.999) fails.push(`jerrycan did not fill at the pool (fillLevel ${jerryAfterPool})`);
 
+      // ── 4b. THE NEGATIVE ASSERTION — NO REFILL OVER DRY ROCK (round-12 code critique, sev-2).
+      //     The water mesh reaches CAVE_POOL_SHORE_M + the outer ring schedule PAST the rim (~1.1m of
+      //     skirt), and it is the FRAGMENT SHADER that decides most of that skirt is not water: it
+      //     discards where the measured depth reaches zero. `interaction.ts` raycasts meshes, not
+      //     fragments, so before this fix the "[E] refill" prompt was live up to ~1.6m out, standing
+      //     on visibly dry rock. A gate that only ever checks that refill WORKS cannot see that — so
+      //     this leg checks that it correctly REFUSES.
+      //
+      //     ── ROUND-13, sev-2: THE OLD VERSION OF THIS LEG WAS TAUTOLOGICAL. It found "the visible
+      //     waterline" by marching `mesh.userData.poolWaterDepthAt` — the very closure the raycast
+      //     override rejects on — and then asserted that the raycast rejects outside it. The outer
+      //     probes could not fail for any value of anything: CPU tested against its own predicate.
+      //     Anchor the waterline in GPU TRUTH instead. An ORTHOGRAPHIC top-down pose over the pool
+      //     is rendered TWICE (water visible / water hidden) and the ≥2/255 appearance mask of the
+      //     difference is the pixels the water actually draws — the shader's own `discard` included,
+      //     which is the thing no CPU-side check can see. Unprojecting the mask's outer edge along 8
+      //     bearings gives `gpuEdge`, a waterline measured from the rendered image. Then:
+      //       · |cpuEdge − gpuEdge| ≤ TOL  — the CPU twin tracks the GPU (this is also the honest
+      //         measurement of the float32/interpolation residual; see cavePools.ts `waterDepthAt`),
+      //       · a raycast at gpuEdge + PHANTOM must MISS — no [E] prompt on dry rock, anchored on
+      //         the rendered waterline rather than on the predicate under test,
+      //       · a raycast well inside gpuEdge must HIT on ≥6/8 bearings — so the fix can never be
+      //         "reject everything".
+      //     Two temporary pokes make the measurement honest, both restored: the damp collar is
+      //     switched off (uPoolWetBand→0) so the mask edge IS the waterline and not the collar's
+      //     outer edge 0.30m further out, and a bright lamp is added so the water's effect on the
+      //     rock clears 2/255 (in shipping cave darkness both renders are black and there is no
+      //     mask at all). Neither changes geometry; this is a measurement pose, not a look shot.
+      {
+        // TOLERANCE — MEASURED, not chosen. The CPU twin and the GPU cannot agree exactly: the GPU
+        // reads `vPoolD`, the barycentric interpolation of per-vertex depth, while the CPU samples
+        // the floor exactly at the query point, and over the ~0.11 m/m shore gradient a couple of cm
+        // of depth disagreement is decimetres of lateral waterline.
+        //   MEASURED, 8 bearings, this pose:
+        //     seed 1337  float64 twin (pre-round-13):      meanAbs 0.148m, maxAbs 0.380m
+        //     seed 1337  float32-faithful twin (shipping): meanAbs 0.135m, maxAbs 0.360m
+        //     seed 7     float32-faithful twin (shipping): meanAbs 0.168m, maxAbs 0.460m
+        //   i.e. making the hash fround-faithful is a real but SMALL improvement (~1-2cm), because
+        //   the dominant term is the interpolation, not the precision. That is the honest budget —
+        //   and it is three orders of magnitude off the "~1e-4 m" the old cavePools.ts comment
+        //   claimed. TOL = worst measured (0.46, seed 7) + ~50% margin. TIGHTENING THIS MEANS
+        //   TESSELLATING THE MESH FINER, not lowering the number: the residual is set by
+        //   CAVE_POOL_EDGE_SEGS and the OUTER ring schedule. `annulusDev` is printed every run, so a
+        //   retune of the shore gradient or the ring schedule shows up here first.
+        const TOL = 0.70;
+        // The separate phantom probe sits just past tolerance, NOT at a fixed large offset: the mesh
+        // only reaches ~1.10m past the (wobbled) rim, so a probe at gpuEdge+1.10 fell OFF the
+        // geometry on the wider bearings and could not fail for any value of anything — the exact
+        // vacuity this leg was rewritten to remove. It is also cross-checked against the STOCK
+        // raycast, so a probe that lands on no triangle is REPORTED as uninformative rather than
+        // counted as a pass.
+        const PHANTOM = TOL + 0.15;
+        const src0 = ctx.waterSources.list
+          .filter((w) => w.kind === 'pool' && w.mesh && w.mesh.userData.poolWaterDepthAt)
+          .sort((a, b) => Math.hypot(a.pos.x - P.x, a.pos.z - P.z) - Math.hypot(b.pos.x - P.x, b.pos.z - P.z))[0];
+        if (!src0) {
+          fails.push('no pool mesh exposes poolWaterDepthAt — the raycast can no longer be checked against the shader waterline');
+        } else {
+          const legT0 = performance.now();
+          const mesh = src0.mesh, depthAt = mesh.userData.poolWaterDepthAt;
+          const R = ctx.three.renderer, gl = R.getContext();
+          const saveW = R.domElement.width, saveH = R.domElement.height;
+          R.setSize(900, 900, false);
+          const W = R.domElement.width, H = R.domElement.height;
+          // Ortho so world→screen is exact and height-independent (a perspective pose would make the
+          // unprojection depend on the assumed water height, which is the thing under test).
+          const S = P.r + 2.2;
+          const oc = new THREE.OrthographicCamera(-S, S, S, -S, 0.05, 6);
+          oc.position.set(P.x, P.y + 1.6, P.z);
+          oc.up.set(0, 0, -1);
+          oc.lookAt(P.x, P.y, P.z);
+          oc.updateProjectionMatrix(); oc.updateMatrixWorld(true);
+          const lamp = new THREE.PointLight(0xffffff, 40, 14, 1.4);
+          lamp.position.set(P.x, P.y + 1.5, P.z);
+          ctx.three.scene.add(lamp);
+          // Collar OFF, so the ≥2/255 mask ends at the waterline and not 0.30m past it.
+          const shaders = (mesh.material.userData && mesh.material.userData.poolShaders) || [];
+          const savedBand = shaders.map((s) => (s.uniforms.uPoolWetBand ? s.uniforms.uPoolWetBand.value : null));
+          for (const s of shaders) if (s.uniforms.uPoolWetBand) s.uniforms.uPoolWetBand.value = 0.0001;
+          notes.annulusShaders = shaders.length;
+
+          const read = () => { R.render(ctx.three.scene, oc); const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+          const waters = []; ctx.three.scene.traverse((o) => { if (o.isMesh && o.name === 'cavePoolWater' && o.visible) waters.push(o); });
+          const on = read();
+          for (const o of waters) o.visible = false;
+          const off = read();
+          for (const o of waters) o.visible = true;
+          const mask = new Uint8Array(W * H);
+          let maskN = 0;
+          for (let i = 0, k = 0; k < W * H; k++, i += 4) {
+            const dm = Math.max(Math.abs(on[i] - off[i]), Math.abs(on[i + 1] - off[i + 1]), Math.abs(on[i + 2] - off[i + 2]));
+            if (dm >= 2) { mask[k] = 1; maskN++; }
+          }
+          // restore the pokes immediately — everything below is CPU-side
+          for (let i = 0; i < shaders.length; i++) if (savedBand[i] !== null) shaders[i].uniforms.uPoolWetBand.value = savedBand[i];
+          ctx.three.scene.remove(lamp);
+          R.setSize(saveW, saveH, false);
+
+          const vtmp = new THREE.Vector3();
+          // 3×3 MAJORITY (≥5/9) so a stray speckle cannot invent a waterline 2m out.
+          const inMask = (x, z) => {
+            vtmp.set(x, P.y, z).project(oc);
+            const cx = Math.floor((vtmp.x * 0.5 + 0.5) * W), cy = Math.floor((vtmp.y * 0.5 + 0.5) * H);
+            if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) return false;
+            let n = 0;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (mask[(cy + dy) * W + (cx + dx)]) n++;
+            return n >= 5;
+          };
+          const rc = new THREE.Raycaster(); rc.far = 60;
+          const down = new THREE.Vector3(0, -1, 0);
+          const hitsAt = (x, z) => { rc.set(new THREE.Vector3(x, src0.pos.y + 3, z), down); const h = []; mesh.raycast(rc, h); return h.length; };
+          // The UNCLAMPED raycast — i.e. does the mesh have geometry here at all? Used to tell a
+          // genuine "the clamp rejected it" from an uninformative "there was nothing to reject".
+          const stockHitsAt = (x, z) => { rc.set(new THREE.Vector3(x, src0.pos.y + 3, z), down); const h = []; THREE.Mesh.prototype.raycast.call(mesh, rc, h); return h.length; };
+
+          const rows = []; const devs = [];
+          for (let b = 0; b < 8; b++) {
+            const ang = (b / 8) * Math.PI * 2 + 0.31;
+            const ux = Math.cos(ang), uz = Math.sin(ang);
+            let cpuEdge = -1, gpuEdge = -1;
+            for (let r = 0.1; r < P.r + 2.2; r += 0.02) {
+              const x = P.x + ux * r, z = P.z + uz * r;
+              if (depthAt(x, z) > 0) cpuEdge = r;
+              if (inMask(x, z)) gpuEdge = r;
+            }
+            if (gpuEdge < 0) { rows.push({ b, gpu: null, cpu: cpuEdge < 0 ? null : +cpuEdge.toFixed(2), note: 'no GPU water on this bearing (occluded from above?)' }); continue; }
+            if (cpuEdge < 0) { rows.push({ b, gpu: +gpuEdge.toFixed(2), cpu: null }); fails.push(`refill annulus: bearing ${b} renders water out to r=${gpuEdge.toFixed(2)}m but the CPU predicate finds NONE — the [E] prompt is dead over visible water`); continue; }
+            const dev = cpuEdge - gpuEdge;
+            devs.push(dev);
+            const inn = hitsAt(P.x + ux * (gpuEdge * 0.6), P.z + uz * (gpuEdge * 0.6));
+            const ox = P.x + ux * (gpuEdge + PHANTOM), oz = P.z + uz * (gpuEdge + PHANTOM);
+            const out = hitsAt(ox, oz), outStock = stockHitsAt(ox, oz);
+            rows.push({ b, gpu: +gpuEdge.toFixed(2), cpu: +cpuEdge.toFixed(2), dev: +dev.toFixed(3), inn, out, outStock });
+            if (Math.abs(dev) > TOL) fails.push(`refill annulus: on bearing ${b} the CPU waterline (r=${cpuEdge.toFixed(2)}m) is ${dev >= 0 ? '' : '-'}${Math.abs(dev).toFixed(2)}m from the RENDERED waterline (r=${gpuEdge.toFixed(2)}m) — over the ${TOL}m twin tolerance`);
+            if (out > 0) fails.push(`refill annulus: the water mesh still raycast-hits ${PHANTOM.toFixed(2)}m OUTSIDE its RENDERED waterline on bearing ${b} (r=${(gpuEdge + PHANTOM).toFixed(2)}m) — the [E] prompt would fire on dry rock`);
+          }
+          const innerOk = rows.filter((r) => r.inn > 0).length;
+          const valid = rows.filter((r) => r.gpu !== null).length;
+          // The phantom probe is only evidence where the mesh actually has geometry. If it lands off
+          // the mesh on EVERY bearing the check proved nothing, and the run must say so out loud
+          // rather than bank a green — the `dev ≤ TOL` assertion above is then the only anti-phantom
+          // teeth, which is the honest state of affairs and needs to be visible.
+          const outInformative = rows.filter((r) => r.outStock > 0).length;
+          if (valid >= 6 && outInformative === 0) console.log(`[pool-fill] NOTE: the phantom probe landed off the water mesh on all ${valid} bearings (gpuEdge + ${PHANTOM.toFixed(2)}m is past the skirt) — anti-phantom rests on the dev≤TOL assertion this run`);
+          if (valid < 6) fails.push(`refill annulus: only ${valid}/8 bearings produced a rendered waterline (mask ${maskN}px) — the top-down measurement pose is occluded or unlit`);
+          if (innerOk < 6) fails.push(`refill annulus: only ${innerOk}/8 bearings raycast-hit water WELL INSIDE the rendered waterline — the raycast clamp is eating real water`);
+          const adev = devs.map(Math.abs);
+          notes.annulus = rows;
+          notes.annulusDev = devs.length
+            ? { n: devs.length, meanAbs: +(adev.reduce((a, c) => a + c, 0) / adev.length).toFixed(3), maxAbs: +Math.max(...adev).toFixed(3), tol: TOL, maskPx: maskN, ms: +(performance.now() - legT0).toFixed(0) }
+            : { n: 0, maskPx: maskN, ms: +(performance.now() - legT0).toFixed(0) };
+        }
+      }
+
+      // ── 4c. THE DARK SHARD (round-12 visual critique, sev-2). The r11 refill frame carried a
+      //     4-6px, ~50%-darkening, stair-stepped near-vertical sliver lying across the water at
+      //     ~(850,469)-(866,554). Per the project's z-fight rule: NAME IT before touching it. From
+      //     the refill camera pose, list every object within 3m of the eye whose bounding box is
+      //     thinner than 12cm in any axis — a thin unlit thing between the eye and the lit water.
+      {
+        // The HERO pool is the LARGEST one (that is what poolShotSet frames), not pools[0].
+        const HP = pools.slice().sort((a, b) => b.r - a.r)[0];
+        const hn = cavep.nodes.find((x) => x.id === HP.node) || { x: HP.x, z: HP.z, y: HP.y - 0.26 };
+        let hx = hn.x - HP.x, hz = hn.z - HP.z; const HL = Math.hypot(hx, hz) || 1; hx /= HL; hz /= HL;
+        const hFloor = hn.y;
+        const cam = ctx.three.camera;
+        const eye = new THREE.Vector3(HP.x + hx * (HP.r * 0.92), hFloor + 1.68, HP.z + hz * (HP.r * 0.92));
+        const tgt = new THREE.Vector3(HP.x + hx * (HP.r * 0.92 - 0.42), HP.y - 0.02, HP.z + hz * (HP.r * 0.92 - 0.42));
+        const R = ctx.three.renderer, gl = R.getContext();
+        const W = R.domElement.width, H = R.domElement.height;
+        const saveP = cam.position.clone(), saveQ = cam.quaternion.clone();
+        cam.position.copy(eye); cam.lookAt(tgt); cam.updateMatrixWorld(true);
+        R.render(ctx.three.scene, cam);
+        const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const L = (x, y) => { const i = (((H - 1 - y) * W) + x) * 4; return 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]; };
+        // The signature: a narrow dark NOTCH flanked by brighter pixels 4-6px either side.
+        const notches = [];
+        for (let y = 120; y < H - 120; y += 2) {
+          for (let x = 60; x < W - 60; x++) {
+            const c = L(x, y);
+            const l = Math.max(L(x - 6, y), L(x - 5, y), L(x - 4, y));
+            const r2 = Math.max(L(x + 4, y), L(x + 5, y), L(x + 6, y));
+            const mn = Math.min(l, r2);
+            if (mn > 4 && c < mn * 0.62) notches.push({ x, y, c: +c.toFixed(1), flank: +mn.toFixed(1) });
+          }
+        }
+        notes.shardNotchPx = notches.length;
+        // Name the darkest one: unproject it and raycast EVERYTHING.
+        if (notches.length) {
+          notches.sort((a, b) => (a.c / a.flank) - (b.c / b.flank));
+          const q = notches[0];
+          const ndc = new THREE.Vector3((q.x / W) * 2 - 1, -((q.y / H) * 2 - 1), 0.5);
+          const rc2 = new THREE.Raycaster(); rc2.setFromCamera(ndc, cam); rc2.far = 40;
+          const all = []; ctx.three.scene.traverse((o) => { if (o.isMesh && o.visible) all.push(o); });
+          const hits = rc2.intersectObjects(all, false).slice(0, 5);
+          notes.shardWorst = q;
+          notes.shardHits = hits.map((h) => ({ name: h.object.name || h.object.type, d: +h.distance.toFixed(3), p: [+h.point.x.toFixed(2), +h.point.y.toFixed(3), +h.point.z.toFixed(2)] }));
+        }
+        cam.position.copy(saveP); cam.quaternion.copy(saveQ); cam.updateMatrixWorld(true);
+      }
+
       // ── 5. THE WELL REFUSAL ───────────────────────────────────────────────────────────────
       // The proof chain is deliberately in two halves, because teleporting a kilometre to a real
       // well drags in chunk streaming and would make this gate flaky rather than strict:
@@ -3064,12 +3292,84 @@ const SCENARIOS = {
       return { stable: runs[0] === runs[1], matchesLive: live === rebuilt, a: runs[0], b: runs[1], live, rebuilt };
     }).catch((e) => ({ error: String(e && e.message || e) }));
 
+    // ── 6. THE PER-CAVE EMITTER ISOLATION PROOF (round-13 fix 1) ──────────────────────────────
+    //    THE BUG: `uPoolEmit` held the cave's mirrored fungi, and it lived in module-global arrays
+    //    bound into ONE shared material. `setCavePoolEmitters` overwrote all 8 slots at every cave
+    //    build, and CAVE_RESIDENT_MAX is 3 — so streaming a second cave into range stripped the
+    //    reflections out of the cave the player was STANDING IN. Now each cave owns its material.
+    //    The proof does not need two real caves (an SDF build is seconds): it drives the module's
+    //    own exports. Snapshot the LIVE cave's slots, build a SECOND cave's material and publish a
+    //    deliberately different emitter set into it, then re-read the live cave's slots. Under the
+    //    old module-global code the live cave's slots would now be cave B's; they must be unchanged.
+    const iso = await page.evaluate(async () => {
+      const ctx = window.__game.ctx;
+      const cp = await import('/src/world/cavePools.ts');
+      let liveMat = null;
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.name === 'cavePoolWater' && !liveMat) liveMat = o.material; });
+      if (!liveMat) return { error: 'no live cavePoolWater mesh' };
+      const before = cp.readCavePoolEmitters(liveMat);
+      if (!before) return { error: 'the live pool material is not registered as a pool material' };
+      const liveBefore = JSON.stringify(before);
+      const mats0 = cp.cavePoolLiveMaterials();
+      // Cave B: its own material, its own emitters, at coordinates nothing in cave A shares.
+      const matB = cp.createCavePoolMaterial();
+      const THREE = window.__game.THREE;
+      const emitB = [{ x: 9000, y: 9001, z: 9002, intensity: 7.5, color: new THREE.Color(1, 0, 0) }];
+      cp.setCavePoolEmitters(matB, emitB, [{ nodeId: 0, x: 9000, z: 9002, radius: 2, waterY: 9001, score: 0 }]);
+      const after = cp.readCavePoolEmitters(liveMat);
+      const bSlots = cp.readCavePoolEmitters(matB);
+      const matsAfterCreate = cp.cavePoolLiveMaterials();
+      const released = cp.releaseCavePoolMaterial(matB);
+      const matsAfterRelease = cp.cavePoolLiveMaterials();
+      return {
+        liveBefore, liveAfter: JSON.stringify(after),
+        liveNonZero: before.filter((e) => e[3] > 0).length,
+        bSlot0: bSlots ? bSlots[0] : null,
+        mats0, matsAfterCreate, matsAfterRelease, released,
+        bStillRegistered: cp.readCavePoolEmitters(matB) !== null,
+      };
+    }).catch((e) => ({ error: String((e && e.message) || e) }));
+
     const fails = (r.fails || []).slice();
     if (det.error) fails.push(`determinism check could not run: ${det.error}`);
     else {
       if (!det.stable) fails.push(`pool placement NOT deterministic — run A "${det.a}" vs run B "${det.b}"`);
       if (!det.matchesLive) fails.push(`rebuilt pool placement differs from the LIVE cave — live "${det.live}" vs rebuilt "${det.rebuilt}"`);
     }
+    if (iso.error) fails.push(`per-cave emitter isolation check could not run: ${iso.error}`);
+    else {
+      if (!iso.liveNonZero) fails.push('the live cave publishes NO mirrored emitters at all — setCavePoolEmitters never ran, or no fungi are within CAVE_POOL_GLINT_RANGE_M of water');
+      if (iso.liveAfter !== iso.liveBefore) fails.push(`BUILDING A SECOND CAVE CLOBBERED THE LIVE CAVE'S MIRRORED EMITTERS — before ${iso.liveBefore} / after ${iso.liveAfter} (the module-global emitter regression)`);
+      if (!iso.bSlot0 || iso.bSlot0[3] <= 0) fails.push(`the second cave's own material did not receive its emitters (slot0 ${JSON.stringify(iso.bSlot0)})`);
+      if (iso.matsAfterCreate !== iso.mats0 + 1) fails.push(`creating a cave material did not register it (${iso.mats0} → ${iso.matsAfterCreate})`);
+      if (!iso.released || iso.matsAfterRelease !== iso.mats0) fails.push(`releaseCavePoolMaterial did not unregister (released=${iso.released}, ${iso.matsAfterCreate} → ${iso.matsAfterRelease}) — an evicted cave would keep a live material in the ripple clock forever`);
+      if (iso.bStillRegistered) fails.push('a released pool material is still registered');
+    }
+    console.log(`[pool-fill] emitterIsolation ${JSON.stringify(iso)}`);
+
+    // ── 7. THE PIXEL GATE (round-13 fix 2b) ──────────────────────────────────────────────────
+    //    `pool-look` measures the water's on-screen appearance; nothing ran it in `verify:chunks`,
+    //    so the whole visual contract (darker than lit rock · a LIVE ripple · no 8-bit banding · a
+    //    surface that mirrors rather than glows) had no permanent gate. A REDUCED set of its
+    //    framings now runs here, on the same shared verdict `pool-look` uses:
+    //      rim   — standing over the water: darker-than-rock, ripple motion, plateau/banding.
+    //      fungi — the mirrored-emitter framing (skipped when the seed puts no cluster near water).
+    //      unlit — no lamp in the room: the median canary (it must not glow) AND the p99 canary
+    //              (it must still mirror) — the one framing where an emitter is the only light.
+    //    Screenshots are off (the pictures are `pool-look`'s job); the canvas is set to pool-look's
+    //    1100×720 because the plateau and lit-pixel floors are calibrated at that resolution.
+    const pixT0 = Date.now();
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+    });
+    const pm = await poolShotSet(page, 'poolgate', { only: ['rim', 'fungi', 'unlit'], shots: false });
+    const pixFails = poolPixelFails(pm, Object.keys(pm));
+    for (const f of pixFails) fails.push(f);
+    console.log(`[pool-fill] pixel gate: ${Object.keys(pm).length} framings, ${pixFails.length} fails, ${((Date.now() - pixT0) / 1000).toFixed(1)}s`);
+
     const pass = fails.length === 0 ? 1 : 0;
     for (const f of fails) console.log(`[pool-fill] FAIL ${f}`);
     console.log(`[pool-fill] ${JSON.stringify(r.notes || {})}`);
@@ -3119,6 +3419,72 @@ const SCENARIOS = {
       catch (e) { console.log(`[pool-fill] shot flaked (${e.name})`); }
     }
     if (!pass) throw new Error('pool-fill FAILED');
+  },
+
+  // ── pool-look (DEEPER cycle 6, the HERO-VISUAL pass) — THE REAL PLAYER'S-EYE READ OF THE WATER ──
+  //   The `pool-fill` gate measures; this one LOOKS, and it looks from where the player actually is.
+  //   No rig fill light, no studio rig, no framed exterior: the shipping darkness floors, the shipping
+  //   cave fog, and the shipping TORCH tuning (TORCH_LIGHT_*) carried where the game carries it — at
+  //   the flame, 45cm ahead of the eye and 30cm to the right. The earlier `pool-fill --shot` used a
+  //   14-intensity/22m rig torch, i.e. ~8× the real thing; that is why the water graded "chalky under
+  //   a bright rig torch". A harness that invents its own light is testing a different scene.
+  //   Eight framings, because a single one has hidden failures in this project every time:
+  //     first-sight (entering the chamber) · rim (standing over it) · graze (across the surface) ·
+  //     wade (looking at your feet through the water) · shore (the waterline close-up) ·
+  //     flashlight · unlit (is it just a black hole?) · near-mushroom-glow.
+  //   Run: npm run rig -- --scenario=pool-look --port=5244 [--seed=1337] [--tag=r1]
+  'pool-look': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+    });
+    // ── `--flat=spec|all` — THE TEETH CALIBRATION for the modulation floor (round-13).
+    //    A floor is only a gate if a BROKEN surface falls under it, so the floor is set from a
+    //    measured flat surface, not from taste. This pokes the LIVE uniforms (reachable because each
+    //    cave's material publishes its compiled shader refs on `userData.poolShaders`):
+    //      spec = uPoolRipSlope 0        → the wave normal goes flat; the torch's answer is one lobe.
+    //      all  = + uPoolCaustic/Gravel 0 → a genuinely smooth pane: no transmission bands either.
+    //    NOT a shipping path and never run by a gate — it exists so the numbers in the floor's
+    //    comment are reproducible.
+    if (argv.flat) {
+      const n = await page.evaluate((mode) => {
+        const ctx = window.__game.ctx; let c = 0;
+        ctx.three.scene.traverse((o) => {
+          if (!o.isMesh || o.name !== 'cavePoolWater') return;
+          const shaders = o.material && o.material.userData && o.material.userData.poolShaders;
+          if (!shaders) return;
+          for (const s of shaders) {
+            if (s.uniforms.uPoolRipSlope) { s.uniforms.uPoolRipSlope.value = 0; c++; }
+            if (mode === 'all') {
+              if (s.uniforms.uPoolCaustic) s.uniforms.uPoolCaustic.value = 0;
+              if (s.uniforms.uPoolGravelA) s.uniforms.uPoolGravelA.value = 0;
+            }
+          }
+        });
+        return c;
+      }, String(argv.flat));
+      console.log(`[pool-look] FLAT MODE "${argv.flat}" — zeroed ripple on ${n} live shader(s). These numbers CALIBRATE the floor; they are not a pass.`);
+      if (!n) throw new Error('pool-look --flat: no live pool shader exposed userData.poolShaders — the teeth calibration cannot run');
+    }
+    const m = await poolShotSet(page, argv.tag ? `poollook-${argv.tag}` : 'poollook',
+      argv.framings ? { only: String(argv.framings).split(',').map((s) => s.trim()) } : {});
+
+    // ── THE PIXEL VERDICT (round-12 finding 12, shared since round-13). Machine-read at SHIPPING
+    //    exposure, every run. `poolPixelFails` is the SAME judgement `pool-fill` applies inside
+    //    `verify:chunks` — see its definition for what each rule proves and why.
+    //    `--flat` runs are calibration, not verification: they are EXPECTED to fail.
+    const fails = poolPixelFails(m, argv.framings ? Object.keys(m) : null);
+    for (const f of fails) console.log(`[pool-look] FAIL ${f}`);
+    console.log(`POOL-LOOK pass=${fails.length === 0 ? 1 : 0} exposure=${POOL_SHOT_EXPOSURE} framings=${Object.keys(m).length} fails=${fails.length}`);
+    // UNCONDITIONAL (round-13 sev-2). This used to throw only under `--gate`, a flag NOTHING ever
+    // passed — so the scenario printed FAIL lines and exited 0, and two red framings rode along for
+    // a whole round. A scenario that prints FAIL must fail.
+    if (fails.length) throw new Error(`pool-look FAILED (${fails.length} pixel assertions)`);
   },
 
 
@@ -3938,7 +4304,14 @@ const SCENARIOS = {
       // D299 — dressing registry baselines (pickups/wells/cacti must
       // return to boot counts after the round trip).
       const basePk = base.totalPickups;
+      // BY KIND (DEEPER cycle 6 round-13). `totalWells` filters ctx.waterSources to kind 'well', so
+      // once cycle 6 put cave POOLS in the same registry the old single baseline stopped watching
+      // half of it — "a pool source never outlives its cave" (caveStream.ts) had no gate. Both kinds
+      // are baselined and checked separately, plus the per-cave water MATERIAL count (a cave that is
+      // evicted without releasing its material leaks a live shader the ripple clock keeps writing to).
       const baseWells = base.totalWells;
+      const basePools = base.totalPools;
+      const basePoolMats = base.totalPoolMaterials;
       const baseCacti = base.totalCacti;
       // Content snapshot of chunks guaranteed-loaded around a position:
       // WORLD-space positions of every mesh (markers + streamed-POI content)
@@ -4285,6 +4658,8 @@ const SCENARIOS = {
       // D299 — dressing registries return to boot baselines.
       if (end.totalPickups !== basePk) fails.push(`pickup registry LEAK: ${basePk} → ${end.totalPickups} (streamed branches/scrap not despawned)`);
       if (end.totalWells !== baseWells) fails.push(`well registry LEAK: ${baseWells} → ${end.totalWells}`);
+      if (end.totalPools !== basePools) fails.push(`POOL registry LEAK: ${basePools} → ${end.totalPools} (an evicted cave's pool sources outlived it — caveStream detach)`);
+      if (end.totalPoolMaterials !== basePoolMats) fails.push(`pool MATERIAL leak: ${basePoolMats} → ${end.totalPoolMaterials} (a per-cave water material was not released on eviction)`);
       if (end.totalCacti !== baseCacti) fails.push(`cactus registry LEAK: ${baseCacti} → ${end.totalCacti}`);
       dupCheck('home');
       // ── Leg 5 (D297): SPEEDER RIDE — streaming must follow the BIKE.
@@ -15497,4 +15872,540 @@ async function caveShotSet(page, prefix) {
       await shootDark({ exp: 1.3, cam: [ent.x, ent.y + 1.7, ent.z], look: [geo.mouthX, geo.floor + 1.2, geo.cz], shaft: true }, 'shaft-inside');
     }
   }
+}
+
+/** DEEPER cycle 6 — the CAVE POOL shot set (the hero-visual pass's iteration loop).
+ *
+ *  Every frame here is the REAL in-game read: the shipping cave darkness floors, the shipping cave
+ *  fog, the shipping torch tuning carried at the flame position relative to the eye — and, since the
+ *  round-12 code critique, the SHIPPING TONE-MAPPING EXPOSURE (`POOL_SHOT_EXPOSURE`, which must equal
+ *  `src/core/scene.ts`'s `renderer.toneMappingExposure`). Rounds 1-11 shot at 1.25-1.35 while claiming
+ *  in this very docstring that nothing was brightened — i.e. every look judgement was made ~20-30%
+ *  hot. That is fixed: ONE constant, equal to shipping, used by every framing. If the water turns out
+ *  to be unreadable at 1.05 in some framing, that is a FINDING to report (it feeds the darkness-taste
+ *  pass), never a licence to re-brighten the rig.
+ *
+ *  THE PIXEL METRICS (round-12 finding 12 — "gate blindness"). `pool-fill`'s water check is a CPU
+ *  raycast, which cannot see the fragment `discard`: a pool whose every fragment was discarded would
+ *  pass green. So every framing here is now shot TWICE — water visible, then water hidden — and the
+ *  per-pixel DIFF of the two renders is the water's true on-screen footprint. From that mask:
+ *    · `waterL` mean luminance of the water, `rockL` mean of the lit rock in a ring around it
+ *      → `ratio` (finding 1 wants water DARKER than the rock it sits in: ratio < 1),
+ *    · `mod%` high-pass modulation of the water region (finding 2's ripple floor),
+ *    · `plateau` the worst run of one identical 8-bit value along a scanline (finding 3's banding),
+ *    · `inner/outer` the depth cue (the middle must be DARKER than the shallows).
+ *  Printed per framing as `[pool-metric]` lines, and returned so `pool-fill` can assert on them.
+ *
+ *  Writes `verification/scen-<prefix>-<name>.png`. */
+const POOL_SHOT_EXPOSURE = 1.05;      // === src/core/scene.ts renderer.toneMappingExposure. Do not raise.
+
+// ── THE PIXEL VERDICT, SHARED (round-13). One definition, used by BOTH `pool-look` (the full
+//    12-framing visual pass) and `pool-fill` (the permanent gate in `verify:chunks`, which shoots a
+//    3-framing subset). Two harnesses that grade water by two different rules is how a gate drifts
+//    away from the thing it is supposed to protect.
+const POOL_LIT = ['rim', 'refill', 'graze', 'wade', 'shore', 'flash', 'dimtorch', 'fungi', 'pool2-rim'];
+// The DARKER-THAN-ROCK rule is asked only where the torch is actually lighting the rock the pool
+// sits in — i.e. standing at/over/in the water. `firstsight`, `graze` and `flash` deliberately frame
+// water at 4-12m, where the rock around it is NOT torch-lit and the pool's mirrored glints are
+// correctly the brightest thing in the room (that is the "catch your eye in a black room" read the
+// feature exists for). Applying a ratio<1 rule there would be a gate measuring the wrong thing.
+//   `wade` is excluded from it on purpose and NOT quietly: standing IN the pool puts the water
+//   0.5-1.5m from the flame and the only "adjacent rock" in frame at 3-6m, so an inverse-square
+//   comparison there measures distance, not albedo. `wade` is held to the un-gameable rule below.
+const POOL_NEAR = ['rim', 'refill', 'shore', 'dimtorch', 'pool2-rim'];
+//   …which every near framing must pass: the water may never make what is BEHIND it brighter.
+//   Same pixels, same lights, water on vs water off — no framing artefact can flatter it.
+const POOL_DARKENS = ['rim', 'refill', 'wade', 'shore', 'dimtorch', 'pool2-rim'];
+// PLACEMENT-DEPENDENT framings: `fungi` needs a bioluminescent cluster within 26m of the hero pool
+// and `pool2-rim` needs the seed to have placed a second pool. Absent ⇒ logged skip. Everything else
+// in POOL_LIT is unconditional, and its absence is a FAIL (round-13 sev-3 — the old loop `continue`d
+// past any missing framing, so a shot set that silently lost half its framings graded green).
+const POOL_OPTIONAL = ['fungi', 'pool2-rim'];
+
+/** Grade one shot set. `want` limits the judgement to framings this run actually shot. Returns fails. */
+function poolPixelFails(metrics, want) {
+  const fails = [];
+  const lit = POOL_LIT.filter((k) => !want || want.includes(k));
+  for (const k of lit) {
+    const q = metrics[k];
+    if (!q) {
+      if (POOL_OPTIONAL.includes(k)) { console.log(`[pool-metric] ${k} SKIPPED — placement-dependent framing not available for this seed`); continue; }
+      fails.push(`${k}: framing missing from the shot set`); continue;
+    }
+    if (!q.waterPx) { fails.push(`${k}: the water renders ZERO pixels (fragment discard ate the whole pool)`); continue; }
+    // (a) it demonstrably renders — the A/B diff has real extent.
+    if (q.pctFrame < 0.5) fails.push(`${k}: water covers only ${q.pctFrame}% of the frame (< 0.5% floor — the framing or the discard is wrong)`);
+    // (b) finding 1 — water must be DARKER than the lit rock around it.
+    if (POOL_NEAR.includes(k)) {
+      // NOT a silent skip any more (round-13 sev-3). `ratio` is null when there is no lit rock in the
+      // ring, and these five framings are all defined as "standing at the water with the torch up" —
+      // if the surround is unlit, the framing broke, and passing quietly would hide it.
+      if (q.ratio === null) fails.push(`${k}: NO lit rock in the ring around the water (rockLitPx=${q.rockLitPx}, rockLitL=${q.rockLitL}) — the darker-than-rock rule could not be evaluated in a framing that is supposed to be torch-lit`);
+      // The water side of this comparison is the MEDIAN, not the mean (round-13, found by extending
+      // the gate to a second seed). The rule's intent is "the BODY of the water is darker than the
+      // rock beside it — a dark mirror, not a bright diffuse floor". The MEAN includes the specular
+      // glint path, which is the feature itself: penalising it grades the pool down for answering
+      // the torch, which is the one thing it exists to do. On seed 7 the mean ratio read 1.30 and
+      // failed — but 78% of the move from seed 1337's 0.73 was the RING ROCK getting dimmer
+      // (rockLitL 5.15 → 3.35), not the water getting brighter (waterL 3.75 → 4.35). A rule that
+      // swings on how bright the rock happens to be is measuring the rock.
+      //   The median is the same discriminator the `unlit` canary already uses and for the same
+      //   reason: a mirror is mostly dark with sparse bright glints (low p50, high p99); a glowing
+      //   or diffuse sheet lifts every pixel (high p50). Measured p50/rockLitL: seed 1337 rim 0.42,
+      //   refill 0.31, shore 0.43, dimtorch 0.06, pool2-rim 0.72; seed 7 rim 0.85.
+      //   The MEAN-vs-MEAN comparison is not dropped — it survives in the un-gameable DARKENS rule
+      //   below, which compares the water against the very pixels behind it rather than a ring of
+      //   different ones, and which seed 7 passes by 3.2×.
+      else if (q.p50 > q.rockLitL) fails.push(`${k}: the water's MEDIAN luminance ${q.p50} exceeds the adjacent LIT rock's mean ${q.rockLitL} (ratio of means ${q.ratio}) — the body of the water is brighter than the stone it sits in, i.e. a bright diffuse floor rather than a dark mirror`);
+    }
+    if (POOL_DARKENS.includes(k) && q.waterL >= q.behindL) fails.push(`${k}: the water (${q.waterL}) is BRIGHTER than the bare rock behind it (${q.behindL}) — a surface that adds light rather than absorbing it`);
+    // (c) THE RIPPLE. See the `ripple` metric's block in poolShotSet for why this is a TEMPORAL
+    //     measurement and not the spatial high-pass it replaced: measured on the shipping cave, the
+    //     spatial number cannot tell a rippling surface (6.8-9.3%) from one with the wave slope
+    //     forced to zero (5.2-7.1%) — the distributions overlap and pool2-rim actually scores HIGHER
+    //     flat. The temporal number is 0.00 on a flat surface by construction.
+    //     Floors: measured shipping minimum is 2.38 levels / 16.98% (`graze`); the floors sit at
+    //     ~2.1-2.4× below that, and infinitely above flat.
+    if (q.litPx <= 2000) {
+      // Also not a silent skip any more: every framing in POOL_LIT is defined as lit.
+      fails.push(`${k}: only ${q.litPx} lit water pixels (floor 2000) — a framing that is supposed to be torch-lit has almost no lit water, so the ripple floor could not be evaluated`);
+    } else {
+      if (q.ripple !== null && q.ripple < 1.0) fails.push(`${k}: ripple motion ${q.ripple} 8-bit levels over 2s of wave time (floor 1.0; a surface with NO ripple measures exactly 0.00, shipping measures 2.4-7.9). r11's failure was 0.14 of one level`);
+      if (q.ripplePct !== null && q.ripplePct < 8) fails.push(`${k}: ripple motion is ${q.ripplePct}% of the water's own layer magnitude (floor 8%; shipping measures 17-81%)`);
+      // The ORIGINAL quantization question, kept as its own canary: is the water's spatial signal
+      // above one 8-bit level at all? This is NOT a ripple test (a flat surface still scores
+      // 0.52-0.86 here) — it catches the r11 class where the whole surface collapsed to 0.14 of a
+      // level and banded. `mod`/`modTot` are reported alongside as diagnostics and NOT gated,
+      // precisely because they were measured to be unable to separate rippled from flat.
+      if (q.modAbs !== null && q.modAbs < 0.35) fails.push(`${k}: spatial high-pass ${q.modAbs} of one 8-bit level (floor 0.35) — the water's signal is being eaten by quantization, r11-style`);
+    }
+    // (d) finding 3 — no 8-bit plateaus across the pool.
+    if (q.maxPlateau > 90) fails.push(`${k}: a ${q.maxPlateau}px run of ONE identical 8-bit value (contour banding; dither floor is 90px)`);
+    // (d2) FINDING 4 — THE ENVIRONMENT APPEARS IN THE SURFACE. Asked in the `fungi` framing, which
+    //      is the one deliberately composed around the nearest bioluminescent cluster (and is
+    //      therefore already placement-optional). A mirroring surface carries sparse BRIGHT
+    //      highlights: measured p99 76.6 (seed 1337) / 58.0 (seed 7) against a floor of 8.
+    if (k === 'fungi' && q.p99 < 8) fails.push(`fungi: the water's 99th-percentile luminance is only ${q.p99} in the framing composed around the nearest emissive cluster — nothing bright is being mirrored (finding 4 regressed; shipping measures 58-77)`);
+  }
+  // (e) THE SELF-ILLUMINATION CANARY. With no lamp in the room the pool must not GLOW. The
+  //     discriminator is the MEDIAN, not the mean: a mirror is mostly black with sparse glints.
+  //
+  //     WHEN THE WATER RENDERS NOTHING HERE, THAT IS A PASS, and it is stated rather than skipped.
+  //     Round-13 first asserted `waterPx > 0` on this framing as a "the surface must mirror
+  //     something" proof — and seed 7 failed it. Correctly: this framing's camera is a fixed offset
+  //     from the hero pool, so whether a mirrored emitter lands in its reflection lobe depends on
+  //     where that seed put its fungi (seed 1337's hero pool has a cluster 2.5m away and 5 live
+  //     emitter slots; seed 7's has 2, and none of them reflect into this pose). A pool that
+  //     correctly shows NOTHING in a black room is the desired behaviour and satisfies this canary
+  //     trivially — it is not evidence of a broken mirror. The mirroring proof lives where it is
+  //     actually well-founded: the `fungi` framing's p99 above, and the emitter-publication
+  //     assertion in `pool-fill` leg 6.
+  const u = metrics['unlit'];
+  if (want && !want.includes('unlit')) { /* not shot */ }
+  else if (!u) fails.push('unlit: framing missing from the shot set — the self-illumination canary did not run');
+  else if (!u.waterPx) console.log(`[pool-metric] unlit: water changes no pixel by ≥2/255 with no lamp in the room (anyPx=${u.anyPx}) — nothing to mirror from this pose; the no-glow canary passes trivially`);
+  else {
+    if (u.p50any > 0.6) fails.push(`unlit: MEDIAN luminance ${u.p50any} across the water's whole footprint with no lamp in the room — the surface is self-illuminating, not mirroring`);
+    if (u.ratio !== null && u.ratio > 1.0) fails.push(`unlit: the water (${u.waterL}) is brighter than the emissive features it mirrors (${u.rockLitL})`);
+    // …and when it DOES render here, those pixels must be sparse GLINTS, not a wash.
+    if (u.p99 < 8) fails.push(`unlit: the water renders ${u.waterPx}px with no lamp but its 99th-percentile luminance is only ${u.p99} — that is a uniform wash, not mirrored glints (shipping measures ~110)`);
+  }
+  return fails;
+}
+
+/** `opts.only` — a Set/array of framing names to shoot (default: all of them). `opts.shots:false`
+ *  skips the PNG writes and the settle wait, which is what the permanent `pool-fill` gate uses: it
+ *  wants the pixel METRICS, not the pictures, and the screenshots are most of the wall clock. */
+async function poolShotSet(page, prefix, opts = {}) {
+  const only = opts.only ? new Set(opts.only) : null;
+  const wantShots = opts.shots !== false;
+  const geo = await page.evaluate(() => {
+    const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+    let p = null;
+    ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe; });
+    if (!p || !(p.pools || []).length) return null;
+    const pools = p.pools.slice().sort((a, b) => b.r - a.r).map((q) => {
+      const n = p.nodes.find((x) => x.id === q.node) || { x: q.x, y: q.y - 0.26, z: q.z, rx: 6, kind: '?' };
+      return { x: q.x, y: q.y, z: q.z, r: q.r, node: q.node, nx: n.x, nz: n.z, nrx: n.rx, floorY: n.y, nkind: n.kind };
+    });
+    // Nearest bioluminescent cap to the hero pool — the "light context changes everything" variant.
+    const want = new THREE.Color(T.CAVE_FUNGI_EMISSIVE_HEX).getHexString();
+    const wp = new THREE.Vector3(); let best = null, bd = 1e9;
+    ctx.three.scene.traverse((o) => {
+      if (!o.isMesh || !o.material || !o.material.emissive) return;
+      if (o.material.emissive.getHexString() !== want) return;
+      o.getWorldPosition(wp);
+      const d = Math.hypot(wp.x - pools[0].x, wp.z - pools[0].z);
+      if (d < bd) { bd = d; best = { x: +wp.x.toFixed(2), y: +wp.y.toFixed(2), z: +wp.z.toFixed(2), d: +d.toFixed(1) }; }
+    });
+    return { pools, fungi: best };
+  });
+  // A NAMED FAIL, not a silent `return undefined` (round-13 sev-3): the old early-return handed the
+  // caller `undefined`, which then threw a bare TypeError on `m['rim']` — an unreadable crash for
+  // what is actually a hard content regression. Every cave is guaranteed ≥1 pool
+  // (CAVE_POOL_CHAMBERS_MIN), so zero pools is a placement bug, not a "nothing to shoot" condition.
+  if (!geo) throw new Error('poolShotSet: the cave exposes NO pools (or no caveGenProbe at all) — placement regression? CAVE_POOL_CHAMBERS_MIN guarantees ≥1.');
+  console.log('[pool-look] pools=' + JSON.stringify(geo.pools.map((q) => 'n' + q.node + '@(' + q.x.toFixed(1) + ',' + q.z.toFixed(1) + ')r' + q.r.toFixed(1) + ' ' + q.nkind)) + ' fungi=' + JSON.stringify(geo.fungi));
+
+  const metrics = {};
+  const shoot = async (s, name) => {
+    if (only && !only.has(name)) return;
+    const m = await page.evaluate((s) => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+      ctx.flags.paused = true;
+      ctx.three.renderer.toneMappingExposure = s.exp;
+      const cam = ctx.three.camera;
+      cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+      cam.lookAt(s.look[0], s.look[1], s.look[2]);
+      cam.updateMatrixWorld(true);
+      const L = ctx.lights;
+      const st = {
+        hidden: [], added: [], bg: ctx.three.scene.background, fog: ctx.three.scene.fog,
+        amb: L.ambient.intensity, sun: L.sun.intensity, moon: L.moon.intensity,
+        torchI: ctx.player.viewModel ? ctx.player.viewModel.heldPointLight.intensity : 0,
+      };
+      // Hide everything outside the cave (the one-sided terrain sheet, seen from below, would fill
+      // the frame with sky + desert). Background pure black: unlit rock must read as unlit.
+      let caveGrp = null; ctx.three.scene.traverse((o) => { if (o.name === 'caveGen') caveGrp = o; });
+      ctx.three.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        let keep = false;
+        for (let q = o; q; q = q.parent) { if (q === caveGrp || q.name === 'caveEntrance') { keep = true; break; } }
+        if (!keep && o.visible) { st.hidden.push(o); o.visible = false; }
+      });
+      ctx.three.scene.background = new THREE.Color(0x000000);
+      if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = 0;
+      // THE REAL LIGHT MODEL — the shipping cave floors + the shipping near-black cave fog.
+      L.ambient.intensity = T.AMBIENT_BASE * T.CAVE_DARK_AMBIENT_FLOOR;
+      L.sun.intensity = 0; L.moon.intensity = 0;
+      ctx.three.scene.fog = new THREE.FogExp2(new THREE.Color(T.CAVE_FOG_HEX), T.CAVE_FOG_DENSITY);
+      if (s.light !== 'none') {
+        const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+        const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+        // Where the game actually puts the flame: ahead + right + a little below the eye.
+        const lp = cam.position.clone().addScaledVector(fwd, 0.45).addScaledVector(right, 0.30);
+        lp.y -= 0.28;
+        if (s.light === 'flashlight') {
+          const sp = new THREE.SpotLight(T.FLASHLIGHT_LIGHT_COLOR_HEX, T.FLASHLIGHT_LIGHT_INTENSITY,
+            T.FLASHLIGHT_LIGHT_DISTANCE, T.FLASHLIGHT_LIGHT_ANGLE_RAD, T.FLASHLIGHT_LIGHT_PENUMBRA, 1.2);
+          sp.position.copy(lp); sp.target.position.set(s.look[0], s.look[1], s.look[2]);
+          ctx.three.scene.add(sp); ctx.three.scene.add(sp.target); st.added.push(sp, sp.target);
+        } else {
+          const tl = new THREE.PointLight(T.TORCH_LIGHT_COLOR_HEX,
+            T.TORCH_LIGHT_INTENSITY * (s.torchMul || 1), T.TORCH_LIGHT_DISTANCE, 2);
+          tl.position.copy(lp); ctx.three.scene.add(tl); st.added.push(tl);
+        }
+      }
+      // ── THE A/B PIXEL METRIC (finding 12). Render with the water, read the framebuffer; hide every
+      //    `cavePoolWater` mesh, render, read again; the DIFF mask is the water's true rendered
+      //    footprint — a mask the CPU raycast cannot fake and the fragment `discard` cannot hide.
+      const R = ctx.three.renderer, gl = R.getContext();
+      const W = R.domElement.width, H = R.domElement.height;
+      const read = () => { R.render(ctx.three.scene, cam); const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+      const on = read();
+      const waters = []; ctx.three.scene.traverse((o) => { if (o.isMesh && o.name === 'cavePoolWater' && o.visible) waters.push(o); });
+      for (const o of waters) o.visible = false;
+      const off = read();
+      for (const o of waters) o.visible = true;
+      R.render(ctx.three.scene, cam);          // leave the canvas showing the real frame for the screenshot
+      window.__shotRestore = st;
+
+      const lum = (p, i) => 0.2126 * p[i] + 0.7152 * p[i + 1] + 0.0722 * p[i + 2];
+      // TWO masks, and the difference between them matters (round-12g). ANY non-zero diff proves the
+      // water RENDERS there — that is the existence check the CPU raycast could never make. But the
+      // water mesh reaches 1.10m past the rim and fades to alpha≈0 over the last of it, so an
+      // any-diff mask is up to 90% of the frame and is mostly DRY ROCK that the outermost fragment
+      // nudged by one LSB. Grading appearance on that mask measures the rock, not the water: it is
+      // why r12c-f reported a flat ~5% "ripple modulation" no matter what the ripple did. The
+      // appearance metrics use the ≥2/255 mask — where the water is actually doing something.
+      const maskAny = new Uint8Array(W * H), mask = new Uint8Array(W * H);
+      let nAny = 0, n = 0, sumOn = 0, sumOff = 0, cx = 0, cy = 0;
+      for (let i = 0, k = 0; k < W * H; k++, i += 4) {
+        const d0 = Math.abs(on[i] - off[i]), d1 = Math.abs(on[i + 1] - off[i + 1]), d2 = Math.abs(on[i + 2] - off[i + 2]);
+        const dm = Math.max(d0, d1, d2);
+        if (dm === 0) continue;
+        maskAny[k] = 1; nAny++;
+        if (dm < 2) continue;
+        mask[k] = 1; n++;
+        sumOn += lum(on, i); sumOff += lum(off, i);
+        cx += k % W; cy += (k / W) | 0;
+      }
+      if (!nAny) return { waterPx: 0, note: 'NO water pixels — the water renders NOTHING in this framing' };
+      if (!n) return { waterPx: 0, anyPx: nAny, note: 'water renders, but changes NO pixel by ≥2/255 — invisible in practice' };
+      cx /= n; cy /= n;
+      // Adjacent rock: a dilation ring outside the mask (RING px), lit pixels only (L ≥ 2).
+      const RING = 16;
+      let rn = 0, rsum = 0, rlit = 0, rlitSum = 0;
+      for (let k = 0; k < W * H; k++) {
+        if (mask[k]) continue;
+        const x = k % W, y = (k / W) | 0;
+        let near = false;
+        for (let dy = -RING; dy <= RING && !near; dy += 4) {
+          const yy = y + dy; if (yy < 0 || yy >= H) continue;
+          for (let dx = -RING; dx <= RING; dx += 4) {
+            const xx = x + dx; if (xx < 0 || xx >= W) continue;
+            if (mask[yy * W + xx]) { near = true; break; }
+          }
+        }
+        if (!near) continue;
+        const L = lum(on, k * 4); rn++; rsum += L;
+        if (L >= 2) { rlit++; rlitSum += L; }
+      }
+      // ── RIPPLE MODULATION — measured on the WATER LAYER, not on the frame (round-13 metric fix).
+      //
+      //   THE BUG IN THE OLD METRIC. It was |L − localmean(L)| / mean(L) over the lit water: a
+      //   high-pass normalised by TOTAL pixel value. But total pixel value in a shallow pool is
+      //   dominated by TRANSMISSION — the lit rock you can see through the water. `shore` measured
+      //   mean L 16.8 against `rim`'s 5.0, so the same physical ripple scored ~1/3 there purely
+      //   because the denominator was 3.4× bigger. That is a gate measuring the wrong thing (the
+      //   bottom's brightness), and it produced two false reds — shore 6.98% and pool2-rim 11.29% —
+      //   that a visual critic confirmed by eye were correct, rippling water.
+      //
+      //   THE FIX. Work in the A/B DIFFERENCE layer D = L(water on) − L(water off): the water's own
+      //   contribution, with the bare rock behind it algebraically removed. Both the high-pass AND
+      //   its normaliser now live in that layer — mean|D − localmean(D)| / mean|D| — so a brighter
+      //   bottom scales numerator and denominator together and cancels. A sheet that uniformly
+      //   attenuates a uniform bottom has constant D and scores 0 no matter how bright the bottom
+      //   is; a rippling sheet scores its true structure fraction. `modTot` (the OLD number) is kept
+      //   alongside so this recalibration stays auditable, and `modAbs` reports the raw high-pass in
+      //   8-bit LEVELS, which is the original quantization question ("0.14 of one level").
+      //
+      //   Measured on the LIT water only (≥2/255, the same signal floor the banding scan uses). Over
+      //   near-black water the ratio is meaningless in both directions — quantization noise inflates it
+      //   (the unlit frame reports 90%+ off two dozen glint pixels) and a large dead area deflates it.
+      //   BOX is +-10px, strided by 2. The band scale that matters here is the caustic/glint structure,
+      //   which measures 10-25px across at these framings; a +-4px box (round-12c-f) partially TRACKED
+      //   those bands and so subtracted the very signal it was meant to detect, pinning every framing
+      //   near 5% no matter what the ripple did. The stride keeps the cost sane at 400-500k lit pixels.
+      const BOX = 10, STEP = 2;
+      let hpD = 0, hpL = 0, hpN = 0, litSum = 0, absD = 0, litN = 0;
+      for (let k = 0; k < W * H; k++) {
+        if (!mask[k] || on[k * 4 + 1] < 2) continue;
+        const x = k % W, y = (k / W) | 0;
+        let s2 = 0, s2d = 0, c2 = 0;
+        for (let dy = -BOX; dy <= BOX; dy += STEP) {
+          const yy = y + dy; if (yy < 0 || yy >= H) continue;
+          for (let dx = -BOX; dx <= BOX; dx += STEP) {
+            const xx = x + dx; if (xx < 0 || xx >= W) continue;
+            const kk = yy * W + xx; if (!mask[kk]) continue;
+            s2 += lum(on, kk * 4); s2d += lum(on, kk * 4) - lum(off, kk * 4); c2++;
+          }
+        }
+        if (c2 < 12) continue;
+        const Lk = lum(on, k * 4), Dk = Lk - lum(off, k * 4);
+        hpL += Math.abs(Lk - s2 / c2);
+        hpD += Math.abs(Dk - s2d / c2);
+        absD += Math.abs(Dk);
+        hpN++; litSum += Lk; litN++;
+      }
+      // ── RIPPLE MOTION — THE METRIC WITH TEETH (round-13).
+      //
+      //   Why a THIRD metric had to be built. `mod` above (and `modTot` before it) is a spatial
+      //   high-pass, and a pool's frame is FULL of spatial structure that is not the ripple: the
+      //   output dither (±1 level by design), the gravel-scale alpha noise, the waterline jitter,
+      //   the depth gradient, and the rock bottom's own texture read through the water. Measured on
+      //   the shipping cave, the six large lit framings score 6.8-9.3 with the ripple ON — and
+      //   5.2-7.1 with the wave slope forced to ZERO (`--flat=spec`). The distributions OVERLAP:
+      //   pool2-rim scores HIGHER flat (7.11) than rippled (6.78). No floor on a spatial high-pass
+      //   can separate those, so no floor on it is a gate. Shipping one would have been this
+      //   project's own worst failure mode — a number that launders a dead surface as verified.
+      //
+      //   What is unique to the ripple is that it MOVES. So: render the same pixels again with
+      //   `uPoolTime` advanced, and difference them. Dither is screen-space (identical), the gravel
+      //   and jitter noises are world-space static, the bottom is static, the lights have not moved
+      //   — the wave field is the ONLY thing in the frame that changed. A surface with no ripple
+      //   returns ~0 by construction, which is what a floor needs underneath it.
+      //   ΔT = 2.0s: the base wave turns 0.44 rad and the k=31 octave 1.78 rad, so both the slow
+      //   swell and the glint-shatter octaves have visibly moved without the metric depending on
+      //   catching a particular phase.
+      //
+      //   REPRODUCE THE CALIBRATION:
+      //     npm run rig -- --scenario=pool-look --port=52xx --flat=all --framings=rim,refill,shore
+      //   Measured 2026-07-26, seed 1337, exposure 1.05:
+      //     flat=all  rim/refill/graze/wade/shore → ripple 0.00, ripplePct 0.00  (exactly zero)
+      //     shipping  the same five             → ripple 2.6-3.0, ripplePct 17.1-21.4
+      //   (`--flat` patches the LIVE uniforms, so a framing that forces three to recompile the
+      //   program — `flash`, which swaps the PointLight for a SpotLight — gets a fresh unpatched
+      //   shader and reports shipping numbers again. That is why the calibration set stops at the
+      //   five same-light framings.)
+      let rip = 0, ripN = 0;
+      {
+        const shaders = [];
+        for (const o of waters) {
+          const ss = o.material && o.material.userData && o.material.userData.poolShaders;
+          if (ss) for (const q of ss) if (shaders.indexOf(q) < 0) shaders.push(q);
+        }
+        const t0 = (shaders[0] && shaders[0].uniforms.uPoolTime) ? shaders[0].uniforms.uPoolTime.value : 0;
+        for (const q of shaders) if (q.uniforms.uPoolTime) q.uniforms.uPoolTime.value = t0 + 2.0;
+        const mov = read();
+        for (const q of shaders) if (q.uniforms.uPoolTime) q.uniforms.uPoolTime.value = t0;
+        for (let k = 0; k < W * H; k++) {
+          if (!mask[k] || on[k * 4 + 1] < 2) continue;
+          rip += Math.abs(lum(on, k * 4) - lum(mov, k * 4)); ripN++;
+        }
+        R.render(ctx.three.scene, cam);        // put the un-advanced frame back for the screenshot
+      }
+
+      // Banding: longest run of ONE identical green byte along a scanline inside the mask. Only over
+      // pixels carrying actual SIGNAL (≥2/255): a long run of pure black is a black room, not a
+      // contour band, and counting it would make this metric measure the wrong thing.
+      let maxPlat = 0, platSum = 0, platN = 0; const levels = new Set();
+      for (let y = 0; y < H; y++) {
+        let run = 0, prev = -1;
+        for (let x = 0; x < W; x++) {
+          const k = y * W + x;
+          if (!mask[k] || on[k * 4 + 1] < 2) { if (run > 1) { platSum += run; platN++; if (run > maxPlat) maxPlat = run; } run = 0; prev = -1; continue; }
+          const gV = on[k * 4 + 1]; levels.add(gV);
+          if (gV === prev) run++; else { if (run > 1) { platSum += run; platN++; if (run > maxPlat) maxPlat = run; } run = 1; prev = gV; }
+        }
+        if (run > 1) { platSum += run; platN++; if (run > maxPlat) maxPlat = run; }
+      }
+      // Depth cue: mean L of the mask's inner third vs its outer third (by radius from the centroid).
+      const rad = []; for (let k = 0; k < W * H; k++) if (mask[k]) rad.push(Math.hypot((k % W) - cx, ((k / W) | 0) - cy));
+      rad.sort((a, b) => a - b);
+      const rIn = rad[(rad.length / 3) | 0], rOut = rad[((rad.length * 2) / 3) | 0];
+      let inS = 0, inN = 0, outS = 0, outN = 0;
+      for (let k = 0; k < W * H; k++) {
+        if (!mask[k]) continue;
+        const r2 = Math.hypot((k % W) - cx, ((k / W) | 0) - cy);
+        if (r2 <= rIn) { inS += lum(on, k * 4); inN++; } else if (r2 >= rOut) { outS += lum(on, k * 4); outN++; }
+      }
+      // Percentiles of the water's own luminance. The MEDIAN is the honest test for
+      // self-illumination: a pool that mirrors a few bright things is mostly black with sparse
+      // glints (low p50, high p99), whereas a pool that GLOWS lifts every pixel (high p50).
+      const allL = new Float32Array(n);
+      for (let k = 0, j = 0; k < W * H; k++) if (mask[k]) allL[j++] = lum(on, k * 4);
+      allL.sort();
+      const pct = (q) => allL[Math.min(n - 1, Math.floor(q * n))];
+      // …and the median over the FULL footprint (any-diff), which is the self-illumination canary:
+      // a mirror is mostly black with sparse glints, a glowing sheet lifts every pixel it covers.
+      const anyL = new Float32Array(nAny);
+      for (let k = 0, j = 0; k < W * H; k++) if (maskAny[k]) anyL[j++] = lum(on, k * 4);
+      anyL.sort();
+      const p50any = anyL[Math.floor(nAny / 2)];
+      const f2 = (v) => +v.toFixed(2);
+      const waterL = sumOn / n, rockL = rlit ? rlitSum / rlit : 0;
+      return {
+        waterPx: n, anyPx: nAny, pctFrame: f2((100 * n) / (W * H)),
+        waterL: f2(waterL), p50: f2(pct(0.5)), p99: f2(pct(0.99)), p50any: f2(p50any), behindL: f2(sumOff / n),
+        rockAllL: rn ? f2(rsum / rn) : 0, rockLitL: f2(rockL), rockLitPx: rlit,
+        ratio: rockL > 0.05 ? f2(waterL / rockL) : null,
+        // `mod` = the GATED metric (water-layer relative high-pass). `modTot` = the pre-round-13
+        // total-value normalisation, kept as a diagnostic. `modAbs` = the same high-pass in 8-bit
+        // levels — the literal "is the ripple above one quantization step" question.
+        mod: hpN ? f2((100 * (hpD / hpN)) / Math.max(0.5, absD / hpN)) : null,
+        modTot: hpN ? f2((100 * (hpL / hpN)) / Math.max(0.01, litSum / litN)) : null,
+        modAbs: hpN ? f2(hpD / hpN) : null,
+        waterLayerL: hpN ? f2(absD / hpN) : null,
+        // The gated one: mean |ΔL| over the lit water when uPoolTime advances 2s, in 8-bit LEVELS,
+        // and the same as a % of the water's own layer magnitude. ~0 on a surface with no ripple.
+        ripple: ripN ? f2(rip / ripN) : null,
+        ripplePct: (ripN && hpN) ? f2((100 * (rip / ripN)) / Math.max(0.5, absD / hpN)) : null,
+        ripplePx: ripN,
+        litPx: litN,
+        maxPlateau: maxPlat, meanPlateau: platN ? f2(platSum / platN) : 0, levels: levels.size,
+        innerL: inN ? f2(inS / inN) : 0, outerL: outN ? f2(outS / outN) : 0,
+      };
+    }, s);
+    if (wantShots) {
+      await page.waitForTimeout(200);
+      try { await page.screenshot({ path: join(OUT, 'scen-' + prefix + '-' + name + '.png'), fullPage: false, timeout: 60000 }); console.log('[pool-look] saved scen-' + prefix + '-' + name + '.png'); }
+      catch (e) { console.log('[pool-look] ' + name + ' shot flaked (' + e.name + ')'); }
+    }
+    metrics[name] = m;
+    console.log('[pool-metric] ' + name.padEnd(11) + ' ' + JSON.stringify(m));
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
+      const L = ctx.lights;
+      for (const o of st.added) ctx.three.scene.remove(o);
+      for (const o of st.hidden) o.visible = true;
+      ctx.three.scene.background = st.bg; ctx.three.scene.fog = st.fog;
+      L.ambient.intensity = st.amb; L.sun.intensity = st.sun; L.moon.intensity = st.moon;
+      if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
+      window.__shotRestore = null;
+    });
+  };
+
+  const P = geo.pools[0];
+  // "Toward the chamber centre" — the side with open floor, i.e. where a player would stand.
+  let ix = P.nx - P.x, iz = P.nz - P.z;
+  const IL = Math.hypot(ix, iz) || 1; ix /= IL; iz /= IL;
+  const EYE = 1.68;
+
+  const EXP = POOL_SHOT_EXPOSURE;
+  // (a) FIRST SIGHT — walking into the chamber with the torch up. ~7m out; the pool is the thing
+  //     that has to catch your eye in a black room.
+  await shoot({ exp: EXP, cam: [P.x + ix * (P.r + 7.0), P.floorY + EYE, P.z + iz * (P.r + 7.0)],
+    look: [P.x, P.y - 0.05, P.z] }, 'firstsight');
+  // (b) THE RIM — standing right over the edge, looking DOWN at the near water, not across at the
+  //     far side. (Round 1 aimed at the pool CENTRE from r+1.2m: at a 21 degree pitch the whole
+  //     near half of the pool fell below the frame and the shot graded water that was 4-6m away,
+  //     i.e. past the torch's useful range. The read that decides "water or chalky disc" is the
+  //     water inside the torch pool, at your feet.)
+  await shoot({ exp: EXP, cam: [P.x + ix * (P.r * 0.98), P.floorY + EYE, P.z + iz * (P.r * 0.98)],
+    look: [P.x + ix * P.r * 0.18, P.y - 0.02, P.z + iz * P.r * 0.18] }, 'rim');
+  // (b2) THE REFILL POSE — the single most-played camera in this feature: standing at the edge with
+  //     the crosshair ON the water, about to press E. It is also the ONE pose where the geometry lets
+  //     you see the torch's own reflection: a light carried at the eye mirrors to a point roughly
+  //     halfway between your feet and the flame, so it lands on water only when you are over it and
+  //     looking down. (Rounds 1-4 all framed from further back and higher, which is why the specular
+  //     kept falling outside the frame and the water kept grading "no reflection".)
+  //     ROUND-12 REFRAME. At the round-11 aim (1.0m ahead, pitch ≈ -55°) the mirror of a light carried
+  //     AT the eye lands ~0.25m in front of you — 23° below the view axis, i.e. two-thirds of the way
+  //     down the frame, right where the hotbar DOM sits in a real screenshot. Aiming 0.42m ahead
+  //     (pitch ≈ -73°) puts the same reflection ~13% below frame centre: the glint path now runs up
+  //     through the upper-centre third with the far water above it, clear of the HUD.
+  await shoot({ exp: EXP, cam: [P.x + ix * (P.r * 0.92), P.floorY + EYE, P.z + iz * (P.r * 0.92)],
+    look: [P.x + ix * (P.r * 0.92 - 0.42), P.y - 0.02, P.z + iz * (P.r * 0.92 - 0.42)] }, 'refill');
+  // (c) GRAZING — from the near rim across the surface to the FAR rim. Water is most reflective
+  //     exactly here, so this is where a wrong Fresnel reads as ice.
+  await shoot({ exp: EXP, cam: [P.x + ix * (P.r + 0.7), P.floorY + 1.30, P.z + iz * (P.r + 0.7)],
+    look: [P.x - ix * P.r * 1.02, P.y + 0.05, P.z - iz * P.r * 1.02] }, 'graze');
+  // (d) MID-WADE — standing IN it, looking down at your feet through the water. The bottom you see
+  //     here is the collider you are standing on (rule 9), so it had better read as a bottom.
+  await shoot({ exp: EXP, cam: [P.x, P.floorY + EYE - 0.10, P.z],
+    look: [P.x + ix * 0.85, P.floorY - 0.10, P.z + iz * 0.85] }, 'wade');
+  // (e) THE WATERLINE, close. Crouched at the shore: does stone meet water, or does a disc end?
+  await shoot({ exp: EXP, cam: [P.x + ix * (P.r + 1.05), P.floorY + 1.05, P.z + iz * (P.r + 1.05)],
+    look: [P.x + ix * P.r * 0.86, P.y - 0.06, P.z + iz * P.r * 0.86] }, 'shore');
+  // (f) FLASHLIGHT — a cool-white narrow beam instead of the warm point. Different light, different
+  //     water; both must work.
+  await shoot({ exp: EXP, light: 'flashlight', cam: [P.x + ix * (P.r + 1.4), P.floorY + EYE, P.z + iz * (P.r + 1.4)],
+    look: [P.x - ix * P.r * 0.35, P.y, P.z - iz * P.r * 0.35] }, 'flash');
+  // (f2) DIM TORCH ON THE WATER — the round-11 "chalk bug" regime had ZERO coverage: a torch burned
+  //     down to a third, aimed straight at the surface. This is where an UNLIT additive term (a raw
+  //     Fresnel colour wash) stops being a whisper and becomes self-illumination.
+  await shoot({ exp: EXP, torchMul: 0.30, cam: [P.x + ix * (P.r * 0.95), P.floorY + EYE, P.z + iz * (P.r * 0.95)],
+    look: [P.x - ix * P.r * 0.30, P.y - 0.02, P.z - iz * P.r * 0.30] }, 'dimtorch');
+  // (g) UNLIT — no torch at all. The honest question: with nothing to reflect, is it a black hole in
+  //     the floor? (It should be near-invisible, not a bright artefact.)
+  await shoot({ exp: EXP, light: 'none', cam: [P.x + ix * (P.r + 1.2), P.floorY + EYE, P.z + iz * (P.r + 1.2)],
+    look: [P.x, P.y, P.z] }, 'unlit');
+  // (h) MUSHROOM CONTEXT — the pool framed with the nearest bioluminescent cluster in shot, torch
+  //     dimmed to a third so the cool glow actually contributes.
+  if (geo.fungi && geo.fungi.d < 26) {
+    let fx = geo.fungi.x - P.x, fz = geo.fungi.z - P.z;
+    const FL = Math.hypot(fx, fz) || 1; fx /= FL; fz /= FL;
+    await shoot({ exp: EXP, torchMul: 0.34,
+      cam: [P.x - fx * (P.r + 2.6), P.floorY + EYE, P.z - fz * (P.r + 2.6)],
+      look: [geo.fungi.x, geo.fungi.y - 0.2, geo.fungi.z] }, 'fungi');
+  }
+  // (i) A SECOND POOL, if the seed placed one — one pool looking right is not the material looking
+  //     right (the shared-material discipline from the rusted-hull canon).
+  if (geo.pools[1]) {
+    const Q = geo.pools[1];
+    let qx = Q.nx - Q.x, qz = Q.nz - Q.z;
+    const QL = Math.hypot(qx, qz) || 1; qx /= QL; qz /= QL;
+    // ROUND-12: pool2 graded "no reflection at all" — 100% of its playfield under L16. The round-11
+    // framing aimed at the pool CENTRE from r+1.4m, i.e. a 25° pitch onto water 3-6m away, past the
+    // torch's useful throw AND past the near-specular geometry. That is a SHOT bug, not a material
+    // bug, so it is fixed here: pool 2 gets the same over-the-edge aim as the hero pool's `rim`.
+    await shoot({ exp: EXP, cam: [Q.x + qx * (Q.r * 0.98), Q.floorY + EYE, Q.z + qz * (Q.r * 0.98)],
+      look: [Q.x + qx * Q.r * 0.18, Q.y - 0.02, Q.z + qz * Q.r * 0.18] }, 'pool2-rim');
+    // …and the round-11 framing kept as-is, so the "does it hold up across the room" question is
+    // still asked honestly rather than framed away.
+    await shoot({ exp: EXP, cam: [Q.x + qx * (Q.r + 1.4), Q.floorY + EYE, Q.z + qz * (Q.r + 1.4)],
+      look: [Q.x, Q.y, Q.z] }, 'pool2-far');
+  }
+  return metrics;
 }

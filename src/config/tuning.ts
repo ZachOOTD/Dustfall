@@ -1075,20 +1075,103 @@ export const Tuning = {
   CAVE_POOL_CENTER_FRAC_MIN: 0.30,     // × rx — nearest the chamber centre a pool centre may sit (keeps the egg dais + the march centreline clear)
   CAVE_POOL_CENTER_FRAC_MAX: 0.52,     // × rx — farthest out (pool rim must still clear the wall)
   CAVE_POOL_MOUTH_CLEAR_DEG: 46,       // ° — angular sector kept clear around every corridor mouth (a pool never blocks a throat)
-  CAVE_POOL_EDGE_SEGS: 40,             // radial segments of the water disc (the rim contour wobble resolves at this count)
+  CAVE_POOL_EDGE_SEGS: 88,             // radial segments of the water disc (the rim contour wobble resolves at this count)
   CAVE_POOL_EDGE_WOBBLE: 0.22,         // × radius — noise wobble on the rim so the pool is not a machined circle
-  CAVE_POOL_WATER_HEX: 0x070d12,       // near-black still water, a touch of cold blue so it is not a VOID (PLACEHOLDER — the hero-visual pass owns this)
-  CAVE_POOL_WATER_OPACITY: 0.88,       // surface opacity — the floor is faintly visible through it
-  CAVE_POOL_SPECULAR_HEX: 0x59707e,    // cool sheen strong enough that a torch glints off the surface (PLACEHOLDER)
-  CAVE_POOL_SHININESS: 150,            // Phong shininess — a tight bright highlight, i.e. still water (PLACEHOLDER)
-  // FRESNEL. Without this the pool reads as a HOLE cut in the floor: a Phong lobe from a near-eye
-  // torch is weakest exactly where you look at water from, so the surface goes to flat black at
-  // grazing angles. Real water does the opposite — it gets MORE reflective toward grazing. This
-  // brightens + opacifies the surface with (1 − N·V), which is what makes a black sheet read as a
-  // sheet. (PLACEHOLDER tier — the hero pass replaces it with a real ripple/reflection treatment.)
-  CAVE_POOL_FRESNEL_HEX: 0x546d7c,     // cool grey-blue the surface tends toward at grazing angles
-  CAVE_POOL_FRESNEL_POW: 2.6,          // Fresnel falloff exponent (lower = the sheen reaches further in from the rim)
-  CAVE_POOL_FRESNEL_STRENGTH: 0.85,    // × the Fresnel colour added at full grazing
+  // ── THE HERO SURFACE (DEEPER cycle 6, visual pass). The old placeholder was a flat Phong sheet at
+  //    a constant y with a Fresnel add — it read as a chalky ice disc because a constant-height sheet
+  //    over a flat floor has NO shoreline (the water can only end at a machined edge) and a Phong lobe
+  //    from a near-eye point light is a fuzzy blob, not a reflection. The replacement is built on four
+  //    ideas, all of them cheap and all of them inside this one material + one mesh builder:
+  //    1. SHELVING GEOMETRY. The surface is not a flat disc: it holds DEPTH_M across the middle, ramps
+  //       up to a FILM_M-thin sheet at the rim, then sinks DROWN_M below the floor plane. Since the
+  //       chamber floor carries ±CAVE_SDF_MICRO_AMP of un-attenuated micro-relief, that ramp CROSSES
+  //       the rock — the waterline becomes a jagged organic contour with gravel standing proud of it,
+  //       and the last hand's-width of water is a damp film ON the stone. That IS the wet-rock rim;
+  //       no decal, no second mesh, nothing floating (which a flat conforming ring would have been).
+  //    2. BEER-LAMBERT DEPTH. Per-vertex water depth → alpha = 1 − exp(−ABSORB·d). The bottom is
+  //       plainly visible in the shallows and swallowed toward the middle, so 26cm reads deep.
+  //    3. A REAL SPECULAR ANSWER TO THE TORCH. MeshStandardMaterial (GGX, per-fragment) instead of
+  //       Phong: the torch is a punctual light, so the highlight is a physically-shaped lobe that
+  //       tracks the light and stretches into a glitter path across the ripple slopes. A planar
+  //       mirror render-target was rejected — N pools × a second scene pass is not affordable for a
+  //       reflection whose only content is near-black rock plus the one light GGX already gives us.
+  //    4. ANALYTIC RIPPLE NORMALS. SIX crossed travelling waves with a closed-form gradient, NOT a
+  //       dFdx height bump (D154: screen-space derivatives shimmer as the camera moves). Geometry
+  //       stays static + seed-pure; only a uTime uniform animates.
+  // ── ROUND-12 (the three-critic FAIL). Everything from WATER_HEX down to SPEC_ALPHA was retuned
+  //    after the adversarial pass measured what the r11 numbers actually produced at the SHIPPING
+  //    exposure of 1.05: water up to 1.5× brighter than the lit rock beside it, ripple modulation
+  //    1.7-3.1% of local mean (i.e. under one 8-bit level), 290-550px plateaus of a single output
+  //    value, and mushrooms standing at the waterline mirroring nothing. Diagnosis: the surface was
+  //    shading as a TINTED DIFFUSE FLOOR WITH A HOTSPOT. The four counter-moves, in order:
+  //      1. KILL THE DIFFUSE. Albedo drops from 0x080d13 (0.031/0.051/0.075) to ALBEDO_HEX — every
+  //         channel ≤ 0.016 — so the reflected LIGHT's colour, not the body tint, drives the read
+  //         under any lamp. (These hexes are consumed RAW, /255, as LINEAR values — `_hex()` in
+  //         cavePools.ts, not THREE.Color, so no sRGB decode inflates them.)
+  //      2. RIPPLE ONTO THE SPECULAR LOBE. Slope ×6 and roughness down ~4×: the torch's answer stops
+  //         being one smooth Gaussian blob and shatters into a glint path. Still-water subtlety now
+  //         comes from LOW frequency + SLOW speed, not from sub-quantization amplitude.
+  //      3. OUTPUT DITHER (see CAVE_POOL_DITHER) — the banding was pure 8-bit quantization.
+  //      4. THE ENVIRONMENT IN THE SURFACE (see CAVE_POOL_GLINT_*) — K emitters as uniforms.
+  CAVE_POOL_ALBEDO_HEX: 0x020304,      // LINEAR albedo of the water body — ≤0.016 on every channel. Water is not a diffuse surface; this is the floor under which "reflected light drives the colour" holds
+  CAVE_POOL_F0: 0.021,                 // normal-incidence Fresnel reflectance of water (IOR 1.333). MeshStandard defaults to 0.04 — i.e. glass — which doubled every specular return
+  CAVE_POOL_WATER_HEX: 0x080d13,       // (legacy) the body colour the material is constructed with; the shader overrides it with ALBEDO_HEX
+  CAVE_POOL_DEEP_HEX: 0x010203,        // what deep water tends toward (the bottom swallowed by absorption) — near-black, neutral-cold
+  CAVE_POOL_ABSORB: 11.0,              // 1/m Beer-Lambert extinction — higher = the bottom vanishes sooner (sells depth)
+  CAVE_POOL_ALPHA_MIN: 0.16,           // alpha of a zero-depth film (the damp shore: rock reads straight through)
+  CAVE_POOL_ALPHA_MAX: 0.985,          // alpha of fully-absorbed water — the deep middle must go OPAQUE BLACK, or the depth cue inverts (r11 measured the centre 2-4× BRIGHTER than the shallows)
+  CAVE_POOL_ROUGH_NEAR: 0.110,        // GGX roughness at the rim you stand at — a MIRROR, not a satin sheet. At 0.055 (round-12b) each glint was sub-pixel-tight and the torch's answer in the REFILL pose collapsed to two 6px dashes; real water carries capillary micro-roughness that gives every glint a size. The ripple still does the spreading; this only decides how big each element of the path is
+  CAVE_POOL_ROUGH_FAR: 0.30,           // …and across the room: rougher, so the ripple highlight cannot alias into sparkle
+  CAVE_POOL_ROUGH_FADE_A: 1.5,         // m — start of the near→far roughness ramp
+  CAVE_POOL_ROUGH_FADE_B: 11.0,        // m — end of it
+  CAVE_POOL_RIPPLE_SLOPE: 0.36,        // max surface gradient (tan) of the ripple field — ~6 of r11's 0.050. atan(0.36) = ~20°: this is what breaks the specular into discrete glints instead of one blob
+  CAVE_POOL_RIPPLE_SCALE: 1.60,        // 1/m — base spatial frequency. SIX waves at k = 1/2.13/4.37/9.10/17.3/31.0, i.e. wavelengths 3.93 / 1.84 / 0.90 / 0.43 / 0.23 / 0.13 m: a spread that resolves INSIDE a 2-5m pool (the last two are the glint-shatter octaves, not a visible ripple)
+  CAVE_POOL_RIPPLE_SPEED: 0.22,        // rad/s on the base wave — slow enough that a still frame and a moving one agree
+  CAVE_POOL_RIPPLE_FADE_M: 13.0,       // m — ripple slope damped to zero past this range (anti-alias, same reason as ROUGH_FAR)
+  CAVE_POOL_RIPPLE_DAMP_D: 0.035,      // m — depth below which ripples damp out (a film on stone does not ripple). At 0.085 the whole shallow band — most of what the rim/shore/refill framings actually SHOW — was a dead smooth pane, which is where the round-12 modulation deficit lived; 3.5cm is the honest threshold for 'too thin to move'
+  CAVE_POOL_SHELF_FRAC: 0.88,          // × rim radius — inside this the surface is flat; outside it ramps up to the film
+  CAVE_POOL_FILM_M: 0.022,             // m — depth of the damp film at the nominal rim (the wet-rock band's thickness)
+  CAVE_POOL_SHORE_M: 0.75,             // m — ABSOLUTE width of the damp shore band past the rim (a shoreline does not scale with the pool)
+  CAVE_POOL_SHORE_FALL: 0.062,         // m — how far the surface falls across the shore band. FILM+FALL over SHORE_M is the shoreline's gradient, and that gradient is what decides whether the ROCK or the MESH RING draws the waterline
+  CAVE_POOL_DROWN_M: 0.34,             // m — how far below the floor plane the outer skirt sinks, so rock reliably occludes it
+  // FRESNEL. Deliberately NOT a colour add (that is what made the placeholder chalky — it painted a
+  // pale wash over the whole disc). Toward grazing, water stops transmitting and starts MIRRORING,
+  // and what it mirrors down here is near-black rock. So the Fresnel term drives ALPHA (the bottom
+  // disappears, the surface becomes a black mirror) and adds only a whisper of colour.
+  CAVE_POOL_FRESNEL_POW: 5.0,          // Schlick's exponent — the physical one, now that Fresnel drives ALPHA and the glints rather than a colour wash
+  CAVE_POOL_FRESNEL_ALPHA: 0.90,       // × how opaque full grazing makes the surface (the black-mirror read)
+  CAVE_POOL_SPEC_ALPHA: 2.4,           // × fragment luma → alpha. Where the surface IS reflecting a light it must not be faded out by transparency
+  // ── THE ENVIRONMENT IN THE SURFACE (round-12 finding 4). No render-target planar mirror: N pools ×
+  //    a second scene pass is not affordable. Instead the cave's own EMISSIVE features (the biolum
+  //    fungi caps) are collected ONCE at cave build into K uniform slots and evaluated as mirror
+  //    sources in the water's specular lobe — reflected across the surface, broken by the same ripple
+  //    normal that breaks the torch, and Fresnel-weighted so they are strongest at grazing. Per-frame
+  //    cost is zero (the uniforms are written at build, never per frame); per-fragment cost is K
+  //    dot-products. This is the term that makes the fungi framing stop being a flat black ellipse.
+  CAVE_POOL_GLINT_MAX: 8,              // K — uniform slots for mirrored emitters (unused slots carry intensity 0, so the loop is branch-free)
+  CAVE_POOL_GLINT_RANGE_M: 22,         // m — an emitter farther than this from every pool is not worth a slot
+  CAVE_POOL_GLINT_STRENGTH: 2.2,       // × the mirrored emitter's contribution at normal incidence (before Fresnel, which is ~0.02 there and ~1 at grazing)
+  CAVE_POOL_GLINT_SHARP: 5.5,          // lobe width NUMERATOR: exponent = SHARP / roughness². At ROUGH_NEAR (0.110) that is ~455 — a true mirror glint the ripple then scatters into a path. (Round-12a shipped 0.0055 here by mistake, i.e. an exponent of 1.8: a hemisphere-wide WASH that lit the whole pool from every emitter and made the unlit frame read L=35. The unlit frame is the canary for exactly this class of error.)
+  CAVE_POOL_GLINT_FALL: 0.055,         // 1/m² inverse-square-ish falloff on the mirrored source
+  CAVE_POOL_GLINT_CAP_Y: 0.30,         // m — how far above a cluster's recorded base the emissive CAPS actually sit (the mirror source height)
+  CAVE_POOL_DITHER: 1.0,               // ± this many 8-bit levels of interleaved-gradient dither, applied in OUTPUT space (after tone-map + sRGB encode). r11 measured 290-550px runs of ONE identical value across the pool; the ripple was 0.14 of a level, i.e. structurally invisible
+  CAVE_POOL_EDGE_JITTER: 0.026,        // m — high-frequency jitter on the depth AT the waterline only: ravels the mesh's ~18cm facet edge (2πr / EDGE_SEGS 88 at a ~2.5m rim) into gravel-scale raggedness
+  CAVE_POOL_EDGE_JITTER_FREQ: 4.2,    // 1/m — base frequency of the 2-octave value noise that ravels it (~24cm lobes + a 5cm layer: gravel, not static)
+  CAVE_POOL_EDGE_LOBE: 0.055,          // m — LOW-frequency depth wander at the waterline (round-12 finding 6: the far shoreline measured ruler-straight, ±3px over 340px). Across the ~0.11 m/m shore gradient this swings the contour by ~0.5m, so the pool interlocks with the rock in PLAN. Placement specs are untouched — this wanders the mesh contour, not the centre or the radius
+  CAVE_POOL_EDGE_LOBE_FREQ: 0.55,      // 1/m — ~1.8m lobes, the scale a shoreline actually meanders at
+  CAVE_POOL_FLOOR_BIAS: 0.035,         // m — the floor sampler max-splats a whole cell, which biases HIGH; bias back down so a high estimate never eats real water
+  CAVE_POOL_CAUSTIC: 0.75,             // × the wave Laplacian modulating transmission — the bottom brightens/dims in slow bands (light-gated for free: it multiplies whatever is behind)
+  CAVE_POOL_GRAVEL_FREQ: 7.5,          // 1/m — pebble-scale modulation of the SHALLOW band's transparency. The bottom itself is rock we cannot texture from here, but varying how much of it the water lets through at gravel scale is what makes the shallows read as a silt/pebble bed instead of a smooth tinted pane
+  CAVE_POOL_GRAVEL_AMP: 0.60,          // × alpha swing of that modulation (shallow water only — it fades out as the middle goes opaque)
+  // ── THE WET-ROCK RIM (round-12 finding 5). Dry matte stone → a darker DAMP collar → a fully-glossy
+  //    contact strip at the waterline. Wet stone DARKENS and GLOSSES; it does not change hue (r11's
+  //    rim measured ~0.5/255 and green-shifted, i.e. neither). Rendered by the water mesh's own shore
+  //    skirt, which is lifted to ride WET_LIFT_M above the sampled rock so it is a film ON the stone
+  //    rather than a sheet floating over it or z-fighting into it.
+  CAVE_POOL_WET_BAND_M: 0.30,          // m — how far past the waterline the damp collar reaches
+  CAVE_POOL_WET_DARK: 0.35,            // × albedo reduction at the waterline, ramping to 0 at the band's outer edge
+  CAVE_POOL_WET_GLOSS_M: 0.05,         // m — width of the fully-glossy contact strip right at the water's edge
+  CAVE_POOL_WET_LIFT_M: 0.045,         // m — how far the damp skirt rides above the SAMPLED rock height (must exceed CAVE_POOL_FLOOR_BIAS, or the film sinks into the stone and disappears in patches)
   // Pool AUDIO — the drip bed gains a destination near water (drips LAND, with a splash tail) and a
   // quiet lapping bed fades in by proximity. Weather-independent, in-cave only (gated on the same
   // smoothed `caveAtmosphere.inside` factor the rest of the cave bed uses).
@@ -1457,6 +1540,7 @@ export const Tuning = {
   // Footstep proximity check (Session Q) — within this distance to any
   // waterSource, footsteps play the wet/splash variant.
   FOOTSTEP_WET_RADIUS: 2.0,
+  FOOTSTEP_WET_DY_M: 4.0,              // m — |dy| gate on the wet-footstep test. A cave pool is 15-40m below the desert; without this, walking over one on the SURFACE made the sand squelch (the radius test was XZ-only, which was safe only while wells were the sole water kind)
 
   // Footprint decals (Session Y) — InstancedMesh pools, alpha fade over time.
   // Player prints fire at the existing footstep cadence (controller.ts);

@@ -44,7 +44,7 @@ import { makeStaticTrimesh } from '../physics/bodies.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { startCaveSdf, buildCaveSdf, caveVertexColor, type CaveSdfJob } from './caveSdf.ts';
-import { buildCavePools, placeCavePools, eggDaisRadius, type CavePool, type CavePoolSpec } from './cavePools.ts';
+import { buildCavePools, placeCavePools, eggDaisRadius, setCavePoolEmitters, lastFloorSamplerMs, type CavePool, type CavePoolSpec } from './cavePools.ts';
 
 /** One station on the crevice's descent centreline (DEEPER cycle 4). The entrance hands the WHOLE
  *  polyline to the cave's SDF so the descent is built as part of the cave's own watertight
@@ -884,6 +884,9 @@ export interface CaveGenProbe {
   msCollider: number;
   /** ms — the SDF polygonization (field + nets + normals). */
   msMesh: number;
+  /** ms — `makeFloorSampler`'s linear pass over the SDF positions, the one cost the water feature
+   *  adds to the ATOMIC dress stage. Measured, not assumed (the cycle-5 hitch-budget lesson). */
+  msPoolSampler: number;
   digest: string;
   nodes: Array<{ id: number; x: number; y: number; z: number; rx: number; height: number; kind: CaveNodeKind; parent: number }>;
   edges: Array<{ a: number; b: number; halfW: number; height: number; squeeze: boolean }>;
@@ -1055,8 +1058,32 @@ export function startSpawnCave(
     // never baked into the trimesh collider. What you wade on is the SDF floor visible through it
     // (rule 9 — see cavePools.ts). They still ride the determinism digest below, so a pool that
     // moved between two builds of the same seed fails the cave-walk gate like any other drift.
-    pools = buildCavePools(graph, cnoise, prand, dirsByNode);
+    // The SDF geometry goes in so the water can measure the REAL rock height under it and cut its
+    // shoreline on the stone (cavePools.makeFloorSampler) — one linear pass over the positions.
+    const poolBuild = buildCavePools(graph, cnoise, prand, dirsByNode, sdf.geometry);
+    pools = poolBuild.pools;
     for (const p of pools) { group.add(p.mesh); decor.push(p.mesh); }
+
+    // DEEPER cycle 6, round 12 — WHAT THE WATER MIRRORS. The pools had zero environmental reflection:
+    // bioluminescent caps standing AT a waterline showed nothing in the water beside them. A planar
+    // render-target mirror is unaffordable here (a second scene pass per pool inside the streaming
+    // budget), so the cave's emissive features are published ONCE, right here, into K shader uniform
+    // slots and evaluated as mirror sources in the water's own specular lobe (cavePools.ts). Per-frame
+    // cost is nil — this is build-time data. The fungi list is already seed-pure and already built by
+    // the loop above, so no new RNG draw and no new placement rule enters the determinism digest.
+    //
+    // ROUND-13: the slots live on THIS CAVE'S OWN material instance (`poolBuild.material`), never on
+    // a module-shared one. With CAVE_RESIDENT_MAX = 3 the shared version meant the second cave to
+    // build stole the first one's reflections — including from the cave the player was standing in.
+    const capCol = new THREE.Color(Tuning.CAVE_FUNGI_EMISSIVE_HEX);
+    setCavePoolEmitters(
+      poolBuild.material,
+      fungi.map((f) => ({
+        x: f.pos.x, y: f.pos.y + Tuning.CAVE_POOL_GLINT_CAP_Y, z: f.pos.z,
+        intensity: Tuning.CAVE_FUNGI_EMISSIVE_INT, color: capCol,
+      })),
+      pools.map((p) => p.spec),
+    );
   };
 
   // -- Stage 4: FINALIZE, atomic. ONE trimesh collider baked from the EXACT visual triangles (rule 9):
@@ -1081,7 +1108,7 @@ export function startSpawnCave(
 
     const probe: CaveGenProbe = {
       seed, eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
-      colliderTris, msCollider, msMesh,
+      colliderTris, msCollider, msMesh, msPoolSampler: lastFloorSamplerMs,
       digest: caveDigest(graph, allMeshes),
       nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
       edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),
