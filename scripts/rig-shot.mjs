@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'pool-fill') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -2756,6 +2756,369 @@ const SCENARIOS = {
     });
     const tag = argv.tag ? `cave-look-${argv.tag}` : 'cave-look';
     await caveShotSet(page, tag);
+  },
+
+  // ── pool-fill (DEEPER cycle 6) — THE UNDERGROUND-WATER GATE ────────────────────────────────
+  //   Five things, all with teeth, none of them a screenshot:
+  //
+  //   1. EXISTENCE + DETERMINISM. The origin cave must have ≥1 pool (the spec's guarantee), and the
+  //      pool set must be byte-stable: the caveGenProbe's pool list is compared against a SECOND
+  //      generation of the same seed (`__game.rebuildCaveProbe`-free — we re-run the pure placement
+  //      through the module, so the check costs milliseconds instead of a second cave build).
+  //   2. RULE 9 — COLLISION MATCHES THE VISIBLE GEOMETRY. A Rapier ray dropped through the pool
+  //      centre must NOT stop at the water plane: it must hit the rock at the FLOOR, and that hit
+  //      must agree (≤5cm) with the first NON-WATER hit of a three.js raycast down the same line —
+  //      i.e. the bottom you SEE through the water is the surface you STAND on. A collider on the
+  //      water plane fails this immediately; so does a floor that has drifted from the visual.
+  //   3. WADE-THROUGH — a REAL KCC march straight across the pool (entry point → far side, through
+  //      the centre). It must arrive (no invisible wall), and the capsule's feet must track the
+  //      FLOOR the whole way, never rising onto the water plane and never sinking below the bottom.
+  //   4. REFILL — E at the pool fills the canteen, then fills the jerrycan.
+  //   5. THE WELL REFUSAL — at a WELL the canteen fills and the jerrycan does NOT, with the
+  //      diegetic prompt. Run against a real well in the world when one is in range; the
+  //      registry-shape assertions run unconditionally.
+  //
+  //   Run: npm run rig -- --scenario=pool-fill --port=5232 [--seed=1337]
+  'pool-fill': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);
+      ctx.three.renderer.setSize(320, 200, false);
+    });
+
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER; const THREE = g.THREE;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const fails = [];
+      const notes = {};
+      ctx.flags.paused = false; ctx.flags.thirdPerson = false;
+
+      let cavep = null, caveGroup = null;
+      ctx.three.scene.traverse((o) => {
+        if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
+        if (o.name === 'caveGen') caveGroup = o;
+      });
+      if (!cavep || !caveGroup) return { fails: ['no caveGenProbe / caveGen group (cave not built — flag off?)'] };
+
+      // ── 1. EXISTENCE ───────────────────────────────────────────────────────
+      const pools = cavep.pools || [];
+      notes.poolCount = pools.length;
+      notes.pools = pools.map((p) => `n${p.node}@(${p.x.toFixed(1)},${p.y.toFixed(2)},${p.z.toFixed(1)})r${p.r.toFixed(1)}`);
+      if (!pools.length) return { fails: ['origin cave has NO water pools (the cycle-6 guarantee is ≥1)'], notes };
+
+      // The registry must carry one 'pool' source per placed pool, all with the large-vessel rule
+      // set the right way round — and every well must have it set the other way.
+      const srcPools = ctx.waterSources.list.filter((w) => w.kind === 'pool');
+      const srcWells = ctx.waterSources.list.filter((w) => w.kind === 'well');
+      notes.sources = { pools: srcPools.length, wells: srcWells.length };
+      if (srcPools.length !== pools.length) fails.push(`waterSources has ${srcPools.length} pool sources for ${pools.length} placed pools`);
+      for (const w of srcPools) {
+        if (w.noun !== 'pool') fails.push(`pool source ${w.id} noun="${w.noun}" (expected "pool")`);
+        if (w.deepEnoughForLargeVessel !== true) fails.push(`pool source ${w.id} is not deep enough for a large vessel`);
+      }
+      for (const w of srcWells) {
+        if (w.noun !== 'well') fails.push(`well source ${w.id} noun="${w.noun}" (expected "well")`);
+        if (w.deepEnoughForLargeVessel !== false) fails.push(`well source ${w.id} claims a jerrycan fits — a well must refuse`);
+      }
+
+      // ── 2. RULE 9 — the water has NO collider; the visible bottom IS the collider ──────────
+      const P = pools[0];
+      const node = cavep.nodes.find((n) => n.id === P.node);
+      const floorY = node ? node.y : P.y - 0.26;
+      const phys = g.castDown(P.x, P.z, P.y + 1.5, true);
+      if (!phys) fails.push(`no physics floor under pool centre (${P.x.toFixed(1)},${P.z.toFixed(1)})`);
+      const rc = new THREE.Raycaster();
+      rc.far = 40;
+      rc.set(new THREE.Vector3(P.x, P.y + 1.5, P.z), new THREE.Vector3(0, -1, 0));
+      caveGroup.updateMatrixWorld(true);
+      const hits = rc.intersectObject(caveGroup, true);
+      const waterHit = hits.find((h) => h.object.userData && h.object.userData.cavePool);
+      const rockHit = hits.find((h) => !(h.object.userData && h.object.userData.cavePool));
+      notes.rule9 = {
+        physFloorY: phys ? +phys.hitY.toFixed(3) : null,
+        visWaterY: waterHit ? +waterHit.point.y.toFixed(3) : null,
+        visRockY: rockHit ? +rockHit.point.y.toFixed(3) : null,
+        graphFloorY: +floorY.toFixed(3),
+      };
+      if (!waterHit) fails.push('the water surface is not visible from directly above the pool centre');
+      if (!rockHit) fails.push('no VISIBLE rock bottom under the water surface (you would see the void through it)');
+      if (phys && waterHit && Math.abs(phys.hitY - waterHit.point.y) < 0.02) {
+        fails.push(`RULE 9: the physics floor coincides with the WATER PLANE at y=${phys.hitY.toFixed(3)} — the water has a collider`);
+      }
+      if (phys && rockHit) {
+        const d = Math.abs(phys.hitY - rockHit.point.y);
+        notes.rule9.deltaVisibleVsCollider = +d.toFixed(4);
+        if (d > 0.05) fails.push(`RULE 9: collider floor y=${phys.hitY.toFixed(3)} vs VISIBLE bottom y=${rockHit.point.y.toFixed(3)} — Δ${d.toFixed(3)}m > 0.05m`);
+      }
+      if (phys && waterHit) {
+        const depth = waterHit.point.y - phys.hitY;
+        notes.rule9.depthM = +depth.toFixed(3);
+        if (depth <= 0.02) fails.push(`pool depth ${depth.toFixed(3)}m — the water is at or below the floor (not a pool)`);
+        if (depth > 0.40) fails.push(`pool depth ${depth.toFixed(3)}m > 0.40m — deeper than the walkable-only decision allows`);
+      }
+
+      // ── 3. WADE-THROUGH — a real KCC crossing of the pool ─────────────────────────────────
+      const body = ctx.player.body.body;
+      const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;
+      const at = () => { const t = body.translation(); return { x: t.x, y: t.y, z: t.z }; };
+      const face = (dx, dz) => {
+        const cam = ctx.three.camera; const t = body.translation();
+        const L = Math.hypot(dx, dz) || 1;
+        cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+        cam.lookAt(t.x + dx / L, t.y + ctx.player.eyeOffset, t.z + dz / L);
+        cam.updateMatrixWorld(true);
+      };
+      const placeAt = async (wx, wy, wz) => {
+        body.setTranslation({ x: wx, y: wy + CAP + 0.2, z: wz }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        ctx.player.velocityY = 0;
+        await frames(40);
+      };
+      // Pick a crossing DIAMETER whose two ends both stand on real cave floor. Staging the wade on a
+      // fixed bearing once teleported the capsule into solid rock outside the chamber (it fell 33m
+      // and the gate blamed the pool) — so the ends are chosen by castDown, not assumed. This also
+      // means the "no invisible wall" result is about the WATER, never about the staging.
+      const span = P.r + 1.6;
+      const floorOk = (x, z) => {
+        const h = g.castDown(x, z, P.y + 3.0, true);
+        return h && Math.abs(h.hitY - floorY) < 1.5;
+      };
+      let ax = 0, az = 0, startX = 0, startZ = 0, endX = 0, endZ = 0, staged = false;
+      for (let b = 0; b < 24 && !staged; b++) {
+        const a = (b / 24) * Math.PI * 2;
+        const ux = Math.cos(a), uz = Math.sin(a);
+        const sx = P.x - ux * span, sz = P.z - uz * span;
+        const ex = P.x + ux * span, ez = P.z + uz * span;
+        if (floorOk(sx, sz) && floorOk(ex, ez)) {
+          ax = ux; az = uz; startX = sx; startZ = sz; endX = ex; endZ = ez; staged = true;
+        }
+      }
+      if (!staged) {
+        fails.push(`no diameter across pool 0 has real cave floor at BOTH ends (r=${P.r.toFixed(1)}) — the pool does not sit on open walkable floor`);
+        return { fails, notes, seed: ctx.seed, digest: cavep.digest };
+      }
+      await placeAt(startX, floorY, startZ);
+
+      let minFeet = Infinity, maxFeet = -Infinity, insideSamples = 0, aboveWater = 0;
+      let arrived = false, best = Infinity, stall = 0;
+      ctx.input.keys['KeyW'] = true;
+      for (let i = 0; i < 900; i++) {
+        const p = at();
+        const dx = endX - p.x, dz = endZ - p.z;
+        const dist = Math.hypot(dx, dz);
+        face(dx, dz);
+        await raf();
+        const q = at();
+        const feet = q.y - CAP;
+        const dc = Math.hypot(q.x - P.x, q.z - P.z);
+        if (dc < P.r * 0.8) {                 // sampling only well INSIDE the pool footprint
+          insideSamples++;
+          if (feet < minFeet) minFeet = feet;
+          if (feet > maxFeet) maxFeet = feet;
+          if (feet > P.y + 0.05) aboveWater++;   // standing ON the water plane = an invisible floor
+        }
+        if (dist < 1.2) { arrived = true; break; }
+        if (dist < best - 0.03) { best = dist; stall = 0; } else if (++stall > 160) break;
+      }
+      ctx.input.keys['KeyW'] = false;
+      const endP = at();
+      notes.wade = {
+        from: [+startX.toFixed(1), +startZ.toFixed(1)], to: [+endX.toFixed(1), +endZ.toFixed(1)],
+        ended: [+endP.x.toFixed(1), +endP.z.toFixed(1)],
+        arrived, insideSamples,
+        feetMin: insideSamples ? +minFeet.toFixed(3) : null,
+        feetMax: insideSamples ? +maxFeet.toFixed(3) : null,
+        floorY: +floorY.toFixed(3), waterY: +P.y.toFixed(3),
+        framesStandingOnWater: aboveWater,
+      };
+      if (!arrived) fails.push(`wade: could not cross the pool — stalled at (${endP.x.toFixed(1)},${endP.z.toFixed(1)}), target (${endX.toFixed(1)},${endZ.toFixed(1)}) [invisible wall?]`);
+      if (insideSamples < 3) fails.push(`wade: only ${insideSamples} samples inside the pool footprint — the crossing did not go through the water`);
+      if (aboveWater > 0) fails.push(`wade: ${aboveWater} frames with the feet ABOVE the water plane — something is colliding with the surface`);
+      if (insideSamples >= 3 && minFeet < floorY - 0.45) fails.push(`wade: feet sank to y=${minFeet.toFixed(2)}, ${(floorY - minFeet).toFixed(2)}m below the pool floor y=${floorY.toFixed(2)}`);
+
+      // ── 4. REFILL at the pool ─────────────────────────────────────────────────────────────
+      const src = ctx.waterSources.list.find((w) => w.kind === 'pool' && Math.hypot(w.pos.x - P.x, w.pos.z - P.z) < 0.5)
+        || ctx.waterSources.list.find((w) => w.kind === 'pool');
+      ctx.inventory.slots[0] = { item: 'canteen', count: 1, meta: { fillLevel: 0.1 } };
+      ctx.inventory.slots[1] = { item: 'jerrycan', count: 1, meta: { fillLevel: 0 } };
+      ctx.inventory.selectedIdx = 0;
+      // Stand at the pool rim and look down into the water — a real player's aim, a real E press.
+      await placeAt(P.x - ax * (P.r * 0.55), floorY, P.z - az * (P.r * 0.55));
+      // Aim at a point and press E. Returns the FIRST prompt noun seen — the state the player was
+      // actually looking at when they pressed, not the "already full" prompt the fill itself causes.
+      const aimAndPress = async (tx, ty, tz, tries) => {
+        let noun = null;
+        for (let i = 0; i < tries; i++) {
+          const cam = ctx.three.camera; const t = body.translation();
+          cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+          cam.lookAt(tx, ty, tz);
+          cam.updateMatrixWorld(true);
+          ctx.input.pressed.add('KeyE');
+          await raf();
+          if (noun === null && ctx.inventory.hover) noun = ctx.inventory.hover.promptNoun;
+          await raf();
+        }
+        return noun;
+      };
+      const poolNoun = await aimAndPress(P.x + ax * (P.r * 0.15), P.y, P.z + az * (P.r * 0.15), 8);
+      const canteenAfterPool = ctx.inventory.slots[0].meta.fillLevel;
+      // Now the canteen is full, so the SAME press must move on to the jerrycan.
+      await aimAndPress(P.x + ax * (P.r * 0.15), P.y, P.z + az * (P.r * 0.15), 8);
+      const jerryAfterPool = ctx.inventory.slots[1].meta.fillLevel;
+      notes.poolRefill = { promptNoun: poolNoun, canteen: canteenAfterPool, jerrycan: jerryAfterPool };
+      if (poolNoun !== 'pool') fails.push(`pool prompt noun was "${poolNoun}" (expected "pool")`);
+      if (canteenAfterPool < 0.999) fails.push(`canteen did not fill at the pool (fillLevel ${canteenAfterPool})`);
+      if (jerryAfterPool < 0.999) fails.push(`jerrycan did not fill at the pool (fillLevel ${jerryAfterPool})`);
+
+      // ── 5. THE WELL REFUSAL ───────────────────────────────────────────────────────────────
+      // The proof chain is deliberately in two halves, because teleporting a kilometre to a real
+      // well drags in chunk streaming and would make this gate flaky rather than strict:
+      //   (a) the REGISTRY assertions above already prove every well has deepEnoughForLargeVessel
+      //       === false, and
+      //   (b) this leg proves that a source with that field false FILLS THE CANTEEN and REFUSES
+      //       THE JERRYCAN, diegetically — run at the pool with the field temporarily flipped, so
+      //       it drives the exact interaction branch a well drives.
+      // (a) + (b) ⇒ wells refuse jerrycans, deterministically, with no teleport.
+      ctx.inventory.slots[0].meta.fillLevel = 0.1;
+      ctx.inventory.slots[1].meta.fillLevel = 0;
+      src.deepEnoughForLargeVessel = false;                 // stand in a well's shoes
+      const aimPt = [P.x + ax * (P.r * 0.15), P.y, P.z + az * (P.r * 0.15)];
+      const shallowNoun1 = await aimAndPress(aimPt[0], aimPt[1], aimPt[2], 8);
+      const canteenShallow = ctx.inventory.slots[0].meta.fillLevel;
+      const shallowNoun2 = await aimAndPress(aimPt[0], aimPt[1], aimPt[2], 8);
+      const jerryShallow = ctx.inventory.slots[1].meta.fillLevel;
+      src.deepEnoughForLargeVessel = true;                  // restore
+      notes.shallowRule = { noun1: shallowNoun1, noun2: shallowNoun2, canteen: canteenShallow, jerrycan: jerryShallow };
+      if (canteenShallow < 0.999) fails.push(`a shallow source did not fill the CANTEEN (fillLevel ${canteenShallow}) — the well flow regressed`);
+      if (jerryShallow > 0.001) fails.push(`a shallow source FILLED THE JERRYCAN (fillLevel ${jerryShallow}) — the volume rule is broken`);
+      if (canteenShallow >= 0.999 && !(shallowNoun2 || '').includes('too shallow')) {
+        fails.push(`the shallow-source refusal is SILENT — prompt was "${shallowNoun2}", expected it to say why`);
+      }
+
+      // Bonus teeth when a REAL well is close enough to stage without a cross-world teleport: run
+      // the same two presses at actual well geometry. Skipped (reported, not failed) when the well
+      // is far away — the deterministic leg above is what the gate stands on.
+      let well = null, wellD = Infinity;
+      const here = at();
+      for (const w of srcWells) {
+        const d = Math.hypot(w.pos.x - here.x, w.pos.z - here.z);
+        if (d < wellD) { wellD = d; well = w; }
+      }
+      if (!well) {
+        notes.realWell = 'no well in the world';
+      } else {
+        ctx.inventory.slots[0].meta.fillLevel = 0.1;
+        ctx.inventory.slots[1].meta.fillLevel = 0;
+        // Land ON the streamed ground next to the well: drop in high, let the chunks build, then
+        // re-seat on whatever the physics floor turned out to be.
+        const wx = well.pos.x + 1.7, wz = well.pos.z;
+        body.setTranslation({ x: wx, y: ctx.terrain.heightAt(wx, wz) + 4, z: wz }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        await frames(90);
+        const gh = g.castDown(wx, wz, well.pos.y + 8, true);
+        if (gh) await placeAt(wx, gh.hitY, wz);
+        const settled = at();
+        const dOff = Math.hypot(settled.x - well.pos.x, settled.z - well.pos.z);
+        const staged2 = dOff < 4 && Math.abs(settled.y - (gh ? gh.hitY : settled.y)) < 3;
+        if (!staged2) {
+          notes.realWell = { dist: +wellD.toFixed(0), staged: false, endedAt: [+settled.x.toFixed(1), +settled.y.toFixed(1), +settled.z.toFixed(1)] };
+        } else {
+          const box = new THREE.Box3().setFromObject(well.mesh);
+          const c = box.getCenter(new THREE.Vector3());
+          const n1 = await aimAndPress(c.x, box.max.y - 0.15, c.z, 12);
+          const canteenAtWell = ctx.inventory.slots[0].meta.fillLevel;
+          const n2 = await aimAndPress(c.x, box.max.y - 0.15, c.z, 12);
+          const jerryAtWell = ctx.inventory.slots[1].meta.fillLevel;
+          notes.realWell = { dist: +wellD.toFixed(0), staged: true, noun1: n1, noun2: n2, canteen: canteenAtWell, jerrycan: jerryAtWell };
+          if (n1 === null) {
+            notes.realWell.staged = 'no-hover';        // stood in the right place but never resolved the mesh
+          } else {
+            if (n1 !== 'well') fails.push(`well prompt noun was "${n1}" (expected "well")`);
+            if (canteenAtWell < 0.999) fails.push(`canteen did not fill at the REAL well (fillLevel ${canteenAtWell})`);
+            if (jerryAtWell > 0.001) fails.push(`JERRYCAN FILLED AT A REAL WELL (fillLevel ${jerryAtWell})`);
+          }
+        }
+      }
+
+      return { fails, notes, seed: ctx.seed, digest: cavep.digest };
+    });
+
+    // ── 1b. DETERMINISM ×2 — re-run the PURE placement for this seed and diff it against the
+    //    probe's pool list. Cheap (no second cave build) and it fails on any hidden Math.random.
+    const det = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      let cavep = null;
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe; });
+      const caveGen = await import('/src/world/caveGen.ts');
+      const seed = cavep.seed;
+      const runs = [];
+      for (let k = 0; k < 2; k++) {
+        runs.push(caveGen.cavePoolLayout(seed, cavep.junction, ctx.terrain)
+          .map((p) => `${p.nodeId}:${p.x.toFixed(4)}:${p.z.toFixed(4)}:${p.waterY.toFixed(4)}:${p.radius.toFixed(4)}`).join('|'));
+      }
+      const live = (cavep.pools || []).map((p) => `${p.node}:${p.x.toFixed(3)}:${p.z.toFixed(3)}`).join('|');
+      const rebuilt = runs[0].split('|').map((s) => { const a = s.split(':'); return `${a[0]}:${(+a[1]).toFixed(3)}:${(+a[2]).toFixed(3)}`; }).join('|');
+      return { stable: runs[0] === runs[1], matchesLive: live === rebuilt, a: runs[0], b: runs[1], live, rebuilt };
+    }).catch((e) => ({ error: String(e && e.message || e) }));
+
+    const fails = (r.fails || []).slice();
+    if (det.error) fails.push(`determinism check could not run: ${det.error}`);
+    else {
+      if (!det.stable) fails.push(`pool placement NOT deterministic — run A "${det.a}" vs run B "${det.b}"`);
+      if (!det.matchesLive) fails.push(`rebuilt pool placement differs from the LIVE cave — live "${det.live}" vs rebuilt "${det.rebuilt}"`);
+    }
+    const pass = fails.length === 0 ? 1 : 0;
+    for (const f of fails) console.log(`[pool-fill] FAIL ${f}`);
+    console.log(`[pool-fill] ${JSON.stringify(r.notes || {})}`);
+    console.log(`[pool-fill] determinism ${JSON.stringify({ stable: det.stable, matchesLive: det.matchesLive })}`);
+    console.log(`POOL-FILL pass=${pass} seed=${r.seed} digest=${r.digest} pools=${(r.notes && r.notes.poolCount) || 0} fails=${fails.length}`);
+
+    // `--shot` — one torch-lit player-eye frame of the pool, for the visual pass. OFF by default so
+    // the permanent gate stays a fast measurement and never pays for a render.
+    if (argv.shot) {
+      await page.evaluate(() => {
+        const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
+        let cavep = null, caveGroup = null;
+        ctx.three.scene.traverse((o) => {
+          if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
+          if (o.name === 'caveGen') caveGroup = o;
+        });
+        const P = cavep.pools[0];
+        const n = cavep.nodes.find((q) => q.id === P.node);
+        ctx.flags.paused = true;
+        ctx.three.renderer.setSize(1100, 720, false);
+        const cam = ctx.three.camera;
+        cam.aspect = 1100 / 720; cam.updateProjectionMatrix();
+        // Stand back from the rim at eye height, looking down into the water — the player's own view.
+        let dx = P.x - n.x, dz = P.z - n.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+        cam.position.set(P.x + dx * (P.r + 2.4), P.y + 1.55, P.z + dz * (P.r + 2.4));
+        cam.lookAt(P.x, P.y, P.z);
+        cam.updateMatrixWorld(true);
+        // The only real light down there is what you carry — put a torch in the player's hand-space.
+        const torch = new THREE.PointLight(0xffb464, 14, 22, 1.6);
+        torch.position.set(cam.position.x, cam.position.y - 0.25, cam.position.z);
+        ctx.three.scene.add(torch);
+        window.__poolShotTorch = torch;
+        // Hide everything outside the cave so the one-sided terrain sheet doesn't fill the frame.
+        const hidden = [];
+        ctx.three.scene.traverse((o) => {
+          if (!o.isMesh || !o.visible) return;
+          let inCave = false; for (let p = o; p; p = p.parent) if (p === caveGroup) { inCave = true; break; }
+          if (!inCave) { hidden.push(o); o.visible = false; }
+        });
+        window.__poolShotHidden = hidden;
+        ctx.three.scene.background = new THREE.Color(0x000000);
+        ctx.three.renderer.render(ctx.three.scene, cam);
+      });
+      await page.waitForTimeout(300);
+      const name = argv.tag ? `pool-${argv.tag}` : 'pool';
+      try { await page.screenshot({ path: join(OUT, `scen-${name}.png`) }); console.log(`[pool-fill] saved scen-${name}.png`); }
+      catch (e) { console.log(`[pool-fill] shot flaked (${e.name})`); }
+    }
+    if (!pass) throw new Error('pool-fill FAILED');
   },
 
 

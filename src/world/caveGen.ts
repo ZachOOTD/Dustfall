@@ -44,6 +44,7 @@ import { makeStaticTrimesh } from '../physics/bodies.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { startCaveSdf, buildCaveSdf, caveVertexColor, type CaveSdfJob } from './caveSdf.ts';
+import { buildCavePools, placeCavePools, eggDaisRadius, type CavePool, type CavePoolSpec } from './cavePools.ts';
 
 /** One station on the crevice's descent centreline (DEEPER cycle 4). The entrance hands the WHOLE
  *  polyline to the cave's SDF so the descent is built as part of the cave's own watertight
@@ -434,7 +435,8 @@ const _tmpCol = new THREE.Color();
  *  (sides ≤ the walk grade so the KCC climbs it; top ≤ the floor-grid tolerance so it isn't read as
  *  a hole). Where the egg will sit next cycle. WORLD space; baked into the trimesh (collider=visual). */
 function buildDais(node: CaveNode, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
-  const baseR = Math.min(node.rx * 0.34, 3.4);
+  // Shared with cavePools.ts so a water pool can never be placed on top of the pedestal.
+  const baseR = eggDaisRadius(node.rx);
   const topR = baseR * 0.42;
   const H = 0.9;                           // slope = H/(baseR−topR) ≈ 0.48 → ~26° (KCC-walkable, gentle)
   const RINGS = 5, SEGS = 20;
@@ -843,6 +845,34 @@ export function makeCaveRockMaterial(bump: number): THREE.MeshLambertMaterial {
   return m;
 }
 
+/** Per-chamber unit directions toward every neighbour (plus, for node 0, back out the entrance).
+ *  Used to keep corridor mouths clear of speleothems (cycle 2) and of water pools (cycle 6). One
+ *  definition so the two consumers can never disagree about where a mouth is. */
+function cornerDirsByNode(graph: CaveGraph, junction: CaveJunction): Map<number, Array<{ x: number; z: number }>> {
+  const dirs = new Map<number, Array<{ x: number; z: number }>>();
+  const byId = (id: number): CaveNode => graph.nodes[id];
+  const push = (id: number, tx: number, tz: number): void => {
+    const n = byId(id); const d = Math.hypot(tx - n.x, tz - n.z) || 1;
+    let arr = dirs.get(id);
+    if (!arr) { arr = []; dirs.set(id, arr); }
+    arr.push({ x: (tx - n.x) / d, z: (tz - n.z) / d });
+  };
+  for (const e of graph.edges) { push(e.a, byId(e.b).x, byId(e.b).z); push(e.b, byId(e.a).x, byId(e.a).z); }
+  { const n0 = byId(0); push(0, n0.x - junction.heading.x, n0.z - junction.heading.z); }
+  return dirs;
+}
+
+/** DEEPER cycle 6 — the PURE water-pool layout for a seed: the exact placement `startSpawnCave`
+ *  will use, with no geometry, no collider and no scene. The `pool-fill` gate calls this twice and
+ *  diffs the results, so a stray `Math.random` in the placement fails determinism in milliseconds
+ *  instead of costing two full cave builds. */
+export function cavePoolLayout(seed: number, junction: CaveJunction, terrain: Terrain): CavePoolSpec[] {
+  const graph = generateCaveGraph(seed, junction, terrain);
+  const cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));
+  const prand = makeRng((seed ^ 0x9007e4) >>> 0);
+  return placeCavePools(graph, cnoise, prand, cornerDirsByNode(graph, junction));
+}
+
 export interface CaveGenProbe {
   seed: number;
   eggId: number;
@@ -859,6 +889,10 @@ export interface CaveGenProbe {
   edges: Array<{ a: number; b: number; halfW: number; height: number; squeeze: boolean }>;
   tour: number[];
   junction: CaveJunction;
+  /** DEEPER cycle 6 — the placed water pools (`y` = the water SURFACE; the floor plane is
+   *  CAVE_POOL_DEPTH_M below it). Visual-only geometry: no collider is baked for them. The
+   *  `pool-fill` scenario + the determinism check read this. */
+  pools: Array<{ node: number; x: number; y: number; z: number; r: number }>;
 }
 
 export interface SpawnedCave {
@@ -868,6 +902,10 @@ export interface SpawnedCave {
   probe: CaveGenProbe;
   /** UNDERWORLD cycle 3 — harvestable fungi clusters (E → alien_fruit). Wired to ctx.caveFungi. */
   fungi: CaveFungiCluster[];
+  /** DEEPER cycle 6 — standing water pools. Their `source` records are published into
+   *  `ctx.waterSources.list` when the cave becomes resident and removed when it is evicted
+   *  (caveStream.ts) — a pool source must never outlive its cave. */
+  pools: CavePool[];
   /** World-space top of the egg-chamber dais — where main.ts places the companion egg. */
   eggDaisTop: THREE.Vector3;
   /** World-space floor anchors for the deep loot caches (the hall + the egg chamber, battery-rich). */
@@ -926,6 +964,8 @@ export function startSpawnCave(
   let meshes: THREE.Mesh[] = [];            // baked into the trimesh collider (rule 9)
   let decor: THREE.Mesh[] = [];             // visual-only (small speleothems + fungi; no collider, like scatter)
   let fungi: CaveFungiCluster[] = [];       // UNDERWORLD cycle 3 — harvestable fungi clusters (E -> alien_fruit)
+  let pools: CavePool[] = [];               // DEEPER cycle 6 — standing water (visual-only mesh; the FLOOR is the collider)
+  let prand!: () => number;                 // pool placement RNG (own stream — never perturbs the others)
   let msMesh = 0;
   let out: SpawnedCave | null = null;
   // VITE_CAVE_SDF_BENCH=1 only — re-polygonizes at the measurement resolutions (cost numbers).
@@ -943,20 +983,15 @@ export function startSpawnCave(
     cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));   // colour/dressing noise stream
     srand = makeRng((seed ^ 0x59e1e0) >>> 0);                   // speleothem placement RNG
     frand = makeRng((seed ^ 0xf0091a) >>> 0);                   // fungi placement RNG (own stream)
+    prand = makeRng((seed ^ 0x9007e4) >>> 0);                   // DEEPER cycle 6 — pool placement RNG (own stream)
 
     group = new THREE.Group();
     group.name = 'caveGen';
-    meshes = []; decor = []; fungi = [];
+    meshes = []; decor = []; fungi = []; pools = [];
 
-    const byId = (id: number): CaveNode => graph.nodes[id];
-    // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems).
-    dirsByNode = new Map<number, Array<{ x: number; z: number }>>();
-    const pushDir = (id: number, tx: number, tz: number): void => {
-      const n = byId(id); const d = Math.hypot(tx - n.x, tz - n.z) || 1;
-      (dirsByNode.get(id) ?? dirsByNode.set(id, []).get(id)!).push({ x: (tx - n.x) / d, z: (tz - n.z) / d });
-    };
-    for (const e of graph.edges) { pushDir(e.a, byId(e.b).x, byId(e.b).z); pushDir(e.b, byId(e.a).x, byId(e.a).z); }
-    { const n0 = byId(0); pushDir(0, n0.x - junction.heading.x, n0.z - junction.heading.z); }
+    // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems and,
+    // since cycle 6, of water pools — shared so both agree on where a mouth is).
+    dirsByNode = cornerDirsByNode(graph, junction);
 
     // Weird mushrooms — seed 2-4 chambers (never every one), the egg + hall favoured (the "distinct
     // landmark" rooms), the rest chosen by rng score. Deterministic (frand stream). Visual-only.
@@ -1015,6 +1050,13 @@ export function startSpawnCave(
       addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
       if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
     }
+
+    // DEEPER cycle 6 — STANDING WATER. Pools go in `decor`, NOT `meshes`: the water surface is
+    // never baked into the trimesh collider. What you wade on is the SDF floor visible through it
+    // (rule 9 — see cavePools.ts). They still ride the determinism digest below, so a pool that
+    // moved between two builds of the same seed fails the cave-walk gate like any other drift.
+    pools = buildCavePools(graph, cnoise, prand, dirsByNode);
+    for (const p of pools) { group.add(p.mesh); decor.push(p.mesh); }
   };
 
   // -- Stage 4: FINALIZE, atomic. ONE trimesh collider baked from the EXACT visual triangles (rule 9):
@@ -1045,6 +1087,11 @@ export function startSpawnCave(
       edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),
       tour: graph.tour,
       junction,
+      pools: pools.map((p) => ({
+        node: p.spec.nodeId,
+        x: +p.spec.x.toFixed(3), y: +p.spec.waterY.toFixed(3), z: +p.spec.z.toFixed(3),
+        r: +p.spec.radius.toFixed(3),
+      })),
     };
     group.userData.caveGenProbe = probe;
 
@@ -1066,7 +1113,7 @@ export function startSpawnCave(
     const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
     if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
 
-    out = { group, body, graph, probe, fungi, eggDaisTop, lootAnchors };
+    out = { group, body, graph, probe, fungi, pools, eggDaisTop, lootAnchors };
   };
 
   const step = (budgetMs: number): boolean => {

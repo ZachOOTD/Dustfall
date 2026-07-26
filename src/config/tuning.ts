@@ -146,6 +146,16 @@ export const Tuning = {
   // proportionally. 0.7s gives an intentional cadence — not instant, not
   // sluggish. See src/player/wieldAction.ts.
   CANTEEN_DRINK_INTERVAL_S: 0.7,
+  // ── DEEPER cycle 6 — the JERRYCAN (the VOLUME tier of underground water). A larger vessel that
+  //    only makes sense to fill at a real body of water: it fills at CAVE POOLS ONLY, never at a
+  //    well (a well is a shaft with a bucket's worth in reach — "too shallow to fill the jerrycan").
+  //    It is the SAME stateful-container mechanism as the canteen (slot.meta.fillLevel 0..1,
+  //    hold-LMB drinking) with a bigger tank: one gulp costs 1/CAPACITY_MULT of what a canteen gulp
+  //    costs and restores the SAME thirst, so a full jerrycan = CAPACITY_MULT canteens of water.
+  //    Both derived values are computed from the CANTEEN_* keys at call time (items.ts) — never
+  //    duplicated here, so retuning the canteen retunes the jerrycan with it.
+  JERRYCAN_CAPACITY_MULT: 4,         // × canteen capacity (gulp delta = CANTEEN_DRINK_DELTA / this)
+  JERRYCAN_DRINK_INTERVAL_S: 0.7,    // s between hold-LMB gulps (same cadence as the canteen — a bigger can, not a faster mouth)
 
   // Session UU (D75) — distance ahead of the player where placed kits
   // land (fire_kit, tent_kit, sled_kit). Replaces the 1.5m local constant
@@ -1048,6 +1058,45 @@ export const Tuning = {
   CAVE_BED_DRIP_ECHO_S: 0.26,          // s — feedback-delay time for the drip echo
   CAVE_BED_DRIP_ECHO_FEEDBACK: 0.42,   // delay feedback (a couple of audible repeats, decaying — not a reverb engine)
 
+  // ── DEEPER cycle 6 — UNDERGROUND WATER (cavePools.ts). Still black pools in the true low points
+  //    of chamber floors. THE COLLISION RULE (rule 9): the water surface gets NO collider — the
+  //    collider IS the cave floor trimesh you can see THROUGH the water, so what you wade on is
+  //    exactly what you see. Pools are therefore SHALLOW BY CONSTRUCTION (DEPTH_M below the
+  //    step-up height a KCC clears without noticing) — there is no swimming and no wading pit in
+  //    this campaign. Placement reads the SAME signal the floor sediment does (the low-frequency
+  //    `cn(x*0.10, 3.7, z*0.10)` pooled-sand field in caveVertexColor) — where sand pools, water
+  //    pools. Seed-pure per cave descriptor (D290): a private RNG stream + the cave's colour noise.
+  CAVE_POOL_CHAMBERS_MIN: 1,           // pools per cave (min) — ALWAYS ≥1 so every cave has water somewhere
+  CAVE_POOL_CHAMBERS_MAX: 3,           // (max) — water is a feature of the cave, not of every room
+  CAVE_POOL_DEPTH_M: 0.26,             // m — water surface above the local floor plane. Shallow: you wade, you never swim
+  CAVE_POOL_R_MIN: 1.9,                // m — smallest pool radius
+  CAVE_POOL_R_MAX: 5.2,                // m — largest pool radius (a hall pool you have to walk around, not across)
+  CAVE_POOL_R_FRAC: 0.30,              // × chamber rx — target pool radius before the min/max clamp
+  CAVE_POOL_CENTER_FRAC_MIN: 0.30,     // × rx — nearest the chamber centre a pool centre may sit (keeps the egg dais + the march centreline clear)
+  CAVE_POOL_CENTER_FRAC_MAX: 0.52,     // × rx — farthest out (pool rim must still clear the wall)
+  CAVE_POOL_MOUTH_CLEAR_DEG: 46,       // ° — angular sector kept clear around every corridor mouth (a pool never blocks a throat)
+  CAVE_POOL_EDGE_SEGS: 40,             // radial segments of the water disc (the rim contour wobble resolves at this count)
+  CAVE_POOL_EDGE_WOBBLE: 0.22,         // × radius — noise wobble on the rim so the pool is not a machined circle
+  CAVE_POOL_WATER_HEX: 0x070d12,       // near-black still water, a touch of cold blue so it is not a VOID (PLACEHOLDER — the hero-visual pass owns this)
+  CAVE_POOL_WATER_OPACITY: 0.88,       // surface opacity — the floor is faintly visible through it
+  CAVE_POOL_SPECULAR_HEX: 0x59707e,    // cool sheen strong enough that a torch glints off the surface (PLACEHOLDER)
+  CAVE_POOL_SHININESS: 150,            // Phong shininess — a tight bright highlight, i.e. still water (PLACEHOLDER)
+  // FRESNEL. Without this the pool reads as a HOLE cut in the floor: a Phong lobe from a near-eye
+  // torch is weakest exactly where you look at water from, so the surface goes to flat black at
+  // grazing angles. Real water does the opposite — it gets MORE reflective toward grazing. This
+  // brightens + opacifies the surface with (1 − N·V), which is what makes a black sheet read as a
+  // sheet. (PLACEHOLDER tier — the hero pass replaces it with a real ripple/reflection treatment.)
+  CAVE_POOL_FRESNEL_HEX: 0x546d7c,     // cool grey-blue the surface tends toward at grazing angles
+  CAVE_POOL_FRESNEL_POW: 2.6,          // Fresnel falloff exponent (lower = the sheen reaches further in from the rim)
+  CAVE_POOL_FRESNEL_STRENGTH: 0.85,    // × the Fresnel colour added at full grazing
+  // Pool AUDIO — the drip bed gains a destination near water (drips LAND, with a splash tail) and a
+  // quiet lapping bed fades in by proximity. Weather-independent, in-cave only (gated on the same
+  // smoothed `caveAtmosphere.inside` factor the rest of the cave bed uses).
+  CAVE_POOL_AUDIO_RANGE_M: 16,         // m — distance over which the pool audio fades to zero
+  CAVE_POOL_LAP_MASTER: 0.045,         // gain of the lapping bed at the water's edge (very quiet — a felt presence)
+  CAVE_POOL_LAP_CUTOFF: 620,           // Hz — lowpass cutoff for the lapping bed
+  CAVE_POOL_SPLASH_MASTER: 0.5,        // × the drip gain — the splash tail added to a drip that lands in water
+
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
   // ACAX — darkened + WARMED from ACAT W5's light grey-tan (0x6a6657/0x5e5a52). User
@@ -1361,6 +1410,7 @@ export const Tuning = {
   VIEWMODEL_OFFSET_Z: -0.55,
   // Per-item use-anim durations (seconds)
   VIEWMODEL_CANTEEN_ANIM_S: 1.2,
+  VIEWMODEL_JERRYCAN_ANIM_S: 1.6,      // DEEPER cycle 6 — slower than the canteen: it is a heavy can, hoisted with both hands
   VIEWMODEL_MACHETE_ANIM_S: 0.4,
   VIEWMODEL_BANDAGE_ANIM_S: 0.8,
   // Session PP — weapon variants

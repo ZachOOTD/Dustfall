@@ -398,6 +398,26 @@ export const RECIPES: Recipe[] = [
     output: { id: 'worm_lure', count: 1 },
     category: 'tool',
   },
+  // ── DEEPER cycle 6 — UNDERGROUND WATER ────────────────────────────
+  {
+    // JERRYCAN — the volume vessel. Deliberately in-family with the canteen (id 20, scrap×2 +
+    // cloth×1) and priced ONE tier above it: a bigger tank is more sheet metal (scrap×3), a proper
+    // welded spout and handle is a salvaged fitting (metal_pipe×1), and the cap still needs a
+    // gasket (cloth×1). No battery/wiring — this is a bucket, not a machine, and gating the
+    // desert's water behind the scarcest material would be a survival tax, not a decision.
+    // Discovery unlocks exactly like the canteen's: once scrap + cloth + metal_pipe have all been
+    // collected. Crafts EMPTY (fillLevel 0) — making one is never free water.
+    // *** BALANCE NUMBERS FLAGGED FOR ZACH: inputs + JERRYCAN_CAPACITY_MULT (4×). ***
+    id: 24,
+    displayName: 'jerrycan',
+    inputs: [
+      { id: 'scrap', count: 3 },
+      { id: 'metal_pipe', count: 1 },
+      { id: 'cloth', count: 1 },
+    ],
+    output: { id: 'jerrycan', count: 1, meta: { fillLevel: 0 } },
+    category: 'tool',
+  },
 ];
 
 // ── Scavenger's Economy (build 3) — material source hints ─────────

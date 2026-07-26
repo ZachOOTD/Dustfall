@@ -49,6 +49,8 @@ interface CaveBed {
   dripDelay: DelayNode;    // echo delay line
   dripFeedback: GainNode;  // delay feedback (decaying repeats)
   nextDrip: number;        // ctx.currentTime the next drip fires
+  /** DEEPER cycle 6 — the quiet LAPPING bed near a water pool (× pool proximity × inside). */
+  lapGain: GainNode;
 }
 
 interface SoundscapeState {
@@ -254,7 +256,20 @@ export function startSoundscape(): void {
   dripBus.connect(dripDelay);
   dripDelay.connect(dripFeedback).connect(dripDelay);   // feedback loop → decaying echo
   dripDelay.connect(a.ambient);
-  const cave: CaveBed = { hushGain: caveHushGain, dripBus, dripDelay, dripFeedback, nextDrip: 0 };
+  // DEEPER cycle 6 — the LAPPING bed. Another tap off the same wind noise through a lowpass, so a
+  // pool costs one filter and one gain: a soft broadband wash that rises as you approach the water
+  // and dies at the range edge. Weather-independent by construction (it is fed by `caveInside`,
+  // which is 0 anywhere the sky can reach).
+  const capLapFilter = a.ctx.createBiquadFilter();
+  capLapFilter.type = 'lowpass';
+  capLapFilter.frequency.value = Tuning.CAVE_POOL_LAP_CUTOFF;
+  capLapFilter.Q.value = 0.8;
+  const caveLapGain = a.ctx.createGain();
+  caveLapGain.gain.value = 0;
+  noise.connect(capLapFilter).connect(caveLapGain).connect(a.ambient);
+  const cave: CaveBed = {
+    hushGain: caveHushGain, dripBus, dripDelay, dripFeedback, nextDrip: 0, lapGain: caveLapGain,
+  };
 
   // Build placeholder state first (silent stems) — buffers attach once decode
   // resolves below. This keeps updateSoundscape simple: it never touches null.
@@ -421,10 +436,22 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   if (s.cave) {
     const t0 = s.ctx.currentTime;
     s.cave.hushGain.gain.setTargetAtTime(Tuning.CAVE_BED_HUSH_MASTER * caveInside, t0, 0.4);
+    // DEEPER cycle 6 — POOL PROXIMITY. 1 at the water's edge → 0 at CAVE_POOL_AUDIO_RANGE_M. It
+    // gives the drip bed a DESTINATION (drips near water land with a splash tail) and fades in the
+    // lapping bed. Multiplied by `caveInside`, so it is silent everywhere the desert bed is playing.
+    let poolNear = 0;
+    for (const w of ctx.waterSources.list) {
+      if (w.kind !== 'pool') continue;
+      const d = Math.hypot(w.pos.x - pp.x, w.pos.z - pp.z);
+      const n = 1 - Math.min(1, d / Tuning.CAVE_POOL_AUDIO_RANGE_M);
+      if (n > poolNear) poolNear = n;
+    }
+    poolNear *= caveInside;
+    s.cave.lapGain.gain.setTargetAtTime(Tuning.CAVE_POOL_LAP_MASTER * poolNear * poolNear, t0, 0.5);
     if (caveInside > 0.15) {
       if (s.cave.nextDrip === 0) s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S;
       if (t0 >= s.cave.nextDrip) {
-        scheduleDrip(s.cave, s.ctx, Tuning.CAVE_BED_DRIP_MASTER * caveInside);
+        scheduleDrip(s.cave, s.ctx, Tuning.CAVE_BED_DRIP_MASTER * caveInside, poolNear);
         s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S
           + Math.random() * (Tuning.CAVE_BED_DRIP_MAX_S - Tuning.CAVE_BED_DRIP_MIN_S);
       }
@@ -435,9 +462,32 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
 }
 
 /** One water DRIP — a short pitched blip (fast attack, exponential decay) through a bandpass, into
- *  the drip bus (which feeds the feedback delay → a couple of decaying echoes). Cheap one-shots. */
-function scheduleDrip(cave: CaveBed, ctx: AudioContext, level: number): void {
+ *  the drip bus (which feeds the feedback delay → a couple of decaying echoes). Cheap one-shots.
+ *
+ *  DEEPER cycle 6 — `splash` (0..1, pool proximity) gives the drip a DESTINATION: near standing
+ *  water the plink is followed by a short highpassed noise burst, so the same bed reads as "drips
+ *  landing in a pool" instead of "drips landing on rock". At splash=0 the sound is bit-identical to
+ *  the cycle-2 drip. */
+function scheduleDrip(cave: CaveBed, ctx: AudioContext, level: number, splash = 0): void {
   const t = ctx.currentTime;
+  if (splash > 0.02) {
+    const s = ctx.createOscillator();          // the water-surface "bloop" under the plink
+    s.type = 'sine';
+    const sf = 190 + Math.random() * 140;
+    s.frequency.setValueAtTime(sf, t + 0.02);
+    s.frequency.exponentialRampToValueAtTime(sf * 1.9, t + 0.13);   // rising = a bubble in water
+    const sg = ctx.createGain();
+    const lvl = Math.max(0.0002, level * Tuning.CAVE_POOL_SPLASH_MASTER * splash);
+    sg.gain.setValueAtTime(0.0001, t + 0.02);
+    sg.gain.exponentialRampToValueAtTime(lvl, t + 0.035);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 140;
+    s.connect(hp).connect(sg).connect(cave.dripBus);
+    s.start(t + 0.02);
+    s.stop(t + 0.26);
+  }
   const osc = ctx.createOscillator();
   osc.type = 'sine';
   const f0 = 720 + Math.random() * 900;          // varied pitch per drip

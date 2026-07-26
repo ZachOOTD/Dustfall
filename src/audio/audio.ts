@@ -2209,6 +2209,54 @@ export function playPour(): void {
   src.stop(t + 0.58);
 }
 
+/** DEEPER cycle 6 — JERRYCAN FILL. The canteen's `playPour` is a half-second bandpassed pour; a
+ *  jerrycan is the same event at a bigger scale, so this is the same synthesis stretched and
+ *  dropped: ~2× the duration, the sweep starting lower and ending lower (a wider mouth, a deeper
+ *  vessel), plus a slow downward "filling up" resonance — a bandpass whose centre frequency RISES
+ *  as the airspace above the water shrinks, which is the physical cue that a big container is
+ *  getting full. Procedural Web Audio, no samples. */
+export function playJerrycanFill(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const DUR = 1.15;
+
+  // The glug/pour body — noise through a bandpass sweeping DOWN (heavier, wider than the canteen).
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.55;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(520, t);
+  filter.frequency.exponentialRampToValueAtTime(190, t + DUR * 0.9);
+  filter.Q.value = 2.6;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.13, t + 0.08);
+  env.gain.setValueAtTime(0.13, t + DUR * 0.72);
+  env.gain.exponentialRampToValueAtTime(0.001, t + DUR);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + DUR + 0.05);
+
+  // The rising air-column resonance — the "it's getting full" cue.
+  const res = a.ctx.createBufferSource();
+  res.buffer = a.noiseBuffer;
+  res.playbackRate.value = 0.9;
+  const rf = a.ctx.createBiquadFilter();
+  rf.type = 'bandpass';
+  rf.frequency.setValueAtTime(150, t + 0.15);
+  rf.frequency.exponentialRampToValueAtTime(560, t + DUR);
+  rf.Q.value = 8.0;
+  const renv = a.ctx.createGain();
+  renv.gain.setValueAtTime(0.0, t);
+  renv.gain.linearRampToValueAtTime(0.05, t + 0.30);
+  renv.gain.exponentialRampToValueAtTime(0.001, t + DUR + 0.10);
+  res.connect(rf).connect(renv).connect(a.sfx);
+  res.start(t);
+  res.stop(t + DUR + 0.15);
+}
+
 /** Death — slow low descending tone with rumble. */
 export function playDeath(): void {
   const a = getAudioInternals();

@@ -74,9 +74,21 @@ export interface CaveStreamPerf {
   occupiedEvictionsBlocked: number;
 }
 
+/** DEEPER cycle 6 — how a resident cave publishes its water pools into `ctx.waterSources`. The
+ *  registry is built AFTER the origin cave (main.ts), so the sink is installed late; installing it
+ *  attaches every cave that is already resident, and from then on it is driven by the resident
+ *  lifecycle. THE INVARIANT: a pool source never outlives its cave — eviction detaches before the
+ *  geometry is disposed, so the interaction raycast can never hold a mesh that left the scene. */
+export interface CavePoolSink {
+  attach(cave: SpawnedCave): void;
+  detach(cave: SpawnedCave): void;
+}
+
 export interface CaveStream {
   /** Queue a cave build at `junction`. Returns the resident key (idempotent per key). */
   request(key: string, junction: CaveJunction, seed: number): string;
+  /** Install the water-source sink (see CavePoolSink). Attaches existing residents immediately. */
+  setPoolSink(sink: CavePoolSink): void;
   /** Register an ALREADY-BUILT cave (the boot preload) as a resident. */
   adopt(key: string, junction: CaveJunction, seed: number, cave: SpawnedCave, pinned: boolean): CaveResident;
   /** Per-frame tick: advance the in-flight build by the slice budget, then enforce the cap. */
@@ -131,6 +143,8 @@ export function createCaveStream(
     evictions: 0, evictionsRefused: 0, occupiedEvictionsBlocked: 0,
   };
 
+  let poolSink: CavePoolSink | null = null;
+
   const has = (key: string): boolean =>
     list.some((r) => r.key === key) || queue.some((q) => q.key === key) || inflight?.key === key;
 
@@ -140,6 +154,7 @@ export function createCaveStream(
       key, seed, cave, box, center: box.getCenter(new THREE.Vector3()), pinned, bornAt: born++,
     };
     list.push(r);
+    poolSink?.attach(cave);          // DEEPER cycle 6 — publish this cave's pools as water sources
     return r;
   };
 
@@ -170,6 +185,9 @@ export function createCaveStream(
       }
       perf.occupiedEvictionsBlocked += blockedOccupied;
       if (!victim) { perf.evictionsRefused++; return; }   // soft cap — never evict at the cost of a fall-through
+      // Detach BEFORE the geometry goes: the interaction raycast must never hold a pool mesh that
+      // has left the scene (rule 9's registry twin — no dangling source under vanished water).
+      poolSink?.detach(victim.cave);
       disposeResident(scene, world, victim);
       list.splice(list.indexOf(victim), 1);
       perf.evictions++;
@@ -210,6 +228,10 @@ export function createCaveStream(
       return key;
     },
     adopt: (key, _junction, seed, cave, pinned) => addResident(key, seed, cave, pinned),
+    setPoolSink: (sink) => {
+      poolSink = sink;
+      for (const r of list) sink.attach(r.cave);   // catch up the caves that were resident already
+    },
     update,
     residents: () => list.slice(),
     occupied,

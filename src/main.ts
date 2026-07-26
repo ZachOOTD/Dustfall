@@ -263,6 +263,19 @@ const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
 const treePerches = spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes, physics.world);
 _mark('trees+branches');
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
+// DEEPER cycle 6 — CAVE POOLS join the SAME water-source registry the wells use. The registry is
+// built here (after the cave, which is preloaded during boot), so the sink is installed late and
+// immediately catches up the origin cave. From then on it is driven by the resident lifecycle:
+// attach on build, detach on eviction — a pool source can never outlive the cave it belongs to.
+caveStream?.setPoolSink({
+  attach: (cave) => { for (const p of cave.pools) waterSources.push(p.source); },
+  detach: (cave) => {
+    for (const p of cave.pools) {
+      const i = waterSources.indexOf(p.source);
+      if (i >= 0) waterSources.splice(i, 1);
+    }
+  },
+});
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biomes);
 // OO-4 — rocky biome rocks. Replaces the cracked-rock procedural
 // shader with actual scatter geometry (read too similarly to salt

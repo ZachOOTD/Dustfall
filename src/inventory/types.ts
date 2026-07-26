@@ -5,6 +5,11 @@ import type { GameContext } from '../GameContext.ts';
 
 export type ItemId =
   | 'canteen'
+  // DEEPER cycle 6 (2026-07-26) — the VOLUME tier of underground water. A larger stateful container
+  // (same slot.meta.fillLevel mechanism as the canteen, JERRYCAN_CAPACITY_MULT× the capacity) that
+  // can ONLY be filled at a real body of water — a cave pool, never a well. Craft-only; no loot
+  // table was touched (the loot digest baseline is unchanged).
+  | 'jerrycan'
   | 'scrap'
   | 'bandage'
   | 'machete'

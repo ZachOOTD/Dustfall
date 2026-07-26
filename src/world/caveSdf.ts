@@ -615,6 +615,17 @@ export function startSurfaceNets(
   return { stepCells, stepQuads, out: { vx, vy, vz, idx } };
 }
 
+/** POOLED FLOOR SEDIMENT, 0..~1 — the low-point signal for a cave floor at (wx, wz): a broad
+ *  10m-wavelength field broken by a 3m octave, so it reads as sand drifts between exposed rock.
+ *  ONE definition, two consumers: the floor's tan sediment tint below, and DEEPER cycle 6's pool
+ *  placement (cavePools.ts) — where sand pools, water pools. They must not drift apart, which is
+ *  why this is a shared function and not a copied expression. */
+export function caveFloorSediment(cn: Noise3, wx: number, wz: number): number {
+  let sand = Math.max(0, cn(wx * 0.10 + 5, 3.7, wz * 0.10 + 9)) * 0.72;
+  sand *= 0.62 + 0.38 * Math.max(0, cn(wx * 0.33 + 27, 8.1, wz * 0.33 + 4) + 0.35);
+  return sand;
+}
+
 /** THE cave palette — the single copy (cycle 2 deleted caveGen's, which died with the shells).
  *  Cave-rock vertex colour by role + world position + normalized depth `depthT` (0 near the mouth,
  *  1 at the egg): walls carry horizontal STRATA bands + patchy mineral (rust / cool) STAINING; the
@@ -669,8 +680,7 @@ export function caveVertexColor(
     // geometrically flat floor rendered as an enormous featureless beige wash (the "mudflat" read in
     // the cycle-2 shots). Same pooled-sand idea, now weaker overall and broken by a 3m octave so it
     // reads as drifts between exposed rock instead of a fog bank.
-    let sand = Math.max(0, cn(wx * 0.10 + 5, 3.7, wz * 0.10 + 9)) * 0.72;
-    sand *= 0.62 + 0.38 * Math.max(0, cn(wx * 0.33 + 27, 8.1, wz * 0.33 + 4) + 0.35);
+    let sand = caveFloorSediment(cn, wx, wz);
     sand = Math.min(1, sand) * fwt;
     r = L(r, 0.52, sand); g = L(g, 0.43, sand); b = L(b, 0.28, sand);
     const gr = cn(wx * 1.6, 1.3, wz * 1.6) * 0.05 * fwt;

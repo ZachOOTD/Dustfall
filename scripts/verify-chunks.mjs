@@ -235,6 +235,38 @@ for (const seed of DET_SEEDS) {
   }
 }
 
+// ── 10. DEEPER cycle 6 — UNDERGROUND WATER. Permanent gate, both seeds. Per seed it asserts:
+//       ≥1 pool exists; the water plane carries NO collider and the collider floor agrees with the
+//       VISIBLE bottom to within 5cm (rule 9); a real KCC crossing wades through without an
+//       invisible wall and without the feet ever rising onto the water plane; E fills the canteen
+//       AND the jerrycan at a pool; a WELL fills the canteen and REFUSES the jerrycan with a
+//       diegetic prompt; and the placement is byte-stable when re-derived from the seed.
+{
+  const poolRe = /POOL-FILL pass=(\d) seed=(\S+) digest=(\S+) pools=(\d+) fails=(\d+)/;
+  let poolPort = 5550;
+  const poolDigests = [];
+  for (const seed of DET_SEEDS) {
+    const m = runParsed('pool-fill', seed, poolPort, poolRe, 420000);
+    poolPort += 2;
+    if (!m) {
+      allPass = false;
+      rows.push(`pool-fill seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`);
+      continue;
+    }
+    const okP = m[1] === '1';
+    if (!okP) allPass = false;
+    poolDigests.push(m[3]);
+    rows.push(`pool-fill seed ${seed}: ${m[4]} pools, digest ${m[3]}, ${m[5]} fails  ${okP ? 'OK' : '*** FAIL ***'}`);
+  }
+  // Cross-seed teeth: two different worlds must not produce the same cave (a placement that ignored
+  // the seed would still pass every per-seed assertion above).
+  if (poolDigests.length === 2) {
+    const differ = poolDigests[0] !== poolDigests[1];
+    if (!differ) allPass = false;
+    rows.push(`pool-fill cross-seed: cave digests ${differ ? `differ (${poolDigests[0]} vs ${poolDigests[1]})  OK` : `IDENTICAL (${poolDigests[0]}) — the seed does not reach the cave  *** FAIL ***`}`);
+  }
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass

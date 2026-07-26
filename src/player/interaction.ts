@@ -50,6 +50,7 @@ import { getItemDef } from '../inventory/items.ts';
 import {
   playPickup,
   playPour,
+  playJerrycanFill,
   playHarvest,
   playCookSizzle,
   playFireCrackle,
@@ -443,20 +444,34 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const w = findWaterSourceById(ctx.waterSources.list, info.id);
       if (!w) return;
       w.hovered = true;
-      // Find a canteen slot the player can refill
-      const slot = findRefillableCanteen(ctx);
-      const noun = 'well';
-      if (slot) {
+      // DEEPER cycle 6 — the prompt noun comes from the SOURCE now ('well' / 'pool'), and which
+      // vessels a source can fill depends on whether it is a real body of water.
+      const noun = w.noun;
+      const found = findRefillableContainer(ctx, w.deepEnoughForLargeVessel);
+      if (found) {
         ctx.inventory.hover = { type: 'refill', distance: info.distance, promptNoun: noun };
         if (ctx.input.pressed.has('KeyE')) {
-          if (!slot.meta) slot.meta = { fillLevel: 1 };
-          slot.meta.fillLevel = 1;
-          playPour();
-          ctx.ui.showToast('canteen refilled');
+          if (!found.slot.meta) found.slot.meta = { fillLevel: 1 };
+          found.slot.meta.fillLevel = 1;
+          if (found.slot.item === 'jerrycan') {
+            playJerrycanFill();
+            ctx.ui.showToast('jerrycan filled — it drags at your shoulder');
+          } else {
+            playPour();
+            ctx.ui.showToast('canteen refilled');
+          }
         }
+      } else if (!w.deepEnoughForLargeVessel && findRefillableContainer(ctx, true)) {
+        // The player is carrying a jerrycan that needs water, but this source can't submerge it.
+        // Say so DIEGETICALLY rather than silently doing nothing (cycle-6 spec).
+        ctx.inventory.hover = { type: 'refill', distance: info.distance, promptNoun: `${noun} — too shallow to fill the jerrycan` };
       } else {
-        // No canteen — still show the water but with a different prompt
-        ctx.inventory.hover = { type: 'refill', distance: info.distance, promptNoun: `${noun} (need canteen)` };
+        // Nothing to fill — the water is still worth showing, with the actual reason.
+        const carrying = hasWaterContainer(ctx);
+        ctx.inventory.hover = {
+          type: 'refill', distance: info.distance,
+          promptNoun: carrying ? `${noun} (your water is full)` : `${noun} (need canteen)`,
+        };
       }
       return;
     }
@@ -1325,13 +1340,35 @@ function tickCooking(ctx: GameContext): void {
   }
 }
 
-function findRefillableCanteen(ctx: GameContext): import('../inventory/types.ts').Slot | null {
-  for (const slot of ctx.inventory.slots) {
-    if (slot.item === 'canteen' && (slot.meta?.fillLevel ?? 1) < 1) {
-      return slot;
-    }
-  }
+/** DEEPER cycle 6 — which container this water source can top up, or null.
+ *
+ *  `allowLarge` is the source's `deepEnoughForLargeVessel`: a cave POOL can submerge a jerrycan, a
+ *  WELL cannot (only the canteen fits down a shaft on a cord). ORDER: the WIELDED container wins if
+ *  it needs water — you fill what is in your hands — otherwise the first fillable hotbar slot, then
+ *  the backpack. Backpack inclusion is new here and deliberate: a jerrycan is a stowed bulk item,
+ *  and requiring the player to hotbar it just to fill it would be busywork, not a decision. */
+function findRefillableContainer(
+  ctx: GameContext,
+  allowLarge: boolean,
+): { slot: import('../inventory/types.ts').Slot } | null {
+  const fillable = (slot: import('../inventory/types.ts').Slot): boolean => {
+    if (slot.item !== 'canteen' && slot.item !== 'jerrycan') return false;
+    if (slot.item === 'jerrycan' && !allowLarge) return false;
+    return (slot.meta?.fillLevel ?? 1) < 1;
+  };
+  const held = ctx.inventory.slots[ctx.inventory.selectedIdx];
+  if (held && fillable(held)) return { slot: held };
+  for (const slot of ctx.inventory.slots) if (fillable(slot)) return { slot };
+  for (const slot of ctx.inventory.backpack) if (fillable(slot)) return { slot };
   return null;
+}
+
+/** Does the player carry any water container at all (full or not)? Separates "you own nothing that
+ *  holds water" from "everything you carry is already full" in the refill prompt. */
+function hasWaterContainer(ctx: GameContext): boolean {
+  const isContainer = (slot: import('../inventory/types.ts').Slot): boolean =>
+    slot.item === 'canteen' || slot.item === 'jerrycan';
+  return ctx.inventory.slots.some(isContainer) || ctx.inventory.backpack.some(isContainer);
 }
 
 /** Per-frame salvage timer. AAR — drives the PRY animation. Extracts

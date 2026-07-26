@@ -6,6 +6,14 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Resume + cycle-6 kickoff (2026-07-26)
+
+Zach: "pick up where we left off" — campaign unpaused at `31a6de9` (tree clean, verify:all green).
+Cycle-6 design decision, his call at kickoff (made in chat, AskUserQuestion): **VOLUME tier** —
+pools plus a larger vessel (jerrycan) that only fills at real bodies of water, giving the descent
+a purpose. Stated honestly: the repair descent (D-1..D-4) is **still unwalked**; cycle 6 builds on
+the gate-green but human-unverified base, per his 2026-07-25 "run the remaining ladder" directive.
+
 ## Cycle 5 — the cave build stops hitching: boot preload + frame-budgeted slicing (2026-07-25) — SHIPPED
 
 - **Planned:** walk-test **D-4** — preload the origin cave behind the loading screen; slice streamed

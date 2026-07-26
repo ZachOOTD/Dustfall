@@ -144,6 +144,41 @@ function buildSkewerMesh(cooked: boolean): THREE.Group {
   return group;
 }
 
+// ── Stateful water containers (canteen / jerrycan) ────────────────────────
+// DEEPER cycle 6. Both are the SAME mechanism — `slot.meta.fillLevel` 0..1 drained per gulp, thirst
+// restored in proportion — differing only in how much one gulp costs the tank. The jerrycan's tank
+// is JERRYCAN_CAPACITY_MULT× larger, so its gulp delta is that much SMALLER for the same drink; the
+// numbers are derived from the CANTEEN_* keys at call time rather than duplicated, so retuning the
+// canteen retunes the jerrycan with it (architecture rule 2).
+
+/** fillLevel consumed per gulp, per container. */
+export function containerDrinkDelta(id: ItemId): number {
+  return id === 'jerrycan'
+    ? Tuning.CANTEEN_DRINK_DELTA / Tuning.JERRYCAN_CAPACITY_MULT
+    : Tuning.CANTEEN_DRINK_DELTA;
+}
+
+/** One gulp from a container slot. Returns false if it was already empty. Thirst restored per gulp
+ *  is CANTEEN_THIRST_RESTORE regardless of vessel — a mouthful is a mouthful; the big can just holds
+ *  more of them. */
+function gulpFromContainer(
+  ctx: import('../GameContext.ts').GameContext,
+  slot: import('./types.ts').Slot,
+  id: ItemId,
+): boolean {
+  const fill = slot.meta?.fillLevel ?? 1;
+  if (fill <= 0.001) return false;
+  const delta = containerDrinkDelta(id);
+  const drink = Math.min(fill, delta);
+  if (!slot.meta) slot.meta = { fillLevel: 1 };
+  slot.meta.fillLevel = Math.max(0, fill - drink);
+  // Proportional restore: a partial last gulp restores proportionally less.
+  ctx.stats.thirst = Math.min(1, ctx.stats.thirst + (drink / delta) * Tuning.CANTEEN_THIRST_RESTORE);
+  playPour();
+  playDrink();
+  return true;
+}
+
 const _DEFS: Record<ItemId, ItemDef> = {
   canteen: {
     id: 'canteen',
@@ -155,20 +190,12 @@ const _DEFS: Record<ItemId, ItemDef> = {
     wieldLmb: 'hold_use',
     thirdPersonScale: 1.3,    // ABY P3
     onUse(ctx, slot) {
-      // Q-key single-gulp path (backward compatibility post-UU).
-      const fill = slot.meta?.fillLevel ?? 1;
-      if (fill <= 0.001) {
+      // Q-key single-gulp path (backward compatibility post-UU). Shares the gulp mechanism with the
+      // jerrycan (DEEPER cycle 6) — same maths, one copy.
+      if (!gulpFromContainer(ctx, slot, 'canteen')) {
         return { consumed: false, message: 'the canteen is empty' };
       }
-      const drink = Math.min(fill, Tuning.CANTEEN_DRINK_DELTA);
-      if (!slot.meta) slot.meta = { fillLevel: 1 };
-      slot.meta.fillLevel = Math.max(0, fill - drink);
-      // Thirst gain scales with how much we actually drank (proportional).
-      const restorePerUnit = Tuning.CANTEEN_THIRST_RESTORE / Tuning.CANTEEN_DRINK_DELTA;
-      ctx.stats.thirst = Math.min(1, ctx.stats.thirst + drink * restorePerUnit);
-      playPour();
-      playDrink();
-      const empty = slot.meta.fillLevel <= 0.001;
+      const empty = (slot.meta?.fillLevel ?? 0) <= 0.001;
       return {
         consumed: false,
         message: empty ? 'you drink the last of it' : 'you drink — the water is warm',
@@ -180,24 +207,15 @@ const _DEFS: Record<ItemId, ItemDef> = {
     onHoldTick(ctx, slot, holdSeconds, dt) {
       const interval = Tuning.CANTEEN_DRINK_INTERVAL_S;
       const prev = Math.max(0, holdSeconds - dt);
-      const gulpsAfter = Math.floor(holdSeconds / interval);
       const gulpsBefore = Math.floor(prev / interval);
-      if (gulpsAfter <= gulpsBefore) return;
-      const fill = slot.meta?.fillLevel ?? 1;
-      if (fill <= 0.001) {
+      if (Math.floor(holdSeconds / interval) <= gulpsBefore) return;
+      if (!gulpFromContainer(ctx, slot, 'canteen')) {
         // Empty — toast on the first attempted gulp of this hold.
         if (gulpsBefore === 0) ctx.ui.showToast('the canteen is empty');
         return;
       }
-      const drink = Math.min(fill, Tuning.CANTEEN_DRINK_DELTA);
-      if (!slot.meta) slot.meta = { fillLevel: 1 };
-      slot.meta.fillLevel = Math.max(0, fill - drink);
-      const restorePerUnit = Tuning.CANTEEN_THIRST_RESTORE / Tuning.CANTEEN_DRINK_DELTA;
-      ctx.stats.thirst = Math.min(1, ctx.stats.thirst + drink * restorePerUnit);
-      playPour();
-      playDrink();
       ctx.player.viewModel?.triggerUse();
-      if (slot.meta.fillLevel <= 0.001) {
+      if ((slot.meta?.fillLevel ?? 0) <= 0.001) {
         ctx.ui.showToast('you drink the last of it');
       }
     },
@@ -264,6 +282,126 @@ const _DEFS: Record<ItemId, ItemDef> = {
       itemRoot.rotation.set(1.35 * p, -0.25 * p, -0.18);
     },
     useAnimDuration: Tuning.VIEWMODEL_CANTEEN_ANIM_S,
+  },
+
+  // DEEPER cycle 6 — THE JERRYCAN. The volume tier of underground water: JERRYCAN_CAPACITY_MULT×
+  // the canteen, fillable ONLY at a real body of water (a cave pool — never a well; interaction.ts
+  // states the refusal diegetically). Craft-only; it never appears in a loot table. Crafted EMPTY,
+  // exactly like the canteen, so making one is never free water.
+  jerrycan: {
+    id: 'jerrycan',
+    name: 'JERRYCAN',
+    glyph: '▤',
+    description: 'a dented steel jerrycan — holds a real load of water',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'hold_use',
+    thirdPersonScale: 1.15,
+    onUse(ctx, slot) {
+      // Q-key single-gulp path (mirrors the canteen).
+      if (!gulpFromContainer(ctx, slot, 'jerrycan')) {
+        return { consumed: false, message: 'the jerrycan is empty' };
+      }
+      const empty = (slot.meta?.fillLevel ?? 0) <= 0.001;
+      return {
+        consumed: false,
+        message: empty ? 'you drain the last of it' : 'you drink — the water is cold and flat',
+      };
+    },
+    onHoldTick(ctx, slot, holdSeconds, dt) {
+      const interval = Tuning.JERRYCAN_DRINK_INTERVAL_S;
+      const prev = Math.max(0, holdSeconds - dt);
+      if (Math.floor(holdSeconds / interval) <= Math.floor(prev / interval)) return;
+      if (!gulpFromContainer(ctx, slot, 'jerrycan')) {
+        if (Math.floor(prev / interval) === 0) ctx.ui.showToast('the jerrycan is empty');
+        return;
+      }
+      ctx.player.viewModel?.triggerUse();
+      if ((slot.meta?.fillLevel ?? 0) <= 0.001) ctx.ui.showToast('you drain the last of it');
+    },
+    makeViewModel() {
+      // A military-pattern steel jerrycan: a flattened box tank with rolled corner seams, the
+      // classic X-emboss on both large faces, a welded waist seam, the three-bar top handle, and a
+      // screwed spout at one top corner. Rule 7 — every part is SOLID geometry with genuine depth
+      // (the ribs are 8mm proud on a 75mm-deep tank, ~10%); nothing here is a zero-thickness shell.
+      // PLACEHOLDER TIER: shaped and proportioned, not hero-detailed — flagged for the hero pass.
+      const group = new THREE.Group();
+      const steelMat = vmMetal(0x4c5147, { wornScale: 6.0, scratchStrength: 0.09, rustLevel: 0.42 });
+      const darkMat = vmMetal(0x33372f, { wornScale: 4.0, rustLevel: 0.5 });
+      const capMat = vmMetal(0x2a2620, { wornScale: 5.0 });
+
+      const W = 0.132, H = 0.188, D = 0.076;   // tank envelope (m, viewmodel scale)
+
+      // Tank body — one solid slab, not a shell.
+      const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), steelMat);
+      group.add(body);
+      // Rolled vertical corner seams (cylinders are inherently thick).
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, H * 0.99, 10), darkMat);
+          post.position.set(sx * W * 0.5, 0, sz * D * 0.5);
+          group.add(post);
+        }
+      }
+      // Welded waist seam right around the tank.
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(W + 0.007, 0.010, D + 0.007), darkMat);
+      group.add(seam);
+      // The X-emboss on both large faces — four proud ribs per side, 8mm deep.
+      for (const sz of [-1, 1]) {
+        for (const rot of [0.72, -0.72]) {
+          const rib = new THREE.Mesh(new THREE.BoxGeometry(0.014, H * 0.80, 0.008), steelMat);
+          rib.position.set(0, 0, sz * (D * 0.5 + 0.003));
+          rib.rotation.z = rot * sz;
+          group.add(rib);
+        }
+      }
+      // Top plate + the three-bar handle (two end cheeks carrying three grip bars).
+      const top = new THREE.Mesh(new THREE.BoxGeometry(W + 0.006, 0.014, D + 0.006), steelMat);
+      top.position.y = H * 0.5 + 0.004;
+      group.add(top);
+      for (const sx of [-1, 1]) {
+        const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.030, D * 0.86), darkMat);
+        cheek.position.set(sx * W * 0.36, H * 0.5 + 0.026, 0);
+        group.add(cheek);
+      }
+      for (let i = 0; i < 3; i++) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(W * 0.78, 0.011, 0.013), darkMat);
+        bar.position.set(0, H * 0.5 + 0.038, (i - 1) * D * 0.28);
+        group.add(bar);
+      }
+      // Screwed spout at one top corner, with a knurled cap and a retaining lug.
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.023, 0.026, 14), steelMat);
+      spout.position.set(W * 0.30, H * 0.5 + 0.020, D * 0.20);
+      group.add(spout);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.014, 16), capMat);
+      cap.position.set(W * 0.30, H * 0.5 + 0.040, D * 0.20);
+      group.add(cap);
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const knurl = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.014, 0.004), capMat);
+        knurl.position.set(W * 0.30 + Math.cos(a) * 0.023, H * 0.5 + 0.040, D * 0.20 + Math.sin(a) * 0.023);
+        group.add(knurl);
+      }
+
+      group.rotation.set(0, 0.35, -0.10);
+      group.scale.setScalar(0.9);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '6', y: '7', width: '12', height: '14', rx: '1.6' }));
+      s.appendChild(svgEl('path', { d: 'M8 9 L16 19 M16 9 L8 19', 'stroke-width': '1' }));
+      s.appendChild(svgEl('path', { d: 'M8.5 7 L8.5 4.5 L15.5 4.5 L15.5 7' }));
+      s.appendChild(svgEl('rect', { x: '14.5', y: '3', width: '3', height: '2.4', rx: '0.6' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Heavier than the canteen: no back-overshoot, a longer settle at the top, a bigger tip.
+      const p = t < 0.45 ? easeInOutCubic(t / 0.45) : 1 - easeInOutCubic((t - 0.45) / 0.55);
+      itemRoot.position.set(-0.20 * p, 0.17 * p, 0.10 * p);
+      itemRoot.rotation.set(1.55 * p, 0.35 - 0.55 * p, -0.10 - 0.22 * p);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_JERRYCAN_ANIM_S,
   },
 
   bandage: {
@@ -3521,7 +3659,7 @@ export const ALL_REGISTERED_ITEM_IDS: ReadonlyArray<ItemId> =
   Object.keys(_DEFS) as ItemId[];
 
 export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
-  'canteen', 'scrap', 'bandage', 'machete', 'scrap_bar', 'scrap_machete',
+  'canteen', 'jerrycan', 'scrap', 'bandage', 'machete', 'scrap_bar', 'scrap_machete',
   'cactus_pulp', 'cooked_cactus_pulp',
   'raw_lizard_meat', 'cooked_lizard_meat',
   'raw_worm_meat', 'cooked_worm_meat',

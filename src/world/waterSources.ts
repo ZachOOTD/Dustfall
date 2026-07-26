@@ -13,17 +13,32 @@ import { findBiomeCentroid } from './biomes.ts';
 import { perturbOutward } from './sculpt.ts';
 import { Tuning } from '../config/tuning.ts';
 
-export type WaterSourceKind = 'well';
+/** DEEPER cycle 6 — a second kind. 'well' = a surface shaft with a bucket's worth in reach;
+ *  'pool' = a real body of standing water on a cave floor (cavePools.ts). */
+export type WaterSourceKind = 'well' | 'pool';
 
 export interface WaterSource {
   id: number;
   kind: WaterSourceKind;
+  /** Display noun for the interact prompt ("well", "pool"). The prompt reads THIS — it is no longer
+   *  hardcoded to 'well' (DEEPER cycle 6). */
+  noun: string;
+  /** Whether a LARGE vessel (the jerrycan) can be submerged and filled here. True for a pool; false
+   *  for a well, where the refusal is stated diegetically rather than silently doing nothing. This
+   *  is the whole mechanical reason the underworld's water is worth the descent. */
+  deepEnoughForLargeVessel: boolean;
   mesh: THREE.Object3D;
   pos: THREE.Vector3;
   hovered: boolean;
 }
 
 let _nextId = 1;
+
+/** Allocate the next water-source id. Exported so other builders (cavePools.ts) can mint records
+ *  that share this registry's id space — two sources must never collide on `interactId`. */
+export function nextWaterSourceId(): number {
+  return _nextId++;
+}
 
 function tag(root: THREE.Object3D, id: number): void {
   root.traverse((o) => {
@@ -179,6 +194,8 @@ export function spawnWellAt(
   return {
     id,
     kind: 'well',
+    noun: 'well',
+    deepEnoughForLargeVessel: false,
     mesh,
     pos: new THREE.Vector3(x, groundY, z),
     hovered: false,
@@ -224,6 +241,8 @@ export function spawnWaterSources(
     list.push({
       id,
       kind: 'well',
+      noun: 'well',
+      deepEnoughForLargeVessel: false,
       mesh,
       pos: new THREE.Vector3(x, groundY, z),
       hovered: false,

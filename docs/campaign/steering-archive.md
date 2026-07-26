@@ -253,3 +253,16 @@ add/commit, file-write tools for markers) so overnight cycles generate few or no
 prompts still bother you, YOU can add the rules: open `.claude/settings.local.json` and add e.g.
 "Bash(node scripts/*)", "Bash(python *)", "Bash(git *)" to permissions.allow — or run /permissions
 in an interactive terminal.
+
+## 2026-07-26 (DEEPER resume + cycle-6 kickoff, in chat)
+
+> "pick up where we left off"
+
+**Action taken:** campaign unpaused (status active, gate cleared) at `31a6de9`. Asked the
+charter's reserved cycle-6 kickoff question (pool design tier); **Zach chose the VOLUME tier** —
+"Volume — larger vessel": pools plus a waterskin/jerrycan that only makes sense to fill at a real
+body of water, giving the descent a purpose. This supersedes the charter's atmosphere-only
+default recommendation. Quality/purity (clean-vs-brackish) stays OUT of this campaign per the
+charter. The repair descent walk-test (D-1..D-4) remains OWED and is the real verdict; cycles 6+
+build on the gate-green, human-unwalked base per the 2026-07-25 "run the remaining ladder"
+directive.
