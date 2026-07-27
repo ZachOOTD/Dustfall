@@ -1,45 +1,41 @@
-# Next session — campaign DEEPER, cycle 9: cave kinds
+# Next session — campaign DEEPER is PAUSED mid-cycle-9 (Zach's call, 2026-07-27)
 
-**State:** campaign DEEPER **active** on `campaign/2026-07-24-deeper` (8/20 cycles, ~6.15M/10M,
-push HELD). Cycles 6 (water) + 7 (reassess) + 8 (density) SHIPPED — tip `d5b28e8`, `verify:all`
-end-to-end green. Boot from `docs/campaign/campaign-state.json` + `steering.md`; this file is the
-hint, the state is truth.
+**State:** `campaign/2026-07-24-deeper` at `c8fab5a`, tree clean, push HELD. 8 cycles + a cycle-9
+partial shipped (~6.9M/10M). `status: paused`, `awaiting_approval: true`. Boot from
+`docs/campaign/campaign-state.json` (the paused_note is the resume brief) + `steering.md`.
 
-## Cycle 9 — cave kinds (the charter's cycle 8)
+## Resume: finish cycle 9 first
 
-Distinct parameter sets over the SAME generator so caves read as different places — **a kind
-table, not new code paths**: a tight salvage warren · a vaulted fungal cavern · a **flooded cave**
-(leans on cycle 6's pools) · a collapsed shaft. Kind rolls seed-pure off the site descriptor
-(caveSites.ts); the origin/egg cave keeps its own canonical parameters (unique, not a kind).
-Gates per the charter: `cave-walk` + `cave-void` green across EVERY kind ×3 seeds (the streamed
-gates from cycle 8 take `residentKey` — extend the net by kind) · `verify:solid`-class checks
-where applicable · rule 8 visual iteration per kind (each kind needs its own look pass and its
-own audit framings — the cave-audit scenario is the instrument).
+1. **The entrance headroom defect (the cave-kinds seed-1337 leg is deliberately RED for it).**
+   Some streamed caves pinch to 1.17-1.44m clear height vs the 1.70m capsule in the roofed
+   fissure stretch — they cannot be entered. Pre-existing, kind-independent, fully measured.
+   Instrument: `npm run rig -- --scenario=crevice-profile --siteOffset=N`. Failing sites: seed
+   1337 (675,1113) pinch s=8.39; seed 7 (-1100,-1146) pinch s=8.69. Falsified already: the SDF
+   grid origin (A/B'd), the guard sweep (no-op, 1.44→1.42m), width levers (height is the
+   deficit). Levers: carve the hole further / locally steeper roofed leg / floor depression at
+   pinched columns / profile-based site rejection (rule-6 pattern, the authorized fallback).
+   Acceptance: ≥1.9m clear along both failing descents (or both rejected + replacements clean),
+   marches pass, a permanent clearance tooth proven red-then-green, cave-kinds leg GREEN.
+2. **The per-kind rule-8 look pass** — 12 smoke shots at `verification/scen-kind-*.png`; rubble
+   heaps flagged low (≈0.5m); fungal is the perf-heaviest kind (135-153k tris).
+3. **The flaky shaft/1337 apron steering** (fails ~sometimes on approach, off-axis drift ~7m).
+Then close cycle 9 (log/state/bookkeeping) and continue the ladder: hazard SPEC (a doc that
+PAUSES for Zach — the charter's checkpoint 2) → light budget → return reason → integration.
 
-## Milestone ahead — HAZARD-SPEC-REVIEW (a doc, for Zach) before the hazards cycle builds
+## Owed to Zach — the big one
 
-After kinds, the next content cycle is environmental hazards (NO creature — decided). The charter
-requires the spec doc (which hazards, how telegraphed, light-economy interaction) to PAUSE for
-Zach's review before building. Under the 2026-07-25 unattended directive, hazards may be built
-only as the conservative telegraphed subset with the rest flagged — but the spec doc + pause is
-still the required shape. Write the spec at the END of cycle 9 or as cycle 10's first act, set
-`awaiting_approval`, and STOP the loop there if Zach hasn't returned.
+**The repair descent walk-test.** Cycles 6-9 changed pools, interior rendering (envelope/dither/
+strata/bounce), entrance geometry (sawtooth/roof/horn), density (caves everywhere + streamed
+gates), and kinds. One descent judges it all — including motion feel (bounce flicker, dither
+crawl, glint movement, the tor arrival hitch ~155-175ms).
 
-## Owed to Zach (surface at every checkpoint)
-
-- **The repair descent walk-test is STILL OWED** — and cycles 6-8 changed the cave stack
-  substantially (pools, interior rendering, entrance geometry, density). His next descent judges
-  everything, including motion feel (bounce flicker, dither crawl, glint movement, the crevice
-  commitment beat, the tor hitch cadence).
-- Parked decisions: `CAVE_SITE_CHANCE 0.60` (~3.3 caves/travel-hour) · tor hitch (~155-175ms per
-  cave arrival; slicing lever named) · pocket-9 wedge trap + `floorOk` margin (pre-existing,
-  digest-moving) · jerrycan/pool balance · ~20 CAVE_*/CREVICE_* taste dials · swiftshader rock
-  cost 15-22%.
+Parked decisions: `CAVE_SITE_CHANCE 0.60` (~3.3 caves/travel-hour) · `CAVE_KIND_WEIGHTS` ·
+warren `scrapPerCave 6` · jerrycan recipe/capacity · pocket-9 wedge trap + `floorOk` margin
+(digest-moving) · ~20 CAVE_*/CREVICE_* taste dials · swiftshader rock cost 15-22% · tor slicing.
 
 ## Standing rules (unchanged)
 
 Fable plans / Opus executes · one code-writing agent at a time · never `git stash` · push HELD ·
-SPEED RULES (probes via `npm run rig -- --scenario=… --port=52xx`; full gate suite ONCE per
-batch; no watchers; honest budgets) · rule 8 for visual work · trust the playtest over a green
-gate · NO creature underground · determinism D290 · flaky-gate discipline (n≥5 per tree) ·
-`strands=N` nonzero on green = a real trap · origin parity (`108af91c`/`ff8309a8`) is a hard gate.
+SPEED RULES · rule 8 for visual work · trust the playtest over a green gate · NO creature
+underground · D290 · flaky-gate n≥5 discipline · `strands=N` nonzero = a real trap · origin cave
+digests are now `d8f15005` / `99e0015b` (re-baselined at the lattice snap, documented).

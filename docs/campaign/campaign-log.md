@@ -6,6 +6,34 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## PAUSED mid-cycle-9 (2026-07-27) — Zach: "ok need to pause cleanly here"
+
+Cycle 9 state at the pause (`c8fab5a`, tree clean, in-flight agent stopped pre-edit):
+- **DONE + committed:** the four-kind table (warren/fungal/flooded/shaft) over the canonical
+  generator with machine-asserted safety invariants; seed-pure kind assignment (placement digests
+  untouched); distribution proven ×3 seeds; 9/12 kind marches green with 0 strands everywhere;
+  a real void-gate mis-sampling fixed (+ puncture-red re-proof); the warren's scrap scatter (6
+  plain scrap, transient, loot digest untouched — Zach's number); the `cave-kinds` gate as
+  verify:chunks leg 13; the lattice snap (latent-coupling fix, origin digests re-baselined
+  108af91c→d8f15005 / ff8309a8→99e0015b, surface+density digests unmoved).
+- **REMAINING (cycle 9 finishes on resume):** (1) the **pre-existing entrance headroom defect**
+  — at some streamed sites the roofed fissure pinches to 1.17-1.44m clear height vs the 1.70m
+  capsule: those caves cannot be entered. Kind-independent (canonical A/B fails identically);
+  the grid-origin theory was falsified by measurement; the guard-sweep fix proven a no-op; the
+  `crevice-profile` instrument + measured deficits + four shortlisted levers are in the c8fab5a
+  message. The cave-kinds seed-1337 leg stays deliberately RED until this is fixed. (2) The
+  per-kind rule-8 look pass (12 smoke shots exist). (3) The flaky shaft/1337 apron steering.
+- **Two process notes from tonight worth keeping:** the 4242 lesson (one flaky-gate sample is
+  not evidence — n≥5 per tree) was applied again when the grid-origin diagnosis was falsified
+  by A/B measurement before any churn shipped; and the density/kinds gate-widening philosophy
+  paid for itself three times (the tile-clamped hole, the 1.6s cold-shader frame, the headroom
+  pinch — all found by widening, none by the original nets).
+
+**Resume:** `/campaign-start --resume` then `/loop /campaign-cycle`. **Owed: Zach's repair
+descent walk-test** — cycles 6-9 changed pools, interior rendering, entrance geometry, density,
+and kinds; his next descent judges the whole stack. Parked decisions listed in
+[next-session-prompt.md](../next-session-prompt.md).
+
 ## Cycle 8 — caves are a rocky-terrain feature: the D307-at-density proof (2026-07-27) — SHIPPED
 
 - **Planned:** the charter's density cycle — caves roll off the chunk descriptor in rocky terrain
