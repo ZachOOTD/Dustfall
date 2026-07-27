@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 6,
-  "current_tier": "cycle-7: the displaced D-3 visual reassess + CAVE_* taste pass",
+  "cycles_completed": 7,
+  "current_tier": "cycle-8: caves as rocky-terrain density (the D307-at-density proof)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "paused_note": "(historical) Zach paused after cycle 5 (2026-07-25) with the repair complete and unwalked; resumed 2026-07-26. Carried residuals for cycle 7 (D-3 reassess): cave ceilings ~80% (dark smoky band at 8-15m), global value contrast below the old shell kit, the tor marginal at 78m, sawtooth spikes on the fissure's upper walls, CAVE_ROCK_BUMP perf unmeasured on low-end GPUs.",
@@ -23,7 +23,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 3650000
+    "total": 5200000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -94,6 +94,17 @@
         "e4b6429"
       ],
       "note": "NEW src/world/caveEntrance.ts; src/world/caveTest.ts DELETED entirely along with its tuning keys and the 228-line cave-mouth rig scenario. A rock tor ~19x13m, 5.2m proud, split by a fissure: mouth 2.50m clear pinching to 2.64m where rock closes overhead 6.5m in, widening to 5.0m only at the cave hand-off. Descent is a 3-leg polyline with two knees at 27.0 deg on every seed, mirrored by seed parity. The slot is unioned into buildCaveSdf as primitives -> entrance and cave are ONE continuous surface, no weld; cut against terrain.pureHeightAt instead of cycle 1's junction plane. D307 preserved and the carved hole SHRANK 29.2x8.34m -> 12.5x8.33m. Non-leak invariant by construction: the tor's fissure is always 0.62m narrower/lower than the enclosing SDF slot. 6/6 seeds cave-walk with ascent=OUT; cave-void 0.00% with excused=0 (the declaration is present but zero rays need it). THREE structural KCC bugs found ONLY by the ascent, each of which would have shipped under descent-only testing: corridorPrim held its ramp floor flat past segment ends (~1.5m step at every joint); the entrance hall's flat floor disk reached 2.4m back past the junction and swallowed the climb-out ramp (~50 deg, at the KCC limit); the tor carved its fissure floor 45cm BELOW the SDF floor, making a 45cm gutter down both walls that wedged the capsule on the way out. Round 5 disproved a shadow-acne hypothesis (frame byte-identical, recorded in code); round 6 found the real blotching cause — CAVE_ROCK_BUMP 1.15, tuned for torch-lit interior rock at 2m, applied to sunlit exterior under a directional sun. HONEST: reads as a crevice at near/threshold/descent; at 78m it is a small dark bump, marginal. Budget 2.5h stated vs ~5.5h actual — entirely the three ascent bugs; the visual loop and traversal loop were sequenced wrong (one cave-walk after round 1 would have caught them early)."
+    },
+    {
+      "n": 7,
+      "date": "2026-07-26",
+      "focus": "the displaced D-3 reassess: full-tree adversarial audit + interior rendering + entrance geometry",
+      "outcome": "SHIPPED",
+      "spend": 1550000,
+      "commits": [
+        "23c29fe"
+      ],
+      "note": "New cave-audit scenario (17 framings x2 seeds, shipping-honest, HUD-masked) -> 2 fresh critics -> the unifying diagnosis: the whole interior rendered into ~18 of 255 codes. Interior round: rock dither + depth-ramped lit gain (unlit bit-identical, fungi-only canary 0.29 stable), 4-octave normals with tilt saturation (the leopard was the old bump over-driven), strata/grain, flatShading off (was masking missing detail), carried-light-proportional ceiling bounce (no new light; ceilings p95 2.4->13.4/7.9), sun-through-rock fixed surface-byte-identical, slicer stage-attribution laundering hazard fixed (proven vs pristine worktree). Entrance round: sawtooth fixed by construction, roof 'lamina' was the terrain sheet 7cm past the hole (closure moved + ROOF_UNDER clamp), 78m findability by silhouette (horn+shoulders, arc 1.9->4.1/2.7->5.5 deg), projectSlot softmin (cycle-4 discontinuity was the blade-thicket source), arrival fungi cluster, ROOF_DROP not margin-widening. The 4242 episode: the orchestrator's 1-run worktree 'proof' of an introduced regression was falsified (flaky both trees, 5+10 runs); the follow-up fixed the gate blind spot instead (stranded revisit legs now print strands=N) exposing a genuine pre-existing pocket-9 wedge trap; speleothem envelope assert added and PROVEN to fire. verify:chunks 20/20 green, wide net 4 seeds ascent=OUT, tsc clean. Flagged for Zach: ~20 taste dials, swiftshader 15-22% (GPU noise), wedge trap + floorOk margin (both pre-existing, digest-moving), motion feel to walk-test. Lesson recorded: one flaky-gate sample is not evidence, n>=5 per tree."
     },
     {
       "n": 6,

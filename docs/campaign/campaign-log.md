@@ -6,6 +6,78 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 7 — the D-3 reassess: the cave renders, the crevice reads (2026-07-26/27) — SHIPPED
+
+- **Planned:** the displaced D-3 full-tree adversarial visual audit + CAVE_* taste pass, carrying
+  five named residuals (ceiling band, value contrast, tor at 78m, sawtooth spikes, ROCK_BUMP perf).
+
+- **The audit instrument first:** a new `cave-audit` rig scenario — 17 player-eye framings ×2
+  seeds at true shipping settings (exposure 1.05, real light path via `__game.setCaveRockLight`,
+  HUD-masked metrics), + a swiftshader/GPU CAVE_ROCK_BUMP perf A/B with pixel-proofed legs. Two
+  fresh critics then produced the cycle's unifying diagnosis: **the entire interior rendered into
+  ~18 of 255 output codes** — the "smoky ceiling band" was a hard torch-distance cutoff leaving
+  8-15m rock at code 1-4, the "low contrast" was a healthy 8-11× lighting ratio crushed into a 7%
+  envelope, the banding was that envelope quantized, and the "leopard" mottle was the only texture
+  octave the rock had. Bonus confirmed bug: the sun sprite (depthTest:false) painting an L≈220
+  disc on deep-cave rock in upward views.
+
+- **Interior round (`23c29fe`):** rock dither + depth-ramped lit-envelope gain (unlit floor
+  bit-identical — the fungi-only no-free-light canary bit-stable at meanL 0.29); 4-octave normal
+  field with tilt saturation (the leopard was the old bump OVER-DRIVEN past the normal-flip
+  point); bedding strata + near grain; `flatShading` off on the cave body (it was standing in for
+  detail that didn't exist); ceiling bounce strictly proportional to carried light (NO new
+  PointLight — one uniform; ceilings p95 2.4→13.4 gallery / 7.9 hall); sun-through-rock fixed
+  with the surface byte-identical; motes/wind-dust/flashlight-penumbra/speleothem batch. Found
+  and properly fixed a pre-existing slicer laundering hazard: atomic stages were billing work to
+  the divisible budget (now 15.3ms, better than baseline — proven against a pristine worktree,
+  not blamed on machine load).
+
+- **Entrance round (`23c29fe`):** sawtooth comb fixed by construction (relief out-slopes the
+  voxel grid + lateral wobble, widths compensated); the "roof lamina" root-caused as the TERRAIN
+  SHEET overshooting the carved hole by 7cm (closure moved inside + ROOF_UNDER clamp — 6.8m of
+  real rock above the lintel now); 78m findability met by silhouette not value (seed-pure horn +
+  fin shoulders; arc 1.9°→4.1° / 2.7°→5.5°, the notch survives); apron/aperture/sky-rim reshaped;
+  the deepest fix was cycle-4's `projectSlot` nearest-segment discontinuity (the true source of
+  the lintel blade thicket) replaced with a softmin; a guaranteed arrival fungi cluster near the
+  hand-off on its own rand stream. The margin lesson re-learned safely: two clearance approaches
+  that moved the whole cave were caught by gates and replaced with `CREVICE_ROOF_DROP`.
+
+- **The 4242 episode (a process lesson recorded honestly):** the entrance round's wide-net run
+  flagged seed 4242 failing cave-walk; the orchestrator "proved" it introduced-vs-pre-existing
+  with ONE pristine-worktree run — a lucky sample. The follow-up agent falsified the premise
+  properly (5+10 runs: flaky on BOTH trees at the same rate), refused to build the hypothesized
+  speleothem fix whose reasoning was also wrong, and instead fixed what the flake exposed: the
+  march gate could not fail a stranded REVISIT leg (silent blind spot → misdiagnosis 60m away).
+  Now every run prints `strands=N`, and it immediately made a genuine pre-existing wedge trap
+  visible on green runs. One flaky-gate sample is not evidence; n≥5 per tree is the floor.
+
+- **Verify:** tsc clean · `verify:chunks` 20/20 legs green (walk 11/11+10/10 stable ×2, void
+  0/8160+0/7392, pool-fill, preload ON/OFF, perf, skyfall/leviathan/ribcage/dune unmoved) ·
+  wide net 4242/99/2024/31337 all `ascent=OUT fails=0` · the speleothem envelope assert PROVEN
+  able to fire (clamp deliberately broken → loud abort → reverted).
+
+- **Visual iteration:** interior ~8 rounds, entrance ~9 rounds incl. 4 falsified hypotheses on
+  the lintel slivers; both agents A/B'd against the audit framings throughout.
+
+- **FLAGGED FOR ZACH:** ~20 new CAVE_*/CREVICE_* taste dials (legibility gain, bounce, strata,
+  horn) — the darkness READ is preserved but the lit rock is far more legible; swiftshader rock
+  cost 15-22% (real GPUs: inside noise; levers named in tuning.ts); pocket-9 wedge trap at seed
+  4242 (pre-existing on master, digest-moving to fix); `floorOk` margin under-bounds the true
+  speleothem silhouette (pre-existing, digest-moving); motion feel (bounce flicker, dither crawl,
+  crevice commitment beat) is walk-test territory.
+
+- **Residuals carried:** entrance apron outer shelf still flat-ish with a hard sand rim (terrain
+  blend, not tor); 1-3 sub-voxel slivers at the lintel at 3.5× zoom; the horn slightly
+  needle-like; the descent below the tor's footprint keeps 0.45m-voxel facets; `ceil-hall` p95
+  at the bottom of target; `CREVICE_COVER_CLEAR` under-sized but only binding off-net (named in
+  tuning.ts, belongs to a graph-re-baselining cycle).
+
+- **Spend:** ~1.55M this cycle (campaign ~5.2M / 10M; cycle 7/20).
+- **Commit:** `23c29fe`.
+- **Next (cycle 8):** the charter's density cycle — caves as a regular rocky-terrain feature
+  (streamed entrances, resident cap, exact teardown, the D307-at-density proof), egg cave stays
+  unique. The clustered-"cave country" fallback remains a Zach-surfaced scope-cut, never silent.
+
 ## Cycle 6 — UNDERGROUND WATER, volume tier: pools + the jerrycan (2026-07-26) — SHIPPED
 
 - **Planned:** the charter's cycle-6 spec at the VOLUME tier (Zach's kickoff call): seed-pure pools
