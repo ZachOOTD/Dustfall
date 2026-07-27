@@ -6,6 +6,12 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## RESUMED (2026-07-27) — Zach: /campaign-start --resume, after the pace review
+
+The pause gate is cleared. Per the approved efficiency plan: the tiered/parallel gate runner is
+the first act (EFFICIENCY WATCH standing directive now in force in steering.md), then cycle 9
+finishes (entrance headroom fix → kinds look pass → shaft/1337 apron flake → close).
+
 ## PAUSED mid-cycle-9 (2026-07-27) — Zach: "ok need to pause cleanly here"
 
 Cycle 9 state at the pause (`c8fab5a`, tree clean, in-flight agent stopped pre-edit):
