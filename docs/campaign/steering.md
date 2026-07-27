@@ -37,6 +37,23 @@ is the source of truth for cycles 1-5. No new content ships before Zach's repair
 - Widen the seed net. Underworld's two generator defects hid behind 2 gate seeds. 6 seeds minimum.
 - **Trust the playtest over a green gate.**
 
+**EFFICIENCY WATCH (Zach 2026-07-27, in force — "keep monitoring to see if there are any other
+efficiencies we should implement along the way"):**
+1. **Gate-latency budget.** The full `verify:chunks` suite has a wall-clock budget of ~35 min
+   (post-parallelization). Adding a permanent leg must state its cost and stay inside the budget
+   — pay for new legs with parallelism/tiering, never by silently growing the serial wall.
+2. **Full suite ONCE per cycle, run by the orchestrator at close.** Agents run only the legs
+   their change touches (`--legs=` filter). An agent re-running the full suite is a brief bug.
+3. **Tee every gate run to a file** (verification/gate-logs/) — a result is never lost and never
+   re-run for reporting.
+4. **Measure before dispatching.** No multi-hour fix agent is commissioned on an unmeasured
+   hypothesis; buy the 15-minute probe first. Flaky signals need n≥5 per tree.
+5. **Right-sized critic waves.** Full adversarial panels for NEW hero elements only;
+   verification passes get 1 visual + 1 code critic.
+6. **Per-cycle efficiency retro.** Every cycle-close log entry includes one line: where the
+   wall-clock actually went + any new efficiency lever spotted. New levers get proposed to Zach
+   at checkpoints, implemented when cheap and obviously safe.
+
 **SPEED RULES (Zach 2026-07-20, in force):**
 1. Probes ONLY via `npm run rig -- --scenario=… --port=52xx` (zero permission prompts).
    NEVER raw `node scripts/…`.

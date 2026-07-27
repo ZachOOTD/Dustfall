@@ -4,7 +4,25 @@
 partial shipped (~6.9M/10M). `status: paused`, `awaiting_approval: true`. Boot from
 `docs/campaign/campaign-state.json` (the paused_note is the resume brief) + `steering.md`.
 
-## Resume: finish cycle 9 first
+## Resume: the gate-runner efficiency build FIRST (Zach-approved 2026-07-27), then cycle 9
+
+**0. THE GATE RUNNER (first act on resume — everything after it gets cheaper).** The full
+`verify:chunks` suite has grown to ~90 min serial and was the #1 wall-clock cost of cycles 6-9
+(agents ran it 2-3× per task; one 45-min run was lost to a grep filter and re-run purely for
+reporting). Build, in one agent-session:
+- `verify-chunks.mjs --legs=<a,b,c>` — run only named legs (agents use this for affected-leg
+  iteration; the FULL suite runs exactly once per cycle, by the orchestrator, at close).
+- A parallel runner: legs are independent rig runs on separate ports — run 3-4 concurrently;
+  frame-time-sensitive perf legs (chunk-perf, cave-build, cave-density) run SOLO in a quiet
+  phase. Target: full suite ≤~35 min.
+- Tee every gate run's output to `verification/gate-logs/<timestamp>-<leg>.txt`.
+- Prove: one full parallel run vs the last serial run — same legs, same verdicts, wall-clock
+  quoted. Flake-check the perf legs ×2 (parallelism must not corrupt their numbers).
+The EFFICIENCY WATCH standing directive in `steering.md` governs from here (gate-latency
+budget, once-per-cycle full suite, tee-to-file, measure-before-dispatch, right-sized critic
+waves, per-cycle efficiency retro).
+
+## Then finish cycle 9
 
 1. **The entrance headroom defect (the cave-kinds seed-1337 leg is deliberately RED for it).**
    Some streamed caves pinch to 1.17-1.44m clear height vs the 1.70m capsule in the roofed
