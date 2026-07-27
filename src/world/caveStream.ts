@@ -35,6 +35,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { Tuning } from '../config/tuning.ts';
 import { startSpawnCave, type CaveJunction, type CaveSpawnJob, type SpawnedCave } from './caveGen.ts';
+import { caveEntranceHoleBlock, spawnCaveEntrance, type CaveEntrance } from './caveEntrance.ts';
 import { releaseCavePoolMaterial } from './cavePools.ts';   // per-cave water material — disposed on eviction
 import type { Terrain } from './terrain.ts';
 
@@ -49,6 +50,23 @@ export interface CaveResident {
   pinned: boolean;
   /** Monotonic counter — the tiebreak when several caves are equally far. */
   bornAt: number;
+  // ── DEEPER cycle 8 — a STREAMED resident owns two more things than a preloaded one: the crevice
+  //    entrance (tor mesh + its trimesh body) and the carved hole in the terrain sheet. Both are
+  //    null for the origin cave, whose entrance is built by main.ts and whose hole is the static
+  //    D307 one baked into tile (0,0) — nothing about the origin cave streams. ──
+  entrance: CaveEntrance | null;
+  /** The `terrain.addCaveHole` key this resident opened, or null (origin). */
+  holeKey: string | null;
+  /** Where the entrance stands — the site the descriptor placed. */
+  site: { x: number; z: number } | null;
+}
+
+/** What the streamer needs to know about a site. A pure descriptor from caveSites.ts. */
+export interface CaveStreamSite {
+  key: string;
+  x: number;
+  z: number;
+  seed: number;
 }
 
 export interface CaveStreamPerf {
@@ -73,6 +91,29 @@ export interface CaveStreamPerf {
   evictionsRefused: number;
   /** Set if the scheduler ever considered evicting the cave the player was standing in. */
   occupiedEvictionsBlocked: number;
+  /** DEEPER cycle 8 — releases driven by DISTANCE / tile unload rather than by the cap. */
+  releases: number;
+  /** Sites requested from the descriptor (the density driver actually firing). */
+  requests: number;
+  /** Worst single-frame cost of the crevice-tor build. It is the one stage this cycle could not
+   *  slice (see the note on `doTor`), so it is reported on its own and never blended into the
+   *  interior's numbers — an unsliced 180ms stage hiding inside a "max atomic" figure is exactly
+   *  the laundering cycle 7 had to unpick. */
+  maxTorMs: number;
+  /** Worst single-frame cost of the ATOMIC finalize (interior collider bake + hole open). */
+  maxFinalizeMs: number;
+  /** Worst single-frame cost of a teardown (hole close + entrance + interior disposal). */
+  maxTeardownMs: number;
+  /** DEEPER cycle 8 (closing agent) — shader warm-ups started (one per streamed build). */
+  warms: number;
+  /** Worst single-frame cost of KICKING OFF a warm-up (the synchronous half of `compileAsync`:
+   *  the traverse + `gl.compileShader`/`linkProgram` calls, NOT the link itself). */
+  maxWarmMs: number;
+  /** Frames the worst warm-up waited for the driver to report its programs ready. */
+  maxWarmFrames: number;
+  /** Warm-ups that hit CAVE_WARM_MAX_FRAMES and finalized anyway — should be 0; a non-zero value
+   *  means the fail-safe fired and that build paid the cold-compile stall it was meant to avoid. */
+  warmTimeouts: number;
 }
 
 /** DEEPER cycle 6 — how a resident cave publishes its water pools into `ctx.waterSources`. The
@@ -88,6 +129,12 @@ export interface CavePoolSink {
 export interface CaveStream {
   /** Queue a cave build at `junction`. Returns the resident key (idempotent per key). */
   request(key: string, junction: CaveJunction, seed: number): string;
+  /** DEEPER cycle 8 — queue a FULL streamed cave (crevice entrance + interior + terrain hole) at a
+   *  descriptor site. Idempotent per key; ignored if the site's terrain tile is not loaded. */
+  requestSite(site: CaveStreamSite): boolean;
+  /** DEEPER cycle 8 — the density driver: a pure source of the sites near a point. Installing it
+   *  makes `update` stream caves in and out on its own. */
+  setSiteSource(src: ((x: number, z: number, radius: number) => CaveStreamSite[]) | null): void;
   /** Install the water-source sink (see CavePoolSink). Attaches existing residents immediately. */
   setPoolSink(sink: CavePoolSink): void;
   /** Register an ALREADY-BUILT cave (the boot preload) as a resident. */
@@ -120,8 +167,32 @@ function caveBounds(cave: SpawnedCave): THREE.Box3 {
 }
 
 /** Tear a resident down completely: geometries disposed, group off-scene, rigid body (and with it
- *  every collider it owns) removed. Rule 9 — no orphaned collider under vanished geometry. */
-function disposeResident(scene: THREE.Scene, world: RAPIER.World, r: CaveResident): void {
+ *  every collider it owns) removed. Rule 9 — no orphaned collider under vanished geometry.
+ *
+ *  DEEPER cycle 8 — TEARDOWN SYMMETRY. A streamed resident owns THREE things and all three go here,
+ *  in the order that keeps the world legal at every instant:
+ *    1. the carved terrain hole CLOSES FIRST — the sheet is solid again before the cave under it
+ *       disappears, so there is never a frame with an opening onto nothing (the invariant that
+ *       makes the whole density safe; see terrain.addCaveHole),
+ *    2. the crevice entrance (tor mesh + its own trimesh body),
+ *    3. the interior (meshes + the single trimesh body + the per-cave pool material).
+ *  The pool SOURCES are detached by the caller before this runs — the interaction raycast must
+ *  never hold a mesh that has left the scene. */
+function disposeResident(
+  scene: THREE.Scene, world: RAPIER.World, terrain: Terrain, r: CaveResident,
+): void {
+  // 1 — close the hole (no-op for the origin cave, whose hole is the static D307 one).
+  if (r.holeKey) terrain.removeCaveHole(r.holeKey);
+  // 2 — the entrance.
+  if (r.entrance) {
+    scene.remove(r.entrance.group);
+    r.entrance.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.geometry) m.geometry.dispose();   // the tor's rock material is module-shared
+    });
+    if (r.entrance.body) world.removeRigidBody(r.entrance.body);
+  }
+  // 3 — the interior.
   scene.remove(r.cave.group);
   r.cave.group.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -141,29 +212,68 @@ export function createCaveStream(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
+  /** DEEPER cycle 8 (closing agent) — precompile an OFF-SCENE object's shader programs against the
+   *  live scene. `main.ts` passes `renderer.compileAsync(obj, camera, scene)`; the gates that boot
+   *  without a warm hook simply skip the stage. See `doWarm`. */
+  warm: ((obj: THREE.Object3D) => Promise<unknown>) | null = null,
 ): CaveStream {
   const list: CaveResident[] = [];
-  const queue: Array<{ key: string; junction: CaveJunction; seed: number }> = [];
-  let inflight: { key: string; junction: CaveJunction; seed: number; job: CaveSpawnJob } | null = null;
+  /** A queued build. `site` non-null ⇒ the full streamed unit (entrance + interior + hole);
+   *  `junction` non-null ⇒ the legacy body-only request (the probe/debug hook). */
+  interface QueueItem {
+    key: string;
+    seed: number;
+    site: CaveStreamSite | null;
+    junction: CaveJunction | null;
+  }
+  const queue: QueueItem[] = [];
+  interface Inflight extends QueueItem {
+    entrance: CaveEntrance | null;
+    job: CaveSpawnJob | null;
+    /** 0 = not started, 1 = compiling, 2 = done/skipped (see `doWarm`). */
+    warmState: 0 | 1 | 2;
+    warmFrames: number;
+  }
+  let inflight: Inflight | null = null;
   let born = 0;
   const perf: CaveStreamPerf = {
     steps: 0, builds: 0, maxSliceMs: 0, maxAtomicMs: 0, worstAtomicStage: '-', maxStepMs: 0,
     evictions: 0, evictionsRefused: 0, occupiedEvictionsBlocked: 0,
+    releases: 0, requests: 0, maxTorMs: 0, maxFinalizeMs: 0, maxTeardownMs: 0,
+    warms: 0, maxWarmMs: 0, maxWarmFrames: 0, warmTimeouts: 0,
   };
 
   let poolSink: CavePoolSink | null = null;
+  let siteSource: ((x: number, z: number, radius: number) => CaveStreamSite[]) | null = null;
+  let pollCountdown = 0;
 
   const has = (key: string): boolean =>
     list.some((r) => r.key === key) || queue.some((q) => q.key === key) || inflight?.key === key;
 
-  const addResident = (key: string, seed: number, cave: SpawnedCave, pinned: boolean): CaveResident => {
+  const addResident = (
+    key: string, seed: number, cave: SpawnedCave, pinned: boolean,
+    entrance: CaveEntrance | null = null, holeKey: string | null = null,
+    site: { x: number; z: number } | null = null,
+  ): CaveResident => {
     const box = caveBounds(cave);
     const r: CaveResident = {
       key, seed, cave, box, center: box.getCenter(new THREE.Vector3()), pinned, bornAt: born++,
+      entrance, holeKey, site,
     };
     list.push(r);
     poolSink?.attach(cave);          // DEEPER cycle 6 — publish this cave's pools as water sources
     return r;
+  };
+
+  /** Release a resident: detach its pool sources, then tear down hole → entrance → interior. */
+  const release = (r: CaveResident): void => {
+    const t0 = performance.now();
+    poolSink?.detach(r.cave);
+    disposeResident(scene, world, terrain, r);
+    const i = list.indexOf(r);
+    if (i >= 0) list.splice(i, 1);
+    const ms = performance.now() - t0;
+    if (ms > perf.maxTeardownMs) perf.maxTeardownMs = ms;
   };
 
   const occupied = (p: { x: number; y: number; z: number }): CaveResident | null => {
@@ -193,22 +303,174 @@ export function createCaveStream(
       }
       perf.occupiedEvictionsBlocked += blockedOccupied;
       if (!victim) { perf.evictionsRefused++; return; }   // soft cap — never evict at the cost of a fall-through
-      // Detach BEFORE the geometry goes: the interaction raycast must never hold a pool mesh that
-      // has left the scene (rule 9's registry twin — no dangling source under vanished water).
-      poolSink?.detach(victim.cave);
-      disposeResident(scene, world, victim);
-      list.splice(list.indexOf(victim), 1);
+      release(victim);
       perf.evictions++;
     }
   };
 
+  /** DEEPER cycle 8 — DISTANCE + TILE RELEASE, run before the cap. Two rules, and the second one is
+   *  the load-bearing half of the hole invariant:
+   *    · past CAVE_STREAM_DROP_M the cave is simply out of range,
+   *    · a cave whose TERRAIN TILE has unloaded must go, because its carved hole went with the tile
+   *      and a resident whose hole the sheet no longer has is a cave with no way in. Releasing it
+   *      means the pair is re-derived together when the player comes back.
+   *  Both defer to occupancy and to the pin, exactly like the cap does: never drop the floor out
+   *  from under the player, whatever the range says. */
+  const releaseOutOfRange = (p: { x: number; y: number; z: number }): void => {
+    const here = occupied(p);
+    for (let i = list.length - 1; i >= 0; i--) {
+      const r = list[i];
+      if (r.pinned || r === here) continue;
+      // A resident with NO site descriptor was placed by hand — the dev panel's "spawn far cave"
+      // button and the chunk-perf gate's synthetic cap test both do this. It is not part of the
+      // density system and must not evaporate just because you are not standing next to it: the
+      // dev tool would be unusable, and the cap gate would never get to run (it requests four caves
+      // 5km away on purpose, and the first version of this rule released them before the cap could
+      // fire — a green-looking regression in the OTHER gate, caught by running it).
+      if (!r.site) continue;
+      const d = Math.hypot(r.site.x - p.x, r.site.z - p.z);
+      const tileGone = !terrain.isTileLoadedAt(r.site.x, r.site.z);
+      if (d <= Tuning.CAVE_STREAM_DROP_M && !tileGone) continue;
+      release(r);
+      perf.releases++;
+    }
+  };
+
+  /** The density driver. Polled every CAVE_STREAM_POLL_FRAMES (the scan is a small cell sweep, but
+   *  it is pure work with no reason to run every frame). A site is only requested when its terrain
+   *  tile is already loaded — see the invariant. */
+  const pollSites = (p: { x: number; y: number; z: number }): void => {
+    if (!siteSource) return;
+    if (pollCountdown-- > 0) return;
+    pollCountdown = Tuning.CAVE_STREAM_POLL_FRAMES;
+    // Don't out-queue the cap: one queued build at a time is enough to keep up with walking, and it
+    // stops a fast traverse from banking a queue of caves the player has already left behind.
+    if (queue.length || inflight) return;
+    for (const s of siteSource(p.x, p.z, Tuning.CAVE_STREAM_REQUEST_M)) {
+      if (has(s.key)) continue;
+      if (!terrain.isTileLoadedAt(s.x, s.z)) continue;
+      queue.push({ key: s.key, seed: s.seed, site: s, junction: null });
+      perf.requests++;
+      break;                                   // nearest first (the source sorts) — one per poll
+    }
+  };
+
+  /** Stage 1 of a streamed build: the crevice tor.
+   *
+   *  ⚠ THE ONE UNSLICED STAGE, measured and named rather than hidden. `spawnCaveEntrance` is a
+   *  single ~180ms call (measured at boot: `CAVE-PRELOAD … ent=180.1`) — a local SDF + surface-nets
+   *  pass over the tor's own voxel grid. Its field fill IS a pure per-column loop and is sliceable
+   *  on exactly the S6/D296 pattern the interior already uses, but that refactor cuts through the
+   *  geometry cycles 4 and 7 tuned and did not fit this cycle. So it runs whole, on its OWN frame,
+   *  reported through `maxTorMs` and gated by its own tripwire — never blended into `maxAtomicMs`,
+   *  where a 180ms stage would hide behind the interior's ~90ms bake.
+   *
+   *  The tor goes live (mesh + its trimesh collider together — `spawnCaveEntrance` does both) while
+   *  the interior is still building. That is safe and deliberate: with no hole yet, it is simply a
+   *  solid rock outcrop with a fissure in it, and the terrain sheet under it is intact. Nothing is
+   *  drawn that is not also solid, which is what rule 9 asks. */
+  const doTor = (f: Inflight): void => {
+    const t0 = performance.now();
+    f.entrance = spawnCaveEntrance(scene, world, terrain, { x: f.site!.x, z: f.site!.z }, f.seed);
+    const ms = performance.now() - t0;
+    if (ms > perf.maxTorMs) perf.maxTorMs = ms;
+    perf.steps++;
+    if (ms > perf.maxStepMs) perf.maxStepMs = ms;
+  };
+
+  /** ── THE SHADER WARM-UP — the fix for the 1.6-SECOND FINALIZE FRAME (DEEPER cycle 8, closing).
+   *
+   *  WHAT WAS MEASURED. `cave-density` seed 7 reported a worst frame of 1544-1667ms across four
+   *  runs, against 87ms at seed 1337 — reproducible, so structural. None of the build's own numbers
+   *  came near it: tor 154-166ms, divisible slices ≤16ms, the atomic Rapier bake 81-84ms, the
+   *  terrain-hole rebuild 8ms. The cost is not in the build. `finalize` calls `scene.add(group)` and
+   *  the SAME frame renders a cave carrying a shader program that has never been compiled;
+   *  `renderer.info.programs` went 101 → 103 across that one frame at seed 7 (and 99 → 99 at 1337).
+   *  Both new keys were `cavePoolWater-v1` — the cycle-6 pool water, which is `transparent` +
+   *  `DoubleSide` and therefore renders in two passes, so three needs the `flipSided` and
+   *  non-flipSided builds of it. Two cold links inside one frame, and the driver blocks the draw
+   *  until they finish.
+   *
+   *  WHY "IT'S FINE ON 1337" WAS NEVER SAFETY. Every cave has at least one pool, so every cave needs
+   *  those programs; what differed is only whether something had already rendered a pool surface.
+   *  And the luck does not even hold within a session — the per-cave pool material is DISPOSED on
+   *  eviction, and disposing the last material that references a program frees it, so once every
+   *  pooled cave has been evicted the next one pays the full stall again. This is a player-facing
+   *  freeze on the first cave of a walk, not a gate artefact.
+   *
+   *  WHY THE OBVIOUS FIX DOES NOT WORK, tried and measured before this one: warming those programs
+   *  at boot next to `renderer.compileAsync(scene, camera)`. Two materials byte-identical to a pool
+   *  material but pinned FrontSide/BackSide DID compile both variants — and the streamed cave still
+   *  compiled two more, because a three program key carries the SCENE'S LIGHT STATE. The boot keys
+   *  read `numPointLights 33, shadowMapType 2`; the cave-build keys read `34` and `1`. No warm-up at
+   *  a fixed moment can match a key that moves with the world, so the warm-up has to happen at the
+   *  live light state, which means here.
+   *
+   *  HOW. The cave's whole material set is parented to its group before `finalize` and the group is
+   *  still OFF-SCENE, which is exactly what `compileAsync(object, camera, targetScene)` exists for:
+   *  lights, fog and shadow state come from the real scene, nothing is added to it, nothing is drawn.
+   *  The link then runs on the driver's parallel-compile threads while the build sits here, so the
+   *  finalize frame meets a warm cache. It generalises past the pool material: whatever a future cave
+   *  introduces is warmed the same way, at whatever light count the world happens to have.
+   *
+   *  Returns true when the build may proceed to `finalize`. */
+  const doWarm = (f: Inflight): boolean => {
+    if (!warm || f.warmState === 2) return true;
+    if (f.warmState === 0) {
+      f.warmState = 1;
+      perf.warms++;
+      const t0 = performance.now();
+      // `compileAsync`'s synchronous half (traverse + shader creation) happens inside this call; the
+      // promise only reports when the driver says the programs are ready. A REJECTION is handled the
+      // same way as success — the warm-up is an optimisation and a failed precompile must cost a
+      // hitch, never a cave that refuses to arrive. The try/catch covers the one case `.then` cannot:
+      // a synchronous throw (a lost GL context), which would otherwise fire on every frame forever.
+      try {
+        warm(f.job!.object()).then(() => { f.warmState = 2; }, () => { f.warmState = 2; });
+      } catch {
+        f.warmState = 2;
+      }
+      const ms = performance.now() - t0;
+      if (ms > perf.maxWarmMs) perf.maxWarmMs = ms;
+    }
+    // A `.then` callback can never have run by the time control returns here (promise callbacks are
+    // always a task later), so the completion test is the early guard above, on the NEXT frame.
+    f.warmFrames++;
+    if (f.warmFrames > perf.maxWarmFrames) perf.maxWarmFrames = f.warmFrames;
+    if (f.warmFrames >= Tuning.CAVE_WARM_MAX_FRAMES) {   // fail-safe — never wedge on a compile
+      f.warmState = 2;
+      perf.warmTimeouts++;
+      return true;
+    }
+    return false;
+  };
+
   const update = (playerPos: { x: number; y: number; z: number }): void => {
+    pollSites(playerPos);
+
     if (!inflight && queue.length) {
       const next = queue.shift()!;
-      inflight = { ...next, job: startSpawnCave(scene, world, terrain, next.junction, next.seed) };
+      inflight = { ...next, entrance: null, job: null, warmState: 0, warmFrames: 0 };
+      // A body-only request (the legacy probe hook) already has its junction; a SITE request has to
+      // build the crevice first, because the crevice IS what produces the junction the cave hangs
+      // off. Either way the tor gets its own frame — never stacked onto a slice step.
+      if (!inflight.site) {
+        inflight.job = startSpawnCave(scene, world, terrain, inflight.junction!, inflight.seed);
+      }
+      return;
     }
     if (inflight) {
+      if (!inflight.job) {
+        if (!inflight.entrance) { doTor(inflight); return; }   // ← its own frame
+        inflight.job = startSpawnCave(
+          scene, world, terrain, inflight.entrance.junction, inflight.seed,
+        );
+        return;
+      }
       const stageBefore = inflight.job.stage();
+      // The cave's material set is complete and still off-scene: precompile it before the step that
+      // makes it visible (see `doWarm`). Waiting here costs frames the build already spends anyway.
+      if (stageBefore === 'finalize' && !doWarm(inflight)) return;
       const t0 = performance.now();
       const done = inflight.job.step(Tuning.CAVE_BUILD_SLICE_MS);
       const ms = performance.now() - t0;
@@ -222,19 +484,42 @@ export function createCaveStream(
         perf.maxSliceMs = ms;
       }
       if (done) {
-        addResident(inflight.key, inflight.seed, inflight.job.result(), false);
+        // ── THE ATOMIC FINALIZE. The interior's mesh + collider are already live (caveGen's own
+        //    finalize stage); the LAST thing to happen is the hole, in the same frame. Ordered this
+        //    way on purpose: the sheet opens only once there is a cave under it to catch you.
+        const tf = performance.now();
+        let holeKey: string | null = null;
+        if (inflight.site) {
+          holeKey = inflight.key;
+          terrain.addCaveHole(holeKey, caveEntranceHoleBlock({ x: inflight.site.x, z: inflight.site.z }));
+        }
+        addResident(
+          inflight.key, inflight.seed, inflight.job.result(), false,
+          inflight.entrance, holeKey, inflight.site ? { x: inflight.site.x, z: inflight.site.z } : null,
+        );
+        const fms = performance.now() - tf;
+        if (fms > perf.maxFinalizeMs) perf.maxFinalizeMs = fms;
         perf.builds++;
         inflight = null;
       }
     }
+    releaseOutOfRange(playerPos);
     enforceCap(playerPos);
   };
 
   return {
     request: (key, junction, seed) => {
-      if (!has(key)) queue.push({ key, junction, seed });
+      if (!has(key)) queue.push({ key, seed, junction, site: null });
       return key;
     },
+    requestSite: (site) => {
+      if (has(site.key)) return false;
+      if (!terrain.isTileLoadedAt(site.x, site.z)) return false;
+      queue.push({ key: site.key, seed: site.seed, site, junction: null });
+      perf.requests++;
+      return true;
+    },
+    setSiteSource: (src) => { siteSource = src; pollCountdown = 0; },
     adopt: (key, _junction, seed, cave, pinned) => addResident(key, seed, cave, pinned),
     setPoolSink: (sink) => {
       poolSink = sink;
@@ -243,13 +528,18 @@ export function createCaveStream(
     update,
     residents: () => list.slice(),
     occupied,
-    pending: () => (inflight ? { key: inflight.key, stage: inflight.job.stage() } : null),
+    pending: () => (inflight
+      ? { key: inflight.key, stage: inflight.job ? inflight.job.stage() : (inflight.entrance ? 'tor:done' : 'tor') }
+      : null),
     queued: () => queue.length,
     perf: () => ({ ...perf }),
     resetPerf: () => {
       perf.steps = 0; perf.builds = 0; perf.maxSliceMs = 0; perf.maxAtomicMs = 0;
       perf.worstAtomicStage = '-'; perf.maxStepMs = 0;
       perf.evictions = 0; perf.evictionsRefused = 0; perf.occupiedEvictionsBlocked = 0;
+      perf.releases = 0; perf.requests = 0; perf.maxTorMs = 0;
+      perf.maxFinalizeMs = 0; perf.maxTeardownMs = 0;
+      perf.warms = 0; perf.maxWarmMs = 0; perf.maxWarmFrames = 0; perf.warmTimeouts = 0;
     },
   };
 }

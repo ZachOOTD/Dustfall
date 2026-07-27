@@ -1199,6 +1199,12 @@ export interface SpawnedCave {
 export interface CaveSpawnJob {
   step(budgetMs: number): boolean;
   stage(): string;
+  /** The cave's scene graph WHILE IT IS STILL OFF-SCENE. Every mesh — walls, speleothems, fungi,
+   *  pool surfaces — is parented by the time the job reaches `finalize`, so this is the complete
+   *  material set the renderer will meet the instant `finalize` calls `scene.add`. caveStream uses
+   *  it to precompile those programs against the LIVE scene first (see `doWarm` there). Valid from
+   *  the `graph` stage on; before that there is no group. */
+  object(): THREE.Group;
   /** Valid only once `step` has returned true. */
   result(): SpawnedCave;
 }
@@ -1475,6 +1481,7 @@ export function startSpawnCave(
     // `finalize` = the Rapier trimesh bake). Reporting one blended "slice" number would let a 90ms
     // atomic bake hide inside the slice budget.
     stage: () => (stage === 'sdf' && sdfJob ? `sdf:${sdfJob.stage()}` : stage),
+    object: () => group,
     result: () => {
       if (!out) throw new Error('caveGen: result() before the spawn completed');
       return out;

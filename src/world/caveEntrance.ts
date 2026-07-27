@@ -101,27 +101,78 @@ export interface CaveHoleBlock {
   zMin: number; zMax: number;
 }
 
-export function caveEntranceHoleBlock(site: { x: number; z: number }): CaveHoleBlock {
+/** The UNCLAMPED cell indices the hole wants, plus the owning tile. Split out of
+ *  `caveEntranceHoleBlock` (DEEPER cycle 8) so the fit test and the block itself derive the SAME
+ *  numbers from one piece of arithmetic — the alternative is two copies of an index convention that
+ *  is already easy to get backwards. */
+function rawHoleCells(site: { x: number; z: number }): {
+  tileTx: number; tileTz: number; centerX: number; centerZ: number;
+  iMin: number; iMax: number; jMin: number; jMax: number;
+} {
   const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
   const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
   const tileTx = Math.round(site.x / SIZE);
   const tileTz = Math.round(site.z / SIZE);
   const centerX = tileTx * SIZE;
   const centerZ = tileTz * SIZE;
-  const clampCell = (n: number): number => Math.max(0, Math.min(CELLS - 1, n));
   const iOf = (wx: number): number => ((wx - centerX) / SIZE + 0.5) * CELLS;
   const jOf = (wz: number): number => ((wz - centerZ) / SIZE + 0.5) * CELLS;
   const i0 = Math.round(iOf(site.x));            // site is snapped → this IS a vertex index
   const j0 = Math.round(jOf(site.z));
   const nz = Tuning.CREVICE_HOLE_CELLS_Z;
-  const iMin = clampCell(i0 - 1);
-  const iMax = clampCell(i0 - 1 + Tuning.CREVICE_HOLE_CELLS_X - 1);
-  const jMin = clampCell(j0 - Math.floor(nz / 2));
-  const jMax = clampCell(jMin + nz - 1);
-  const vX = (i: number): number => centerX + (i / CELLS - 0.5) * SIZE;
-  const vZ = (j: number): number => centerZ + (j / CELLS - 0.5) * SIZE;
+  const jMin = j0 - Math.floor(nz / 2);
   return {
-    tileTx, tileTz, iMin, iMax, jMin, jMax,
+    tileTx, tileTz, centerX, centerZ,
+    iMin: i0 - 1, iMax: i0 - 1 + Tuning.CREVICE_HOLE_CELLS_X - 1,
+    jMin, jMax: jMin + nz - 1,
+  };
+}
+
+/**
+ * DEEPER cycle 8 — DOES THE CARVED HOLE FIT WHOLLY INSIDE ONE TERRAIN TILE?
+ *
+ * `caveEntranceHoleBlock` CLAMPS its cell range to the owning tile, because a `CaveHoleBlock` names
+ * exactly one tile and the terrain's hole registry opens it on exactly one tile. For the origin cave
+ * that clamp never fires — `caveEntranceSite` puts the mouth in open ground mid-tile. For a STREAMED
+ * site it can: the placement grid (`caveSites.ts`) is on its own 460m pitch with ±80m jitter and
+ * knows nothing about the 800m terrain tiling, so a site can land on a tile seam.
+ *
+ * When it fires, the carved hole is TRUNCATED or SHIFTED by a cell (4.17m), measured over the whole
+ * snapped-vertex space: 1.56% of possible site positions — about one cave in 64. The sheet then
+ * stays SOLID over part of the descent slot, which is a cave you can see the tor of and cannot get
+ * into. Nothing else in the pipeline notices: the tor still builds, the interior still builds, the
+ * hole registry still reports a hole, and every existing gate stays green.
+ *
+ * WHY REJECT THE SITE RATHER THAN TEACH THE HOLE TO SPAN TILES. A cross-tile hole would have to be
+ * opened and closed on two tiles whose load/unload lifetimes are INDEPENDENT — and the invariant the
+ * whole cycle rests on is that a hole exists if and only if the cave under it is resident. Half a
+ * hole surviving on a tile that stayed loaded is precisely the "opening onto nothing" that invariant
+ * exists to forbid. Losing ~1.6% of candidate sites costs nothing (the grid has no shortage of
+ * cells); breaking the invariant would cost the safety of the entire feature.
+ */
+export function caveEntranceHoleFitsTile(site: { x: number; z: number }): boolean {
+  const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
+  const r = rawHoleCells(site);
+  return r.iMin >= 0 && r.iMax <= CELLS - 1 && r.jMin >= 0 && r.jMax <= CELLS - 1;
+}
+
+export function caveEntranceHoleBlock(site: { x: number; z: number }): CaveHoleBlock {
+  const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
+  const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
+  const r = rawHoleCells(site);
+  // The clamp is kept — it is what makes a `CaveHoleBlock` always a legal cell range for its tile,
+  // and the ORIGIN cave's block (D307, baked at createTerrain time) must stay byte-identical. What
+  // changed in cycle 8 is that streamed sites which would ACTUALLY hit it are rejected upstream by
+  // `caveEntranceHoleFitsTile`, so the clamp is now unreachable rather than silently destructive.
+  const clampCell = (n: number): number => Math.max(0, Math.min(CELLS - 1, n));
+  const iMin = clampCell(r.iMin);
+  const iMax = clampCell(r.iMax);
+  const jMin = clampCell(r.jMin);
+  const jMax = clampCell(jMin + Tuning.CREVICE_HOLE_CELLS_Z - 1);
+  const vX = (i: number): number => r.centerX + (i / CELLS - 0.5) * SIZE;
+  const vZ = (j: number): number => r.centerZ + (j / CELLS - 0.5) * SIZE;
+  return {
+    tileTx: r.tileTx, tileTz: r.tileTz, iMin, iMax, jMin, jMax,
     xMin: vX(iMin), xMax: vX(iMax + 1), zMin: vZ(jMin), zMax: vZ(jMax + 1),
   };
 }

@@ -1203,6 +1203,70 @@ export const Tuning = {
   CAVE_RESIDENT_MAX: 3,                // max cave INTERIORS resident at once (each is ~70k collider tris + ~90k visual tris)
   CAVE_EVICT_MARGIN_M: 45,             // m — a cave whose padded bounds contain the player is OCCUPIED and is NEVER evicted, cap or no cap
   CAVE_EVICT_MIN_DIST_M: 260,          // m — never evict a cave nearer than this either (you can see the mouth from here)
+  //    DEEPER cycle 8 (closing agent) — THE SHADER WARM-UP WINDOW. The build's last frame used to
+  //    cost 1.6 SECONDS at gate seed 7, none of it in the build: `finalize` calls `scene.add` and the
+  //    same frame renders a cave whose water program has never been compiled (see `doWarm` in
+  //    caveStream.ts). The warm-up hands those compiles to the driver's parallel-compile threads and
+  //    waits here for them. The cap is a FAIL-SAFE, not a budget — if a browser never reports the
+  //    programs ready (no KHR_parallel_shader_compile), the cave finalizes anyway and pays the old
+  //    cost, rather than the streamer wedging on a promise that never resolves.
+  CAVE_WARM_MAX_FRAMES: 180,           // frames — give up waiting for the off-thread shader compile and finalize regardless (~3s at 60fps)
+
+  // ── DEEPER cycle 8 — CAVES AS ROCKY-TERRAIN DENSITY (caveSites.ts). Zach's kickoff call:
+  //    "caves are a regular feature of ROCKY TERRAIN … you meet several in an hour's travel".
+  //
+  //    ⚑ FLAGGED FOR ZACH — CAVE_SITE_CHANCE IS THE DENSITY DIAL. Everything else here is a
+  //      structural constraint; this one is a taste call. The arithmetic it was set from:
+  //
+  //        rocky fraction of the world  f = 0.35        (MEASURED: simplex at BIOME_NOISE_FREQ
+  //                                                      under BIOME_THRESHOLD_ROCKY, 2M samples
+  //                                                      × 3 seeds → 34.8 / 35.0 / 35.2 %)
+  //        travel in an hour            L = 13 km       (~60% of a play-hour moving at WALK_SPEED
+  //                                                      6.0 m/s — an honest travel hour, not an
+  //                                                      hour of holding W)
+  //        sighting half-corridor       R = 150 m       (the tor's silhouette read. Cycle 7 GATED
+  //                                                      findability at 78m, which is the strict
+  //                                                      threshold, not the limit of noticing a
+  //                                                      5-10m rock fin on open desert)
+  //        encounters/hour              E = L · 2R · D  ⇒  D = E / (13000 · 300)
+  //        for E ≈ 4 ("several")        D ≈ 1.0 caves / km² of WORLD
+  //                                       ≈ 2.9 caves / km² of ROCKY  (mean spacing ~590m in rock)
+  //        and D = CHANCE · f / CELL²   ⇒  CHANCE = 1.0e-6 · 460² / 0.35 = 0.60
+  //
+  //      Raise CHANCE toward 1.0 for "caves everywhere in rock" (CHANCE 1.0 ⇒ D = 1.65/km², one
+  //      per ~360m of rocky travel); drop it toward 0.3 for "a rocky-country landmark you're glad
+  //      to find" (D = 0.5/km²). The realized density is MEASURED by the `cave-density` gate leg
+  //      rather than trusted from this comment, because the biome/relief/conflict rejections below
+  //      cut into it and the honest number is the one the probe counts.
+  CAVE_SITE_CHANCE: 0.60,              // per-cell presence roll — THE DENSITY DIAL (see above)
+  //    THE GRID. One candidate per cell, jittered inside a central sub-square, so two sites in
+  //    adjacent cells are ≥ CELL − 2·JITTER apart BY CONSTRUCTION (no rejection loop, no neighbour
+  //    scan, no order dependence — the S4 hero-landmark region-grid pattern). That minimum spacing
+  //    is not a taste number: a cave is a ~200m-wide underground volume, and two overlapping SDF
+  //    bodies (or two overlapping carved holes) is a correctness bug. 460 − 2·80 = 300m, and the
+  //    `cave-density` gate asserts it against the cave's MEASURED horizontal extent every run.
+  CAVE_SITE_CELL_M: 460,               // m — placement grid pitch
+  CAVE_SITE_JITTER_M: 80,              // m — max offset from the cell centre (⇒ 300m min spacing)
+  //    ORIGIN PROTECTION — the egg cave must stay THE one that matters. Set equal to
+  //    CHUNK_POI_ORIGIN_EXCLUSION_M on purpose: streamed caves begin exactly where the boot-placed
+  //    POI field ends, which (a) gives the egg cave 1.15km of world to itself and (b) makes it
+  //    impossible for a streamed tor to weld itself on top of a hand-placed boot POI, a conflict
+  //    class the injected chunk-descriptor check below cannot see.
+  CAVE_SITE_ORIGIN_CLEAR_M: 1150,      // m — no streamed cave inside this radius
+  //    SITE QUALITY. The crevice welds a 12.5 × 8.3m carved hole plus an apron into the terrain
+  //    sheet; on a steep flank the apron's downhill side floats and its uphill side buries. The
+  //    ring radius covers the hole block + apron margin.
+  CAVE_SITE_RELIEF_RING_M: 9,          // m — radius of the pure-height relief ring
+  CAVE_SITE_RELIEF_MAX_M: 3.4,         // m — worst ring-to-centre height difference allowed
+  CAVE_SITE_CONTENT_CLEAR_M: 70,       // m — keep clear of a streamed POI / hero landmark
+  //    STREAMING. Request radius sits well inside the terrain ring's guaranteed coverage (tile
+  //    radius 1 ⇒ the nearest 776m of ground is always tiled even with the player at a tile corner
+  //    plus the anchor margin), because a cave may only be resident where its terrain tile is
+  //    loaded — that is the invariant that lets the carved hole and the cave under it share one
+  //    lifetime. Eviction distance is bounded by the same coverage.
+  CAVE_STREAM_REQUEST_M: 330,          // m — start building a cave's tor + interior at this range
+  CAVE_STREAM_DROP_M: 620,             // m — beyond this the cave is released (< the 776m tile floor)
+  CAVE_STREAM_POLL_FRAMES: 12,         // frames between site-list polls (the scan is a 3×3 cell sweep)
 
   // ── UNDERWORLD cycle 2 — WEIRD MUSHROOMS (the life accent; caveGen.ts). Sparse clusters of pale,
   //    faintly cool-bioluminescent fungi in 2-4 chambers (denser near floor dips, a few on walls).

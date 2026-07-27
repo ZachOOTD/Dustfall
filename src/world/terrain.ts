@@ -128,6 +128,11 @@ interface Tile {
   centerZ: number;
   /** Heights at each vertex, indexed [i*(CELLS+1)+j]. */
   heights: Float32Array;
+  /** DEEPER cycle 8 — the same array the geometry holds; kept so a hole
+   *  open/close can rebuild the collider set without re-filling the tile. */
+  positions: Float32Array;
+  tx: number;
+  tz: number;
   mesh: THREE.Mesh;
   body: RAPIER.RigidBody;
 }
@@ -178,6 +183,35 @@ export interface Terrain {
   /** Legacy half-extent of the ORIGINAL fixed grid (kept for consumers
    *  that still reason about the authored origin region). */
   worldHalfSize: number;
+
+  // ── DEEPER cycle 8 — STREAMED CAVE HOLES ──────────────────────────────
+  //
+  // D307 carved ONE hole, decided at createTerrain time and baked into the
+  // tile forever. At rocky density the hole has to come and go with the cave
+  // under it, because the two lifetimes are what make the whole thing safe:
+  //
+  //   THE INVARIANT — a hole exists in the terrain sheet IF AND ONLY IF the
+  //   cave beneath it is a live resident. There is therefore never a state
+  //   where the player can walk into an opening with nothing under it. This
+  //   is strictly stronger than sealing the slot with a plug, and it costs
+  //   nothing extra: the sheet is simply intact until the cave arrives.
+  //
+  // Both calls are ATOMIC with respect to the frame (rule 9): the tile's
+  // visual index buffer and its collider set are replaced together, so the
+  // ground is never drawn open while it is still solid, or vice versa.
+  /** Open the hole for `block` (idempotent per key). Rebuilds the owning
+   *  tile's index buffer + colliders if that tile is loaded. */
+  addCaveHole: (key: string, block: CaveHoleBlock) => void;
+  /** Close it again and restore the sheet EXACTLY (idempotent). */
+  removeCaveHole: (key: string) => void;
+  /** Is the terrain tile containing (x, z) currently loaded? A cave may only
+   *  be resident where its tile is — see the invariant above. */
+  isTileLoadedAt: (x: number, z: number) => boolean;
+  /** Probe/gate view of the live hole registry. */
+  caveHoleKeys: () => string[];
+  /** Probe/gate counters: collider churn from hole open/close. */
+  holeStats: () => { opens: number; closes: number; rebuilds: number; maxRebuildMs: number; colliders: number };
+  resetHoleStats: () => void;
 }
 
 export function createTerrain(
@@ -444,6 +478,137 @@ export function createTerrain(
   const isCaveTile = (tx: number, tz: number): boolean =>
     caveBlock !== null && tx === caveBlock.tileTx && tz === caveBlock.tileTz;
 
+  // ── DEEPER cycle 8 — the DYNAMIC hole registry (streamed caves). ───────────────────────────
+  //
+  // The ORIGIN cave's hole above stays exactly as D307 built it — a static, createTerrain-time
+  // decision on one tile, holed index buffer + FULL-TILE TRIMESH collider. Not because that is the
+  // better representation (it isn't, see below) but because it is the collider the crevice weld and
+  // the descent were tuned against across cycles 4 and 7, and the released origin world has to come
+  // out byte-identical. `CAVE_SITE_ORIGIN_CLEAR_M` (1150m) guarantees no streamed site can ever
+  // land on the origin tile, so the two paths can never meet on one tile.
+  //
+  // STREAMED holes take the cheaper path, and the cost difference is the whole reason this cycle's
+  // density is affordable (measured on this machine's rapier3d-compat build, 192×192 cells):
+  //
+  //     full-tile trimesh, 1 hole   73,728 tris     24.4 ms      ← what D307 does
+  //     plain heightfield (no hole)                  0.2 ms      ← every other tile in the game
+  //     BAND-DECOMPOSED heightfields, 1 hole   ×4    0.3 ms      ← this
+  //     …………………………………………………, 3 holes  ×10    0.3 ms
+  //
+  // A Rapier heightfield cannot have a hole (parry's per-cell status bitvec is not exposed by the
+  // JS bindings — checked, not assumed), but a SUB-RECTANGLE of the height matrix is itself a
+  // perfectly good heightfield. So a holed tile becomes a handful of heightfields tiling everything
+  // the holes don't cover: row bands split at the holes' i-extents, and the bands that contain a
+  // hole split again along j. Adjacent pieces SHARE their boundary vertex row, so there is no seam
+  // and no gap — the collision surface is the same sheet, minus the holes.
+  //
+  // 80× cheaper than re-baking a trimesh is what makes the hole affordable to OPEN AND CLOSE with
+  // the cave's residency instead of baking it in for the tile's lifetime.
+  const dynHoles = new Map<string, CaveHoleBlock>();
+  const _holeStats = { opens: 0, closes: 0, rebuilds: 0, maxRebuildMs: 0, colliders: 0 };
+
+  const dynBlocksFor = (tx: number, tz: number): CaveHoleBlock[] => {
+    const out: CaveHoleBlock[] = [];
+    for (const b of dynHoles.values()) if (b.tileTx === tx && b.tileTz === tz) out.push(b);
+    // Stable order — two derivations of the same tile must produce the same index buffer.
+    out.sort((a, b) => (a.iMin - b.iMin) || (a.jMin - b.jMin));
+    return out;
+  };
+
+  const inAnyBlock = (blocks: CaveHoleBlock[], i: number, j: number): boolean => {
+    for (const b of blocks) {
+      if (i >= b.iMin && i <= b.iMax && j >= b.jMin && j <= b.jMax) return true;
+    }
+    return false;
+  };
+
+  /** Index buffer for a tile carrying `blocks` (empty ⇒ the shared full-tile buffer). */
+  const holedIndicesFor = (blocks: CaveHoleBlock[]): number[] => {
+    if (!blocks.length) return _sharedIndices;
+    const idx: number[] = [];
+    for (let i = 0; i < CELLS; i++) {
+      for (let j = 0; j < CELLS; j++) {
+        if (inAnyBlock(blocks, i, j)) continue;
+        const a = i * stride + j;
+        const b2 = a + 1;
+        const c2 = (i + 1) * stride + j;
+        const d = c2 + 1;
+        idx.push(a, b2, c2, b2, d, c2);
+      }
+    }
+    return idx;
+  };
+
+  /** One heightfield over the cell sub-rect X∈[i0,i1) × Z∈[j0,j1).
+   *
+   *  The index convention is the one the full-tile collider already relies on and is easy to get
+   *  backwards, so it is spelled out: Rapier stores the height matrix COLUMN-MAJOR as
+   *  element(row, col) at `row + col*(nrows+1)`, with row ↔ local z and col ↔ local x. The existing
+   *  full-tile call passes `heights[iX*stride + jZ]` with nrows = ncols = CELLS, i.e. nrows+1 =
+   *  stride — so it is already (z-index) + (x-index)*(nrows+1). A sub-rect therefore takes
+   *  nrows = the Z cell count and ncols = the X cell count, NOT the other way round. */
+  const addSubHeightfield = (
+    body: RAPIER.RigidBody, heights: Float32Array,
+    i0: number, i1: number, j0: number, j1: number,
+  ): void => {
+    const nx = i1 - i0, nz = j1 - j0;
+    if (nx <= 0 || nz <= 0) return;
+    const sub = new Float32Array((nx + 1) * (nz + 1));
+    for (let i = 0; i <= nx; i++) {
+      for (let j = 0; j <= nz; j++) sub[i * (nz + 1) + j] = heights[(i0 + i) * stride + (j0 + j)];
+    }
+    const cell = SIZE / CELLS;
+    world.createCollider(
+      RAPIER.ColliderDesc
+        .heightfield(nz, nx, sub, { x: nx * cell, y: 1, z: nz * cell })
+        .setTranslation(((i0 + i1) * 0.5 / CELLS - 0.5) * SIZE, 0, ((j0 + j1) * 0.5 / CELLS - 0.5) * SIZE),
+      body,
+    );
+  };
+
+  /** Band decomposition (see the note above). Returns the collider count. */
+  const addBandHeightfields = (body: RAPIER.RigidBody, heights: Float32Array, blocks: CaveHoleBlock[]): number => {
+    const rowCuts = new Set<number>([0, CELLS]);
+    for (const b of blocks) { rowCuts.add(b.iMin); rowCuts.add(b.iMax + 1); }
+    const rows = [...rowCuts].sort((a, b) => a - b);
+    let n = 0;
+    for (let r = 0; r < rows.length - 1; r++) {
+      const i0 = rows[r], i1 = rows[r + 1];
+      // Cuts include every block's i-extent, so a band is wholly inside or wholly outside each.
+      const band = blocks.filter((b) => b.iMin <= i0 && b.iMax + 1 >= i1);
+      if (!band.length) { addSubHeightfield(body, heights, i0, i1, 0, CELLS); n++; continue; }
+      const colCuts = new Set<number>([0, CELLS]);
+      for (const b of band) { colCuts.add(b.jMin); colCuts.add(b.jMax + 1); }
+      const cols = [...colCuts].sort((a, b) => a - b);
+      for (let c = 0; c < cols.length - 1; c++) {
+        const j0 = cols[c], j1 = cols[c + 1];
+        if (band.some((b) => b.jMin <= j0 && b.jMax + 1 >= j1)) continue;   // this IS a hole
+        addSubHeightfield(body, heights, i0, i1, j0, j1); n++;
+      }
+    }
+    return n;
+  };
+
+  /** Attach the collider set for a tile. THREE representations, one rule each:
+   *   · no hole            → the plain full-tile heightfield (every tile in the game since EE),
+   *   · the ORIGIN hole    → the D307 full-tile trimesh, untouched (see the note above),
+   *   · streamed hole(s)   → band-decomposed heightfields. */
+  const attachTileColliders = (
+    body: RAPIER.RigidBody, tx: number, tz: number,
+    heights: Float32Array, positions: Float32Array, dyn: CaveHoleBlock[],
+  ): number => {
+    if (isCaveTile(tx, tz) && _caveHoledIndicesU32) {
+      world.createCollider(RAPIER.ColliderDesc.trimesh(positions, _caveHoledIndicesU32), body);
+      return 1;
+    }
+    if (dyn.length) return addBandHeightfields(body, heights, dyn);
+    world.createCollider(
+      RAPIER.ColliderDesc.heightfield(CELLS, CELLS, heights, { x: SIZE, y: 1, z: SIZE }),
+      body,
+    );
+    return 1;
+  };
+
   const assembleGeometry = (b: TileBuild): void => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(b.positions, 3));
@@ -453,7 +618,11 @@ export function createTerrain(
     // Per-vertex erg mask — the shader suppresses cracks/mirage inside it.
     geo.setAttribute('aErgMask', new THREE.BufferAttribute(b.ergMasks, 1));
     // UNDERWORLD cycle 1 — the entrance chunk's visual mesh drops the hole triangles.
-    geo.setIndex(isCaveTile(b.tx, b.tz) && _caveHoledIndices ? _caveHoledIndices : _sharedIndices);
+    // DEEPER cycle 8 — …and so does any tile carrying live streamed-cave holes.
+    geo.setIndex(
+      isCaveTile(b.tx, b.tz) && _caveHoledIndices ? _caveHoledIndices
+        : holedIndicesFor(dynBlocksFor(b.tx, b.tz)),
+    );
     geo.computeVertexNormals();
     b.geo = geo;
   };
@@ -478,18 +647,40 @@ export function createTerrain(
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.fixed().setTranslation(b.centerX, 0, b.centerZ),
     );
-    if (isCaveTile(b.tx, b.tz) && _caveHoledIndicesU32) {
-      world.createCollider(RAPIER.ColliderDesc.trimesh(b.positions, _caveHoledIndicesU32), body);
-    } else {
-      const colliderDesc = RAPIER.ColliderDesc.heightfield(
-        CELLS, CELLS, b.heights,
-        { x: SIZE, y: 1, z: SIZE },
-      );
-      world.createCollider(colliderDesc, body);
-    }
-    tiles.set(tileKey(b.tx, b.tz), { centerX: b.centerX, centerZ: b.centerZ, heights: b.heights, mesh, body });
+    _holeStats.colliders += attachTileColliders(
+      body, b.tx, b.tz, b.heights, b.positions, dynBlocksFor(b.tx, b.tz),
+    );
+    tiles.set(tileKey(b.tx, b.tz), {
+      centerX: b.centerX, centerZ: b.centerZ, heights: b.heights, positions: b.positions,
+      tx: b.tx, tz: b.tz, mesh, body,
+    });
     meshes.push(mesh);
   };
+
+  // ── DEEPER cycle 8 — reopen/reclose a LOADED tile around its current hole set. Both the drawn
+  //    index buffer and the whole collider set are replaced inside ONE call, so the frame either
+  //    sees the tile with its holes or without them, never half-way (rule 9). Restoring is not a
+  //    "repair" of the old collider — the sheet is rebuilt from the same `heights` array the tile
+  //    was baked from, so a closed hole is bit-identical to a tile that never had one.
+  const rebuildTileHoles = (tile: Tile): void => {
+    const t0 = performance.now();
+    const dyn = dynBlocksFor(tile.tx, tile.tz);
+    world.removeRigidBody(tile.body);        // drops every collider it owns with it (rule 9)
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(tile.centerX, 0, tile.centerZ),
+    );
+    _holeStats.colliders += attachTileColliders(body, tile.tx, tile.tz, tile.heights, tile.positions, dyn);
+    tile.body = body;
+    tile.mesh.geometry.setIndex(
+      isCaveTile(tile.tx, tile.tz) && _caveHoledIndices ? _caveHoledIndices : holedIndicesFor(dyn),
+    );
+    tile.mesh.geometry.computeVertexNormals();
+    const ms = performance.now() - t0;
+    _holeStats.rebuilds++;
+    if (ms > _holeStats.maxRebuildMs) _holeStats.maxRebuildMs = ms;
+  };
+
+  const tileOf = (block: CaveHoleBlock): Tile | undefined => tiles.get(tileKey(block.tileTx, block.tileTz));
 
   /** SYNCHRONOUS build — the boot ring + the anchor tile (a save-load
    *  teleport must never fall through unloaded ground). Same staged fns,
@@ -670,6 +861,30 @@ export function createTerrain(
       _perf.maxStageMs.fill = 0; _perf.maxStageMs.geometry = 0; _perf.maxStageMs.finalize = 0;
     },
     worldHalfSize,
+
+    // ── DEEPER cycle 8 — the streamed-cave hole API (see the Terrain interface note). ──
+    addCaveHole: (key, block) => {
+      if (dynHoles.has(key)) return;                       // idempotent
+      dynHoles.set(key, block);
+      _holeStats.opens++;
+      const tile = tileOf(block);
+      if (tile) rebuildTileHoles(tile);                    // not loaded ⇒ the next build picks it up
+    },
+    removeCaveHole: (key) => {
+      const block = dynHoles.get(key);
+      if (!block) return;                                  // idempotent
+      dynHoles.delete(key);
+      _holeStats.closes++;
+      const tile = tileOf(block);
+      if (tile) rebuildTileHoles(tile);
+    },
+    isTileLoadedAt: (x, z) => tiles.has(tileKey(Math.round(x / SIZE), Math.round(z / SIZE))),
+    caveHoleKeys: () => [...dynHoles.keys()],
+    holeStats: () => ({ ..._holeStats }),
+    resetHoleStats: () => {
+      _holeStats.opens = 0; _holeStats.closes = 0; _holeStats.rebuilds = 0;
+      _holeStats.maxRebuildMs = 0; _holeStats.colliders = 0;
+    },
   };
 }
 

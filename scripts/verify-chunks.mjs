@@ -282,6 +282,102 @@ for (const seed of DET_SEEDS) {
   }
 }
 
+// ── 11. DEEPER cycle 8 — CAVES AS ROCKY-TERRAIN DENSITY. Permanent gate, both seeds. Per seed:
+//       the cave-site list over a 12km box is byte-stable across two derivations and every site
+//       obeys the rules (rocky biome · outside the origin protection · not inside a terrain-carving
+//       regional biome · minimum spacing ≥ what the grid guarantees AND ≥ the MEASURED cave extent,
+//       so two cave bodies can never interpenetrate); the realized density is COUNTED (caves/km²
+//       and encounters per hour of travel) rather than trusted from the tuning comment; the terrain
+//       hole opens and closes through the shipped `addCaveHole`/`removeCaveHole` path with the
+//       surface restored to within EXACTLY 0m of its pre-hole heights and no gap left anywhere in
+//       the band-decomposed sheet; and a real descriptor site streams in, releases out of range with
+//       its tile still loaded, and streams back BIT-IDENTICAL, with rigid-body / water-source /
+//       pool / pool-material counts all returning to baseline.
+//
+//       Cross-seed teeth: two worlds must not produce the same site list — a placement that ignored
+//       the seed would pass every per-seed assertion above.
+{
+  const cdRe = /CAVE-DENSITY pass=(\d) digest=(\S+) sites=(\d+) spacing=([\d.]+)m\/(\d+)m extent=([\d.]+)m rocky=([\d.]+) perKm2=([\d.]+) perKm2Rocky=([\d.]+) encPerHour=([\d.]+) restoreMax=([\d.]+)m reentry=(\d) bodies=(\d+)->(\d+)->(\d+) tor=([\d.]+)ms fin=([\d.]+)ms teardown=([\d.]+)ms holeRebuild=([\d.]+)ms slice=([\d.]+)ms atomic=([\d.]+)ms\(([\w:-]+)\) warm=([\d.]+)ms\/(\d+)f×(\d+) progs=(\d+)->(\d+)\(visibleFrame (\d+)\) frame=([\d.]+)ms\(([\w:-]+)\) fails=(\d+)/;
+  let cdPort = 5560;
+  const cdDigests = [];
+  for (const seed of DET_SEEDS) {
+    const m = runParsed('cave-density', seed, cdPort, cdRe, 600000);
+    cdPort += 2;
+    if (!m) {
+      allPass = false;
+      rows.push(`cave-density seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`);
+      continue;
+    }
+    const okD = m[1] === '1';
+    if (!okD) allPass = false;
+    cdDigests.push(m[2]);
+    rows.push(`cave-density seed ${seed}: ${m[3]} sites, spacing ${m[4]}m (grid ${m[5]}m, cave extent ${m[6]}m), rocky ${m[7]}, ${m[8]}/km² world = ${m[9]}/km² rocky ≈ ${m[10]} per travel-hour, restore Δ${m[11]}m, re-entry ${m[12] === '1' ? 'bit-identical' : 'DRIFTED'}, bodies ${m[13]}→${m[14]}→${m[15]}, tor ${m[16]}ms / slice ${m[20]}ms / atomic ${m[21]}ms (${m[22]}) / finalize ${m[17]}ms / teardown ${m[18]}ms / hole ${m[19]}ms, shader warm ${m[23]}ms + ${m[24]}f wait ×${m[25]} (programs ${m[26]}→${m[27]}, ${m[28]} on the visible frame), worst frame ${m[29]}ms (${m[30]}), ${m[31]} fails  ${okD ? 'OK' : '*** FAIL ***'}`);
+  }
+  if (cdDigests.length === 2) {
+    const differ = cdDigests[0] !== cdDigests[1];
+    if (!differ) allPass = false;
+    rows.push(`cave-density cross-seed: site lists ${differ ? `differ (${cdDigests[0]} vs ${cdDigests[1]})  OK` : `IDENTICAL (${cdDigests[0]}) — the seed does not reach cave placement  *** FAIL ***`}`);
+  }
+}
+
+// ── 12. DEEPER cycle 8 — THE STREAMED CAVES GET WALKED. Permanent gate, both seeds.
+//
+//       THE HOLE THIS CLOSES. Legs 8 (cave-walk) and the cave-void gate have only ever run on the
+//       ORIGIN cave. Cycle 8 made caves a world-wide rocky-terrain feature built by the SAME
+//       generator at descriptor inputs the origin cave never exercises — a different gen seed, a
+//       different surface height and local relief, the opposite crevice knee (the `mirror` bit),
+//       different neighbouring terrain for the cover guard. "Same generator, therefore fine" is
+//       precisely the argument UNDERWORLD's 2-seed net made, and widening that net immediately
+//       surfaced two real generator defects. An unwalkable or see-through cave 4km out is exactly
+//       as broken as one at spawn, and far less likely to be noticed.
+//
+//       WHAT RUNS. Per seed, the two NEAREST streamed sites from the deterministic site list are
+//       streamed in through the shipped path (drive into range → `pollSites` → `requestSite` →
+//       sliced build → atomic finalize → `addCaveHole`), then:
+//         · the nearest gets the FULL `cave-walk` machinery — the Euler-tour KCC march over every
+//           chamber, crevice descent AND ascent, corridor sweeps, chamber-floor grid, topology;
+//         · BOTH get the FULL `cave-void` sweep (0 unexcused escapes, and excused must stay 0).
+//       Not a copy of those gates — literally those gates, pointed at a resident key, so they
+//       cannot drift apart from the origin-cave versions.
+//
+//       WHY 1 MARCH AND 2 VOIDS PER SEED, stated with the numbers rather than buried. MEASURED on
+//       this machine, seed 1337, `--sites=2 --march=2`: site 1 took 226s and site 2 took 217s
+//       end-to-end (arrival + full march + void sweep), i.e. ~8 min per seed, ~16 min for both —
+//       the kind of cost that gets a gate commented out. Almost all of it is the march: the void
+//       sweep alone is ~15-25s (61 sample points × 96 rays × 3 material passes). So every site is
+//       void-swept and the NEAREST one is additionally marched, which measures ~5.5 min per seed,
+//       ~11 min added to `verify:chunks` for the pair. The result is 2 marched + 4 void-sampled
+//       streamed caves per run, and `--march=2` widens it to 4 marched when a change warrants the
+//       deeper net.
+//
+//       STRANDS RIDE THE ROW whether green or red: a stranded leg means the capsule wedged and the
+//       tour kept measuring from the wrong place. On unexercised descriptor inputs that is the
+//       leading indicator of a real wedge trap, and it is never papered over.
+{
+  const csRe = /CAVE-STREAMED pass=(\d) seed=(\S+) sites=(\d+) marched=(\d+) voided=(\d+) marchOk=(\d+)\/(\d+) ascentOut=(\d+)\/(\d+) minChambers=(\d+) strands=(\d+) voidPoints=(\d+) voidRays=(\d+) escapes=(\d+) excused=(\d+) culled=(\d+) holes=(\d+) fails=(\d+)/;
+  let csPort = 5570;
+  for (const seed of DET_SEEDS) {
+    const m = runParsed('cave-streamed', seed, csPort, csRe, 1500000);
+    csPort += 2;
+    if (!m) {
+      allPass = false;
+      rows.push(`cave-streamed seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`);
+      continue;
+    }
+    const okS = m[1] === '1';
+    if (!okS) allPass = false;
+    // The vacuous-pass guard, harness side: a green row off zero marched / zero void-sampled caves
+    // would launder "the streamer never delivered" as "the streamed caves are fine".
+    const marched = Number(m[4]), voided = Number(m[5]), vrays = Number(m[13]);
+    if (!(marched >= 1) || !(voided >= 2) || !(vrays >= 3840)) {
+      allPass = false;
+      rows.push(`cave-streamed seed ${seed}: VACUOUS — marched=${m[4]} voided=${m[5]} voidRays=${m[13]} (expected ≥1 / ≥2 / ≥3840)  *** FAIL ***`);
+      continue;
+    }
+    rows.push(`cave-streamed seed ${seed}: ${m[3]} streamed sites — ${m[6]}/${m[7]} marched clean, ascent OUT ${m[8]}/${m[9]}, ≥${m[10]} chambers each, strands ${m[11]}${m[11] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void ${m[12]} pts / ${m[13]} rays → ${m[14]} escapes (excused ${m[15]}, culled ${m[16]}, holes ${m[17]}), ${m[18]} fails  ${okS ? 'OK' : '*** FAIL ***'}`);
+  }
+}
+
 console.log('\n=== verify:chunks (infinite-world determinism + streaming/leak + generation-perf gate) ===');
 for (const row of rows) console.log('  ' + row);
 console.log(allPass

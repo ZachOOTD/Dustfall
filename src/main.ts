@@ -19,6 +19,7 @@ import { caveEntranceSite, spawnCaveEntrance } from './world/caveEntrance.ts';  
 import { caveGenSeed, spawnCave, type CaveFungiCluster } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
 import { getPlayerPos } from './util/playerPos.ts';   // canonical player position (speeder/sled-aware)
 import { createCaveStream, type CaveStream } from './world/caveStream.ts';   // DEEPER cycle 5 (D-4) — cave build budget + resident cap
+import { caveSitesNear } from './world/caveSites.ts';                       // DEEPER cycle 8 — seed-pure rocky-terrain cave placement
 import { createCaveAtmosphere, updateCaveAtmosphere, type CaveAtmosphere } from './world/caveAtmosphere.ts'; // UNDERWORLD cycle 2 — darkness + light model
 import { createChunkManager, updateChunks } from './world/chunkManager.ts';   // Infinite Sands S1
 import { createBiomeSampler } from './world/biomes.ts';
@@ -208,7 +209,15 @@ const caveLootCaches: LootContainer[] = [];              // deep loot caches (ba
 // adopted PINNED. That is the literal "preload the caves on the starting loading screen".
 let caveStream: CaveStream | null = null;
 if (caveSite) {
-  caveStream = createCaveStream(three.scene, physics.world, terrain);
+  // The 4th argument is the shader warm-up hook (DEEPER cycle 8, closing agent — the 1.6s finalize
+  // frame; see `doWarm` in caveStream.ts). `compileAsync`'s three-argument form precompiles an object
+  // that is NOT yet in the scene, taking lights/fog/shadow state from the scene it is about to join —
+  // which is the only way to get a program key that matches, since the key carries the live light
+  // count and that moves with the world.
+  caveStream = createCaveStream(
+    three.scene, physics.world, terrain,
+    (obj) => three.renderer.compileAsync(obj, three.camera, three.scene),
+  );
   const tEnt = performance.now();
   const bore = spawnCaveEntrance(three.scene, physics.world, terrain, caveSite, worldSeed);
   _mark('cave:entrance');
@@ -753,6 +762,37 @@ createFootprintPuffs(three.scene); // AAG — upward dust burst on each footstep
 // content pushes into / splices out of ctx's live lists). Boot placement
 // above is complete, so the sacred boot streams are untouched.
 chunkManager.wireCtx(ctx);
+
+// ── DEEPER cycle 8 — CAVES AS ROCKY-TERRAIN DENSITY. The streamer gets its site source here,
+//    AFTER the chunk manager exists, because a cave site must yield to a POI or hero landmark that
+//    already owns that ground and `describeChunk` is the only pure way to ask. Everything in the
+//    closure is pure (descriptor hashes + closed-form heights), so the site list is a function of
+//    the world seed alone — the same list on every derivation, save or no save.
+//
+//    The origin/egg cave is NOT part of this: it is preloaded and pinned above, its site comes from
+//    `caveEntranceSite`, and CAVE_SITE_ORIGIN_CLEAR_M (1150m — the same seam the streamed POI field
+//    uses) keeps every streamed cave outside the world it owns.
+if (caveStream) {
+  const contentClearNear = (x: number, z: number, r: number): boolean => {
+    const CS = Tuning.CHUNK_SIZE;
+    const c0x = Math.floor((x - r) / CS), c1x = Math.floor((x + r) / CS);
+    const c0z = Math.floor((z - r) / CS), c1z = Math.floor((z + r) / CS);
+    const r2 = r * r;
+    for (let cx = c0x; cx <= c1x; cx++) {
+      for (let cz = c0z; cz <= c1z; cz++) {
+        const d = chunkManager.describeChunk(cx, cz);
+        if (d.poi.present && (d.poi.x - x) ** 2 + (d.poi.z - z) ** 2 < r2) return true;
+        if (d.landmark.present && (d.landmark.x - x) ** 2 + (d.landmark.z - z) ** 2 < r2) return true;
+        if (d.scene.present && (d.scene.x - x) ** 2 + (d.scene.z - z) ** 2 < r2) return true;
+      }
+    }
+    return false;
+  };
+  caveStream.setSiteSource((x, z, radius) =>
+    caveSitesNear(worldSeed, x, z, radius, terrain, biomes, contentClearNear));
+  (window as unknown as { __caveSites: unknown }).__caveSites =
+    (x: number, z: number, r: number) => caveSitesNear(worldSeed, x, z, r, terrain, biomes, contentClearNear);
+}
 createTutorial(ctx);
 wireOverlays(ctx);
 installDebugPanel(ctx, {

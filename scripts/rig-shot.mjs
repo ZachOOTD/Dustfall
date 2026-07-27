@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -2376,7 +2376,21 @@ const SCENARIOS = {
   //    to the surface), plus castDown centreline sweeps (slope/headroom/floor-gaps/cover),
   //    topology asserts from the generator's own graph (tree, egg deepest, depth 25-40m), and the
   //    layout digest. Forces the flag ON. Run: node scripts/rig-shot.mjs --scenario=cave-walk --port=5210
-  'cave-walk': async (page) => {
+  //
+  //    ── DEEPER cycle 8 — REUSED, NOT FORKED ─────────────────────────────────────────────────
+  //    `cave-streamed` walks STREAMED far-field caves with this exact machinery, by passing
+  //    `opts.residentKey`. That is deliberate and it is the whole point: a second copy of a
+  //    ~350-line march would drift from this one the first time either is tuned, and this
+  //    project's driving lesson is that a gate measuring the wrong thing is worse than no gate.
+  //    So the ONLY difference between walking the origin cave and walking a streamed one is
+  //    WHICH probe pair the march reads — everything downstream (the Euler tour, the strand
+  //    accounting, the corridor sweeps, the chamber-floor grid, the topology asserts) is shared
+  //    code that cannot diverge. `opts` is absent for the origin run, so `cave-walk` itself is
+  //    byte-for-byte the gate it has always been.
+  //      opts.residentKey — walk THIS caveStream resident instead of the scene-traversed cave
+  //      opts.noShots     — skip the 11-framing shot set (the streamed legs run 2-4 caves)
+  //      opts.noThrow     — return the result instead of throwing, so the caller can aggregate
+  'cave-walk': async (page, opts = {}) => {
     await page.evaluate(() => {
       const g = window.__game; const ctx = g.ctx;
       try { ctx.sandWorms.list.length = 0; } catch {}
@@ -2386,7 +2400,7 @@ const SCENARIOS = {
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
     });
-    const r = await page.evaluate(async () => {
+    const r = await page.evaluate(async (KEY) => {
       const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER;
       const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
       const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
@@ -2396,11 +2410,24 @@ const SCENARIOS = {
       const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;
       const RAD = ctx.player.body.radius;
 
+      // WHICH CAVE. With no key this is the scene-traversed cave — with the origin cave preloaded
+      // and pinned that is the egg cave, exactly as it has always been. With a key it is that
+      // caveStream RESIDENT, read off the resident record rather than by scene traversal: once
+      // caves stream, several `caveGen` groups can be in the scene at once and a traversal would
+      // silently pick whichever came last. Reading the resident is the only unambiguous handle.
       let cavep = null, borep = null;
-      ctx.three.scene.traverse((o) => {
-        if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
-        if (o.userData && o.userData.caveEntranceProbe) borep = o.userData.caveEntranceProbe;
-      });
+      if (KEY) {
+        const res = (ctx.caveStream ? ctx.caveStream.residents() : []).find((x) => x.key === KEY);
+        if (!res) return { fails: [`no resident cave keyed ${KEY} — it never streamed in`] };
+        cavep = res.cave.probe;
+        borep = res.entrance ? res.entrance.probe : null;
+        if (!borep) return { fails: [`resident ${KEY} carries no crevice entrance — there is no way in to walk`] };
+      } else {
+        ctx.three.scene.traverse((o) => {
+          if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
+          if (o.userData && o.userData.caveEntranceProbe) borep = o.userData.caveEntranceProbe;
+        });
+      }
       if (!cavep || !borep) return { fails: ['missing caveGenProbe / caveEntranceProbe (cave not built?)'] };
       const fails = [];
       const nodes = cavep.nodes;                 // {id,x,y,z,rx,height,kind,parent}
@@ -2728,7 +2755,7 @@ const SCENARIOS = {
         trace, tourStr: tour.join('>'), strands,
         nodesXY: nodes.map((n) => `${n.id}<-${n.parent}:(${n.x.toFixed(1)},${n.z.toFixed(1)},${n.y.toFixed(1)})r${n.rx.toFixed(1)}h${n.height.toFixed(1)}`),
       };
-    });
+    }, opts.residentKey ?? null);
     const pass = r.fails.length === 0;
     console.log(`CAVE-WALK pass=${pass ? 1 : 0} seed=${r.seed ?? '?'} digest=${r.digest ?? '?'} chambers=${r.chambers ?? '?'} edges=${r.edges ?? '?'} reached=${r.reached ?? '?'}/${r.chambers ?? '?'} tour=${r.tour ?? '?'} eggDepth=${r.eggDepth ?? '?'}m eggRx=${r.eggRx ?? '?'} slope=${r.maxSlope ?? '?'}° headroom=${r.minHeadroom ?? '?'} chamHead=${r.chamMinHead ?? '?'} cover=${r.minCover ?? '?'} ascent=${r.exited ? 'OUT' : 'FAIL'} tris=${r.tris ?? '?'} strands=${(r.strands ?? []).length} fails=${r.fails.length}`);
     if (r.fails.length) console.log('[cave-walk] ' + JSON.stringify(r.fails.slice(0, 12)));
@@ -2740,6 +2767,14 @@ const SCENARIOS = {
     console.log(`[cave-walk] kinds=[${r.kinds ?? '?'}]`);
     if (r.nodesXY) console.log(`[cave-walk] nodes=[${r.nodesXY.join(' ')}] tour=${r.tourStr}`);
     if (r.trace) console.log(`[cave-walk] trace=[${r.trace.join(' | ')}]`);
+
+    // The streamed legs stop here: the mouth-area mesh scan below and the 11-framing shot set are
+    // origin-cave diagnostics, and re-shooting them per streamed cave would multiply the gate's
+    // wall clock for pictures nobody reads. The MEASUREMENTS above are identical either way.
+    if (opts.noShots) {
+      if (!pass && !opts.noThrow) throw new Error('cave-walk GATE FAILED');
+      return r;
+    }
 
     // UNDERWORLD cycle 2 carry-item — hunt the "floating red cube" seen at the mouth in pass 1.
     // Position-based scan: ANY mesh (regardless of material) whose world pos sits within 22m (XZ) of
@@ -2766,7 +2801,8 @@ const SCENARIOS = {
     console.log(`[cave-walk] MOUTH-AREA MESH SCAN: ${JSON.stringify(redScan)}`);
 
     await caveShotSet(page, 'cave-walk');
-    if (!pass) throw new Error('cave-walk GATE FAILED');
+    if (!pass && !opts.noThrow) throw new Error('cave-walk GATE FAILED');
+    return r;
   },
 
   // ── cave-look (DEEPER cycle 3) — the FAST visual-iteration scenario. Exactly the `cave-walk`
@@ -3632,7 +3668,12 @@ const SCENARIOS = {
   //   is a genuine HOLE (a carve with no plug). The split localises the defect for the remesh.
   //
   //   Run: npm run rig -- --scenario=cave-void --port=5230 [--seed=1337]
-  'cave-void': async (page) => {
+  //
+  //   DEEPER cycle 8 — REUSED, NOT FORKED (same reasoning as `cave-walk`): `cave-streamed` void-
+  //   samples STREAMED caves through this identical sweep by passing `opts.residentKey`. Only the
+  //   mesh set changes; the Fibonacci sphere, the declared-opening allowance, the DoubleSide /
+  //   FrontSide discriminators, the vacuous-pass guard and the tally are shared code.
+  'cave-void': async (page, opts = {}) => {
     await page.evaluate(() => {
       const g = window.__game; const ctx = g.ctx;
       try { ctx.sandWorms.list.length = 0; } catch {}
@@ -3643,18 +3684,31 @@ const SCENARIOS = {
       if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
     });
 
-    const r = await page.evaluate((PUNCTURE) => {
+    const r = await page.evaluate((ARGS) => {
+      const PUNCTURE = ARGS.puncture, KEY = ARGS.residentKey;
       const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
       const FAR = 400;              // far past the cave AABB — no hit inside this = out of the world
       const K = 96;                 // rays per sample point (Fibonacci sphere)
       const EYE = 1.68;             // player eye height above the floor
 
+      // WHICH CAVE — see the note on `cave-walk`. Once caves stream, scene traversal picks whichever
+      // `caveGen` group came last; a resident key is the only unambiguous handle. Taking the mesh set
+      // from the resident record also keeps the sweep HONEST for a streamed cave: it is sampled
+      // against its OWN shell alone, so a ray that leaves it cannot be silently stopped by some other
+      // cave's geometry kilometres away.
       let caveGroup = null, boreGroup = null, cavep = null;
-      ctx.three.scene.traverse((o) => {
-        if (o.name === 'caveGen') caveGroup = o;
-        if (o.name === 'caveEntrance') boreGroup = o;
-        if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
-      });
+      if (KEY) {
+        const res = (ctx.caveStream ? ctx.caveStream.residents() : []).find((x) => x.key === KEY);
+        if (!res) return { fatal: `no resident cave keyed ${KEY} — it never streamed in` };
+        caveGroup = res.cave.group; cavep = res.cave.probe;
+        boreGroup = res.entrance ? res.entrance.group : null;
+      } else {
+        ctx.three.scene.traverse((o) => {
+          if (o.name === 'caveGen') caveGroup = o;
+          if (o.name === 'caveEntrance') boreGroup = o;
+          if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe;
+        });
+      }
       if (!caveGroup || !cavep) return { fatal: 'no caveGen group / caveGenProbe (cave not built — flag off?)' };
 
       // The cave mesh set = the generated cave + the entrance bore (so entrance-hall rays can
@@ -3826,9 +3880,13 @@ const SCENARIOS = {
         openings: openings.map((o) => ({ by: o.by, c: [+o.c.x.toFixed(1), +o.c.y.toFixed(1), +o.c.z.toFixed(1)], r: +o.r.toFixed(1) })),
         worst: rows.slice(0, 14),
       };
-    }, Number(argv.puncture || 0));
+    }, { puncture: Number(argv.puncture || 0), residentKey: opts.residentKey ?? null });
 
-    if (r.fatal) { console.log(`CAVE-VOID FAIL ${r.fatal}`); throw new Error('cave-void FAILED'); }
+    if (r.fatal) {
+      console.log(`CAVE-VOID FAIL ${r.fatal}`);
+      if (opts.noThrow) return r;
+      throw new Error('cave-void FAILED');
+    }
     const pass = r.escapes === 0;
     console.log(`CAVE-VOID pass=${pass ? 1 : 0} seed=${r.seed} digest=${r.digest} points=${r.points} rays=${r.totalRays} escapes=${r.escapes} rate=${r.escapeRate}% leakyPoints=${r.leakyPoints}/${r.points} culled=${r.culled} holes=${r.holes} excused=${r.excused} chamberEsc=${r.chamberEscapes} corridorEsc=${r.corridorEscapes} meshes=${r.meshes} frontEsc=${r.frontEscapes} frontRate=${r.frontRate}%`);
     console.log(`[cave-void] SPLIT chambers ${r.chamberEscapes}/${r.chamberRays} (${(100*r.chamberEscapes/r.chamberRays).toFixed(1)}%) back, ${r.chamberFront}/${r.chamberRays} (${(100*r.chamberFront/r.chamberRays).toFixed(1)}%) front, holes ${r.chamberHoles} | corridors ${r.corridorEscapes}/${r.corridorRays} (${(100*r.corridorEscapes/r.corridorRays).toFixed(1)}%) back, ${r.corridorFront}/${r.corridorRays} (${(100*r.corridorFront/r.corridorRays).toFixed(1)}%) front, holes ${r.corridorHoles}`);
@@ -3843,7 +3901,9 @@ const SCENARIOS = {
     //    with the scene background flat MAGENTA and fog off, so every escaping pixel is unmistakable.
     //    NOTE (declared in the report): the cave ships near-black, so these shots ADD a fill light
     //    and raise exposure purely for legibility. The geometry/culling is untouched. ──
-    const shots = r.worst.filter((w) => w.dir).slice(0, 3);
+    // (With `opts.noShots` — the streamed legs — the numbers above are the whole verdict; on a RED
+    //  streamed sweep, re-run that one site on its own to get the pictures.)
+    const shots = opts.noShots ? [] : r.worst.filter((w) => w.dir).slice(0, 3);
     for (let i = 0; i < shots.length; i++) {
       const w = shots[i];
       for (const magenta of [false, true]) {
@@ -3882,7 +3942,8 @@ const SCENARIOS = {
       }
     }
 
-    if (!pass) throw new Error('cave-void GATE FAILED');
+    if (!pass && !opts.noThrow) throw new Error('cave-void GATE FAILED');
+    return r;
   },
 
   'drop-test': async (page) => {
@@ -4932,6 +4993,625 @@ const SCENARIOS = {
     console.log(`CAVE-PRELOAD pass=${pass ? 1 : 0} flag=${r.on ? 1 : 0} boot=${r.bootTotal}ms preload=${r.total}ms(ent=${r.ent}/body=${r.body}) tris=${r.tris} digest=${r.digest} fails=${r.fails.length}`);
     console.log(`[cave-preload] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r.fails)}`);
     if (!pass) throw new Error('cave-preload GATE FAILED');
+  },
+
+  // ── DEEPER cycle 8 — CAVES AS ROCKY-TERRAIN DENSITY. The placement + hole-lifecycle gate.
+  //
+  //   Four legs, one boot:
+  //
+  //   A. PLACEMENT PURITY + RULES. The site list over a 12km box is derived TWICE and digested:
+  //      byte-stable, and (across the two gate seeds, compared by verify-chunks) different worlds
+  //      must produce different lists. Every site is then audited against the rules that make the
+  //      cycle safe rather than merely present: rocky biome, outside the origin-protection radius,
+  //      never inside a terrain-carving regional biome, and — the one that matters most —
+  //      MINIMUM SPACING, asserted against the cave's MEASURED horizontal extent rather than a
+  //      constant someone once believed. Two cave bodies that interpenetrate is not a taste bug.
+  //
+  //   B. REALIZED DENSITY, measured not asserted. Counts sites per km² of world and per km² of
+  //      rocky ground, and converts it to the number Zach actually asked about: encounters per
+  //      hour of travel. The rejection ladder (biome / relief / content conflict) eats into the
+  //      nominal CAVE_SITE_CHANCE, so the honest density is the counted one.
+  //
+  //   C. THE HOLE MECHANISM, IN ISOLATION — the leg with the sharpest teeth. Before any cave
+  //      exists, a 200-point grid is cast down onto bare terrain and every hit recorded. Then a
+  //      hole is opened through the REAL `terrain.addCaveHole` path (band-decomposed heightfields)
+  //      and the grid re-cast: points inside the hole must MISS, and every point outside it must
+  //      hit at the IDENTICAL height — which is also what proves the sub-heightfield row/column
+  //      convention is right, because a transposed height matrix would move every sample. Then the
+  //      hole is closed and the grid cast a third time: max |Δ| against the ORIGINAL must be
+  //      exactly 0. That is teardown symmetry as a number, not as a claim (rule 9).
+  //
+  //   D. THE LIVE LIFECYCLE. A real descriptor site is streamed in (crevice tor + interior +
+  //      carved hole), then released by walking out of range with its terrain tile still loaded,
+  //      then streamed in AGAIN. Asserts: the unit arrives whole; the hole exists exactly while
+  //      the cave does; the teardown returns rigid-body count, water-source count, pool count and
+  //      pool-material count to their pre-stream baselines (the leak canaries); and the re-entered
+  //      cave's digest is BIT-IDENTICAL to the first visit's — a streamed cave is descriptor-
+  //      derived, so coming back must not produce a different cave.
+  //
+  //   Run: npm run rig -- --scenario=cave-density --seed=1337 --port=5236
+  'cave-density': async (page) => {
+    const r = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const fails = [];
+      const T = g.Tuning;
+      if (!ctx.caveStream) { fails.push('ctx.caveStream is null — the cave scheduler did not boot'); return { fails, skipped: true }; }
+      ctx.sandWorms.list.length = 0;
+      ctx.three.renderer.setSize(320, 240, false);
+
+      const fnv = (vals) => {
+        let h = 0x811c9dc5 >>> 0;
+        for (const v of vals) h = Math.imul(h ^ (v & 0xffffffff), 0x01000193) >>> 0;
+        return (h >>> 0).toString(16).padStart(8, '0');
+      };
+
+      // ── A. placement purity + rules ─────────────────────────────────────────────────────
+      const BOX = 6000;                              // ±6km → a 12km box
+      const derive = () => g.caveSites(0, 0, BOX * Math.SQRT2)
+        .filter((s) => Math.abs(s.x) <= BOX && Math.abs(s.z) <= BOX)
+        .sort((a, b) => (a.gx - b.gx) || (a.gz - b.gz));
+      const listA = derive();
+      const listB = derive();
+      const digestOf = (l) => fnv(l.flatMap((s) => [s.gx, s.gz, Math.round(s.x * 100), Math.round(s.z * 100), s.seed]));
+      const siteDigest = digestOf(listA);
+      if (siteDigest !== digestOf(listB)) fails.push('site list is NOT stable across two derivations — placement is not pure');
+      if (listA.length < 40) fails.push(`only ${listA.length} sites in a 12km box — too few to audit (vacuous-pass guard)`);
+
+      const clr = T.CAVE_SITE_ORIGIN_CLEAR_M;
+      let offBiome = 0, insideOrigin = 0, inRegion = 0;
+      for (const s of listA) {
+        if (ctx.biomes.biomeAt(s.x, s.z) !== 'rocky') offBiome++;
+        if (s.x * s.x + s.z * s.z <= clr * clr) insideOrigin++;
+        if (ctx.biomes.ergAt(s.x, s.z) > 0 || ctx.biomes.wreckYardAt(s.x, s.z) > 0
+          || ctx.biomes.boneFieldAt(s.x, s.z) > 0 || ctx.biomes.sarlaccPitAt(s.x, s.z) > 0) inRegion++;
+      }
+      if (offBiome) fails.push(`${offBiome} sites are NOT on rocky biome`);
+      if (insideOrigin) fails.push(`${insideOrigin} sites inside the ${clr}m origin protection — the egg cave is not unique`);
+      if (inRegion) fails.push(`${inRegion} sites inside a terrain-carving regional biome (erg / yard / bone / pit)`);
+
+      // ── A2. THE TILE-SEAM CHECK (DEEPER cycle 8, closing agent) ──────────────────────────
+      //   A `CaveHoleBlock` names ONE terrain tile and `caveEntranceHoleBlock` clamps its cell
+      //   range to that tile. A site on a tile seam therefore gets a hole truncated or shifted by
+      //   a cell (4.17m), leaving the sheet SOLID over part of the descent slot — a cave whose tor
+      //   you can see and cannot enter. Nothing else reports it: the tor builds, the interior
+      //   builds, the hole registry lists a hole, and every other gate stays green. It hits 1.56%
+      //   of snapped positions (~1 cave in 64), which is exactly the rate that survives a small
+      //   gate net and then shows up in play.
+      //
+      //   METHOD: the SHIPPED block (`g.caveHoleBlock` → `caveEntranceHoleBlock`) is compared against
+      //   the block it WOULD have produced with no clamp, derived here from the site coordinates.
+      //   The re-derivation is deliberate and is the only form of this check with teeth: the defect
+      //   IS the shipped function quietly clamping, so asking that same function what "correct" looks
+      //   like could only ever agree with itself. Any disagreement — a lost cell (TRUNC) or a whole
+      //   block slid sideways (SHIFT, the j0=0 case, which moves the mouth a cell off the tor) — is
+      //   the clamp firing.
+      //
+      //   NOT a defect, and this cost a red gate to learn: a hole that merely TOUCHES the tile's
+      //   first or last cell row (`i[189,191]`, `j[190,191]`) is perfectly correct — it is the full
+      //   3×2 block, unclamped, ending exactly at the seam, and the band decomposition tiles around
+      //   it with no gap. The first version of this check flagged those six sites as failures. A
+      //   gate that fails on healthy geometry is the same class of error as one that passes on
+      //   broken geometry (the `open-end`/leviathan-front-door precedent), so the criterion is
+      //   EQUALITY WITH THE UNCLAMPED IDEAL, never proximity to an edge.
+      //
+      //   `caveSites.ts` rejects clamping sites by construction, so this must read ZERO — it is the
+      //   proof the rejection is live, over the whole 12km site list on both gate seeds.
+      const HOLE_CELLS_X = T.CREVICE_HOLE_CELLS_X, HOLE_CELLS_Z = T.CREVICE_HOLE_CELLS_Z;
+      const TSIZE = T.TERRAIN_CHUNK_SIZE, TCELLS = T.TERRAIN_CHUNK_CELLS;
+      let seamSites = 0; const seamAt = [];
+      for (const s of listA) {
+        const hb2 = g.caveHoleBlock(s.x, s.z);
+        const tx = Math.round(s.x / TSIZE), tz = Math.round(s.z / TSIZE);
+        const i0 = Math.round(((s.x - tx * TSIZE) / TSIZE + 0.5) * TCELLS);
+        const j0 = Math.round(((s.z - tz * TSIZE) / TSIZE + 0.5) * TCELLS);
+        const wIMin = i0 - 1, wIMax = i0 - 1 + HOLE_CELLS_X - 1;
+        const wJMin = j0 - Math.floor(HOLE_CELLS_Z / 2), wJMax = wJMin + HOLE_CELLS_Z - 1;
+        if (hb2.iMin !== wIMin || hb2.iMax !== wIMax || hb2.jMin !== wJMin || hb2.jMax !== wJMax) {
+          seamSites++;
+          const wI = hb2.iMax - hb2.iMin + 1, wJ = hb2.jMax - hb2.jMin + 1;
+          const kind = (wI !== HOLE_CELLS_X || wJ !== HOLE_CELLS_Z) ? 'TRUNC' : 'SHIFT';
+          if (seamAt.length < 6) seamAt.push(`${s.key}@(${s.x.toFixed(0)},${s.z.toFixed(0)})got_i[${hb2.iMin},${hb2.iMax}]j[${hb2.jMin},${hb2.jMax}]_want_i[${wIMin},${wIMax}]j[${wJMin},${wJMax}]_${kind}`);
+        }
+      }
+      if (seamSites) {
+        fails.push(`${seamSites} sites sit on a terrain-tile seam — the shipped hole block differs from the unclamped ideal, so the carved hole is truncated/shifted and the descent slot stays floored: [${seamAt.join(' ')}]`);
+      }
+
+      // Nearest-neighbour spacing across the whole list (O(n²) on ~100 sites — fine).
+      let minSpacing = Infinity, minPair = '-';
+      for (let i = 0; i < listA.length; i++) {
+        for (let j = i + 1; j < listA.length; j++) {
+          const d = Math.hypot(listA[i].x - listA[j].x, listA[i].z - listA[j].z);
+          if (d < minSpacing) { minSpacing = d; minPair = `${listA[i].key}|${listA[j].key}`; }
+        }
+      }
+      const nominalMin = T.CAVE_SITE_CELL_M - 2 * T.CAVE_SITE_JITTER_M;
+      if (minSpacing < nominalMin - 0.5) {
+        fails.push(`min site spacing ${minSpacing.toFixed(1)}m < the ${nominalMin}m the grid guarantees (${minPair})`);
+      }
+
+      // ── B. realized density ─────────────────────────────────────────────────────────────
+      // Rocky fraction of the SAME box, sampled on a coarse grid (the density denominator).
+      let rockySamples = 0, totalSamples = 0;
+      for (let x = -BOX; x <= BOX; x += 120) {
+        for (let z = -BOX; z <= BOX; z += 120) {
+          totalSamples++;
+          if (ctx.biomes.biomeAt(x, z) === 'rocky') rockySamples++;
+        }
+      }
+      const rockyFrac = rockySamples / totalSamples;
+      // Exclude the origin-protected disc from the area — no site can be there by design.
+      const areaKm2 = ((2 * BOX) ** 2 - Math.PI * clr * clr) / 1e6;
+      const perKm2 = listA.length / areaKm2;
+      const perKm2Rocky = perKm2 / Math.max(1e-6, rockyFrac);
+      // Zach's own unit: encounters per hour of travel (13km at WALK_SPEED, 150m sighting corridor).
+      const encPerHour = 13000 * 2 * 150 * (perKm2 / 1e6);
+
+      // ── C. the hole mechanism, in isolation ─────────────────────────────────────────────
+      // A patch of loaded terrain far from the origin cave and from any streamed site.
+      const HX = -520, HZ = 340;
+      ctx.player.body.body.setTranslation({ x: HX, y: ctx.terrain.heightAt(HX, HZ) + 2, z: HZ }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      await frames(30);
+      const holeSitesNear = g.caveSites(HX, HZ, 400).length;
+      const block = (() => {
+        // The same grid-aligned block the real path uses — derived through the shipped helper by
+        // asking the terrain for a hole at exactly this site.
+        const CELL = T.TERRAIN_CHUNK_SIZE / T.TERRAIN_CHUNK_CELLS;
+        return { x: Math.round(HX / CELL) * CELL, z: Math.round(HZ / CELL) * CELL };
+      })();
+      const samples = [];
+      for (let i = -7; i <= 7; i++) {
+        for (let j = -7; j <= 7; j++) samples.push({ x: block.x + i * 2.6, z: block.z + j * 2.6 });
+      }
+      const castDown = (x, z) => {
+        const ray = new g.RAPIER.Ray({ x, y: 400, z }, { x: 0, y: -1, z: 0 });
+        const hit = ctx.physics.world.castRay(ray, 800, true);
+        return hit ? 400 - hit.timeOfImpact : null;
+      };
+      const before = samples.map((s) => castDown(s.x, s.z));
+      const nullsBefore = before.filter((v) => v === null).length;
+      if (nullsBefore) fails.push(`${nullsBefore}/${samples.length} probe rays MISSED bare terrain before any hole — the probe is broken, not the terrain`);
+      // The band-decomposition indexing proof: the collider surface must agree with heightAt.
+      let worstVsHeight = 0;
+      for (let i = 0; i < samples.length; i++) {
+        if (before[i] === null) continue;
+        const d = Math.abs(before[i] - ctx.terrain.heightAt(samples[i].x, samples[i].z));
+        if (d > worstVsHeight) worstVsHeight = d;
+      }
+      if (worstVsHeight > 0.35) fails.push(`terrain collider disagrees with heightAt by ${worstVsHeight.toFixed(2)}m before any hole`);
+
+      const hb = g.caveHoleBlock(block.x, block.z);
+      ctx.terrain.addCaveHole('gate:hole', hb);
+      await frames(4);                                  // step physics so the QueryPipeline sees it
+      const during = samples.map((s) => castDown(s.x, s.z));
+      let insideHit = 0, outsideMoved = 0, outsideMissed = 0, worstOutside = 0, insideMissed = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i];
+        const inside = s.x > hb.xMin + 0.6 && s.x < hb.xMax - 0.6 && s.z > hb.zMin + 0.6 && s.z < hb.zMax - 0.6;
+        if (inside) {
+          if (during[i] !== null && Math.abs(during[i] - before[i]) < 0.05) insideHit++;
+          else insideMissed++;
+        } else if (s.x < hb.xMin - 1.5 || s.x > hb.xMax + 1.5 || s.z < hb.zMin - 1.5 || s.z > hb.zMax + 1.5) {
+          if (during[i] === null) outsideMissed++;
+          else {
+            const d = Math.abs(during[i] - before[i]);
+            if (d > worstOutside) worstOutside = d;
+            if (d > 1e-4) outsideMoved++;
+          }
+        }
+      }
+      if (insideMissed === 0) fails.push('the carved hole let NO ray through — addCaveHole did not open the sheet (vacuous)');
+      if (insideHit) fails.push(`${insideHit} rays still hit the sheet INSIDE the carved hole — the hole is not a real opening`);
+      if (outsideMissed) fails.push(`${outsideMissed} rays fell through OUTSIDE the hole — the band decomposition left a gap in the sheet`);
+      if (outsideMoved) fails.push(`${outsideMoved} sample heights MOVED outside the hole (worst ${worstOutside.toFixed(4)}m) — the decomposed sheet is not the same surface`);
+
+      ctx.terrain.removeCaveHole('gate:hole');
+      await frames(4);
+      const after = samples.map((s) => castDown(s.x, s.z));
+      let restoreMax = 0, restoreMissed = 0;
+      for (let i = 0; i < samples.length; i++) {
+        if (after[i] === null) { restoreMissed++; continue; }
+        const d = Math.abs(after[i] - before[i]);
+        if (d > restoreMax) restoreMax = d;
+      }
+      if (restoreMissed) fails.push(`${restoreMissed} rays still fall through after removeCaveHole — the sheet was NOT restored`);
+      if (restoreMax > 0) fails.push(`terrain surface differs by ${restoreMax.toFixed(4)}m after a hole open/close cycle — restore is not exact`);
+      if (ctx.terrain.caveHoleKeys().length) fails.push(`hole registry not empty after removal: ${ctx.terrain.caveHoleKeys().join(',')}`);
+
+      // ── D. the live lifecycle ───────────────────────────────────────────────────────────
+      const target = listA.find((s) => Math.hypot(s.x, s.z) < 4000) || listA[0];
+      const APPROACH = 140;
+      const px = target.x - APPROACH, pz = target.z;
+      // THE AUTO DRIVER IS OFF FOR THIS LEG. The leak canaries below compare counts at the SAME
+      // player position with and without the cave; letting the density poll stream a DIFFERENT
+      // nearby cave in between would make the comparison meaningless (and the first run of this
+      // gate duly reported a "leak" that was the chunk ring breathing, not the cave).
+      ctx.caveStream.setSiteSource(null);
+      const settleAt = async (sx, sz) => {
+        ctx.player.body.body.setTranslation({ x: sx, y: ctx.terrain.heightAt(sx, sz) + 2, z: sz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        // The terrain ring builds ONE sliced tile at a time (~18 frames each) — waiting a fixed 90
+        // frames was not enough and the request was refused for a tile that simply hadn't arrived.
+        for (let f = 0; f < 1200; f++) {
+          await raf();
+          if (f > 60 && ctx.terrain.isTileLoadedAt(target.x, target.z) && g.chunkStats().activeKeys.length) {
+            if (f > 200) break;
+          }
+        }
+      };
+      await settleAt(px, pz);
+      if (!ctx.terrain.isTileLoadedAt(target.x, target.z)) fails.push('the site tile never loaded at the approach position');
+
+      const baseBodies = ctx.physics.world.bodies.len();
+      const baseWater = ctx.waterSources.list.length;
+      const basePools = g.chunkStats().totalPools;
+      const baseMats = g.chunkStats().totalPoolMaterials;
+      g.resetCavePerf();
+      const progKeys = () => (ctx.three.renderer.info.programs ?? []).map((p) => String(p.cacheKey ?? ''));
+      const keysBefore = progKeys();
+      const progBefore = keysBefore.length;
+
+      const queued = g.requestCaveSite(target);
+      if (!queued) fails.push(`requestCaveSite refused ${target.key} — its terrain tile was not loaded at ${APPROACH}m`);
+      // THE WORST FRAME IS ATTRIBUTED TO A NAMED STAGE, not left anonymous (DEEPER cycle 8, closing
+      // agent). A bare "worst frame 1592ms" is unactionable and — worse — invites the assumption
+      // that it is the one stage already reported (the tor), which it was not. The scheduler's
+      // pending stage is sampled BEFORE the frame that pays for it, so the number and the stage that
+      // produced it are the same event. `heavyFrames` keeps every frame over 40ms in order, which is
+      // what turns "something hitched" into "these three stages, in this sequence".
+      // Only frame 0 is excluded — it carries this probe's own `resetCavePerf` + `requestCaveSite`.
+      // It used to be `f > 2`, which quietly excluded the CREVICE TOR: the request lands on f=0, the
+      // scheduler picks the queue item up on f=1 and runs the ~155ms unsliced tor on f=2, so the one
+      // stage the module documents as unsliced was the one stage this number could not see. `tor=…ms`
+      // reported it separately, so nothing was hidden — but a field called `worst frame` that skips
+      // the worst frame is the kind of half-true number this project has been bitten by, and with the
+      // stage attribution below there is no reason to keep the hole.
+      let builtFrames = 0, worstFrameMs = 0, worstFrameStage = '-', last = performance.now();
+      const heavyFrames = [];
+      let progsOnVisibleFrame = 0;
+      for (let f = 0; f < 9000; f++) {
+        const p0 = ctx.caveStream.pending();
+        const stg = p0 ? p0.stage : (ctx.caveStream.queued() ? 'queued' : 'idle');
+        const nProg0 = ctx.three.renderer.info.programs?.length ?? 0;
+        await raf();
+        const now = performance.now(); const gap = now - last; last = now;
+        if (f > 0) {
+          if (gap > worstFrameMs) { worstFrameMs = gap; worstFrameStage = stg; }
+          if (gap > 40 && heavyFrames.length < 24) heavyFrames.push(`${stg}:${gap.toFixed(0)}`);
+        }
+        builtFrames++;
+        const st = g.cavePerf();
+        if (st.residents.some((x) => x.key === target.key)) {
+          // THE frame that put the cave in the scene. Whatever it compiled, it compiled while the
+          // player was looking at it — that is the 1.6s stall, and it must be zero.
+          progsOnVisibleFrame = (ctx.three.renderer.info.programs?.length ?? 0) - nProg0;
+          break;
+        }
+      }
+      const keysAfter = progKeys();
+      const progAfter = keysAfter.length;
+      const beforeSet = new Set(keysBefore);
+      const newPrograms = keysAfter.filter((k) => !beforeSet.has(k)).map((k) => k.slice(0, 260));
+      const built = g.cavePerf();
+      const res1 = built.residents.find((x) => x.key === target.key);
+      if (!res1) fails.push(`the streamed cave ${target.key} never built in ${builtFrames} frames`);
+      const firstDigest = res1 ? res1.digest : '-';
+      if (res1 && !(res1.tris > 0)) fails.push('the streamed cave has 0 visual triangles');
+      if (res1 && !(res1.colliderTris > 0)) fails.push('the streamed cave has 0 COLLIDER triangles');
+      const holeOpen = ctx.terrain.caveHoleKeys().includes(target.key);
+      if (!holeOpen) fails.push(`no carved terrain hole for the resident cave ${target.key} — the sheet never opened`);
+      const siteRec = built.sites.find((x) => x.key === target.key);
+      if (siteRec && !siteRec.hasEntrance) fails.push('the streamed resident carries no crevice entrance');
+      const bodiesWith = ctx.physics.world.bodies.len();
+
+      // Release it by walking out of range while its TERRAIN TILE is still loaded.
+      const ox = target.x - (T.CAVE_STREAM_DROP_M + 80), oz = target.z;
+      ctx.player.body.body.setTranslation({ x: ox, y: ctx.terrain.heightAt(ox, oz) + 2, z: oz }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      let released = false;
+      for (let f = 0; f < 900; f++) {
+        await raf();
+        if (!g.cavePerf().residents.some((x) => x.key === target.key)) { released = true; break; }
+      }
+      if (!released) fails.push('the streamed cave was never released after moving out of range');
+      const tileStillLoaded = ctx.terrain.isTileLoadedAt(target.x, target.z);
+      if (!tileStillLoaded) fails.push('the site tile unloaded too — the teardown test did not exercise a hole close on a LIVE tile');
+      if (ctx.terrain.caveHoleKeys().includes(target.key)) fails.push('the carved hole SURVIVED the cave that owned it — an opening onto nothing');
+      // Back to the EXACT approach position (still no auto driver) so the canaries compare like
+      // with like: the same chunk ring, the same tiles, the only difference being the cave.
+      await settleAt(px, pz);
+      const endBodies = ctx.physics.world.bodies.len();
+      const endWater = ctx.waterSources.list.length;
+      const endPools = g.chunkStats().totalPools;
+      const endMats = g.chunkStats().totalPoolMaterials;
+      if (endBodies !== baseBodies) fails.push(`rigid-body LEAK: ${baseBodies} → ${bodiesWith} → ${endBodies} across one stream in/out`);
+      if (endWater !== baseWater) fails.push(`water-source LEAK: ${baseWater} → ${endWater} (a released cave's pools outlived it)`);
+      if (endPools !== basePools) fails.push(`pool-registry LEAK: ${basePools} → ${endPools}`);
+      if (endMats !== baseMats) fails.push(`pool-MATERIAL LEAK: ${baseMats} → ${endMats}`);
+
+      // Re-entry: the same site must re-derive the SAME cave.
+      if (!g.requestCaveSite(target)) fails.push('requestCaveSite refused the re-entry request');
+      let secondDigest = '-';
+      for (let f = 0; f < 9000; f++) {
+        await raf();
+        const rr = g.cavePerf().residents.find((x) => x.key === target.key);
+        if (rr) { secondDigest = rr.digest; break; }
+      }
+      if (secondDigest === '-') fails.push('the released cave never re-streamed on return');
+      else if (secondDigest !== firstDigest) {
+        fails.push(`RE-ENTRY digest ${secondDigest} != first visit ${firstDigest} — a streamed cave is not descriptor-stable`);
+      }
+      if (!ctx.terrain.caveHoleKeys().includes(target.key)) fails.push('the hole did not reopen on re-entry');
+
+      const end = g.cavePerf();
+      // ── THE SHADER WARM-UP HAS TEETH (DEEPER cycle 8, closing agent). The 1.6s finalize frame was
+      //    a COLD PROGRAM LINK inside the frame that made the cave visible, not anything in the
+      //    build — `renderer.info.programs` grew by 2 across that one frame. Two numbers guard it,
+      //    and they guard different failures: `warms` proves the precompile stage RAN AT ALL (a
+      //    silently-skipped warm would leave every other number looking healthy on a machine whose
+      //    programs happened to be cached), and `progsOnVisibleFrame` proves it WORKED.
+      //
+      //    ⚠ THE MEASUREMENT THAT LOOKS RIGHT AND IS NOT, because the first version of this check was
+      //    it: comparing the program count across the WHOLE build. That count legitimately grows —
+      //    by exactly the 2 programs the warm-up compiles — so the check failed on the fixed build.
+      //    A gate that reds on healthy work is the same class of error as one that greens on broken
+      //    work (the `open-end`/leviathan-front-door precedent). What actually matters is narrower:
+      //    nothing may be compiled on THE frame that puts the cave in the scene, which is the frame
+      //    the player pays for. Compiles on the warm-up frames are the fix doing its job.
+      if (!end.stream.warms) fails.push('the shader warm-up never ran for a streamed cave build — the precompile stage is not wired');
+      if (progsOnVisibleFrame > 0) {
+        fails.push(`${progsOnVisibleFrame} shader program(s) compiled ON THE FRAME the cave became visible `
+          + `— the warm-up missed them (build total ${progBefore}→${progAfter}): [${newPrograms.map((k) => k.split(',').pop()).join(' ')}]`);
+      }
+      if (end.stream.warmTimeouts) {
+        fails.push(`${end.stream.warmTimeouts} warm-up(s) hit CAVE_WARM_MAX_FRAMES and finalized anyway — the cold-compile stall is back`);
+      }
+      // Measured cave extent vs the spacing the grid guarantees (leg A's real teeth).
+      let extent = 0;
+      for (const rr of ctx.caveStream.residents()) {
+        const b = rr.box;
+        extent = Math.max(extent, Math.hypot(b.max.x - b.min.x, b.max.z - b.min.z));
+      }
+      if (minSpacing < extent) {
+        fails.push(`min site spacing ${minSpacing.toFixed(0)}m < the MEASURED cave extent ${extent.toFixed(0)}m — two cave bodies can interpenetrate`);
+      }
+      return {
+        fails, skipped: false, siteDigest, sites: listA.length,
+        minSpacing: +minSpacing.toFixed(1), nominalMin, extent: +extent.toFixed(1),
+        rockyFrac: +rockyFrac.toFixed(3), perKm2: +perKm2.toFixed(3), perKm2Rocky: +perKm2Rocky.toFixed(2),
+        encPerHour: +encPerHour.toFixed(2),
+        seamSites, seamAt,
+        worstVsHeight: +worstVsHeight.toFixed(3), restoreMax: +restoreMax.toFixed(4),
+        insideMissed, outsideMissed, outsideMoved, holeSitesNear,
+        firstDigest, secondDigest, released: released ? 1 : 0, tileStillLoaded: tileStillLoaded ? 1 : 0,
+        baseBodies, bodiesWith, endBodies,
+        torMs: +end.stream.maxTorMs.toFixed(1), finMs: +end.stream.maxFinalizeMs.toFixed(1),
+        teardownMs: +end.stream.maxTeardownMs.toFixed(1),
+        holeRebuildMs: +end.holeStats.maxRebuildMs.toFixed(2), holeRebuilds: end.holeStats.rebuilds,
+        worstFrameMs: +worstFrameMs.toFixed(1), worstFrameStage, heavyFrames, builtFrames,
+        progBefore, progAfter, newPrograms, progsOnVisibleFrame,
+        warms: end.stream.warms, warmMs: +end.stream.maxWarmMs.toFixed(1),
+        warmFrames: end.stream.maxWarmFrames, warmTimeouts: end.stream.warmTimeouts,
+        maxSliceMs: +end.stream.maxSliceMs.toFixed(1), maxAtomicMs: +end.stream.maxAtomicMs.toFixed(1),
+        worstAtomicStage: end.stream.worstAtomicStage, maxStepMs: +end.stream.maxStepMs.toFixed(1),
+      };
+    });
+    if (r.skipped) { console.log(`CAVE-DENSITY pass=0 SKIPPED ${JSON.stringify(r.fails)}`); throw new Error('cave-density GATE FAILED'); }
+    const pass = r.fails.length === 0;
+    console.log(`CAVE-DENSITY pass=${pass ? 1 : 0} digest=${r.siteDigest} sites=${r.sites} spacing=${r.minSpacing}m/${r.nominalMin}m extent=${r.extent}m rocky=${r.rockyFrac} perKm2=${r.perKm2} perKm2Rocky=${r.perKm2Rocky} encPerHour=${r.encPerHour} restoreMax=${r.restoreMax}m reentry=${r.firstDigest === r.secondDigest ? 1 : 0} bodies=${r.baseBodies}->${r.bodiesWith}->${r.endBodies} tor=${r.torMs}ms fin=${r.finMs}ms teardown=${r.teardownMs}ms holeRebuild=${r.holeRebuildMs}ms slice=${r.maxSliceMs}ms atomic=${r.maxAtomicMs}ms(${r.worstAtomicStage}) warm=${r.warmMs}ms/${r.warmFrames}f×${r.warms} progs=${r.progBefore}->${r.progAfter}(visibleFrame ${r.progsOnVisibleFrame}) frame=${r.worstFrameMs}ms(${r.worstFrameStage}) fails=${r.fails.length}`);
+    console.log(`[cave-density] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
+    if (!pass) throw new Error('cave-density GATE FAILED');
+  },
+
+  // ── DEEPER cycle 8 — THE CHARTER GATE: STREAMED CAVES GET WALKED AND VOID-SAMPLED ────────────
+  //
+  //   WHY THIS EXISTS, in one sentence: `cave-walk` and `cave-void` have only ever run on the ORIGIN
+  //   cave, and cycle 8 just made caves a world-wide feature built from the SAME generator at
+  //   DESCRIPTOR INPUTS THE ORIGIN CAVE NEVER EXERCISES — a different seed, a different surface
+  //   height, a different crevice heading, a different local terrain. "Same generator, so it must be
+  //   fine" is exactly the argument this project's history refutes: UNDERWORLD shipped on a 2-seed
+  //   net and widening that net immediately surfaced two generator defects (sibling-corridor crossing
+  //   and the chamber-disk/corridor-ramp step), both fixed BY CONSTRUCTION. A cave you cannot walk out
+  //   of, or can see through, is exactly as broken 4km from spawn as it is at spawn — and far less
+  //   likely to be noticed, because nobody hand-tests the far field.
+  //
+  //   WHAT IT DOES, per seed:
+  //     1. Takes the N nearest streamed cave sites from the deterministic `caveSites` list. Nearest
+  //        rather than random, so the gate walks the caves a player is most likely to meet, and so
+  //        the set is stable run-to-run (a flaky gate gets ignored).
+  //     2. Streams each in THROUGH THE REAL PATH — the player is teleported to within
+  //        CAVE_STREAM_REQUEST_M, the terrain ring is allowed to build its tiles, and then the
+  //        shipped `pollSites` → `requestSite` → sliced build → atomic finalize → `addCaveHole`
+  //        chain runs on its own. Nothing here fabricates a junction: if the density system cannot
+  //        deliver a cave at a site it advertises, this gate says so.
+  //     3. Runs the FULL `cave-walk` machinery on it (`residentKey`) — the Euler-tour KCC march over
+  //        every chamber, the crevice descent AND ASCENT, the corridor sweeps, the chamber-floor
+  //        grid, the topology asserts — and the FULL `cave-void` sweep. Same code, not a copy.
+  //
+  //   ⚠ STRANDS ARE REPORTED LOUDLY AND ARE NEVER PAPERED OVER. A nonzero strand count means the
+  //     capsule got wedged somewhere and the Euler tour continued measuring from the wrong place. On
+  //     the origin cave that has been treated as a tolerated steering artefact; on a streamed cave at
+  //     unexercised descriptor inputs it is the leading indicator of a real wedge trap, so it rides
+  //     the summary line and `verify:chunks` prints it whether the run is green or red.
+  //
+  //   COST, and the compromise — stated because the alternative is a gate nobody runs:
+  //     the full march is ~2-4 minutes of real KCC walking PER CAVE. Void-sampling is ~10-25s.
+  //     Defaults are therefore `--sites=2 --march=1`: BOTH nearest sites are void-sampled, the
+  //     nearest is additionally fully marched. Per seed that is 1 full march + 2 void sweeps; over
+  //     the two gate seeds, 2 marched streamed caves + 4 void-sampled streamed caves. Raise
+  //     `--march=2` to walk both (that is what the cycle-8 measurement run did) — the flag exists so
+  //     the deeper net is one word away, and a suspicious change should use it.
+  //
+  //   Run: npm run rig -- --scenario=cave-streamed --seed=1337 --port=5238 [--sites=2] [--march=1]
+  'cave-streamed': async (page) => {
+    const NSITES = Math.max(1, Number(argv.sites ?? 2));
+    const NMARCH = Math.max(0, Number(argv.march ?? 1));
+
+    // ── Pick the sites. Nearest-first from the origin, but never so near that the origin cave's own
+    //    terrain neighbourhood is involved — CAVE_SITE_ORIGIN_CLEAR_M already guarantees that. ──
+    const picked = await page.evaluate((N) => {
+      const g = window.__game; const ctx = g.ctx;
+      if (!ctx.caveStream) return { fatal: 'ctx.caveStream is null — the cave scheduler did not boot' };
+      ctx.sandWorms.list.length = 0;
+      ctx.vultures.list.length = 0;
+      ctx.weather.intensity = 0;
+      const all = g.caveSites(0, 0, 6000);
+      if (all.length < N) return { fatal: `only ${all.length} cave sites within 6km — cannot pick ${N}` };
+      const near = all
+        .map((s) => ({ ...s, d: Math.hypot(s.x, s.z) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, N);
+      return { sites: near, total: all.length, seed: ctx.seed };
+    }, NSITES);
+    if (picked.fatal) { console.log(`CAVE-STREAMED pass=0 FATAL ${picked.fatal}`); throw new Error('cave-streamed FAILED'); }
+    console.log(`[cave-streamed] seed=${picked.seed} ${picked.total} sites within 6km; walking the nearest ${picked.sites.length}: ` +
+      picked.sites.map((s) => `${s.key}@(${s.x.toFixed(0)},${s.z.toFixed(0)})d${s.d.toFixed(0)}m`).join(' '));
+
+    const fails = [];
+    const details = [];
+    let marched = 0, voided = 0, strandTotal = 0, escTotal = 0, excTotal = 0, culTotal = 0, holeTotal = 0;
+    let voidPoints = 0, voidRays = 0, minChambers = 99, marchOk = 0, ascentOut = 0;
+
+    for (let i = 0; i < picked.sites.length; i++) {
+      const site = picked.sites[i];
+      const doMarch = i < NMARCH;
+      const t0 = Date.now();
+
+      // ── ARRIVAL, through the shipped streaming path ───────────────────────────────────────
+      //    The site source is parked while the player is moved and the terrain ring catches up,
+      //    then re-installed so the REAL `pollSites` does the requesting. That ordering is not a
+      //    shortcut around the streamer — it reproduces what actually happens in play (you walk
+      //    into a neighbourhood whose tiles are already built) and it removes the one source of
+      //    nondeterminism that would otherwise decide WHICH cave this gate walks: with the source
+      //    live during a 300-frame teleport settle, the poll can latch a different nearby site and
+      //    the gate silently measures a cave it did not choose.
+      const arrive = await page.evaluate(async (S) => {
+        const g = window.__game; const ctx = g.ctx; const T = g.Tuning;
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        const notes = [];
+        ctx.caveStream.setSiteSource(null);
+        // Stand well inside CAVE_STREAM_REQUEST_M, and closer to this site than the grid can put
+        // any other one (min spacing is CELL − 2·JITTER), so "nearest first" resolves to our target.
+        const APPROACH = Math.min(120, T.CAVE_STREAM_REQUEST_M * 0.4);
+        const px = S.x - APPROACH, pz = S.z;
+        ctx.player.body.body.setTranslation({ x: px, y: ctx.terrain.heightAt(px, pz) + 2, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        // The terrain ring builds ONE sliced tile at a time; wait for the site's tile specifically.
+        let tileFrames = 0;
+        for (let f = 0; f < 2000; f++) {
+          await raf(); tileFrames++;
+          if (f > 90 && ctx.terrain.isTileLoadedAt(S.x, S.z)) break;
+        }
+        if (!ctx.terrain.isTileLoadedAt(S.x, S.z)) {
+          return { ok: false, why: `the site's terrain tile never loaded from ${APPROACH}m away in ${tileFrames} frames`, tileFrames };
+        }
+        // Re-install the SHIPPED site source and let the streamer decide on its own.
+        ctx.caveStream.setSiteSource((x, z, r) => window.__caveSites(x, z, r));
+        g.resetCavePerf();
+        let buildFrames = 0, worstFrameMs = 0, last = performance.now();
+        let arrived = false;
+        for (let f = 0; f < 9000; f++) {
+          await raf(); buildFrames++;
+          const now = performance.now(); const gap = now - last; last = now;
+          if (f > 2 && gap > worstFrameMs) worstFrameMs = gap;
+          if (ctx.caveStream.residents().some((r) => r.key === S.key)) { arrived = true; break; }
+        }
+        const p = g.cavePerf();
+        if (!arrived) {
+          return {
+            ok: false, tileFrames, buildFrames,
+            why: `the streamer never built ${S.key} in ${buildFrames} frames (requests=${p.stream.requests}, queued=${p.queued}, pending=${p.pending ? p.pending.key + '/' + p.pending.stage : 'none'}, residents=[${p.residents.map((r) => r.key).join(',')}])`,
+          };
+        }
+        // PARK THE SOURCE FOR THE WALK. Not to hide anything — to keep the march measuring the cave
+        // this leg chose. With it live, a second site 300-330m away can queue mid-march, and its
+        // unsliced ~180ms tor frame lands inside the KCC walk; worse, a third resident would invite
+        // the cap to evict. Everything the live source does is already gated by `cave-density`.
+        ctx.caveStream.setSiteSource(null);
+        const res = p.residents.find((r) => r.key === S.key);
+        const rec = p.sites.find((r) => r.key === S.key);
+        return {
+          ok: true, tileFrames, buildFrames, worstFrameMs: +worstFrameMs.toFixed(1),
+          requests: p.stream.requests, torMs: +p.stream.maxTorMs.toFixed(1),
+          finMs: +p.stream.maxFinalizeMs.toFixed(1), sliceMs: +p.stream.maxSliceMs.toFixed(1),
+          atomicMs: +p.stream.maxAtomicMs.toFixed(1), atomicStage: p.stream.worstAtomicStage,
+          tris: res ? res.tris : 0, colliderTris: res ? res.colliderTris : 0, digest: res ? res.digest : '-',
+          hasEntrance: rec ? rec.hasEntrance : false,
+          holeOpen: ctx.terrain.caveHoleKeys().includes(S.key),
+          residents: p.residents.map((r) => r.key),
+        };
+      }, site);
+
+      if (!arrive.ok) {
+        fails.push(`${site.key}: ${arrive.why}`);
+        details.push(`${site.key} @(${site.x.toFixed(0)},${site.z.toFixed(0)}) d=${site.d.toFixed(0)}m  *** NEVER ARRIVED *** ${arrive.why}`);
+        continue;
+      }
+      // The streamed unit must be WHOLE before it is worth walking (rule 9 — geometry and collision
+      // together, plus the carved hole that makes it reachable at all).
+      if (!(arrive.tris > 0)) fails.push(`${site.key}: streamed cave has 0 visual triangles`);
+      if (!(arrive.colliderTris > 0)) fails.push(`${site.key}: streamed cave has 0 COLLIDER triangles`);
+      if (!arrive.hasEntrance) fails.push(`${site.key}: streamed resident carries no crevice entrance`);
+      if (!arrive.holeOpen) fails.push(`${site.key}: no carved terrain hole — the sheet never opened over the cave`);
+
+      // ── THE MARCH — the identical `cave-walk` gate, pointed at this resident ───────────────
+      let w = null;
+      if (doMarch) {
+        w = await SCENARIOS['cave-walk'](page, { residentKey: site.key, noShots: true, noThrow: true });
+        marched++;
+        if (w.fails.length) {
+          for (const f of w.fails) fails.push(`${site.key} march: ${f}`);
+        } else { marchOk++; }
+        if (w.exited) ascentOut++;
+        else if (!w.fails.length) fails.push(`${site.key} march: reported no failures but never exited the cave`);
+        const st = (w.strands || []).length;
+        strandTotal += st;
+        if (st) {
+          // Loud, on purpose. A strand is a wedge trap until proven otherwise.
+          console.log(`[cave-streamed] ⚠ ${site.key} STRANDED ${st} leg(s) — the capsule could not walk back out of a chamber it had reached: [${w.strands.join(' ')}]`);
+        }
+        if (typeof w.chambers === 'number' && w.chambers < minChambers) minChambers = w.chambers;
+      }
+
+      // ── THE VOID SWEEP — the identical `cave-void` gate, pointed at this resident ──────────
+      const v = await SCENARIOS['cave-void'](page, { residentKey: site.key, noShots: true, noThrow: true });
+      voided++;
+      if (v.fatal) {
+        fails.push(`${site.key} void: ${v.fatal}`);
+      } else {
+        escTotal += v.escapes; excTotal += v.excused; culTotal += v.culled; holeTotal += v.holes;
+        voidPoints += v.points; voidRays += v.totalRays;
+        if (v.escapes > 0) {
+          fails.push(`${site.key} void: ${v.escapes} unexcused escapes (${v.escapeRate}%) across ${v.leakyPoints}/${v.points} points — culled=${v.culled} holes=${v.holes}`);
+          for (const x of v.worst.slice(0, 6)) console.log(`[cave-streamed] ${site.key} VOID ${x.label.padEnd(28)} esc=${x.esc}/${v.K} culled=${x.culled} hole=${x.hole} at ${JSON.stringify(x.p)}`);
+        }
+        // The excused count is reported and asserted, not merely printed: a declared opening that
+        // starts swallowing rays would quietly convert a see-through into a "pass".
+        if (v.excused > 0) fails.push(`${site.key} void: ${v.excused} rays excused through a declared opening — the origin cave excuses none, so this is new behaviour to explain, not to accept`);
+      }
+
+      const secs = ((Date.now() - t0) / 1000).toFixed(0);
+      details.push(
+        `${site.key} @(${site.x.toFixed(0)},${site.z.toFixed(0)}) d=${site.d.toFixed(0)}m seed=${site.seed} ` +
+        `arrive=${arrive.buildFrames}f/${arrive.tileFrames}tileF tor=${arrive.torMs}ms fin=${arrive.finMs}ms slice=${arrive.sliceMs}ms atomic=${arrive.atomicMs}ms(${arrive.atomicStage}) tris=${arrive.tris}/${arrive.colliderTris} hole=${arrive.holeOpen ? 1 : 0} digest=${arrive.digest} | ` +
+        (w ? `MARCH chambers=${w.chambers} reached=${w.reached}/${w.chambers} tour=${w.tour} ascent=${w.exited ? 'OUT' : 'FAIL'} strands=${(w.strands || []).length} slope=${w.maxSlope}° head=${w.minHeadroom} chamHead=${w.chamMinHead} cover=${w.minCover} eggDepth=${w.eggDepth}m crevice=${w.entSlope}°/${w.entPinchW}m fails=${w.fails.length} | ` : 'MARCH skipped | ') +
+        (v.fatal ? `VOID FATAL ${v.fatal}` : `VOID points=${v.points} rays=${v.totalRays} escapes=${v.escapes} excused=${v.excused} culled=${v.culled} holes=${v.holes}`) +
+        ` | ${secs}s`,
+      );
+    }
+
+    if (marched === 0 && NMARCH > 0) fails.push('no streamed cave was marched — the gate would have passed by measuring nothing');
+    if (voided === 0) fails.push('no streamed cave was void-sampled — the gate would have passed by measuring nothing');
+    if (voided < picked.sites.length) fails.push(`only ${voided}/${picked.sites.length} sites were reached`);
+
+    const pass = fails.length === 0;
+    console.log(`CAVE-STREAMED pass=${pass ? 1 : 0} seed=${picked.seed} sites=${picked.sites.length} marched=${marched} voided=${voided} marchOk=${marchOk}/${marched} ascentOut=${ascentOut}/${marched} minChambers=${minChambers === 99 ? 0 : minChambers} strands=${strandTotal} voidPoints=${voidPoints} voidRays=${voidRays} escapes=${escTotal} excused=${excTotal} culled=${culTotal} holes=${holeTotal} fails=${fails.length}`);
+    for (const d of details) console.log(`[cave-streamed] ${d}`);
+    if (fails.length) for (const f of fails) console.log(`[cave-streamed] FAIL ${f}`);
+    if (!pass) throw new Error('cave-streamed GATE FAILED');
   },
 
   'chunk-perf': async (page) => {
