@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 7,
-  "current_tier": "cycle-8: caves as rocky-terrain density (the D307-at-density proof)",
+  "cycles_completed": 8,
+  "current_tier": "cycle-9: cave kinds (a kind table over the same generator)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "paused_note": "(historical) Zach paused after cycle 5 (2026-07-25) with the repair complete and unwalked; resumed 2026-07-26. Carried residuals for cycle 7 (D-3 reassess): cave ceilings ~80% (dark smoky band at 8-15m), global value contrast below the old shell kit, the tor marginal at 78m, sawtooth spikes on the fissure's upper walls, CAVE_ROCK_BUMP perf unmeasured on low-end GPUs.",
@@ -23,7 +23,7 @@
     "unit": "tokens"
   },
   "spend": {
-    "total": 5200000
+    "total": 6150000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -94,6 +94,17 @@
         "e4b6429"
       ],
       "note": "NEW src/world/caveEntrance.ts; src/world/caveTest.ts DELETED entirely along with its tuning keys and the 228-line cave-mouth rig scenario. A rock tor ~19x13m, 5.2m proud, split by a fissure: mouth 2.50m clear pinching to 2.64m where rock closes overhead 6.5m in, widening to 5.0m only at the cave hand-off. Descent is a 3-leg polyline with two knees at 27.0 deg on every seed, mirrored by seed parity. The slot is unioned into buildCaveSdf as primitives -> entrance and cave are ONE continuous surface, no weld; cut against terrain.pureHeightAt instead of cycle 1's junction plane. D307 preserved and the carved hole SHRANK 29.2x8.34m -> 12.5x8.33m. Non-leak invariant by construction: the tor's fissure is always 0.62m narrower/lower than the enclosing SDF slot. 6/6 seeds cave-walk with ascent=OUT; cave-void 0.00% with excused=0 (the declaration is present but zero rays need it). THREE structural KCC bugs found ONLY by the ascent, each of which would have shipped under descent-only testing: corridorPrim held its ramp floor flat past segment ends (~1.5m step at every joint); the entrance hall's flat floor disk reached 2.4m back past the junction and swallowed the climb-out ramp (~50 deg, at the KCC limit); the tor carved its fissure floor 45cm BELOW the SDF floor, making a 45cm gutter down both walls that wedged the capsule on the way out. Round 5 disproved a shadow-acne hypothesis (frame byte-identical, recorded in code); round 6 found the real blotching cause — CAVE_ROCK_BUMP 1.15, tuned for torch-lit interior rock at 2m, applied to sunlit exterior under a directional sun. HONEST: reads as a crevice at near/threshold/descent; at 78m it is a small dark bump, marginal. Budget 2.5h stated vs ~5.5h actual — entirely the three ascent bugs; the visual loop and traversal loop were sequenced wrong (one cave-walk after round 1 would have caught them early)."
+    },
+    {
+      "n": 8,
+      "date": "2026-07-27",
+      "focus": "caves as rocky-terrain density — the D307-at-density proof",
+      "outcome": "SHIPPED",
+      "spend": 950000,
+      "commits": [
+        "d5b28e8"
+      ],
+      "note": "Placement was NOT real before this cycle (chunk-perf's 8 caves were synthetic). Shipped caveSites.ts (460m grid+jitter=300m spacing by construction, rocky-only, origin protection 1150m); realized ~3.0-3.4 caves/travel-hour (CAVE_SITE_CHANCE 0.60, Zach's dial). Architectural win: holed tiles band-decompose into sub-heightfields, 80x cheaper than the full-tile trimesh (0.3 vs 24.4ms), buying the invariant A HOLE EXISTS IFF THE CAVE BENEATH IT IS A LIVE RESIDENT; origin tile keeps D307 trimesh untouched. Teardown exact (0.0000m, registries to baseline), re-entry bit-identical. Gates widened to streamed sites as literal reuse (4 sites walked/voided clean, 0 strands/escapes) and the widening paid twice: the carved hole was found to CLAMP TO ONE TILE (~1.6% of sites = visible-but-unenterable caves with green gates; fixed by construction via tile-seam rejection), and the reproducible 1.6s frame was root-caused to a cold shader link on the finalize frame (light-state-dependent program keys defeat boot warming — proven; shipped a compileAsync warm stage in the scheduler; 0 programs on the visible frame, gate-asserted; worst frame now the ~155-175ms tor). verify:all end-to-end ALL GREEN; origin parity byte-stable; SAVE_VERSION 18. Flagged for Zach: density dial, tor hitch cadence + slicing lever, save-transient streamed fungi, engine-wide program-key light sensitivity. Residuals: speeder drive unmeasured, warm fail-safe untested, no negative-control seed for the seam fix."
     },
     {
       "n": 7,

@@ -6,6 +6,64 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 8 — caves are a rocky-terrain feature: the D307-at-density proof (2026-07-27) — SHIPPED
+
+- **Planned:** the charter's density cycle — caves roll off the chunk descriptor in rocky terrain
+  at real density; the three flagged D307-at-density proofs (swap cost, teardown symmetry,
+  resident cap); egg cave unique; origin world byte-identical; the "cave country" fallback only
+  ever as a Zach-surfaced scope-cut.
+
+- **Baseline honesty first:** placement was NOT real before this cycle — cycles 5-7 built
+  infrastructure; the chunk-perf "8 caves" were synthetic hardcoded-coordinate test placements.
+  The game placed exactly one cave (origin/egg).
+
+- **Shipped (`d5b28e8`):** `caveSites.ts` — 460m grid + jitter → 300m spacing by construction,
+  rocky-only, relief/POI/landmark rejections, origin protection 1150m (= the POI exclusion, so
+  tors can't weld onto boot POIs). Realized density measured: **~3.0-3.4 caves per travel-hour**
+  (`CAVE_SITE_CHANCE 0.60` = Zach's dial). **The architectural win:** holed tiles now
+  band-decompose into sub-heightfields instead of a full-tile trimesh — measured **80× cheaper**
+  (0.3 vs 24.4ms) — buying the invariant *a hole exists iff the cave beneath it is a live
+  resident* (the sheet is simply intact until the cave arrives; origin tile keeps the D307
+  trimesh path untouched). Teardown proven EXACT (restoreMax 0.0000m; 0 rays through the sheet
+  outside the hole; pools/materials/water registries to baseline); re-entry bit-identical.
+  **No scope cut needed** — uniform density is perf-safe on foot.
+
+- **Gates widened + two real defects found by the widening:** (1) cave-walk/cave-void extended
+  to STREAMED sites as literal reuse (residentKey — not a fork that can drift); 4 sites
+  marched/void-swept clean through the real streaming path (0 strands, 0 escapes); permanent
+  leg, +~11min. (2) Code-reading found the carved hole CLAMPS TO ONE TERRAIN TILE — ~1.6% of
+  sites would ship a visible-but-unenterable cave with every gate green; fixed by construction
+  (tile-seam rejection sharing one `rawHoleCells` derivation with the hole block itself).
+  (3) The reproducible **1.6-second frame** at seed 7 root-caused to a COLD SHADER-PROGRAM LINK
+  on the finalize frame (pool water needs 2 programs; three's program keys carry the live light
+  state, so boot-time warming can never match — tried, proven, reverted). Shipped: a warm stage
+  in the build scheduler (`compileAsync` off-scene at live state) — **0 programs compiled on the
+  visible frame, gate-asserted**; worst frame 1667ms → the known ~155-175ms unsliced tor. Also
+  fixed `worstFrameMs f>2` silently skipping the actual worst frame, and a false-positive
+  edge-check in the new density gate (the "gate that fails on healthy geometry is the same class
+  of error" lesson, written into the check).
+
+- **Verify:** `verify:all` end-to-end ALL GREEN on the final tree — every leg. Origin parity
+  byte-stable (`108af91c`/`ff8309a8`); density digests `f180c0fc`/`f95e4986` stable ×2;
+  SAVE_VERSION stays 18 (streamed caves descriptor-derived + save-transient, D299).
+
+- **FLAGGED FOR ZACH:** `CAVE_SITE_CHANCE 0.60` (~3.3/travel-hour — the low end of "several";
+  1.0 ≈ one per 360m rocky travel, 0.3 ≈ landmark-rare) · the tor is now the worst frame
+  (~155-175ms every ~90s of rocky walking; the slicing refactor is the named lever) · streamed
+  caves' harvested-fungi state is save-transient (matches D299 streamed-content behavior) ·
+  program keys carry the scene light count (engine-wide pre-existing recompile sensitivity —
+  fires/lanterns elsewhere; the cave path is now immune).
+
+- **Residuals:** speeder-pace drive unmeasured (foot-pace proven; feeds the density taste call) ·
+  the warm fail-safe path untested (no harness browser lacks KHR_parallel_shader_compile) ·
+  tile-seam fix has no negative-control seed on the net (by design — rejection removes them).
+
+- **Spend:** ~0.95M this cycle (campaign ~6.15M / 10M; cycle 8/20).
+- **Commit:** `d5b28e8`.
+- **Next (cycle 9):** cave kinds — distinct parameter sets over the same generator (tight salvage
+  warren / vaulted fungal cavern / flooded cave leaning on cycle 6 / collapsed shaft): a kind
+  table, not new code paths. Walk/void green across every kind ×3 seeds.
+
 ## Cycle 7 — the D-3 reassess: the cave renders, the crevice reads (2026-07-26/27) — SHIPPED
 
 - **Planned:** the displaced D-3 full-tree adversarial visual audit + CAVE_* taste pass, carrying
