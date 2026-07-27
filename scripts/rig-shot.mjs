@@ -25,7 +25,11 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = resolve(ROOT, 'verification');
+// Screenshot/artifact output dir. RIG_OUT_DIR lets a CALLER give this process its own
+// directory — the parallel gate runner (scripts/verify-chunks.mjs) sets it per leg so two
+// concurrent legs of the same scenario at different seeds can never race on the same
+// verification/scen-*.png. Unset (every interactive/manual run) ⇒ verification/, unchanged.
+const OUT = resolve(ROOT, process.env.RIG_OUT_DIR || 'verification');
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
 
 const argv = Object.fromEntries(

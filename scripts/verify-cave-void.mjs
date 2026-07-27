@@ -38,7 +38,14 @@
 //      ~25% of the cave surface's triangles in-page before the sweep. The gate goes RED (thousands
 //      of escapes). Re-run it any time you doubt the gate is live.
 //
-// Run: npm run verify:cave:void            (seeds 1337,7 — the verify:chunks leg)
+// WHERE IT RUNS NOW (2026-07-27, the gate-runner parallelization)
+//   The seeds-1337/7 pair is a LEG of scripts/verify-chunks.mjs (`--legs=cave-void`), not a
+//   `&&` chain after it. The chain silently SKIPPED this gate whenever anything upstream in
+//   verify:chunks went red — i.e. exactly when you most want to know whether the cave shell is
+//   watertight. This script stays as the WIDE-NET / puncture-proof standalone: extend the seed
+//   net here, and keep the two files' parse + vacuous guards in step if either changes.
+//
+// Run: npm run verify:cave:void            (seeds 1337,7 — same pair verify:chunks runs)
 //      npm run verify:cave:void -- --seeds=1337,7,42,99,2024,555
 
 import { spawnSync } from 'node:child_process';

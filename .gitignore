@@ -28,6 +28,10 @@ dist-ssr
 
 # Playwright rig-shot harness output (scripts/rig-shot.mjs) — dev artifacts
 verification/*.png
+# Gate-runner output (scripts/verify-chunks.mjs): per-leg tee'd stdout+stderr, and the
+# per-leg screenshot dirs the parallel phase gives each leg via RIG_OUT_DIR.
+verification/gate-logs/
+verification/gate-shots/
 
 # gamedev-framework campaign/overnight runtime state (lock, progress journal,
 # cycle in-progress marker). Transient + machine-local — never commit.
