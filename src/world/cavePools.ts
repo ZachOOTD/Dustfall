@@ -76,6 +76,7 @@ import * as THREE from 'three';
 import { Tuning } from '../config/tuning.ts';
 import { caveFloorSediment } from './caveSdf.ts';
 import type { CaveGraph, CaveNode } from './caveGen.ts';
+import { caveKindParams, type CaveKindParams } from './caveKinds.ts';   // DEEPER cycle 9 — per-kind water
 import { nextWaterSourceId, type WaterSource } from './waterSources.ts';
 
 type Noise3 = (x: number, y: number, z: number) => number;
@@ -113,6 +114,12 @@ export function placeCavePools(
   cnoise: Noise3,
   rand: () => number,
   dirsByNode: Map<number, Array<{ x: number; z: number }>>,
+  /** DEEPER cycle 9 — the cave KIND's water parameters (count, radius fraction, how near the centre
+   *  a pool may sit). Defaults to canonical, so every pre-kinds caller is unchanged. NOTE what is
+   *  NOT here: `CAVE_POOL_DEPTH_M`. Water depth is not a kind parameter — the collider is the floor
+   *  you can see through the surface (rule 9), so 26cm is what makes every pool wadeable rather
+   *  than swimmable, and the flooded kind gets its read from COVERAGE, not from depth. */
+  kp: CaveKindParams = caveKindParams('canonical'),
 ): CavePoolSpec[] {
   const T = Tuning;
   const cosMouth = Math.cos((T.CAVE_POOL_MOUTH_CLEAR_DEG * Math.PI) / 180);
@@ -120,12 +127,12 @@ export function placeCavePools(
   // Best candidate site inside one chamber, or null if the room can't hold a pool that clears its
   // mouths and its wall. Scored on the pooled-sediment field — the floor's own low-point signal.
   const bestInNode = (n: CaveNode): CavePoolSpec | null => {
-    const rMean = Math.min(T.CAVE_POOL_R_MAX, Math.max(T.CAVE_POOL_R_MIN, Math.min(n.rx, n.rz) * T.CAVE_POOL_R_FRAC));
+    const rMean = Math.min(kp.poolRMax, Math.max(kp.poolRMin, Math.min(n.rx, n.rz) * kp.poolRFrac));
     // The rim (mean radius + its max outward wobble) must stay inside the walkable floor disk. The
     // SDF flattens the floor to ~0.94·rx, so 0.88 leaves a real margin of dry rock at the wall.
     const rimReach = rMean * (1 + T.CAVE_POOL_EDGE_WOBBLE);
     const maxCentre = Math.min(n.rx, n.rz) * 0.88 - rimReach;
-    let minCentre = Math.min(n.rx, n.rz) * T.CAVE_POOL_CENTER_FRAC_MIN;
+    let minCentre = Math.min(n.rx, n.rz) * kp.poolCenterFracMin;
     // THE EGG CHAMBER. Its centre carries the rock dais the companion egg sits on — collider-bearing
     // geometry, and the destination of every player's walk line. Push the pool clear of the whole
     // pedestal plus a margin of dry floor, so water never intersects the dais and never lands on the
@@ -134,7 +141,7 @@ export function placeCavePools(
     if (maxCentre <= minCentre) return null;                     // room too tight for a pool at all
     const outer = n.kind === 'egg'
       ? maxCentre                                                 // the egg pool is pushed outward by the dais clearance above
-      : Math.min(maxCentre, Math.min(n.rx, n.rz) * T.CAVE_POOL_CENTER_FRAC_MAX);
+      : Math.min(maxCentre, Math.min(n.rx, n.rz) * kp.poolCenterFracMax);
     if (outer <= minCentre) return null;
 
     const dirs = dirsByNode.get(n.id) ?? [];
@@ -173,9 +180,9 @@ export function placeCavePools(
 
   // How many pools this cave gets. Drawn from the pool RNG stream so it varies by seed, then clamped
   // to what the rooms can actually hold — but never below CHAMBERS_MIN, so every cave has water.
-  const span = T.CAVE_POOL_CHAMBERS_MAX - T.CAVE_POOL_CHAMBERS_MIN + 1;
-  const want = Math.min(cands.length, T.CAVE_POOL_CHAMBERS_MIN + Math.floor(rand() * span));
-  const target = Math.max(Math.min(cands.length, T.CAVE_POOL_CHAMBERS_MIN), want);
+  const span = kp.poolChambersMax - kp.poolChambersMin + 1;
+  const want = Math.min(cands.length, kp.poolChambersMin + Math.floor(rand() * span));
+  const target = Math.max(Math.min(cands.length, kp.poolChambersMin), want);
 
   // Wettest rooms first; ties broken by node id so the order is total and stable.
   cands.sort((a, b) => (b.score - a.score) || (a.nodeId - b.nodeId));
@@ -1068,9 +1075,10 @@ export function buildCavePools(
   rand: () => number,
   dirsByNode: Map<number, Array<{ x: number; z: number }>>,
   sdfGeometry?: THREE.BufferGeometry,
+  kp: CaveKindParams = caveKindParams('canonical'),
 ): CavePoolBuild {
   const out: CavePool[] = [];
-  const specs = placeCavePools(graph, cnoise, rand, dirsByNode);
+  const specs = placeCavePools(graph, cnoise, rand, dirsByNode, kp);
   if (!specs.length) return { pools: out, material: null };
   const floorH = sdfGeometry ? makeFloorSampler(sdfGeometry, specs) : undefined;
   // ONE instance for THIS cave, shared by its own pools (they mirror the same fungi) and by nothing

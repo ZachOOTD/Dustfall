@@ -35,6 +35,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { Tuning } from '../config/tuning.ts';
 import { startSpawnCave, type CaveJunction, type CaveSpawnJob, type SpawnedCave } from './caveGen.ts';
+import type { CaveKind } from './caveKinds.ts';   // DEEPER cycle 9 — cave kinds
 import { caveEntranceHoleBlock, spawnCaveEntrance, type CaveEntrance } from './caveEntrance.ts';
 import { releaseCavePoolMaterial } from './cavePools.ts';   // per-cave water material — disposed on eviction
 import type { Terrain } from './terrain.ts';
@@ -67,6 +68,9 @@ export interface CaveStreamSite {
   x: number;
   z: number;
   seed: number;
+  /** DEEPER cycle 9 — the cave KIND this site rolled. Optional so a hand-placed request (the dev
+   *  panel, the chunk-perf cap test) still gets the canonical cave without saying so. */
+  kind?: CaveKind;
 }
 
 export interface CaveStreamPerf {
@@ -116,12 +120,19 @@ export interface CaveStreamPerf {
   warmTimeouts: number;
 }
 
-/** DEEPER cycle 6 — how a resident cave publishes its water pools into `ctx.waterSources`. The
- *  registry is built AFTER the origin cave (main.ts), so the sink is installed late; installing it
- *  attaches every cave that is already resident, and from then on it is driven by the resident
- *  lifecycle. THE INVARIANT: a pool source never outlives its cave — eviction detaches before the
- *  geometry is disposed, so the interaction raycast can never hold a mesh that left the scene. */
-export interface CavePoolSink {
+/** DEEPER cycle 6 — how a resident cave publishes CONTENT that lives outside the cave's own scene
+ *  graph: cycle 6's water pools into `ctx.waterSources`, and (cycle 9) the warren kind's loose scrap
+ *  pickups into `ctx.pickups`. Those registries are built AFTER the origin cave (main.ts), so a sink
+ *  is installed late; installing it attaches every cave that is already resident, and from then on it
+ *  is driven by the resident lifecycle. THE INVARIANT: published content never outlives its cave —
+ *  eviction detaches before the geometry is disposed, so the interaction raycast can never hold a
+ *  mesh that left the scene.
+ *
+ *  DEEPER cycle 9 made this a LIST rather than a single slot (`addResidentSink`, was `setPoolSink`).
+ *  Not cosmetic: the pool sink is installed while the water registry is built, and the scrap sink can
+ *  only be installed once `ctx` exists — a single slot would have meant one closure spanning both
+ *  moments, i.e. a boot-order landmine the day a canonical cave gets its first scrap. */
+export interface CaveResidentSink {
   attach(cave: SpawnedCave): void;
   detach(cave: SpawnedCave): void;
 }
@@ -135,8 +146,8 @@ export interface CaveStream {
   /** DEEPER cycle 8 — the density driver: a pure source of the sites near a point. Installing it
    *  makes `update` stream caves in and out on its own. */
   setSiteSource(src: ((x: number, z: number, radius: number) => CaveStreamSite[]) | null): void;
-  /** Install the water-source sink (see CavePoolSink). Attaches existing residents immediately. */
-  setPoolSink(sink: CavePoolSink): void;
+  /** Install a resident-content sink (see CaveResidentSink). Attaches existing residents immediately. */
+  addResidentSink(sink: CaveResidentSink): void;
   /** Register an ALREADY-BUILT cave (the boot preload) as a resident. */
   adopt(key: string, junction: CaveJunction, seed: number, cave: SpawnedCave, pinned: boolean): CaveResident;
   /** Per-frame tick: advance the in-flight build by the slice budget, then enforce the cap. */
@@ -243,7 +254,7 @@ export function createCaveStream(
     warms: 0, maxWarmMs: 0, maxWarmFrames: 0, warmTimeouts: 0,
   };
 
-  let poolSink: CavePoolSink | null = null;
+  const sinks: CaveResidentSink[] = [];
   let siteSource: ((x: number, z: number, radius: number) => CaveStreamSite[]) | null = null;
   let pollCountdown = 0;
 
@@ -261,14 +272,14 @@ export function createCaveStream(
       entrance, holeKey, site,
     };
     list.push(r);
-    poolSink?.attach(cave);          // DEEPER cycle 6 — publish this cave's pools as water sources
+    for (const s of sinks) s.attach(cave);   // publish this cave's pools (c6) + scrap (c9)
     return r;
   };
 
   /** Release a resident: detach its pool sources, then tear down hole → entrance → interior. */
   const release = (r: CaveResident): void => {
     const t0 = performance.now();
-    poolSink?.detach(r.cave);
+    for (const s of sinks) s.detach(r.cave);
     disposeResident(scene, world, terrain, r);
     const i = list.indexOf(r);
     if (i >= 0) list.splice(i, 1);
@@ -455,7 +466,7 @@ export function createCaveStream(
       // build the crevice first, because the crevice IS what produces the junction the cave hangs
       // off. Either way the tor gets its own frame — never stacked onto a slice step.
       if (!inflight.site) {
-        inflight.job = startSpawnCave(scene, world, terrain, inflight.junction!, inflight.seed);
+        inflight.job = startSpawnCave(scene, world, terrain, inflight.junction!, inflight.seed, 'canonical');
       }
       return;
     }
@@ -464,6 +475,7 @@ export function createCaveStream(
         if (!inflight.entrance) { doTor(inflight); return; }   // ← its own frame
         inflight.job = startSpawnCave(
           scene, world, terrain, inflight.entrance.junction, inflight.seed,
+          inflight.site!.kind ?? 'canonical',   // DEEPER cycle 9 — the kind rolled by the descriptor
         );
         return;
       }
@@ -521,8 +533,8 @@ export function createCaveStream(
     },
     setSiteSource: (src) => { siteSource = src; pollCountdown = 0; },
     adopt: (key, _junction, seed, cave, pinned) => addResident(key, seed, cave, pinned),
-    setPoolSink: (sink) => {
-      poolSink = sink;
+    addResidentSink: (sink) => {
+      sinks.push(sink);
       for (const r of list) sink.attach(r.cave);   // catch up the caves that were resident already
     },
     update,

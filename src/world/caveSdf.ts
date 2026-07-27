@@ -271,6 +271,33 @@ export function startCaveSdf(
     z0 = Math.min(z0, p.bz - r); z1 = Math.max(z1, p.bz + r);
     p.br += BAND;                                            // pad once, for the block-cull test
   }
+  // ── THE GRID ORIGIN IS SNAPPED TO A FIXED WORLD LATTICE. ────────────────────────────────────
+  // DEEPER cycle 9. The AABB above is the min over ALL primitive bounds, so the grid origin MOVED
+  // with the chamber layout: change the rooms 40m underground and the ENTRANCE CREVICE — whose slot
+  // primitives are IDENTICAL world-space geometry in every cave kind — re-quantized by up to a
+  // voxel (0.45m), because its walls landed on different sample corners. Snapping the origin down
+  // to floor(min/voxel)·voxel per axis makes the sample lattice a pure function of WORLD POSITION
+  // and `voxel` and nothing else, so any given world-space geometry polygonizes identically no
+  // matter what else shares its field. Seed- and layout-independent by construction (D290): the
+  // lattice is anchored at the world origin, not at anything the generator rolled.
+  //
+  // ⚠ WHAT THIS IS **NOT**. Cycle 9 shipped this believing it was the cause of the three kind×seed
+  // marches that failed IN THE ENTRANCE. IT IS NOT, and that was MEASURED, not assumed: with the
+  // lattice stable the same three sites still fail at the same legs and the capsule stalls at the
+  // same coordinates to within 0.1m (flooded/1337 @(675,1113) stalls at (683.0,1111.6,y13.7) both
+  // before and after), and — the decisive A/B — the CANONICAL kind fails identically at those same
+  // sites. The entrance failures are SITE-dependent and kind-independent; the blocking surface is
+  // the tor, which this grid never touched. What the snap buys is the removal of a real latent
+  // coupling (a cave's entrance mesh silently depending on its own room layout), which is worth
+  // having on its own terms — it is the thing that made the failure look kind-shaped for a day.
+  //
+  // KNOWN, DELIBERATE CONSEQUENCE: every cave mesh (the origin cave included) shifts by up to one
+  // voxel and `caveDigest` re-baselines. That is the third deliberate cave-digest re-baseline of
+  // this campaign (cycles 2-4 were the others). The SURFACE world is untouched — terrain/chunk
+  // digests do not move; only cave meshes requantize.
+  x0 = Math.floor(x0 / voxel) * voxel;
+  y0 = Math.floor(y0 / voxel) * voxel;
+  z0 = Math.floor(z0 / voxel) * voxel;
   const nx = Math.ceil((x1 - x0) / voxel), ny = Math.ceil((y1 - y0) / voxel), nz = Math.ceil((z1 - z0) / voxel);
   const cw = nx + 1, ch = ny + 1, cd = nz + 1;               // corner grid dims
 

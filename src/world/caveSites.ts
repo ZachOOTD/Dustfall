@@ -30,6 +30,7 @@
 import { Tuning } from '../config/tuning.ts';
 import { caveEntranceHoleFitsTile } from './caveEntrance.ts';   // cycle 8 — the tile-seam rejection
 import { makeRng } from '../core/rng.ts';
+import { pickCaveKind, type CaveKind } from './caveKinds.ts';   // DEEPER cycle 9 — the kind mix
 import type { BiomeSampler } from './biomes.ts';
 import type { Terrain } from './terrain.ts';
 
@@ -45,6 +46,10 @@ export interface CaveSiteDesc {
   x: number;
   z: number;
   seed: number;
+  /** DEEPER cycle 9 — which CAVE KIND stands here (a warren / a fungal cavern / a flooded cave / a
+   *  collapsed shaft / the canonical one). Rolled from this cell's own stream AFTER `seed`, so
+   *  adding it moved no site and the cycle-8 placement digests are byte-stable. */
+  kind: CaveKind;
 }
 
 /** Optional conflict test injected by the caller (main.ts wires it to the chunk descriptors). Kept
@@ -107,11 +112,17 @@ export function caveSiteInCell(
 ): CaveSiteDesc | null {
   const T = Tuning;
   const rand = makeRng(siteSeed(worldSeed, gx, gz));
-  // FIXED DRAW BUDGET — all four draws happen unconditionally, before any rejection.
+  // FIXED DRAW BUDGET — all FIVE draws happen unconditionally, before any rejection.
+  // DEEPER cycle 9 added the kind roll and added it LAST, after `genSeed`: the four cycle-8 draws
+  // keep their exact values, so every site's position and generation seed are unmoved and the
+  // committed placement digests (f180c0fc / f95e4986) stay byte-stable. Appending rather than
+  // inserting is the whole discipline here — a draw inserted mid-stream would silently relocate
+  // every cave in the world.
   const roll = rand();
   const jx = (rand() - 0.5) * 2 * T.CAVE_SITE_JITTER_M;
   const jz = (rand() - 0.5) * 2 * T.CAVE_SITE_JITTER_M;
   const genSeed = Math.floor(rand() * 0x100000000) >>> 0;
+  const kind = pickCaveKind(rand());
 
   if (roll >= T.CAVE_SITE_CHANCE) return null;
 
@@ -152,7 +163,7 @@ export function caveSiteInCell(
   // 7 — content conflict (POI / hero landmark already here).
   if (conflict && conflict(x, z, T.CAVE_SITE_CONTENT_CLEAR_M)) return null;
 
-  return { key: `cave:${gx},${gz}`, gx, gz, x, z, seed: genSeed };
+  return { key: `cave:${gx},${gz}`, gx, gz, x, z, seed: genSeed, kind };
 }
 
 /** Every site whose cell centre lies within `radius` of (x, z), nearest first. Pure. */

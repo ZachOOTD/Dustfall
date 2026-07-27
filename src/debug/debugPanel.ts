@@ -50,7 +50,9 @@ import { spawnDroppedPickup, despawnPickup, spawnMaterialAt } from '../pickups/p
 import { addItem } from '../inventory/inventory.ts';   // crafting rework — giveItem dev hook (real acquire path)
 import { recipeCardState, findRecipeById } from '../inventory/recipeDiscovery.ts';   // crafting rework — pickup-unlock verification hooks
 import { FEATURES } from '../config/features.ts';        // Underworld review — gotoCave flag gate
-import { caveEntranceSite, caveEntranceHoleBlock, type CaveHoleBlock } from '../world/caveEntrance.ts';   // Underworld review — gotoCave warp target; cycle 8 — the hole-block helper for the density gate
+import { caveEntranceSite, caveEntranceHoleBlock, type CaveHoleBlock } from '../world/caveEntrance.ts';
+import { CAVE_KIND_LIST, caveKindParams, caveKindWeights, pickCaveKind, type CaveKind } from '../world/caveKinds.ts';
+import { caveSiteMinSpacingM } from '../world/caveSites.ts';   // DEEPER cycle 9 — the kinds gate's extent bar   // DEEPER cycle 9 — the kind table as gate-readable data   // Underworld review — gotoCave warp target; cycle 8 — the hole-block helper for the density gate
 import { farCaveJunction } from '../world/caveStream.ts';        // DEEPER cycle 5 — streamed-cave probe hook
 import { cavePoolLiveMaterials } from '../world/cavePools.ts';   // DEEPER cycle 6 round-13 — per-cave water-material leak canary
 import { setCaveRockLightState } from '../world/caveGen.ts';     // DEEPER cycle 7 — cave-rock light-response probe hook
@@ -495,10 +497,23 @@ interface DebugApi {
     sites: Array<{ key: string; site: { x: number; z: number } | null; holeKey: string | null; hasEntrance: boolean }>;
   };
   resetCavePerf: () => void;
-  /** DEEPER cycle 8 — the seed-pure cave-site list near a point. */
-  caveSites: (x: number, z: number, r: number) => Array<{ key: string; gx: number; gz: number; x: number; z: number; seed: number }>;
-  /** DEEPER cycle 8 — queue a REAL streamed cave (crevice tor + interior + carved terrain hole). */
-  requestCaveSite: (site: { key: string; x: number; z: number; seed: number }) => boolean;
+  /** DEEPER cycle 8 — the seed-pure cave-site list near a point (cycle 9 adds each site's KIND). */
+  caveSites: (x: number, z: number, r: number) => Array<{ key: string; gx: number; gz: number; x: number; z: number; seed: number; kind: CaveKind }>;
+  /** DEEPER cycle 8 — queue a REAL streamed cave (crevice tor + interior + carved terrain hole).
+   *  Cycle 9: `kind` is optional and, when given, OVERRIDES the descriptor's own roll — that is how
+   *  the `cave-kinds` gate walks a chosen kind at a site the placement rules already accepted,
+   *  instead of hunting the world for a site that happens to have rolled the kind under test. */
+  requestCaveSite: (site: { key: string; x: number; z: number; seed: number; kind?: CaveKind }) => boolean;
+  /** DEEPER cycle 9 — the kind table as data (params + weights), for the gate to assert against. */
+  caveKindTable: () => { kinds: CaveKind[]; weights: Record<string, number>; params: Record<string, unknown> };
+  /** DEEPER cycle 9 — the SHIPPED weighted picker. Exposed so the kinds gate exercises the real
+   *  selection rather than re-deriving the weighting in the harness (the D165 failure mode: a rig
+   *  that re-derives is a rig that can be wrong while looking right). */
+  pickCaveKind: (u: number) => CaveKind;
+  /** The minimum centre-to-centre cave spacing the site grid guarantees, in metres. The kinds gate
+   *  asserts every kind's MEASURED extent against it (a bigger kind is how two cave bodies would
+   *  start to interpenetrate). */
+  caveSiteMinSpacing: () => number;
   /** DEEPER cycle 8 — the grid-aligned terrain hole block for a site (the SHIPPED helper, so the
    *  gate can never audit a hole rect the game does not actually carve). */
   caveHoleBlock: (x: number, z: number) => CaveHoleBlock;
@@ -1121,12 +1136,19 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     /** DEEPER cycle 8 — the pure site list near a point (gate + dev panel). */
     caveSites: (x, z, r) => {
       const f = (window as unknown as {
-        __caveSites?: (x: number, z: number, r: number) => Array<{ key: string; gx: number; gz: number; x: number; z: number; seed: number }>;
+        __caveSites?: (x: number, z: number, r: number) => Array<{ key: string; gx: number; gz: number; x: number; z: number; seed: number; kind: CaveKind }>;
       }).__caveSites;
       return f ? f(x, z, r) : [];
     },
     /** DEEPER cycle 8 — request a REAL streamed cave (crevice + interior + terrain hole). */
     requestCaveSite: (site) => (ctx.caveStream ? ctx.caveStream.requestSite(site) : false),
+    caveKindTable: () => {
+      const params: Record<string, unknown> = {};
+      for (const k of CAVE_KIND_LIST) params[k] = caveKindParams(k);
+      return { kinds: [...CAVE_KIND_LIST], weights: caveKindWeights(), params };
+    },
+    pickCaveKind: (u) => pickCaveKind(u),
+    caveSiteMinSpacing: () => caveSiteMinSpacingM(),
     caveHoleBlock: (x, z) => caveEntranceHoleBlock({ x, z }),
     requestCave: (x, z, seed) => {
       if (!ctx.caveStream) return null;

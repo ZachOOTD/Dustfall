@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed' || SCENARIO === 'cave-kinds' || SCENARIO === 'crevice-profile') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -2731,18 +2731,37 @@ const SCENARIOS = {
       if (chamMinHead < 2.0) fails.push(`chamber headroom: min ${chamMinHead.toFixed(2)}m < 2.0m`);
 
       // ── E — TOPOLOGY asserts from the generator's own graph. ──
+      //
+      //   DEEPER cycle 9 — KIND-AWARE ENVELOPE. The chamber count and egg depth used to be the
+      //   literals 8-11 and 25-40m, which were the canonical cave's range and nothing else. With
+      //   kinds those literals would fail a 14-room warren and a 48m collapsed shaft for being
+      //   exactly what they are designed to be. They now come from the KIND'S OWN DECLARED envelope
+      //   (`probe.envelope`), which `assertCaveKindTable` proves actually contains that kind's
+      //   generator range — so a kind cannot widen its gate without widening it honestly, and
+      //   `canonical` still declares 8-11 / 25-40m, i.e. the origin cave is asserted EXACTLY as
+      //   before. Three things stay HARD LIMITS on every kind, because they are not taste:
+      //     · the tree property (V-1 edges), · the egg is the deepest AND the largest chamber,
+      //     · absolute floors nothing may cross (≥4 chambers, 15-70m deep) so a table that
+      //       declared a nonsense envelope still cannot launder a broken cave as a pass.
       const V = nodes.length, E = cavep.edges.length;
-      if (V < 8 || V > 11) fails.push(`topology: chamber count ${V} outside 8-11 (labyrinth range)`);
+      const env = cavep.envelope || { chambersMin: 8, chambersMax: 11, depthMin: 25, depthMax: 40 };
+      const kindName = cavep.kind || 'canonical';
+      if (V < env.chambersMin || V > env.chambersMax) fails.push(`topology: chamber count ${V} outside the '${kindName}' envelope ${env.chambersMin}-${env.chambersMax}`);
+      if (V < 4) fails.push(`topology: chamber count ${V} < 4 — below the absolute floor no kind may cross`);
       if (E !== V - 1) fails.push(`topology: ${E} edges for ${V} nodes — not a tree (V-1 edges required)`);
       for (const n of nodes) if (n.id !== egg.id && n.y < egg.y) fails.push(`topology: node ${n.id} (y${n.y.toFixed(1)}) deeper than the egg (y${egg.y.toFixed(1)})`);
       for (const n of nodes) if (n.id !== egg.id && n.rx > egg.rx) fails.push(`topology: node ${n.id} (rx${n.rx.toFixed(1)}) larger than the egg (rx${egg.rx.toFixed(1)})`);
       const depth = cavep.depthBelowSurface;
-      if (depth < 25 || depth > 40) fails.push(`topology: egg depth ${depth.toFixed(1)}m outside 25-40m`);
+      if (depth < env.depthMin || depth > env.depthMax) fails.push(`topology: egg depth ${depth.toFixed(1)}m outside the '${kindName}' envelope ${env.depthMin}-${env.depthMax}m`);
+      if (depth < 15 || depth > 70) fails.push(`topology: egg depth ${depth.toFixed(1)}m outside the absolute 15-70m floor/ceiling no kind may cross`);
       const hasSqueeze = cavep.edges.some((e) => e.squeeze), hasGallery = cavep.edges.some((e) => !e.squeeze);
       if (!hasSqueeze || !hasGallery) fails.push(`topology: corridors lack varied cross-sections (squeeze=${hasSqueeze} gallery=${hasGallery})`);
 
       return {
         fails, seed: ctx.seed, digest: cavep.digest,
+        caveKind: kindName,
+        fungiClusters: cavep.fungiClusters ?? -1, rubbleHeaps: cavep.rubbleHeaps ?? -1,
+        scrapAnchors: cavep.scrapAnchors ?? -1, pools: (cavep.pools || []).length,
         chambers: V, edges: E, eggId: cavep.eggId, eggKind: egg.kind, eggDepth: +depth.toFixed(1),
         eggRx: +egg.rx.toFixed(1), tris: cavep.triCount, reached: reached.size, tour: tour.length,
         maxSlope: +maxSlope.toFixed(1), minHeadroom: minHeadroom === Infinity ? 'n/a' : +minHeadroom.toFixed(2),
@@ -2757,7 +2776,7 @@ const SCENARIOS = {
       };
     }, opts.residentKey ?? null);
     const pass = r.fails.length === 0;
-    console.log(`CAVE-WALK pass=${pass ? 1 : 0} seed=${r.seed ?? '?'} digest=${r.digest ?? '?'} chambers=${r.chambers ?? '?'} edges=${r.edges ?? '?'} reached=${r.reached ?? '?'}/${r.chambers ?? '?'} tour=${r.tour ?? '?'} eggDepth=${r.eggDepth ?? '?'}m eggRx=${r.eggRx ?? '?'} slope=${r.maxSlope ?? '?'}° headroom=${r.minHeadroom ?? '?'} chamHead=${r.chamMinHead ?? '?'} cover=${r.minCover ?? '?'} ascent=${r.exited ? 'OUT' : 'FAIL'} tris=${r.tris ?? '?'} strands=${(r.strands ?? []).length} fails=${r.fails.length}`);
+    console.log(`CAVE-WALK pass=${pass ? 1 : 0} seed=${r.seed ?? '?'} kind=${r.caveKind ?? '?'} digest=${r.digest ?? '?'} chambers=${r.chambers ?? '?'} edges=${r.edges ?? '?'} reached=${r.reached ?? '?'}/${r.chambers ?? '?'} tour=${r.tour ?? '?'} eggDepth=${r.eggDepth ?? '?'}m eggRx=${r.eggRx ?? '?'} slope=${r.maxSlope ?? '?'}° headroom=${r.minHeadroom ?? '?'} chamHead=${r.chamMinHead ?? '?'} cover=${r.minCover ?? '?'} ascent=${r.exited ? 'OUT' : 'FAIL'} tris=${r.tris ?? '?'} strands=${(r.strands ?? []).length} fails=${r.fails.length}`);
     if (r.fails.length) console.log('[cave-walk] ' + JSON.stringify(r.fails.slice(0, 12)));
     // Strands are reported on PASSING runs too — a tour that covered every chamber but had to
     // fight its way out of one of them is the early warning for the flake that eventually goes red.
@@ -3782,13 +3801,43 @@ const SCENARIOS = {
           });
         }
       }
+      // ── CORRIDOR SAMPLE POINTS SIT ON THE CLEAR SPAN, NOT THE CENTRE-TO-CENTRE SPAN. ────────
+      //   DEEPER cycle 9 fixed this, and the fix is a GATE-CORRECTNESS fix, not a loosened
+      //   threshold — the sibling gate already had it, with the same reasoning written down:
+      //   `cave-walk`'s corridor sweep samples `sA = a.rx - OV` to `sB = D - (b.rx - OV)` because
+      //   "measuring through the chamber interiors gives false gaps (flat chamber floor != the
+      //   linear ramp)". The void sweep never got the same treatment, and on canonical geometry it
+      //   did not matter: with rx ~4-9 against a ~20m run, t=0.25 lands close enough to the mouth
+      //   that the linear floor estimate is still inside open air.
+      //
+      //   The `fungal` kind broke that coincidence. Its chambers reach rx 12 against a 9m minimum
+      //   clear span, so t=0.25 of the centre-to-centre span lands 7m INSIDE the chamber — where the
+      //   floor is the chamber's FLAT disk, not the corridor's ramp. The estimate `a.y + (b.y-a.y)·t`
+      //   then puts the sample point up to ~1.5m BELOW the real floor, i.e. inside solid rock, and
+      //   ~45% of its ray sphere leaves through the underside. That is what seeds 7 and 4242 reported
+      //   as `corridorEsc=83 / holes=83 / frontEsc=83` at exactly one or two corridor points: a
+      //   measurement artefact with the signature of one (all-front-face, all classified holes, all
+      //   in corridors, none in chambers).
+      //
+      //   The fix places every corridor point on the span the corridor's own floor actually spans,
+      //   which is also the only stretch a player walks as a corridor. It REMOVES a false positive;
+      //   it removes no true positive, because the chamber interiors those points were straying into
+      //   are already sampled by five chamber points each. `--puncture` remains the proof-of-teeth.
+      const OV_VOID = 1.2;   // CAVE_GEN_END_OVERLAP — matches cave-walk's corridor sweep exactly
       for (const e of cavep.edges) {
         const a = byId(e.a), b = byId(e.b);
         const eye = Math.min(EYE, Math.max(0.7, e.height * 0.45));
+        const D = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+        const sA = Math.max(0, a.rx - OV_VOID), sB = Math.min(D, D - (b.rx - OV_VOID));
+        // A degenerate clear span (chambers nearly touching) falls back to the midpoint rather than
+        // silently emitting nothing — a corridor that stops being sampled is a gate losing teeth.
+        const lo = sB > sA ? sA : D * 0.5, hi = sB > sA ? sB : D * 0.5;
         for (const t of [0.25, 0.5, 0.75]) {
+          const along = lo + (hi - lo) * t;
+          const u = along / D;
           pts.push({
             label: `corridor${e.a}-${e.b}${e.squeeze ? ':sq' : ':gal'}@${t}`, kind: 'corridor', node: e.a,
-            p: new THREE.Vector3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t + eye, a.z + (b.z - a.z) * t),
+            p: new THREE.Vector3(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u + eye, a.z + (b.z - a.z) * u),
           });
         }
       }
@@ -5612,6 +5661,461 @@ const SCENARIOS = {
     for (const d of details) console.log(`[cave-streamed] ${d}`);
     if (fails.length) for (const f of fails) console.log(`[cave-streamed] FAIL ${f}`);
     if (!pass) throw new Error('cave-streamed GATE FAILED');
+  },
+
+  // ── cave-kinds (DEEPER cycle 9) — THE KIND GATE ─────────────────────────────────────────────
+  //
+  //   WHAT IT PROVES, and why each half exists:
+  //
+  //   1. THE MIX IS REAL AND PURE. Over a large box of deterministic sites, every kind occurs at
+  //      roughly its weight and NO KIND IS ABSENT. The absent-kind check is the vacuous-pass guard
+  //      that matters most here: a typo in the weight table, a reordered `CAVE_KIND_LIST`, or a
+  //      broken hash would produce a world that still builds caves and still passes every other
+  //      gate — it would just quietly only ever build one kind. The weighted picker is ALSO tested
+  //      directly over 20k uniform rolls, because a site sample can only ever be a loose check.
+  //
+  //   2. EVERY KIND IS WALKABLE AND WATERTIGHT. Per kind: a REAL streamed build at a REAL
+  //      descriptor-accepted site, then the FULL `cave-walk` Euler-tour KCC march (every chamber,
+  //      the crevice descent AND ascent, corridor sweeps, chamber-floor grids, topology) and the
+  //      FULL `cave-void` sweep. Same shared code as the origin gate and as `cave-streamed` —
+  //      pointed at this resident by `residentKey` — never a second copy that can drift.
+  //
+  //   HOW A KIND GETS UNDER TEST. The gate takes the N nearest sites the placement rules already
+  //   accepted and requests each through the SHIPPED entry point (`caveStream.requestSite`, the same
+  //   call `pollSites` makes) with the kind OVERRIDDEN. It does not hunt the world for a site that
+  //   happened to roll the kind under test: that would make the gate's coverage depend on the
+  //   weights, so re-tuning the mix could silently stop testing a kind. Everything else — the tor,
+  //   the sliced interior build, the atomic finalize, the carved terrain hole — is the real path.
+  //
+  //   3. THE KIND ACTUALLY TOOK. Walk-green is necessary and nowhere near sufficient: a kind table
+  //      that silently fell back to canonical would march perfectly. So each kind asserts its own
+  //      DEFINING signal (the warren's room count + its scrap, the fungal cavern's fungi, the
+  //      flooded cave's pools, the shaft's depth + rubble), and the cross-kind block asserts the
+  //      kinds differ from each other in the ways the table claims.
+  //
+  //   4. NO KIND OUTGROWS ITS PLOT. The measured horizontal extent of each kind's cave must stay
+  //      under the minimum spacing the site grid guarantees, or two cave bodies can interpenetrate.
+  //      Cycle 8 asserts this for the canonical cave; a bigger kind is exactly how it would break.
+  //
+  //   COST — stated because the alternative is a gate nobody runs. A full march is ~2-4 minutes of
+  //   real KCC walking per cave, plus ~40-60s of arrival and ~20s of void sampling. Four kinds is
+  //   ~18-22 minutes at one seed. The PERMANENT leg in `verify:chunks` is therefore each kind × the
+  //   ONE seed 1337 (4 marches); the x3 seed net (12 marches, seeds 1337/7/4242) was run once at
+  //   cycle 9 and is one flag away (`--seed=`) whenever the generator is touched again.
+  //
+  //   Run: npm run rig -- --scenario=cave-kinds --seed=1337 --port=52xx
+  //        …--kinds=shaft --march=0 --shots=1     (fast: build + smoke shots, no march)
+  'cave-kinds': async (page) => {
+    const ALL = ['warren', 'fungal', 'flooded', 'shaft'];
+    const KINDS = argv.kinds ? String(argv.kinds).split(',').map((k) => k.trim()).filter(Boolean) : ALL;
+    const DO_MARCH = argv.march === undefined ? 1 : Number(argv.march);
+    const DO_SHOTS = Number(argv.shots || 0);
+    // `--siteOffset=N` shifts which nearest-sites the kinds land on. It exists for ONE reason and it
+    // is a diagnostic one: when a kind fails at its site, the only way to tell a KIND defect from a
+    // SITE defect is to put a DIFFERENT kind on the SAME site. Default 0 = the permanent gate.
+    const SITE_OFFSET = Number(argv.siteOffset || argv.siteoffset || 0);
+    const fails = [];
+    const details = [];
+
+    // ── A. THE TABLE + THE MIX ──────────────────────────────────────────────────────────────
+    const dist = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      if (!ctx.caveStream) return { fatal: 'ctx.caveStream is null — the cave scheduler did not boot' };
+      const out = { fails: [] };
+      const table = g.caveKindTable();
+      out.kinds = table.kinds;
+      out.weights = table.weights;
+
+      // A1 — the PICKER itself, over a uniform sweep. Exact, cheap, and independent of placement:
+      //      if the weighted selection is wrong this fails in milliseconds instead of hiding behind
+      //      the noise of a site sample.
+      const N = 20000; const hit = {};
+      for (const k of table.kinds) hit[k] = 0;
+      for (let i = 0; i < N; i++) hit[g.pickCaveKind((i + 0.5) / N)]++;
+      let tot = 0; for (const k of table.kinds) tot += table.weights[k];
+      out.pickerShare = {}; out.pickerWant = {};
+      for (const k of table.kinds) {
+        const got = hit[k] / N, want = table.weights[k] / tot;
+        out.pickerShare[k] = +got.toFixed(4); out.pickerWant[k] = +want.toFixed(4);
+        if (Math.abs(got - want) > 0.01) out.fails.push(`picker: '${k}' takes ${(got * 100).toFixed(1)}% of a uniform sweep, weights say ${(want * 100).toFixed(1)}%`);
+      }
+
+      // A2 — the REAL site list. Purity first (two derivations must agree on every kind), then the
+      //      observed share, then the hard no-kind-absent rule.
+      const BOX = 9000;
+      const derive = () => g.caveSites(0, 0, BOX * Math.SQRT2)
+        .filter((s) => Math.abs(s.x) <= BOX && Math.abs(s.z) <= BOX)
+        .sort((a, b) => (a.gx - b.gx) || (a.gz - b.gz));
+      const A = derive(), B = derive();
+      out.sites = A.length;
+      if (A.length !== B.length) out.fails.push(`site list length is not stable (${A.length} vs ${B.length})`);
+      let kindDrift = 0;
+      for (let i = 0; i < Math.min(A.length, B.length); i++) if (A[i].kind !== B[i].kind) kindDrift++;
+      if (kindDrift) out.fails.push(`${kindDrift} sites changed KIND between two derivations — the kind roll is not pure (D290)`);
+      if (A.length < 120) out.fails.push(`only ${A.length} sites in an 18km box — too few to audit the mix (vacuous-pass guard)`);
+      const count = {}; for (const k of table.kinds) count[k] = 0;
+      let unknown = 0;
+      for (const s of A) { if (count[s.kind] === undefined) unknown++; else count[s.kind]++; }
+      if (unknown) out.fails.push(`${unknown} sites carry a kind that is not in CAVE_KIND_LIST`);
+      out.count = count;
+      out.share = {};
+      for (const k of table.kinds) {
+        const got = count[k] / Math.max(1, A.length), want = table.weights[k] / tot;
+        out.share[k] = +got.toFixed(4);
+        // NO KIND ABSENT is the hard rule; the band is deliberately loose (a few hundred sites is a
+        // small sample and this is a distribution check, not a chi-squared test).
+        if (count[k] === 0) out.fails.push(`kind '${k}' does not occur ONCE in ${A.length} sites — it is unreachable in play`);
+        else if (got < want * 0.55 || got > want * 1.45) out.fails.push(`kind '${k}' takes ${(got * 100).toFixed(1)}% of ${A.length} sites, weights say ${(want * 100).toFixed(1)}% (±45% band)`);
+      }
+      return out;
+    });
+    if (dist.fatal) { console.log(`CAVE-KINDS pass=0 FATAL ${dist.fatal}`); throw new Error('cave-kinds FAILED'); }
+    for (const f of dist.fails) fails.push(`mix: ${f}`);
+    console.log(`[cave-kinds] mix over ${dist.sites} sites: ` + dist.kinds.map((k) => `${k}=${dist.count[k]}(${(dist.share[k] * 100).toFixed(1)}%/want ${(dist.pickerWant[k] * 100).toFixed(1)}%)`).join(' '));
+
+    // ── B. PICK THE SITES. Nearest-first, one per kind under test. ─────────────────────────
+    const picked = await page.evaluate((N) => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.sandWorms.list.length = 0; ctx.vultures.list.length = 0; ctx.weather.intensity = 0;
+      const all = g.caveSites(0, 0, 6000);
+      if (all.length < N) return { fatal: `only ${all.length} cave sites within 6km — cannot pick ${N}` };
+      return {
+        seed: ctx.seed,
+        sites: all.map((s) => ({ ...s, d: Math.hypot(s.x, s.z) })).sort((a, b) => a.d - b.d).slice(0, N),
+      };
+    }, KINDS.length + SITE_OFFSET);
+    if (picked.fatal) { console.log(`CAVE-KINDS pass=0 FATAL ${picked.fatal}`); throw new Error('cave-kinds FAILED'); }
+
+    const per = {};
+    let marched = 0, voided = 0, built = 0, strandTotal = 0, escTotal = 0;
+
+    for (let i = 0; i < KINDS.length; i++) {
+      const kind = KINDS[i];
+      const site = picked.sites[i + SITE_OFFSET];
+      const key = `kindgate:${kind}`;
+      const t0 = Date.now();
+
+      // ── ARRIVAL through the shipped streaming path, with the kind forced. ────────────────
+      const arrive = await page.evaluate(async (S) => {
+        const g = window.__game; const ctx = g.ctx; const T = g.Tuning;
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        // Park the descriptor-driven source: this leg builds ONE named cave and must measure that
+        // one. (Identical reasoning to `cave-streamed`; the density system is gated elsewhere.)
+        ctx.caveStream.setSiteSource(null);
+        const APPROACH = Math.min(120, T.CAVE_STREAM_REQUEST_M * 0.4);
+        const px = S.x - APPROACH, pz = S.z;
+        ctx.player.body.body.setTranslation({ x: px, y: ctx.terrain.heightAt(px, pz) + 2, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        let tileFrames = 0;
+        for (let f = 0; f < 2000; f++) {
+          await raf(); tileFrames++;
+          if (f > 90 && ctx.terrain.isTileLoadedAt(S.x, S.z)) break;
+        }
+        if (!ctx.terrain.isTileLoadedAt(S.x, S.z)) return { ok: false, why: `terrain tile never loaded in ${tileFrames} frames` };
+        g.resetCavePerf();
+        // THE SHIPPED ENTRY POINT, kind overridden. `requestSite` is what `pollSites` calls.
+        const queued = ctx.caveStream.requestSite({ key: S.key, x: S.x, z: S.z, seed: S.seed, kind: S.kind });
+        if (!queued) return { ok: false, why: 'requestSite refused the synthesized descriptor' };
+        let buildFrames = 0, worstFrameMs = 0, last = performance.now(), arrived = false;
+        for (let f = 0; f < 9000; f++) {
+          await raf(); buildFrames++;
+          const now = performance.now(); const gap = now - last; last = now;
+          if (f > 2 && gap > worstFrameMs) worstFrameMs = gap;
+          if (ctx.caveStream.residents().some((r) => r.key === S.key)) { arrived = true; break; }
+        }
+        const p = g.cavePerf();
+        if (!arrived) return { ok: false, buildFrames, why: `the streamer never built ${S.key} in ${buildFrames} frames (queued=${p.queued}, pending=${p.pending ? p.pending.stage : 'none'})` };
+        const res = ctx.caveStream.residents().find((r) => r.key === S.key);
+        const pr = res.cave.probe;
+        // Measured horizontal extent of THIS cave body — the number the site grid's guaranteed
+        // spacing has to clear (see leg 4 in the header).
+        const b = res.box;
+        let meshes = 0; res.cave.group.traverse((o) => { if (o.isMesh) meshes++; });
+        return {
+          ok: true, buildFrames, tileFrames, worstFrameMs: +worstFrameMs.toFixed(1),
+          kind: pr.kind, envelope: pr.envelope, digest: pr.digest,
+          chambers: pr.nodes.length, edges: pr.edges.length,
+          eggRx: +pr.nodes[pr.eggId].rx.toFixed(1), eggDepth: +pr.depthBelowSurface.toFixed(1),
+          fungiClusters: pr.fungiClusters, rubbleHeaps: pr.rubbleHeaps, scrapAnchors: pr.scrapAnchors,
+          pools: pr.pools.length, poolR: pr.pools.map((q) => q.r),
+          squeezes: pr.edges.filter((e) => e.squeeze).length,
+          corridorH: +Math.min.apply(null, pr.edges.map((e) => e.height)).toFixed(2),
+          tris: pr.triCount, colliderTris: pr.colliderTris, meshes,
+          extent: +Math.hypot(b.max.x - b.min.x, b.max.z - b.min.z).toFixed(1),
+          minSpacing: +g.caveSiteMinSpacing().toFixed(0),
+          torMs: +p.stream.maxTorMs.toFixed(1), finMs: +p.stream.maxFinalizeMs.toFixed(1),
+          sliceMs: +p.stream.maxSliceMs.toFixed(1), atomicMs: +p.stream.maxAtomicMs.toFixed(1),
+          atomicStage: p.stream.worstAtomicStage,
+          holeOpen: ctx.terrain.caveHoleKeys().includes(S.key),
+          // The warren's scrap is a PICKUP spawned by the resident sink, not cave geometry — so it
+          // is counted in the live pickup list, which is the only place a dangling one would show.
+          // UNDERGROUND-ONLY: `transient` scrap is also what the D299 streamed wreck scrap rings
+          // are, so a plain radius test counts surface salvage too (the first run of this gate read
+          // 19 pickups against 6 anchors, and read non-zero for kinds that scatter none). A pickup
+          // more than 3m BELOW the terrain sheet can only have come from a cave.
+          scrapPickups: ctx.pickups.list.filter((q) => q.itemId === 'scrap' && q.transient
+            && Math.hypot(q.pos.x - S.x, q.pos.z - S.z) < 400
+            && q.pos.y < ctx.terrain.pureHeightAt(q.pos.x, q.pos.z) - 3).length,
+        };
+      }, { ...site, key, kind });
+
+      if (!arrive.ok) {
+        fails.push(`${kind}: ${arrive.why}`);
+        details.push(`${kind.padEnd(8)} *** NEVER BUILT *** ${arrive.why}`);
+        continue;
+      }
+      built++;
+      per[kind] = arrive;
+
+      // ── THE KIND ACTUALLY TOOK (leg 3) ──────────────────────────────────────────────────
+      if (arrive.kind !== kind) fails.push(`${kind}: the resident reports kind '${arrive.kind}' — the override did not reach the generator`);
+      if (!arrive.holeOpen) fails.push(`${kind}: no carved terrain hole — the sheet never opened over the cave`);
+      if (!(arrive.tris > 0) || !(arrive.colliderTris > 0)) fails.push(`${kind}: ${arrive.tris} visual / ${arrive.colliderTris} collider triangles`);
+      if (arrive.extent >= arrive.minSpacing) fails.push(`${kind}: measured cave extent ${arrive.extent}m ≥ the site grid's guaranteed min spacing ${arrive.minSpacing}m — two cave bodies of this kind can interpenetrate`);
+      if (kind === 'warren') {
+        if (arrive.chambers < 10) fails.push(`warren: only ${arrive.chambers} chambers — the warren is supposed to be MANY small rooms`);
+        if (arrive.scrapAnchors < 4) fails.push(`warren: ${arrive.scrapAnchors} scrap anchors — the salvage scatter did not happen`);
+        if (arrive.scrapPickups !== arrive.scrapAnchors) fails.push(`warren: ${arrive.scrapPickups} live UNDERGROUND scrap pickups for ${arrive.scrapAnchors} anchors — the resident sink did not spawn exactly one per anchor`);
+        if (arrive.squeezes < arrive.edges * 0.5) fails.push(`warren: only ${arrive.squeezes}/${arrive.edges} corridors are squeezes`);
+      }
+      if (kind !== 'warren' && arrive.scrapPickups > 0) fails.push(`${kind}: ${arrive.scrapPickups} underground scrap pickups near a kind that scatters none — either the anchors leaked or a previously-evicted cave's pickups were never despawned`);
+      if (kind === 'fungal') {
+        if (arrive.fungiClusters < 15) fails.push(`fungal: ${arrive.fungiClusters} fungi clusters — a canonical cave already carries ~7-13, so the density did not take`);
+        if (arrive.eggRx < 11) fails.push(`fungal: egg chamber rx ${arrive.eggRx}m — the vault did not take`);
+      }
+      if (kind === 'flooded') {
+        if (arrive.pools < 4) fails.push(`flooded: only ${arrive.pools} pools — canonical already carries 1-3`);
+      }
+      if (kind === 'shaft') {
+        if (arrive.eggDepth < 40) fails.push(`shaft: egg depth ${arrive.eggDepth}m — the shaft did not descend`);
+        if (arrive.rubbleHeaps < 3) fails.push(`shaft: ${arrive.rubbleHeaps} rubble heaps — the collapse dressing did not take`);
+      }
+
+      // ── THE MARCH + THE VOID SWEEP — the identical shared gates, pointed at this resident ──
+      let w = null;
+      if (DO_MARCH) {
+        w = await SCENARIOS['cave-walk'](page, { residentKey: key, noShots: true, noThrow: true });
+        marched++;
+        for (const f of w.fails) fails.push(`${kind} march: ${f}`);
+        if (!w.exited && !w.fails.length) fails.push(`${kind} march: reported no failures but never exited the cave`);
+        const st = (w.strands || []).length;
+        strandTotal += st;
+        if (st) console.log(`[cave-kinds] ⚠ ${kind} STRANDED ${st} leg(s) — the capsule could not walk back out of a chamber it had reached: [${w.strands.join(' ')}]`);
+      }
+      const v = await SCENARIOS['cave-void'](page, { residentKey: key, noShots: true, noThrow: true });
+      voided++;
+      if (v.fatal) fails.push(`${kind} void: ${v.fatal}`);
+      else {
+        escTotal += v.escapes;
+        if (v.escapes > 0) {
+          fails.push(`${kind} void: ${v.escapes} unexcused escapes (${v.escapeRate}%) across ${v.leakyPoints}/${v.points} points`);
+          for (const x of v.worst.slice(0, 6)) console.log(`[cave-kinds] ${kind} VOID ${x.label.padEnd(28)} esc=${x.esc}/${v.K} at ${JSON.stringify(x.p)}`);
+        }
+        if (v.excused > 0) fails.push(`${kind} void: ${v.excused} rays excused through a declared opening — the origin cave excuses none`);
+      }
+      per[kind].walk = w; per[kind].voidSweep = v;
+
+      // ── THE SCRAP TEARDOWN LEG (warren only). ────────────────────────────────────────────
+      //   A cave's scrap pickups live OUTSIDE the cave's scene graph — in `ctx.pickups` — so the
+      //   resident sink has to despawn them when the cave is evicted. The dangerous case is not the
+      //   happy path: it is a pickup that has ALREADY left the list before eviction, which happens
+      //   every time a player takes one. `despawnPickup` on a POOLED pickup whose slot is already
+      //   freed falls through to `scene.remove(pickup.mesh)`, and `mesh` is the SHARED scrap
+      //   InstancedMesh — so a double despawn deletes every scrap pickup in the WORLD from the
+      //   scene. This leg walks that exact sequence: take one, evict the cave by walking out of
+      //   range through the shipped `releaseOutOfRange` path, and assert the pool survived and the
+      //   cave's remaining scrap went with the cave.
+      if (kind === 'warren' && arrive.scrapAnchors > 0) {
+        const td = await page.evaluate(async (S) => {
+          const g = window.__game; const ctx = g.ctx;
+          const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+          const under = () => ctx.pickups.list.filter((q) => q.itemId === 'scrap' && q.transient
+            && Math.hypot(q.pos.x - S.x, q.pos.z - S.z) < 400
+            && q.pos.y < ctx.terrain.pureHeightAt(q.pos.x, q.pos.z) - 3);
+          const before = under();
+          if (!before.length) return { fatal: 'no underground scrap to take' };
+          const totalScrapBefore = ctx.pickups.list.filter((q) => q.itemId === 'scrap').length;
+          // 1 — TAKE one, through the shipped despawn path (what picking it up does).
+          const took = g.despawnPickupById(before[0].id);
+          // 2 — walk out of range: teleport far and tick until the streamer releases the resident.
+          ctx.player.body.body.setTranslation({ x: S.x + 5000, y: 400, z: S.z + 5000 }, true);
+          let f = 0;
+          for (; f < 900; f++) {
+            await raf();
+            if (!ctx.caveStream.residents().some((r) => r.key === S.key)) break;
+          }
+          const evicted = !ctx.caveStream.residents().some((r) => r.key === S.key);
+          // 3 — the shared pool must still be in the scene, and some scrap must still exist.
+          const anyScrap = ctx.pickups.list.find((q) => q.itemId === 'scrap' && q.inst);
+          return {
+            took, evicted, frames: f,
+            underAfter: under().length, totalScrapBefore,
+            totalScrapAfter: ctx.pickups.list.filter((q) => q.itemId === 'scrap').length,
+            poolInScene: anyScrap ? !!anyScrap.mesh.parent : null,
+          };
+        }, { x: site.x, z: site.z, key });
+        if (td.fatal) fails.push(`warren teardown: ${td.fatal}`);
+        else {
+          if (!td.took) fails.push('warren teardown: could not take a cave scrap pickup');
+          if (!td.evicted) fails.push(`warren teardown: the cave was never released after ${td.frames} frames 5km away`);
+          if (td.underAfter !== 0) fails.push(`warren teardown: ${td.underAfter} underground scrap pickups survived their cave's eviction — dangling interaction targets`);
+          if (td.poolInScene === false) fails.push('warren teardown: the SHARED scrap InstancedMesh left the scene — a double despawn removed every scrap pickup in the world');
+          console.log(`[cave-kinds] warren teardown: took=${td.took ? 1 : 0} evicted=${td.evicted ? 1 : 0} in ${td.frames}f, underground scrap ${arrive.scrapPickups}\u2192${td.underAfter}, world scrap ${td.totalScrapBefore}\u2192${td.totalScrapAfter}, shared pool in scene=${td.poolInScene}`);
+        }
+      }
+
+      // Smoke shots are DIAGNOSTIC, never load-bearing: a framing that throws must not take the
+      // walk/void result down with it.
+      if (DO_SHOTS) { try { await caveKindShots(page, kind, key); } catch (e) { console.log(`[cave-kinds] ${kind} shots failed: ${e.message}`); } }
+
+      const secs = ((Date.now() - t0) / 1000).toFixed(0);
+      details.push(
+        `${kind.padEnd(8)} @(${site.x.toFixed(0)},${site.z.toFixed(0)}) seed=${site.seed} digest=${arrive.digest} ` +
+        `chambers=${arrive.chambers} depth=${arrive.eggDepth}m eggRx=${arrive.eggRx} squeeze=${arrive.squeezes}/${arrive.edges} corrH=${arrive.corridorH}m ` +
+        `fungi=${arrive.fungiClusters} pools=${arrive.pools} rubble=${arrive.rubbleHeaps} scrap=${arrive.scrapAnchors}/${arrive.scrapPickups} ` +
+        `extent=${arrive.extent}m/${arrive.minSpacing}m tris=${arrive.tris}/${arrive.colliderTris} meshes=${arrive.meshes} ` +
+        `tor=${arrive.torMs}ms fin=${arrive.finMs}ms slice=${arrive.sliceMs}ms atomic=${arrive.atomicMs}ms(${arrive.atomicStage}) frame=${arrive.worstFrameMs}ms | ` +
+        (w ? `MARCH reached=${w.reached}/${w.chambers} ascent=${w.exited ? 'OUT' : 'FAIL'} strands=${(w.strands || []).length} slope=${w.maxSlope}° head=${w.minHeadroom} chamHead=${w.chamMinHead} cover=${w.minCover} fails=${w.fails.length} | ` : 'MARCH skipped | ') +
+        (v.fatal ? `VOID FATAL ${v.fatal}` : `VOID points=${v.points} rays=${v.totalRays} escapes=${v.escapes} excused=${v.excused}`) +
+        ` | ${secs}s`,
+      );
+    }
+
+    // ── C. CROSS-KIND DISTINCTNESS. Each kind marching green proves nothing about whether the
+    //      kinds are DIFFERENT PLACES — a table that collapsed to canonical would look perfect
+    //      above. These are the inequalities the table claims, asserted against measured caves. ──
+    const have = (k) => per[k] && per[k].ok;
+    if (have('warren') && have('fungal')) {
+      if (!(per.warren.chambers > per.fungal.chambers)) fails.push(`distinctness: warren has ${per.warren.chambers} chambers, fungal has ${per.fungal.chambers} — the warren must be the many-small-rooms kind`);
+      if (!(per.fungal.eggRx > per.warren.eggRx + 2)) fails.push(`distinctness: fungal egg rx ${per.fungal.eggRx} vs warren ${per.warren.eggRx} — the vault is not vaulted`);
+    }
+    if (have('shaft') && have('flooded')) {
+      if (!(per.shaft.eggDepth > per.flooded.eggDepth + 4)) fails.push(`distinctness: shaft depth ${per.shaft.eggDepth}m vs flooded ${per.flooded.eggDepth}m — the shaft does not go deeper`);
+    }
+    if (have('flooded') && have('warren')) {
+      if (!(per.flooded.pools > per.warren.pools)) fails.push(`distinctness: flooded has ${per.flooded.pools} pools, warren has ${per.warren.pools}`);
+    }
+    if (have('fungal') && have('shaft')) {
+      if (!(per.fungal.fungiClusters > per.shaft.fungiClusters)) fails.push(`distinctness: fungal has ${per.fungal.fungiClusters} fungi clusters, shaft has ${per.shaft.fungiClusters}`);
+    }
+    // Vacuous-pass guards on the run itself.
+    if (built < KINDS.length) fails.push(`only ${built}/${KINDS.length} kinds built`);
+    if (DO_MARCH && marched === 0) fails.push('no kind was marched — the gate would have passed by measuring nothing');
+    if (voided === 0) fails.push('no kind was void-sampled — the gate would have passed by measuring nothing');
+
+    const pass = fails.length === 0;
+    console.log(`CAVE-KINDS pass=${pass ? 1 : 0} seed=${picked.seed} kinds=${KINDS.length} built=${built} marched=${marched} voided=${voided} sites=${dist.sites} strands=${strandTotal} escapes=${escTotal} fails=${fails.length}`);
+    for (const d of details) console.log(`[cave-kinds] ${d}`);
+    if (fails.length) for (const f of fails) console.log(`[cave-kinds] FAIL ${f}`);
+    if (!pass) throw new Error('cave-kinds GATE FAILED');
+  },
+
+  // ── crevice-profile (DEEPER cycle 9) — THE ENTRANCE CLEARANCE PROFILE ────────────────────────
+  //
+  //   WHY IT EXISTS. `cave-walk` reports the crevice descent as a pass/fail per LEG: "could not walk
+  //   leg slot2". That is the right gate and a useless diagnostic — it says a capsule stopped, not
+  //   what stopped it, and the two candidate causes (the slot's ceiling clamped down onto the walker
+  //   vs. its walls closing in) call for opposite fixes. This scenario measures the actual clear
+  //   envelope of the descent with physics rays against the SHIPPED colliders: at 0.3m of arc length
+  //   along the real station polyline, a castDown for the floor, an up-ray for clear HEIGHT, and
+  //   perpendicular pairs at ankle (0.35m) and head (1.65m) for clear WIDTH.
+  //
+  //   The capsule that has to fit is stated in the output, not assumed: 2·radius wide and
+  //   2·(halfHeight+radius) tall, read off `ctx.player.body`.
+  //
+  //   Run: npm run rig -- --scenario=crevice-profile --seed=1337 --siteOffset=2 --port=52xx
+  //        (--siteOffset picks the Nth-nearest cave site — the same ordering `cave-kinds` uses, so a
+  //         site that failed there can be profiled here by the same index.)
+  'crevice-profile': async (page) => {
+    const OFF = Number(argv.siteOffset || argv.siteoffset || 0);
+    const r = await page.evaluate(async (O) => {
+      const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      ctx.sandWorms.list.length = 0; ctx.vultures.list.length = 0; ctx.weather.intensity = 0;
+      const all = g.caveSites(0, 0, 6000).map((s) => ({ ...s, d: Math.hypot(s.x, s.z) })).sort((a, b) => a.d - b.d);
+      const S = all[O];
+      if (!S) return { fatal: `no cave site at offset ${O}` };
+      ctx.caveStream.setSiteSource(null);
+      const px = S.x - 120, pz = S.z;
+      const body = ctx.player.body.body;
+      body.setTranslation({ x: px, y: ctx.terrain.heightAt(px, pz) + 2, z: pz }, true);
+      for (let f = 0; f < 2000; f++) { await raf(); if (f > 90 && ctx.terrain.isTileLoadedAt(S.x, S.z)) break; }
+      const key = 'creviceprofile';
+      if (!ctx.caveStream.requestSite({ key, x: S.x, z: S.z, seed: S.seed, kind: 'canonical' })) return { fatal: 'requestSite refused the descriptor' };
+      let res = null;
+      for (let f = 0; f < 9000; f++) { await raf(); res = ctx.caveStream.residents().find((q) => q.key === key); if (res) break; }
+      if (!res) return { fatal: 'the streamer never built the site' };
+      if (!res.entrance) return { fatal: 'the resident carries no crevice entrance' };
+      const line = res.entrance.line, ep = res.entrance.probe;
+      // Park the capsule 400m up: it must not be what a ray hits, and the filter below excludes it
+      // anyway — belt and braces, because a self-hit reads as "zero clearance" and would invent a
+      // defect that is not there.
+      body.setTranslation({ x: S.x, y: ctx.terrain.heightAt(S.x, S.z) + 400, z: S.z }, true);
+      await raf();
+      const RAD = ctx.player.body.radius, HH = ctx.player.body.halfHeight;
+      const toi = (ox, oy, oz, dx, dy, dz, maxT) => {
+        const h = ctx.physics.world.castRay(new RAPIER.Ray({ x: ox, y: oy, z: oz }, { x: dx, y: dy, z: dz }),
+          maxT, true, undefined, undefined, undefined, body);
+        return h ? h.timeOfImpact : Infinity;
+      };
+      const st = line.stations;
+      const rows = [];
+      let acc = 0;
+      for (let i = 1; i < st.length; i++) {
+        const a = st[i - 1], b = st[i];
+        const dx = b.x - a.x, dz = b.z - a.z, D = Math.hypot(dx, dz) || 1;
+        const ux = dx / D, uz = dz / D, nx = -uz, nz = ux;
+        for (let t = 0; t < D - 1e-6; t += 0.3) {
+          const x = a.x + ux * t, z = a.z + uz * t;
+          const guess = a.floorY + (b.floorY - a.floorY) * (t / D);
+          // ⚠ THE RAY ORIGIN IS THE WHOLE MEASUREMENT. The descent is ROOFED past the sky run, and
+          // the terrain sheet sits a couple of metres over that roof. A castDown from `guess + 3`
+          // therefore starts ABOVE the slot's own ceiling and reports the SHEET as the floor —
+          // Δ ≈ +2.5m, walls at infinity, a bogus "0.9m clear height". The first cut of this probe
+          // did exactly that and it read as a rock plug in the descent at BOTH a failing and a
+          // passing site, which is how it was caught. Start INSIDE the slot (the clear height is
+          // ~2.55m, so +1.2 is under the ceiling and over the floor) and only fall back upward if
+          // that misses, flagging the row when it does.
+          const s = +(acc + t).toFixed(2);
+          let hit = g.castDown(x, z, guess + 1.2, true), from = 1.2;
+          if (!hit) { hit = g.castDown(x, z, guess + 0.4, true); from = 0.4; }
+          if (!hit) { hit = g.castDown(x, z, guess + 3.0, true); from = 3.0; }
+          if (!hit) { rows.push({ s, x: +x.toFixed(1), z: +z.toFixed(1), gap: 1 }); continue; }
+          const fy = hit.hitY;
+          const up = toi(x, fy + 0.12, z, 0, 1, 0, 14);
+          const wl0 = toi(x, fy + 0.35, z, nx, 0, nz, 6), wr0 = toi(x, fy + 0.35, z, -nx, 0, -nz, 6);
+          const wl1 = toi(x, fy + 1.65, z, nx, 0, nz, 6), wr1 = toi(x, fy + 1.65, z, -nx, 0, -nz, 6);
+          rows.push({
+            s, x: +x.toFixed(1), z: +z.toFixed(1), from,
+            fy: +fy.toFixed(2), dFloor: +(fy - guess).toFixed(2),
+            h: +Math.min(14, up + 0.12).toFixed(2),
+            wFoot: +Math.min(12, wl0 + wr0).toFixed(2),
+            wHead: +Math.min(12, wl1 + wr1).toFixed(2),
+          });
+        }
+        acc += D;
+      }
+      const solid = rows.filter((q) => !q.gap);
+      const minBy = (f) => solid.reduce((m, q) => (f(q) < f(m) ? q : m), solid[0]);
+      return {
+        site: { x: +S.x.toFixed(0), z: +S.z.toFixed(0), seed: S.seed, kind: S.kind, d: +S.d.toFixed(0) },
+        gy: +ep.gy.toFixed(2), slope: ep.descentAngleDeg, mouthW: ep.mouthClearW, pinchW: ep.pinchClearW,
+        capW: +(RAD * 2).toFixed(2), capH: +((HH + RAD) * 2).toFixed(2),
+        stations: st.map((q) => ({ x: +q.x.toFixed(1), z: +q.z.toFixed(1), y: +q.floorY.toFixed(2), hw: +q.halfW.toFixed(2) })),
+        gaps: rows.filter((q) => q.gap).length,
+        minH: minBy((q) => q.h), minWFoot: minBy((q) => q.wFoot), minWHead: minBy((q) => q.wHead),
+        rows,
+      };
+    }, OFF);
+    if (r.fatal) { console.log(`CREVICE-PROFILE FATAL ${r.fatal}`); throw new Error('crevice-profile FAILED'); }
+    console.log(`CREVICE-PROFILE site=(${r.site.x},${r.site.z}) d=${r.site.d}m seed=${r.site.seed} gy=${r.gy} slope=${r.slope}° mouthW=${r.mouthW} pinchW=${r.pinchW} capsule=${r.capW}m wide × ${r.capH}m tall gaps=${r.gaps}`);
+    console.log(`[crevice-profile] MIN clearHeight ${r.minH.h}m @s=${r.minH.s} (${r.minH.x},${r.minH.z}) | MIN width@foot ${r.minWFoot.wFoot}m @s=${r.minWFoot.s} | MIN width@head ${r.minWHead.wHead}m @s=${r.minWHead.s} (${r.minWHead.x},${r.minWHead.z})`);
+    console.log(`[crevice-profile] stations=${JSON.stringify(r.stations)}`);
+    for (const q of r.rows) {
+      if (q.gap) { console.log(`[crevice-profile] s=${String(q.s).padStart(6)} (${q.x},${q.z}) *** NO FLOOR ***`); continue; }
+      const flag = (q.h < r.capH + 0.2 ? ' ⚠LOW-ROOF' : '') + (q.wHead < r.capW + 0.2 ? ' ⚠NARROW-HEAD' : '') + (q.wFoot < r.capW + 0.2 ? ' ⚠NARROW-FOOT' : '');
+      console.log(`[crevice-profile] s=${String(q.s).padStart(6)} (${String(q.x).padStart(7)},${String(q.z).padStart(7)}) floor=${String(q.fy).padStart(7)} Δ=${String(q.dFloor).padStart(6)} clearH=${String(q.h).padStart(6)} wFoot=${String(q.wFoot).padStart(6)} wHead=${String(q.wHead).padStart(6)} from+${q.from}${flag}`);
+    }
   },
 
   'chunk-perf': async (page) => {
@@ -16431,6 +16935,163 @@ async function main() {
 // Force a clean exit — on win32 a lingering child handle can otherwise keep the
 // event loop alive even after teardown completes.
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+
+/** DEEPER cycle 9 — PER-KIND SMOKE SHOTS. Three torch-lit player-eye framings per kind, written to
+ *  verification/scen-kind-<kind>-<name>.png.
+ *
+ *  DELIBERATELY NOT a rule-8 look pass — that is the follow-up cycle's job, and this cycle's claim is
+ *  about parameters and traversability, not about the shipped read. What these exist for is the
+ *  cheapest possible answer to "does the silhouette actually differ?": three frames per kind that a
+ *  human (or the visual cycle that follows) can put side by side.
+ *
+ *  The three framings are chosen to show the thing the kind CHANGED:
+ *    · `room`      — standing on the deepest chamber's floor looking across it. Room scale + height.
+ *    · `corridor`  — standing at a corridor mouth looking down the tube. Cross-section + length.
+ *    · `signature` — the kind's own feature: the biggest pool (flooded), the nearest fungi cluster
+ *                    (fungal), a rubble heap (shaft), a scrap flake (warren).
+ *
+ *  Carried light is modelled through the game's OWN setter (`__game.setCaveRockLight`), same as
+ *  `cave-audit`, so the rock's envelope/bounce response is the shipping one and not a rig re-derivation.
+ */
+async function caveKindShots(page, kind, residentKey) {
+  const EYE = 1.68;
+  const specs = await page.evaluate(({ KEY, EYE }) => {
+    const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+    const res = ctx.caveStream.residents().find((r) => r.key === KEY);
+    if (!res) return null;
+    const p = res.cave.probe;
+    const nodes = p.nodes;
+    const egg = nodes.find((n) => n.id === p.eggId) || nodes[0];
+    // The floor snap: the polygonized floor, not the node's analytic height (the audit's lesson —
+    // the eye belongs where the CAPSULE would put it).
+    const floorAt = (x, z, guess) => { const h = g.castDown(x, z, guess + 3.0, true); return h ? h.hitY : guess; };
+    const out = [];
+    // 1 — the deepest room, from its rim looking across the middle.
+    {
+      const a = 0.62, ux = Math.cos(a), uz = Math.sin(a);
+      const sx = egg.x + ux * egg.rx * 0.80, sz = egg.z + uz * egg.rx * 0.80;
+      const fy = floorAt(sx, sz, egg.y);
+      out.push({ name: 'room', cam: [sx, fy + EYE, sz], look: [egg.x - ux * egg.rx * 0.5, egg.y + egg.height * 0.45, egg.z - uz * egg.rx * 0.5] });
+    }
+    // 2 — down a corridor from just inside its mouth. Prefer a squeeze (that is what the warren
+    //     changed); fall back to whatever the tree has.
+    {
+      const e = p.edges.find((q) => q.squeeze) || p.edges[0];
+      const A = nodes.find((n) => n.id === e.a), B = nodes.find((n) => n.id === e.b);
+      const D = Math.hypot(B.x - A.x, B.z - A.z) || 1;
+      const hx = (B.x - A.x) / D, hz = (B.z - A.z) / D;
+      const s0 = A.rx + 1.0;
+      const sx = A.x + hx * s0, sz = A.z + hz * s0;
+      const fy = floorAt(sx, sz, A.y + (B.y - A.y) * (s0 / D));
+      out.push({ name: 'corridor', cam: [sx, fy + EYE, sz], look: [B.x, B.y + 1.4, B.z] });
+    }
+    // 3 — the kind's signature feature, framed from ~2.6m away at eye height.
+    {
+      let tgt = null;
+      const pools = (p.pools || []).slice().sort((a, b) => b.r - a.r);
+      if (pools.length) tgt = { x: pools[0].x, y: pools[0].y, z: pools[0].z, r: Math.max(1.6, pools[0].r) };
+      // fungi / rubble / scrap are all SCENE objects; find the nearest to the deepest room.
+      const want = new THREE.Color(T.CAVE_FUNGI_EMISSIVE_HEX).getHexString();
+      const wp = new THREE.Vector3();
+      let fung = null, fd = 1e9;
+      res.cave.group.traverse((o) => {
+        if (!o.isMesh || !o.material || !o.material.emissive) return;
+        if (o.material.emissive.getHexString() !== want) return;
+        o.getWorldPosition(wp);
+        const d = Math.hypot(wp.x - egg.x, wp.z - egg.z);
+        if (d < fd) { fd = d; fung = { x: wp.x, y: wp.y, z: wp.z, r: 0.9 }; }
+      });
+      const K = p.kind;
+      if (K === 'fungal' && fung) tgt = fung;
+      if (K === 'warren') {
+        let best = null, bd = 1e9;
+        for (const q of ctx.pickups.list) {
+          if (q.itemId !== 'scrap' || !q.transient) continue;
+          const d = Math.hypot(q.pos.x - egg.x, q.pos.z - egg.z);
+          if (d < bd && d < 400) { bd = d; best = { x: q.pos.x, y: q.pos.y, z: q.pos.z, r: 0.7 }; }
+        }
+        if (best) tgt = best;
+      }
+      if (K === 'shaft') {
+        // The rubble heaps are the only collider-bearing icosahedra in the group: pick the mesh whose
+        // bounding sphere is small and which sits within a metre of a chamber floor.
+        let best = null, bd = 1e9;
+        res.cave.group.traverse((o) => {
+          if (!o.isMesh || !o.geometry) return;
+          if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+          const bs = o.geometry.boundingSphere;
+          if (!bs) return;
+          if (bs.radius > 0.9 || bs.radius < 0.15) return;
+          const d = Math.hypot(bs.center.x - egg.x, bs.center.z - egg.z);
+          if (d < bd) { bd = d; best = { x: bs.center.x, y: bs.center.y, z: bs.center.z, r: 1.0 }; }
+        });
+        if (best) tgt = best;
+      }
+      if (tgt) {
+        const off = tgt.r + 2.4;
+        const sx = tgt.x + off * 0.78, sz = tgt.z + off * 0.62;
+        const fy = floorAt(sx, sz, tgt.y);
+        out.push({ name: 'signature', cam: [sx, fy + EYE, sz], look: [tgt.x, tgt.y + 0.2, tgt.z] });
+      }
+    }
+    return out;
+  }, { KEY: residentKey, EYE });
+  if (!specs) { console.log(`[cave-kinds] ${kind}: no resident to shoot`); return; }
+
+  for (const spec of specs) {
+    const st = await page.evaluate((s) => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+      const cam = ctx.three.camera;
+      // FREEZE FIRST. The game keeps rendering on its own rAF, so without the pause `updatePlayer`
+      // puts the camera back on the capsule and the composited screenshot shows the SURFACE the
+      // player is standing on — which is exactly what the first run of this helper produced.
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 720, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+      ctx.three.renderer.toneMappingExposure = 1.05;      // the SHIPPING exposure, never hotter
+      cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+      cam.lookAt(s.look[0], s.look[1], s.look[2]);
+      cam.updateMatrixWorld(true);
+      const hidden = [], dom = [];
+      const hide = (o) => { if (o && o.visible) { hidden.push(o); o.visible = false; } };
+      hide(ctx.player.rig && ctx.player.rig.group);
+      hide(ctx.player.viewModel && ctx.player.viewModel.group);
+      for (const el of Array.from(document.body.children)) {
+        if (el === ctx.three.renderer.domElement || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+        if (el.style.display !== 'none') { dom.push([el, el.style.display]); el.style.display = 'none'; }
+      }
+      let torchI = 0;
+      if (ctx.player.viewModel) { torchI = ctx.player.viewModel.heldPointLight.intensity; ctx.player.viewModel.heldPointLight.intensity = 0; }
+      const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+      const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+      const lp = cam.position.clone().addScaledVector(fwd, 0.45).addScaledVector(right, 0.30);
+      lp.y -= 0.28;
+      const tl = new THREE.PointLight(T.TORCH_LIGHT_COLOR_HEX, T.TORCH_LIGHT_INTENSITY, T.TORCH_LIGHT_DISTANCE, 2);
+      tl.position.copy(lp); ctx.three.scene.add(tl);
+      g.setCaveRockLight(lp.x, lp.y, lp.z, T.TORCH_LIGHT_INTENSITY);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      window.__kindShotRestore = { hidden, dom, torchI, light: tl };
+      return true;
+    }, spec);
+    if (!st) continue;
+    await page.waitForTimeout(120);
+    try {
+      await page.screenshot({ path: join(OUT, `scen-kind-${kind}-${spec.name}.png`), fullPage: false, timeout: 60000 });
+      console.log(`[cave-kinds] saved scen-kind-${kind}-${spec.name}.png`);
+    } catch (e) { console.log(`[cave-kinds] ${kind}/${spec.name} shot flaked (${e.name})`); }
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const st = window.__kindShotRestore; if (!st) return;
+      for (const o of st.hidden) o.visible = true;
+      for (const [el, d] of st.dom) el.style.display = d;
+      if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
+      ctx.three.scene.remove(st.light);
+      g.setCaveRockLight(0, 0, 0, 0);
+      ctx.flags.paused = false;
+      window.__kindShotRestore = null;
+    });
+  }
+}
 
 /** The cave interior shot set — the mouth, trunk descent, a squeeze corridor, the large hall, the
  *  egg chamber, a junction looking back up, plus the DARK-TRUTH set (real light model, no rig fill).

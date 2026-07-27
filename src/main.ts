@@ -16,7 +16,7 @@ import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
 import { caveEntranceSite, spawnCaveEntrance } from './world/caveEntrance.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
-import { caveGenSeed, spawnCave, type CaveFungiCluster } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
+import { caveGenSeed, spawnCave, type CaveFungiCluster, type SpawnedCave } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
 import { getPlayerPos } from './util/playerPos.ts';   // canonical player position (speeder/sled-aware)
 import { createCaveStream, type CaveStream } from './world/caveStream.ts';   // DEEPER cycle 5 (D-4) — cave build budget + resident cap
 import { caveSitesNear } from './world/caveSites.ts';                       // DEEPER cycle 8 — seed-pure rocky-terrain cave placement
@@ -43,7 +43,7 @@ import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
-import { spawnBranches, spawnScrapAt, spawnRelicAt, spawnMaterialAt, updatePickups } from './pickups/pickups.ts';
+import { spawnBranches, spawnScrapAt, spawnCaveScrapAt, spawnRelicAt, spawnMaterialAt, updatePickups, despawnPickup, type Pickup } from './pickups/pickups.ts';
 import { scatterForArchetype } from './config/lootRegistry.ts';   // walk-test fix — origin-world identity material scatter
 import { updatePanelDebris } from './world/panelDebris.ts';   // ACAX — popped panel-door physics sync
 import { spawnDeadTrees } from './world/deadTree.ts';
@@ -276,7 +276,7 @@ const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes
 // built here (after the cave, which is preloaded during boot), so the sink is installed late and
 // immediately catches up the origin cave. From then on it is driven by the resident lifecycle:
 // attach on build, detach on eviction — a pool source can never outlive the cave it belongs to.
-caveStream?.setPoolSink({
+caveStream?.addResidentSink({
   attach: (cave) => { for (const p of cave.pools) waterSources.push(p.source); },
   detach: (cave) => {
     for (const p of cave.pools) {
@@ -788,6 +788,41 @@ if (caveStream) {
     }
     return false;
   };
+  // DEEPER cycle 9 — THE KIND DRESSING SINK. The warren kind scatters loose `scrap` pickups on its
+  // cave floors; `caveGen` only produces ANCHORS for them, because the pickup lifecycle has to be
+  // owned by something that can also DESPAWN them when the cave is evicted (a pickup left in
+  // `ctx.pickups` after its cave's geometry is disposed is a dangling interaction target of the worst
+  // kind — you would pick up scrap out of thin air 30m underground in a cave that no longer exists).
+  // Installed HERE, after `ctx` exists, on its own sink: the pool sink above is installed while the
+  // water registry is being built and cannot reference `ctx` yet.
+  //   · CANONICAL CAVES SCATTER NOTHING (scrapPerCave 0), so the origin/egg cave consumes no pickup
+  //     ids at boot and the save's pickup-id ordering — and origin parity — are untouched.
+  //   · Its own RNG per attach, seeded from the cave's own generation seed, so the yaw/bob of a
+  //     re-streamed cave's scrap is identical on re-entry (D290) and nothing draws from the shared
+  //     scatter stream (D208).
+  const caveScrap = new Map<SpawnedCave, Pickup[]>();
+  caveStream.addResidentSink({
+    attach: (cave) => {
+      if (!cave.scrapAnchors.length) return;
+      const rand = makeRng((cave.probe.seed ^ 0x5c2a97) >>> 0);
+      const spawned: Pickup[] = [];
+      for (const a of cave.scrapAnchors) spawned.push(spawnCaveScrapAt(three.scene, a.x, a.y, a.z, rand, pickupList));
+      caveScrap.set(cave, spawned);
+    },
+    detach: (cave) => {
+      const spawned = caveScrap.get(cave);
+      if (!spawned) return;
+      // ⚠ ONLY DESPAWN WHAT IS STILL LIVE. A cave's scrap can leave `ctx.pickups.list` before its
+      // cave is evicted by two ordinary routes: the player PICKS ONE UP (the whole point of it), and
+      // a save-load cull drops every pickup outside the survivor set. Calling `despawnPickup` twice
+      // on a POOLED pickup is not a no-op — the second call sees `inst` already cleared and falls
+      // through to `scene.remove(pickup.mesh)`, and `mesh` is the SHARED scrap InstancedMesh. That
+      // would delete every scrap pickup in the world from the scene, from the innocuous act of
+      // taking one flake and walking away. Membership is the guard.
+      for (const p of spawned) if (ctx.pickups.list.indexOf(p) >= 0) despawnPickup(ctx, p);
+      caveScrap.delete(cave);
+    },
+  });
   caveStream.setSiteSource((x, z, radius) =>
     caveSitesNear(worldSeed, x, z, radius, terrain, biomes, contentClearNear));
   (window as unknown as { __caveSites: unknown }).__caveSites =

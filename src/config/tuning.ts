@@ -1101,6 +1101,15 @@ export const Tuning = {
   CAVE_GEN_MIN_SIBLING_ANGLE: 55,      // ° — min angular divergence between two corridors leaving the SAME chamber. Below this their flared mouths (halfW×1.7 ≈ 9.5m for a gallery — wider than a small pocket itself) overlap into a crossing floor/ceiling (seed-42 wedge: pockets ~30° apart off one hub crossed → a 2m step read as 59.6° + a blocking wall; seed-2024: two corridors 51° apart still crowded a rx-4.4 hub). Enforced when placing side pockets + asserted post-build.
   CAVE_GEN_CORRIDOR_CLEARANCE: 1.5,    // m — extra margin a new side-corridor must keep from any non-adjacent chamber it doesn't connect (segment→centre distance ≥ chamber rx + gallery half-width + this), so a corridor never spears a chamber it isn't linked to
   CAVE_GEN_BRANCH_DROP_MAX: 4.0,       // m — max descent on a side-branch corridor (branches stay shallower than the egg)
+  CAVE_GEN_POCKET_ATTEMPTS: 120,       // side-pocket placement attempts before the generator settles for fewer chambers than the target. Was a literal in generateCaveGraph; DEEPER cycle 9 lifted it because a kind asking for 15 small rooms against the same rejection ladder (overlap / sibling angle / corridor crossing) needs more tries — and because a kind must be able to raise it WITHOUT touching the canonical loop, which has to stay bit-identical for origin parity
+  // ── DEEPER cycle 9 — CAVE KINDS. The weighted mix a streamed cave's kind is drawn from (the table
+  //    itself is src/world/caveKinds.ts — this is the dial). `canonical` is IN the mix on purpose:
+  //    the cave the player already knows keeps appearing beside the four new reads. Weights are
+  //    relative (they need not sum to 1); `assertCaveKindTable` refuses a zero weight (a kind nobody
+  //    can meet is dead code) and refuses any kind taking >50% (the world would read as one kind).
+  //    ⚑ FLAGGED FOR ZACH: this is a taste dial. Raising `canonical` makes the underworld feel more
+  //    uniform; raising `shaft`/`warren` makes it feel more varied and more hostile.
+  CAVE_KIND_WEIGHTS: { canonical: 0.24, warren: 0.19, fungal: 0.19, flooded: 0.19, shaft: 0.19 },
   // Multi-octave rock displacement (big bulges + medium knobs + fine roughness). OUTWARD excursions
   // (enlarging the cavity) are free; INWARD excursions are capped small so they never eat the walk
   // path or the 2.0m headroom. AMP is the max OUTWARD push → it's what clampCover reserves as cover.

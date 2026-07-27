@@ -448,12 +448,22 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
     }
     poolNear *= caveInside;
     s.cave.lapGain.gain.setTargetAtTime(Tuning.CAVE_POOL_LAP_MASTER * poolNear * poolNear, t0, 0.5);
+    // DEEPER cycle 9 — THE PER-KIND WET BIAS. The drip interval is scaled by the kind of the cave
+    // the player is actually STANDING IN (`caveStream.occupied`, the same occupancy test the
+    // resident cap uses — so it can never disagree about which cave you are in). A flooded cave runs
+    // at half the interval, i.e. twice the drips; a warren is drier than canonical. Everything else
+    // about the wet read is already emergent from cycle 6: `poolNear` above raises the lapping bed
+    // and gives every drip a splash tail, and a flooded cave simply HAS water within range almost
+    // everywhere. One multiplier, no new audio nodes, and exactly 1.0 for canonical.
+    const dripScale = ctx.caveStream
+      ? (ctx.caveStream.occupied(pp)?.cave.probe.kindDripScale ?? 1)
+      : 1;
     if (caveInside > 0.15) {
-      if (s.cave.nextDrip === 0) s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S;
+      if (s.cave.nextDrip === 0) s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S * dripScale;
       if (t0 >= s.cave.nextDrip) {
         scheduleDrip(s.cave, s.ctx, Tuning.CAVE_BED_DRIP_MASTER * caveInside, poolNear);
-        s.cave.nextDrip = t0 + Tuning.CAVE_BED_DRIP_MIN_S
-          + Math.random() * (Tuning.CAVE_BED_DRIP_MAX_S - Tuning.CAVE_BED_DRIP_MIN_S);
+        s.cave.nextDrip = t0 + (Tuning.CAVE_BED_DRIP_MIN_S
+          + Math.random() * (Tuning.CAVE_BED_DRIP_MAX_S - Tuning.CAVE_BED_DRIP_MIN_S)) * dripScale;
       }
     } else {
       s.cave.nextDrip = 0;   // reset so the first drip after re-entering isn't immediate

@@ -45,6 +45,9 @@ import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { startCaveSdf, buildCaveSdf, caveVertexColor, type CaveSdfJob } from './caveSdf.ts';
 import { buildCavePools, placeCavePools, eggDaisRadius, setCavePoolEmitters, lastFloorSamplerMs, type CavePool, type CavePoolSpec } from './cavePools.ts';
+// DEEPER cycle 9 — CAVE KINDS. One table of parameter overrides over this ONE generator; see
+// caveKinds.ts for the table, the safety floors it machine-checks, and why `canonical` is empty.
+import { caveKindParams, type CaveKind, type CaveKindParams } from './caveKinds.ts';
 
 /** One station on the crevice's descent centreline (DEEPER cycle 4). The entrance hands the WHOLE
  *  polyline to the cave's SDF so the descent is built as part of the cave's own watertight
@@ -109,7 +112,15 @@ const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 // ── The room-graph generator ────────────────────────────────────────────────
 
-export function generateCaveGraph(seed: number, junction: CaveJunction, terrain: Terrain): CaveGraph {
+export function generateCaveGraph(
+  seed: number,
+  junction: CaveJunction,
+  terrain: Terrain,
+  /** DEEPER cycle 9 — the KIND's parameter set. Defaults to the canonical one (every field a literal
+   *  `Tuning` read), so an un-kinded call — the origin/egg cave, `cavePoolLayout`, every existing
+   *  gate — produces the byte-identical cave it always did. */
+  p: CaveKindParams = caveKindParams('canonical'),
+): CaveGraph {
   const T = Tuning;
   const rand = makeRng(seed);
   const nodes: CaveNode[] = [];
@@ -144,15 +155,15 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
   nodes.push(n0);
 
   // Counts + the egg's target depth.
-  const trunkSteps = T.CAVE_GEN_TRUNK_STEPS_MIN
-    + Math.floor(rand() * (T.CAVE_GEN_TRUNK_STEPS_MAX - T.CAVE_GEN_TRUNK_STEPS_MIN + 1));
-  const totalChambers = T.CAVE_GEN_CHAMBERS_MIN
-    + Math.floor(rand() * (T.CAVE_GEN_CHAMBERS_MAX - T.CAVE_GEN_CHAMBERS_MIN + 1));
-  const eggDepth = lerp(T.CAVE_GEN_DEPTH_MIN, T.CAVE_GEN_DEPTH_MAX, rand());
+  const trunkSteps = p.trunkStepsMin
+    + Math.floor(rand() * (p.trunkStepsMax - p.trunkStepsMin + 1));
+  const totalChambers = p.chambersMin
+    + Math.floor(rand() * (p.chambersMax - p.chambersMin + 1));
+  const eggDepth = lerp(p.depthMin, p.depthMax, rand());
   const entranceDepth = junction.gy - junction.y;             // ~12m
   const trunkDescent = Math.max(6, eggDepth - entranceDepth);
   const perDrop = trunkDescent / trunkSteps;
-  const slopeTarget = ((T.CAVE_GEN_MAX_SLOPE - 2) * Math.PI) / 180;
+  const slopeTarget = ((p.maxSlope - 2) * Math.PI) / 180;
   const tanSlope = Math.tan(slopeTarget);
   const hallIndex = trunkSteps - 1;                          // the big gallery sits just before the egg
   // Centre-to-centre run for a corridor. The floor ramps ONLY over the CLEAR span between the two
@@ -161,7 +172,7 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
   // the run for the CLEAR span (centreDist − raRx − rbRx ≥ drop/tan(target)); the chamber radii add
   // on top. Jitter only lengthens (flatter, never steeper).
   const runFor = (raRx: number, rbRx: number, drop: number): number => {
-    const clearSpan = Math.max(T.CAVE_GEN_CORRIDOR_RUN_MIN, drop / tanSlope) * (1 + rand() * 0.25);
+    const clearSpan = Math.max(p.corridorRunMin, drop / tanSlope) * (1 + rand() * 0.25);
     return raRx + rbRx + clearSpan;
   };
 
@@ -177,12 +188,12 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
     const isEgg = s === trunkSteps;
     const isHall = s === hallIndex && !isEgg;
     const drop = isEgg ? (prev.floorY - eggFloorY) : perDrop * (0.85 + rand() * 0.3);
-    const rx = isEgg ? T.CAVE_GEN_EGG_RX
-      : isHall ? T.CAVE_GEN_HALL_RX
-        : lerp(T.CAVE_GEN_POCKET_RX_MAX - 0.4, T.CAVE_GEN_POCKET_RX_MAX + 1.2, rand());
-    const height = isEgg ? T.CAVE_GEN_EGG_H
-      : isHall ? T.CAVE_GEN_HALL_H
-        : lerp(T.CAVE_GEN_POCKET_H_MIN + 0.6, T.CAVE_GEN_POCKET_H_MAX, rand());
+    const rx = isEgg ? p.eggRx
+      : isHall ? p.hallRx
+        : lerp(p.pocketRxMax - 0.4, p.pocketRxMax + 1.2, rand());
+    const height = isEgg ? p.eggH
+      : isHall ? p.hallH
+        : lerp(p.pocketHMin + 0.6, p.pocketHMax, rand());
     const run = runFor(prev.rx, rx, drop);
     const node: CaveNode = {
       id: nodes.length,
@@ -196,20 +207,22 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
     if (!isEgg) clampCover(node, eggFloorY + 3);
     else clampCover(node, null);
     nodes.push(node);
-    edges.push(makeEdge(prev, node, rand));
+    edges.push(makeEdge(prev, node, rand, p));
     prev = node;
   }
 
   // Force the trunk to have BOTH a wide gallery (the entry corridor) and a squeeze (right after)
-  // so the player meets varied cross-sections early — the rest stay as rolled.
-  if (edges.length >= 1) { edges[0].squeeze = false; edges[0].halfW = T.CAVE_GEN_GALLERY_HALF_W; edges[0].height = T.CAVE_GEN_GALLERY_H; }
-  if (edges.length >= 2) { edges[1].squeeze = true; edges[1].halfW = T.CAVE_GEN_SQUEEZE_HALF_W; edges[1].height = T.CAVE_GEN_SQUEEZE_H; }
+  // so the player meets varied cross-sections early — the rest stay as rolled. This survives every
+  // kind on purpose: a warren at squeezeChance 0.88 would otherwise be able to emit an all-squeeze
+  // tree, and the march's "corridors lack varied cross-sections" assert exists to catch exactly that.
+  if (edges.length >= 1) { edges[0].squeeze = false; edges[0].halfW = p.galleryHalfW; edges[0].height = p.galleryH; }
+  if (edges.length >= 2) { edges[1].squeeze = true; edges[1].halfW = p.squeezeHalfW; edges[1].height = p.squeezeH; }
 
   const eggId = nodes.length - 1;
 
   // Side pockets — branch sideways off non-egg nodes until the count lands in range.
   let attempts = 0;
-  while (nodes.length < totalChambers && attempts < 120) {
+  while (nodes.length < totalChambers && attempts < p.pocketAttempts) {
     attempts++;
     // Branch off deeper chambers only (never the shallow entrance) so pockets inherit real cover —
     // a branch off the ~12m-deep entrance can poke through a nearby dune valley.
@@ -219,9 +232,9 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
     const ang = side * ((60 + rand() * 50) * Math.PI) / 180;   // roughly perpendicular to the trunk
     const c = Math.cos(ang), sn = Math.sin(ang);
     const bhx = parent.hx * c - parent.hz * sn, bhz = parent.hx * sn + parent.hz * c;
-    const drop = rand() * T.CAVE_GEN_BRANCH_DROP_MAX;
-    const rx = lerp(T.CAVE_GEN_POCKET_RX_MIN, T.CAVE_GEN_POCKET_RX_MAX, rand());
-    const height = lerp(T.CAVE_GEN_POCKET_H_MIN, T.CAVE_GEN_POCKET_H_MAX, rand());
+    const drop = rand() * p.branchDropMax;
+    const rx = lerp(p.pocketRxMin, p.pocketRxMax, rand());
+    const height = lerp(p.pocketHMin, p.pocketHMax, rand());
     const run = runFor(parent.rx, rx, drop);
     const node: CaveNode = {
       id: nodes.length,
@@ -232,10 +245,10 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
       kind: 'pocket', parent: parent.id, hx: bhx, hz: bhz,
     };
     clampCover(node, eggFloorY + 3);                          // never deeper than the egg
-    if (tooClose(node, nodes, parent.id)) continue;           // reject chamber overlap
-    if (corridorCrowds(parent, node, nodes, edges)) continue; // reject crossing/crowding corridors
+    if (tooClose(node, nodes, parent.id)) continue;              // reject chamber overlap
+    if (corridorCrowds(parent, node, nodes, edges, p)) continue; // reject crossing/crowding corridors
     nodes.push(node);
-    edges.push(makeEdge(parent, node, rand));
+    edges.push(makeEdge(parent, node, rand, p));
   }
 
   // Corridor-span cover pass — a corridor can dip under a dune valley BETWEEN two well-covered
@@ -293,7 +306,7 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
   // slope ≤ the ceiling (+ a small displacement margin), clear height ≥ the 2.0m headroom minimum,
   // and sibling corridors diverging (no crossing mouths). Throws in dev so a bad seed is caught at
   // the source; production (guarantee already enforced above) degrades to the built geometry.
-  if (import.meta.env?.DEV) assertCaveTraversable(nodes, edges);
+  if (import.meta.env?.DEV) assertCaveTraversable(nodes, edges, p);
 
   // Euler tour of the tree from the root (each edge down then up) — the DFS march route with
   // backtracking through junctions. Children sorted by id for determinism.
@@ -318,9 +331,9 @@ export function generateCaveGraph(seed: number, junction: CaveJunction, terrain:
  *  corridor clear height below the 2.0m headroom minimum, or two sibling corridors whose mouths cross
  *  (< MIN_SIBLING_ANGLE apart). A generator that can silently emit a broken mandatory objective is a
  *  bug; this makes it fail at the source instead. */
-function assertCaveTraversable(nodes: CaveNode[], edges: CaveEdge[]): void {
+function assertCaveTraversable(nodes: CaveNode[], edges: CaveEdge[], p: CaveKindParams): void {
   const T = Tuning;
-  const slopeCeil = T.CAVE_GEN_MAX_SLOPE + 4;   // ° — +margin for local floor displacement
+  const slopeCeil = p.maxSlope + 4;             // ° — +margin for local floor displacement
   for (const e of edges) {
     const a = nodes[e.a], b = nodes[e.b];
     const cd = Math.hypot(b.x - a.x, b.z - a.z);
@@ -346,12 +359,12 @@ function assertCaveTraversable(nodes: CaveNode[], edges: CaveEdge[]): void {
   }
 }
 
-function makeEdge(a: CaveNode, b: CaveNode, rand: () => number): CaveEdge {
-  const squeeze = rand() < Tuning.CAVE_GEN_SQUEEZE_CHANCE;
+function makeEdge(a: CaveNode, b: CaveNode, rand: () => number, p: CaveKindParams): CaveEdge {
+  const squeeze = rand() < p.squeezeChance;
   return {
     a: a.id, b: b.id,
-    halfW: squeeze ? Tuning.CAVE_GEN_SQUEEZE_HALF_W : Tuning.CAVE_GEN_GALLERY_HALF_W,
-    height: squeeze ? Tuning.CAVE_GEN_SQUEEZE_H : Tuning.CAVE_GEN_GALLERY_H,
+    halfW: squeeze ? p.squeezeHalfW : p.galleryHalfW,
+    height: squeeze ? p.squeezeH : p.galleryH,
     squeeze,
   };
 }
@@ -375,7 +388,9 @@ function tooClose(node: CaveNode, nodes: CaveNode[], parentId: number): boolean 
  *  seed-42 wedge — two pockets ~30° apart off one hub, corridors crossing → a 2m local floor step
  *  read as 59.6° + a blocking wall + <2m headroom); (2) a corridor that passes through a chamber it
  *  doesn't connect. Both are XZ tests (a compact cave keeps heights close). */
-function corridorCrowds(parent: CaveNode, node: CaveNode, nodes: CaveNode[], edges: CaveEdge[]): boolean {
+function corridorCrowds(
+  parent: CaveNode, node: CaveNode, nodes: CaveNode[], edges: CaveEdge[], p: CaveKindParams,
+): boolean {
   const T = Tuning;
   const nl = Math.hypot(node.x - parent.x, node.z - parent.z) || 1;
   const nux = (node.x - parent.x) / nl, nuz = (node.z - parent.z) / nl;
@@ -393,7 +408,7 @@ function corridorCrowds(parent: CaveNode, node: CaveNode, nodes: CaveNode[], edg
     if (m.id === parent.id || m.id === node.id) continue;
     const along = Math.max(0, Math.min(nl, (m.x - parent.x) * nux + (m.z - parent.z) * nuz));
     const d = Math.hypot(m.x - (parent.x + nux * along), m.z - (parent.z + nuz * along));
-    if (d < m.rx + T.CAVE_GEN_GALLERY_HALF_W + T.CAVE_GEN_CORRIDOR_CLEARANCE) return true;
+    if (d < m.rx + p.galleryHalfW + T.CAVE_GEN_CORRIDOR_CLEARANCE) return true;
   }
   // (3) the new corridor must not cross or run alongside a NON-adjacent corridor at a similar depth
   //     (a pocket corridor crossing the trunk, or two pockets' corridors overlapping). Skip edges
@@ -405,7 +420,7 @@ function corridorCrowds(parent: CaveNode, node: CaveNode, nodes: CaveNode[], edg
     const ea = nodes[e.a], eb = nodes[e.b];
     const el = Math.hypot(eb.x - ea.x, eb.z - ea.z) || 1;
     const eux = (eb.x - ea.x) / el, euz = (eb.z - ea.z) / el;
-    const wSum = T.CAVE_GEN_GALLERY_HALF_W + e.halfW + T.CAVE_GEN_CORRIDOR_CLEARANCE;
+    const wSum = p.galleryHalfW + e.halfW + T.CAVE_GEN_CORRIDOR_CLEARANCE;
     for (let s = 0; s <= nSteps; s++) {
       const tt = s / nSteps;
       const px = parent.x + (node.x - parent.x) * tt, pz = parent.z + (node.z - parent.z) * tt;
@@ -601,6 +616,9 @@ function addSpeleothems(
   mouthDirs: Array<{ x: number; z: number }>,
   cnoise: Noise3, depthT: number, rand: () => number,
   group: THREE.Group, meshes: THREE.Mesh[], decor: THREE.Mesh[],
+  /** DEEPER cycle 9 — the kind's speleothem density. EXACTLY 1 for canonical, and every count is
+   *  `Math.round(n × 1)`, so the canonical cave's dripstone is bit-identical. */
+  speleoDensity = 1,
 ): void {
   const T = Tuning;
   const rx = node.rx, floorY = node.floorY, height = node.height;
@@ -628,8 +646,8 @@ function addSpeleothems(
   const dens = kind === 'egg' ? 1.0 : kind === 'hall' ? 0.85 : kind === 'entrance' ? 0.2 : 0.5;
 
   // ── Floor stalagmites + columns (collider-bearing). ──
-  const nStalag = kind === 'egg' ? 5 : kind === 'hall' ? 4 : kind === 'entrance' ? 0 : rx > 3.6 ? 2 : 1;
-  const nColumn = kind === 'egg' ? 2 : kind === 'hall' ? 1 : 0;
+  const nStalag = Math.round((kind === 'egg' ? 5 : kind === 'hall' ? 4 : kind === 'entrance' ? 0 : rx > 3.6 ? 2 : 1) * speleoDensity);
+  const nColumn = Math.round((kind === 'egg' ? 2 : kind === 'hall' ? 1 : 0) * speleoDensity);
   const placeFloor = (isColumn: boolean): void => {
     for (let a = 0; a < 26; a++) {
       const ang = rand() * Math.PI * 2;
@@ -660,7 +678,7 @@ function addSpeleothems(
   for (let i = 0; i < nStalag; i++) placeFloor(false);
   for (let i = 0; i < nColumn; i++) placeFloor(true);
   // small no-collider floor nubbins for density (still off the walk grid).
-  const nSmall = Math.round((kind === 'entrance' ? 1 : rx > 4 ? 4 : 2) * dens * 2);
+  const nSmall = Math.round((kind === 'entrance' ? 1 : rx > 4 ? 4 : 2) * dens * 2 * speleoDensity);
   for (let i = 0; i < nSmall; i++) {
     for (let a = 0; a < 12; a++) {
       const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
@@ -676,7 +694,7 @@ function addSpeleothems(
   }
 
   // ── Ceiling stalactites (visual-only; tips kept ≥ CLEAR above the floor). ──
-  const nTip = kind === 'egg' ? 22 : kind === 'hall' ? 16 : kind === 'entrance' ? 4 : 9;
+  const nTip = Math.round((kind === 'egg' ? 22 : kind === 'hall' ? 16 : kind === 'entrance' ? 4 : 9) * speleoDensity);
   for (let i = 0; i < nTip; i++) {
     const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
     const fr = Math.sqrt(rand()) * 0.86;                            // bias toward the walls where drips cluster
@@ -691,6 +709,108 @@ function addSpeleothems(
     const m = new THREE.Mesh(geo, _caveSolid); m.receiveShadow = true;
     group.add(m); decor.push(m);
   }
+}
+
+// ── Rubble heaps (DEEPER cycle 9 — a GENERAL capability, canonical density 0) ─────────────────
+//
+// The "collapsed shaft" kind needs a floor that reads as fallen ceiling. This is built as a general
+// dressing capability with a per-kind `rubblePerChamber` whose canonical value is ZERO — so the code
+// path is shared by every kind (nothing branches on the kind name) and the canonical cave emits not
+// one vertex of it. Same shape as the small-nubbin speleothem path it sits beside.
+//
+// RULE 7 (real thickness): a boulder is a displaced ICOSAHEDRON — a closed convex solid with genuine
+// volume, seen from outside, FrontSide, exactly like the dripstone kit. There is no shell anywhere in
+// it. The displacement is a pure function of the UNDISPLACED vertex position, so the polyhedron's
+// duplicated seam vertices move identically and the solid stays watertight (which the void-ray gate
+// would catch if it did not).
+//
+// RULE 9 (collision matches the visible geometry): boulders go into `meshes`, i.e. they are baked
+// into the cave's ONE trimesh collider in the same change that adds them — a heap you can walk
+// through would be worse than no heap. Placement therefore borrows the speleothem clearance
+// discipline verbatim: off the chamber floor grid the march samples, out of the corridor-mouth
+// sectors, and spaced from anything already placed.
+
+/** One boulder, WORLD space, as a displaced icosahedron squashed toward the floor. */
+function buildBoulder(
+  x: number, y: number, z: number, r: number, cnoise: Noise3, depthT: number, squash: number,
+): THREE.BufferGeometry {
+  const geo = new THREE.IcosahedronGeometry(r, 1);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+    // Two octaves of angular relief so a boulder reads as fractured rock, not as a die. Sampled on
+    // the UNDISPLACED local position (+ a world offset per boulder), so duplicated seam vertices
+    // land on the same value and the solid cannot split.
+    const n = 1
+      + cnoise(px * 2.1 + x * 0.31, py * 2.1 + 5.1, pz * 2.1 + z * 0.31) * 0.26
+      + cnoise(px * 5.7 + z * 0.17, py * 5.7 + 9.4, pz * 5.7 + x * 0.17) * 0.11;
+    const wx = x + px * n, wy = y + py * n * squash, wz = z + pz * n;
+    pos.setXYZ(i, wx, wy, wz);
+    caveVertexColor('floor', wx, wy, wz, depthT, cnoise, _tmpCol);
+    col[i * 3] = _tmpCol.r; col[i * 3 + 1] = _tmpCol.g; col[i * 3 + 2] = _tmpCol.b;
+  }
+  pos.needsUpdate = true;
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** `count` rubble heaps in one chamber. Each heap is 4-7 part-buried boulders around a centre; the
+ *  heap's footprint is what the clearance test is run against, so the KCC meets it exactly as it
+ *  meets a stalagmite. Returns the number actually placed (a tight room may fit none). */
+function addRubble(
+  node: CaveNode,
+  count: number,
+  mouthDirs: Array<{ x: number; z: number }>,
+  cnoise: Noise3, depthT: number, rand: () => number,
+  group: THREE.Group, meshes: THREE.Mesh[],
+): number {
+  if (count <= 0) return 0;
+  const T = Tuning;
+  const rx = node.rx, floorY = node.floorY;
+  const mouthCos = Math.cos((T.CAVE_SPELEO_MOUTH_CLEAR_DEG * Math.PI) / 180);
+  // The same floor grid the march samples (rings 0.72·rx, 8 spokes) — identical to addSpeleothems.
+  const grid: Array<{ x: number; z: number }> = [];
+  for (let ri = 0; ri <= 4; ri++) {
+    const rr = (rx * 0.72 * ri) / 4, spokes = ri === 0 ? 1 : 8;
+    for (let si = 0; si < spokes; si++) { const a = (si / spokes) * Math.PI * 2; grid.push({ x: node.x + Math.cos(a) * rr, z: node.z + Math.sin(a) * rr }); }
+  }
+  const placed: Array<{ x: number; z: number; r: number }> = [];
+  let made = 0;
+  for (let i = 0; i < count; i++) {
+    for (let a = 0; a < 24; a++) {
+      const ang = rand() * Math.PI * 2;
+      const ux = Math.cos(ang), uz = Math.sin(ang);
+      let blockedByMouth = false;
+      for (const md of mouthDirs) if (ux * md.x + uz * md.z > mouthCos) { blockedByMouth = true; break; }
+      if (blockedByMouth) continue;
+      const fr = lerp(T.CAVE_SPELEO_RING_MIN, T.CAVE_SPELEO_RING_MAX, rand());
+      const cx = node.x + ux * rx * fr, cz = node.z + uz * rx * fr;
+      const heapR = 0.85 + rand() * 0.55;                       // the heap's footprint radius
+      let clear = true;
+      for (const gp of grid) if (Math.hypot(cx - gp.x, cz - gp.z) < heapR + 0.2) { clear = false; break; }
+      if (clear) for (const q of placed) if (Math.hypot(cx - q.x, cz - q.z) < heapR + q.r + 0.5) { clear = false; break; }
+      if (!clear) continue;
+      const n = 4 + Math.floor(rand() * 4);
+      for (let b = 0; b < n; b++) {
+        const ba = rand() * Math.PI * 2, br = rand() * heapR * 0.72;
+        const r0 = 0.24 + rand() * 0.30;
+        const squash = 0.62 + rand() * 0.22;
+        const bx = cx + Math.cos(ba) * br, bz = cz + Math.sin(ba) * br;
+        // Part-buried: the boulder's centre sits BELOW the floor plane by ~40% of its squashed
+        // height, so nothing floats and the heap grows out of the rock instead of resting on it.
+        const by = floorY + r0 * squash * (0.10 + rand() * 0.35) - r0 * squash * 0.40;
+        const m = new THREE.Mesh(buildBoulder(bx, by, bz, r0, cnoise, depthT, squash), _caveSolid);
+        m.castShadow = false; m.receiveShadow = true;
+        group.add(m); meshes.push(m);                            // collider-bearing (rule 9)
+      }
+      placed.push({ x: cx, z: cz, r: heapR });
+      made++;
+      break;
+    }
+  }
+  return made;
 }
 
 // ── Weird mushrooms (the life accent) ────────────────────────────────────────
@@ -761,10 +881,14 @@ function tagFungi(root: THREE.Object3D, id: number): void {
  *  / floor dips) + optional shelf fungi on the wall. Floor clusters are HARVESTABLE (tagged +
  *  recorded); wall-shelf fungi stay pure decor. No colliders — never trips the walk/collision gates.
  *  Deterministic via the passed rng stream. */
-function addFungi(node: CaveNode, cnoise: Noise3, rand: () => number, group: THREE.Group, decor: THREE.Mesh[], clusters: CaveFungiCluster[]): void {
+function addFungi(
+  node: CaveNode, cnoise: Noise3, rand: () => number,
+  group: THREE.Group, decor: THREE.Mesh[], clusters: CaveFungiCluster[],
+  p: CaveKindParams,
+): void {
   const rx = node.rx, floorY = node.floorY;
-  const nClusters = Tuning.CAVE_FUNGI_CLUSTER_MIN
-    + Math.floor(rand() * (Tuning.CAVE_FUNGI_CLUSTER_MAX - Tuning.CAVE_FUNGI_CLUSTER_MIN + 1));
+  const nClusters = p.fungiClusterMin
+    + Math.floor(rand() * (p.fungiClusterMax - p.fungiClusterMin + 1));
   for (let c = 0; c < nClusters; c++) {
     const ang = rand() * Math.PI * 2;
     const fr = 0.45 + rand() * 0.42;                    // mid → outer floor (toward the walls)
@@ -782,7 +906,7 @@ function addFungi(node: CaveNode, cnoise: Noise3, rand: () => number, group: THR
     clusters.push({ id: cid, group: cl, pos: new THREE.Vector3(x, fy, z), harvested: false, hovered: false });
   }
   // Optional wall shelf fungi — a few small caps jutting horizontally from the wall at head height.
-  if (rand() < Tuning.CAVE_FUNGI_WALL_CHANCE) {
+  if (rand() < p.fungiWallChance) {
     const ry = node.height * 0.6, cyc = floorY + node.height - ry;
     const shelves = 2 + Math.floor(rand() * 3);
     for (let s = 0; s < shelves; s++) {
@@ -1139,15 +1263,33 @@ function cornerDirsByNode(graph: CaveGraph, junction: CaveJunction): Map<number,
  *  will use, with no geometry, no collider and no scene. The `pool-fill` gate calls this twice and
  *  diffs the results, so a stray `Math.random` in the placement fails determinism in milliseconds
  *  instead of costing two full cave builds. */
-export function cavePoolLayout(seed: number, junction: CaveJunction, terrain: Terrain): CavePoolSpec[] {
-  const graph = generateCaveGraph(seed, junction, terrain);
+export function cavePoolLayout(
+  seed: number, junction: CaveJunction, terrain: Terrain, kind: CaveKind = 'canonical',
+): CavePoolSpec[] {
+  const p = caveKindParams(kind);
+  const graph = generateCaveGraph(seed, junction, terrain, p);
   const cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));
   const prand = makeRng((seed ^ 0x9007e4) >>> 0);
-  return placeCavePools(graph, cnoise, prand, cornerDirsByNode(graph, junction));
+  return placeCavePools(graph, cnoise, prand, cornerDirsByNode(graph, junction), p);
 }
 
 export interface CaveGenProbe {
   seed: number;
+  /** DEEPER cycle 9 — which KIND built this cave (`canonical` for the origin/egg cave). */
+  kind: CaveKind;
+  /** The kind's DECLARED gate envelope. The `cave-walk` march asserts chamber count + egg depth
+   *  against these instead of the hardcoded 8-11 / 25-40m it carried before kinds existed. The
+   *  numbers are declared in the kind table and `assertCaveKindTable` proves each one actually
+   *  contains its generator's range — so this is the gate reading an INTENT, not a self-report. */
+  envelope: { chambersMin: number; chambersMax: number; depthMin: number; depthMax: number };
+  /** Dressing actually emitted (vacuous-pass guards for the kinds gate: a "fungal cavern" with the
+   *  canonical fungi count, or a "collapsed shaft" with no rubble, is a table that did not take). */
+  fungiClusters: number;
+  rubbleHeaps: number;
+  scrapAnchors: number;
+  /** The kind's drip-interval multiplier, published here so the soundscape can read the wet bias off
+   *  the cave the player is standing in without importing the kind table into the audio layer. */
+  kindDripScale: number;
   eggId: number;
   depthBelowSurface: number;
   triCount: number;
@@ -1186,6 +1328,11 @@ export interface SpawnedCave {
   eggDaisTop: THREE.Vector3;
   /** World-space floor anchors for the deep loot caches (the hall + the egg chamber, battery-rich). */
   lootAnchors: THREE.Vector3[];
+  /** DEEPER cycle 9 — world-space floor points for the kind's loose `scrap` scatter (empty for every
+   *  kind but the warren, and ALWAYS empty for canonical). Deliberately ANCHORS, not pickups: this
+   *  module has no `GameContext`, and the pickup lifecycle has to be owned by whoever can also
+   *  despawn them when the cave is evicted — see the resident sink in caveStream/main. */
+  scrapAnchors: THREE.Vector3[];
 }
 
 /** DEEPER cycle 5 — a RESUMABLE cave spawn. `step(budgetMs)` advances the build and returns true
@@ -1218,8 +1365,9 @@ export function spawnCave(
   terrain: Terrain,
   junction: CaveJunction,
   seed: number,
+  kind: CaveKind = 'canonical',
 ): SpawnedCave {
-  const job = startSpawnCave(scene, world, terrain, junction, seed);
+  const job = startSpawnCave(scene, world, terrain, junction, seed, kind);
   while (!job.step(Infinity)) { /* run to completion */ }
   return job.result();
 }
@@ -1231,9 +1379,13 @@ export function startSpawnCave(
   terrain: Terrain,
   junction: CaveJunction,
   seed: number,
+  /** DEEPER cycle 9 — the cave KIND. Defaults to `canonical`, so the boot preload and every
+   *  pre-kinds call site build the exact cave they always did. */
+  kind: CaveKind = 'canonical',
 ): CaveSpawnJob {
   type Stage = 'graph' | 'sdf' | 'dress' | 'finalize' | 'done';
   let stage: Stage = 'graph';
+  const kp = caveKindParams(kind);
 
   let graph!: CaveGraph;
   let cnoise!: Noise3;
@@ -1248,6 +1400,13 @@ export function startSpawnCave(
   let fungi: CaveFungiCluster[] = [];       // UNDERWORLD cycle 3 — harvestable fungi clusters (E -> alien_fruit)
   let pools: CavePool[] = [];               // DEEPER cycle 6 — standing water (visual-only mesh; the FLOOR is the collider)
   let prand!: () => number;                 // pool placement RNG (own stream — never perturbs the others)
+  // DEEPER cycle 9 — the kind dressing streams. BOTH are private streams keyed off the cave seed,
+  // never `srand`/`frand`/`prand`: a kind that adds rubble must not shift one speleothem of another
+  // kind's cave, and canonical (density 0) draws from neither at all.
+  let rrand!: () => number;                 // rubble placement RNG
+  let scrand!: () => number;                // scrap-anchor RNG
+  let rubbleHeaps = 0;
+  let scrapAnchors: THREE.Vector3[] = [];
   let msMesh = 0;
   let out: SpawnedCave | null = null;
   // VITE_CAVE_SDF_BENCH=1 only — re-polygonizes at the measurement resolutions (cost numbers).
@@ -1260,16 +1419,19 @@ export function startSpawnCave(
 
   // -- Stage 1: the room graph + the RNG streams (cheap; the layout logic is consumed, never re-derived).
   const doGraph = (): void => {
-    graph = generateCaveGraph(seed, junction, terrain);
+    graph = generateCaveGraph(seed, junction, terrain, kp);
     const noise3 = createNoise3D(makeRng((seed ^ 0x5eed3d) >>> 0));
     cnoise = createNoise3D(makeRng((seed ^ 0xc010a2) >>> 0));   // colour/dressing noise stream
     srand = makeRng((seed ^ 0x59e1e0) >>> 0);                   // speleothem placement RNG
     frand = makeRng((seed ^ 0xf0091a) >>> 0);                   // fungi placement RNG (own stream)
     prand = makeRng((seed ^ 0x9007e4) >>> 0);                   // DEEPER cycle 6 — pool placement RNG (own stream)
+    rrand = makeRng((seed ^ 0xb01de5) >>> 0);                   // DEEPER cycle 9 — rubble (own stream)
+    scrand = makeRng((seed ^ 0x5c2a91) >>> 0);                  // DEEPER cycle 9 — scrap anchors (own stream)
 
     group = new THREE.Group();
     group.name = 'caveGen';
     meshes = []; decor = []; fungi = []; pools = [];
+    rubbleHeaps = 0; scrapAnchors = [];
 
     // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems and,
     // since cycle 6, of water pools — shared so both agree on where a mouth is).
@@ -1277,8 +1439,8 @@ export function startSpawnCave(
 
     // Weird mushrooms — seed 2-4 chambers (never every one), the egg + hall favoured (the "distinct
     // landmark" rooms), the rest chosen by rng score. Deterministic (frand stream). Visual-only.
-    const fungiTarget = Tuning.CAVE_FUNGI_CHAMBERS_MIN
-      + Math.floor(frand() * (Tuning.CAVE_FUNGI_CHAMBERS_MAX - Tuning.CAVE_FUNGI_CHAMBERS_MIN + 1));
+    const fungiTarget = kp.fungiChambersMin
+      + Math.floor(frand() * (kp.fungiChambersMax - kp.fungiChambersMin + 1));
     const fungiCandidates = graph.nodes
       .filter((n) => n.kind !== 'entrance')
       .map((n) => ({ id: n.id, score: (n.kind === 'egg' || n.kind === 'hall' ? 1 : 0) + frand() }))
@@ -1329,8 +1491,31 @@ export function startSpawnCave(
         dm.castShadow = false; dm.receiveShadow = true; dm.userData.eggDais = true;
         group.add(dm); meshes.push(dm);
       }
-      addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor);
-      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
+      addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor, kp.speleoDensity);
+      // DEEPER cycle 9 — rubble heaps. Density 0 for every kind but the collapsed shaft, and the
+      // call is unconditional so the ONE code path is what runs (an `if (kind === …)` here is
+      // exactly the branch this cycle exists to avoid). Never in the entrance hall: that room is the
+      // hand-off frame and the crevice's walk line, and it is the one room every player crosses.
+      if (node.kind !== 'entrance') {
+        rubbleHeaps += addRubble(node, kp.rubblePerChamber, dirsByNode.get(node.id) ?? [], cnoise, dT, rrand, group, meshes);
+      }
+      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi, kp);
+    }
+
+    // DEEPER cycle 9 — SCRAP ANCHORS (the warren's salvage). Positions only; the pickups themselves
+    // are spawned by the resident sink (see SpawnedCave.scrapAnchors). Never in the egg chamber —
+    // that room already carries the objective and the deep cache — and never on the corridor
+    // centreline, so a scrap flake can never read as blocking a mouth.
+    if (kp.scrapPerCave > 0) {
+      const cands = graph.nodes.filter((n) => n.kind !== 'egg');
+      for (let i = 0; i < kp.scrapPerCave && cands.length; i++) {
+        const n = cands[Math.floor(scrand() * cands.length)];
+        const ang = scrand() * Math.PI * 2;
+        const fr = 0.30 + scrand() * 0.48;
+        const sx = n.x + Math.cos(ang) * n.rx * fr, sz = n.z + Math.sin(ang) * n.rx * fr;
+        const sy = n.floorY + Math.max(0, cnoise(sx * 0.5, 7.3, sz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP + 0.02;
+        scrapAnchors.push(new THREE.Vector3(sx, sy, sz));
+      }
     }
 
     // DEEPER cycle 7 — THE ARRIVAL CUE. `addFungi` deliberately skips the entrance chamber, so the
@@ -1366,7 +1551,7 @@ export function startSpawnCave(
     // moved between two builds of the same seed fails the cave-walk gate like any other drift.
     // The SDF geometry goes in so the water can measure the REAL rock height under it and cut its
     // shoreline on the stone (cavePools.makeFloorSampler) — one linear pass over the positions.
-    const poolBuild = buildCavePools(graph, cnoise, prand, dirsByNode, sdf.geometry);
+    const poolBuild = buildCavePools(graph, cnoise, prand, dirsByNode, sdf.geometry, kp);
     pools = poolBuild.pools;
     for (const p of pools) { group.add(p.mesh); decor.push(p.mesh); }
 
@@ -1413,7 +1598,15 @@ export function startSpawnCave(
     for (const m of meshes) colliderTris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
 
     const probe: CaveGenProbe = {
-      seed, eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
+      seed,
+      kind,
+      envelope: {
+        chambersMin: kp.gateChambersMin, chambersMax: kp.gateChambersMax,
+        depthMin: kp.gateDepthMin, depthMax: kp.gateDepthMax,
+      },
+      fungiClusters: fungi.length, rubbleHeaps, scrapAnchors: scrapAnchors.length,
+      kindDripScale: kp.dripIntervalScale,
+      eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
       colliderTris, msCollider, msMesh, msPoolSampler: lastFloorSamplerMs,
       digest: caveDigest(graph, allMeshes),
       nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
@@ -1446,7 +1639,7 @@ export function startSpawnCave(
     const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
     if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
 
-    out = { group, body, graph, probe, fungi, pools, eggDaisTop, lootAnchors };
+    out = { group, body, graph, probe, fungi, pools, eggDaisTop, lootAnchors, scrapAnchors };
   };
 
   const step = (budgetMs: number): boolean => {

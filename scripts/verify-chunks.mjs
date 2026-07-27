@@ -195,7 +195,7 @@ for (const seed of DET_SEEDS) {
 //      proof: with the cave shipped, the invariant is flag-on determinism, not "no surface change".
 let cavePort = 5520;
 for (const seed of DET_SEEDS) {
-  const re = /CAVE-WALK pass=(\d) seed=(\S+) digest=(\S+) chambers=(\d+) .* reached=(\d+)\/(\d+)/;
+  const re = /CAVE-WALK pass=(\d) seed=(\S+) kind=(?:\S+) digest=(\S+) chambers=(\d+) .* reached=(\d+)\/(\d+)/;
   const a = runParsed('cave-walk', seed, cavePort, re, 600000);
   const b = runParsed('cave-walk', seed, cavePort + 1, re, 600000);
   cavePort += 3;
@@ -375,6 +375,46 @@ for (const seed of DET_SEEDS) {
       continue;
     }
     rows.push(`cave-streamed seed ${seed}: ${m[3]} streamed sites — ${m[6]}/${m[7]} marched clean, ascent OUT ${m[8]}/${m[9]}, ≥${m[10]} chambers each, strands ${m[11]}${m[11] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void ${m[12]} pts / ${m[13]} rays → ${m[14]} escapes (excused ${m[15]}, culled ${m[16]}, holes ${m[17]}), ${m[18]} fails  ${okS ? 'OK' : '*** FAIL ***'}`);
+  }
+}
+
+// ── 13. DEEPER cycle 9 — CAVE KINDS. Permanent gate, ONE seed, all four kinds.
+//
+//       WHAT IT CLOSES. Cycle 9 gave the ONE cave generator four extra parameter sets. Every other
+//       cave gate in this file walks a CANONICAL cave: leg 8 walks the origin one, leg 12 walks
+//       streamed ones (which now roll a kind, so it samples the mix — but only whatever the two
+//       nearest sites happened to roll). A kind that is untraversable, see-through, or that silently
+//       fell back to canonical would slip past all of them. This leg forces each kind onto a real
+//       descriptor-accepted site through the shipped `requestSite` path, then runs the SAME
+//       `cave-walk` march and `cave-void` sweep on each, plus the kind-defining and cross-kind
+//       distinctness assertions (a table that collapsed to canonical marches perfectly — so
+//       "green" has to mean more than "walkable").
+//
+//       THE COST COMPROMISE, stated rather than buried. A full Euler-tour march is ~2-4 minutes of
+//       real KCC walking per cave; four kinds is ~18-22 minutes at one seed, and 12 would be an
+//       hour. The permanent leg is therefore **each kind × seed 1337** — 4 marches + 4 void
+//       sweeps. The wider **each kind × 3 seeds (1337 / 7 / 4242)** net was run ONCE at cycle 9 and
+//       is one flag away for any future change to the generator or the table:
+//           npm run rig -- --scenario=cave-kinds --seed=7 --port=5299
+//       The mix/distribution half of the gate is nearly free and runs on every invocation.
+{
+  const ckRe = /CAVE-KINDS pass=(\d) seed=(\S+) kinds=(\d+) built=(\d+) marched=(\d+) voided=(\d+) sites=(\d+) strands=(\d+) escapes=(\d+) fails=(\d+)/;
+  const m = runParsed('cave-kinds', 1337, 5590, ckRe, 2100000);
+  if (!m) {
+    allPass = false;
+    rows.push('cave-kinds: NO PROBE LINE (boot failed after retry)  *** FAIL ***');
+  } else {
+    const okK = m[1] === '1';
+    if (!okK) allPass = false;
+    // Vacuous-pass guard, harness side: a green row off zero built / zero marched kinds would
+    // launder "the kind table never produced a cave" as "every kind is fine".
+    const kinds = Number(m[3]), built = Number(m[4]), marched = Number(m[5]), voided = Number(m[6]), sites = Number(m[7]);
+    if (!(kinds >= 4) || built !== kinds || marched !== kinds || voided !== kinds || !(sites >= 120)) {
+      allPass = false;
+      rows.push(`cave-kinds: VACUOUS — kinds=${m[3]} built=${m[4]} marched=${m[5]} voided=${m[6]} sites=${m[7]} (expected ≥4 / all built / all marched / all voided / ≥120 sites)  *** FAIL ***`);
+    } else {
+      rows.push(`cave-kinds seed 1337: ${m[3]} kinds built + marched + void-swept, mix audited over ${m[7]} sites, strands ${m[8]}${m[8] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void escapes ${m[9]}, ${m[10]} fails  ${okK ? 'OK' : '*** FAIL ***'}`);
+    }
   }
 }
 

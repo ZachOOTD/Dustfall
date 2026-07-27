@@ -510,6 +510,73 @@ export function spawnScrapAt(
   return pickup;
 }
 
+/** DEEPER cycle 9 — a scrap pickup at an EXPLICIT world Y, with no terrain-normal alignment.
+ *
+ *  Why this exists rather than a flag on `spawnScrapAt`: that function derives its rest height from
+ *  `terrain.heightAt(x, z)` and tilts the flake onto the terrain normal, and BOTH are wrong under
+ *  30 metres of rock — the surface height there is the roof of the cave, so a cave scrap flake would
+ *  spawn in the sky. This is the same pickup in every other respect: the same instanced pool, the
+ *  same shared world-scrap material, the same `scrap` ItemId, the same take path. NO loot-table,
+ *  drop-rate or registry change is involved anywhere in this cycle — `verify:loot`'s digest cannot
+ *  move, because nothing it hashes is touched.
+ *
+ *  `transient: true` follows the D299 streamed-content rule: streamed caves are descriptor-derived
+ *  and rebuilt from the seed on return, so their pickups are excluded from the save survivor set
+ *  (which is keyed on visit-order ids — the D292 trap) exactly like streamed branches and scrap
+ *  rings. Taken-state does not persist for a streamed cave, which is the same deal its harvested
+ *  fungi already have, and is flagged as such. */
+export function spawnCaveScrapAt(
+  scene: THREE.Scene,
+  x: number,
+  y: number,
+  z: number,
+  rand: Rng,
+  list: Pickup[],
+): Pickup {
+  const yaw = rand() * Math.PI * 2;
+  const pickupId = _nextId++;
+  if (!_scrapPool) {
+    _scrapPool = _makeInstPool(scene, _scrapGeometry(), _worldScrapMat, SCRAP_POOL_CAP);
+  }
+  _instScratch.position.set(x, y, z);
+  _instScratch.rotation.set(0, yaw, 0);
+  _instScratch.updateMatrix();
+  const slot = _poolAlloc(_scrapPool, pickupId, _instScratch.matrix);
+
+  let mesh: THREE.Object3D;
+  let inst: Pickup['inst'];
+  if (slot !== null) {
+    mesh = _scrapPool.imesh;
+    inst = { pool: _scrapPool, index: slot };
+  } else {
+    console.warn(`[pickups] scrap pool full (${_scrapPool.capacity}) — legacy mesh fallback`);
+    const m = makePrimitiveScrap();
+    m.position.set(x, y, z);
+    m.rotation.set(0, yaw, 0);
+    m.userData.noShadow = true;
+    m.castShadow = false;
+    m.receiveShadow = true;
+    tagPickupMeshes(m, pickupId);
+    scene.add(m);
+    mesh = m;
+  }
+
+  const pickup: Pickup = {
+    id: pickupId,
+    transient: true,
+    itemId: 'scrap',
+    mesh,
+    pos: new THREE.Vector3(x, y, z),
+    bobPhase: rand() * Math.PI * 2,
+    hovered: false,
+    body: null,
+    ridingSledId: null,
+    inst,
+  };
+  list.push(pickup);
+  return pickup;
+}
+
 // ────────────────────────────────────────────────────────────────
 // Scavenger's Economy (build 2) — salvage MATERIAL pickups scattered at POIs
 // per the per-POI identity matrix (config/lootRegistry.ts POI_IDENTITY_SCATTER;
