@@ -24,11 +24,30 @@
 //      with the fissure carved out of it. Its footprint COVERS the whole carved terrain hole, so
 //      the one-sided terrain sheet is never seen from underneath — the job cycle 1's trench walls
 //      did with boxes.
-//   THE NON-LEAK INVARIANT: the tor's fissure is always CREVICE_SDF_MARGIN narrower and lower than
-//   the SDF slot around it. So every scrap of air the player can reach is inside the SDF cavity,
-//   and the tor's rock is the NEARER surface — a backface void is impossible by construction. (Get
-//   this backwards and you stand in air that the SDF calls rock, looking at a culled face: the
-//   exact D-2 see-through.)
+//   THE NON-LEAK INVARIANT: the tor's fissure is always CREVICE_SDF_MARGIN narrower (and, since
+//   cycle 7, CREVICE_ROOF_DROP + CREVICE_SDF_MARGIN·0.6 lower) than the SDF slot around it. So every
+//   scrap of air the player can reach is inside the SDF cavity, and the tor's rock is the NEARER
+//   surface — a backface void is impossible by construction. (Get this backwards and you stand in
+//   air that the SDF calls rock, looking at a culled face: the exact D-2 see-through.)
+//   ⚠ The two margins are NOT interchangeable and must be tuned separately. The LATERAL one is a
+//   traversal constraint: past the tor's far face the SDF slot is the only surface, so every extra
+//   centimetre of lateral margin is an alcove beside the walkway with the tor's wall end as a lip,
+//   and the KCC wedges in it on the climb out (cycle-7 R8: 1.30m failed cave-walk seed 2024's
+//   ascent). The VERTICAL one is free — nobody walks on a ceiling — and it has to exceed the SDF's
+//   own inward ceiling push (CAVE_GEN_DISP_IN + CAVE_SDF_MICRO_AMP ≈ 0.375m) or the two ceilings
+//   interpenetrate and shed sliver shrapnel into the roofed slot.
+//
+// CYCLE 7 (2026-07-26) — the adversarial-critique fix round. Six defects, and only one of them was
+// the thing it looked like:
+//   · the "roof lamina" (a floating paper-thin sunlit blade over the crack) was NOT a roof at all —
+//     it was the INTACT TERRAIN SHEET, poking edge-on into the open fissure because the closure
+//     landed 7cm past the carved hole's far edge. Moved inboard + clamped by CREVICE_ROOF_UNDER.
+//   · the SAWTOOTH COMB along both walls at the floor line was 0.03m of relief against a 0.32m grid.
+//     Cured with amplitude (CREVICE_WALL_NOISE, asymmetric) not with fillets.
+//   · the THIN-BLADE THICKET around the lintel was `projectSlot` being discontinuous on the inside
+//     of a bend — see the note on that function. It is the oldest bug of the three.
+//   · 78m findability: ONE horn (an asymmetric skyline break) + fin shoulders so the fissure survives
+//     as a NOTCH in the silhouette. 1.93° → 4.12° of arc on seed 1337, 2.71° → 5.02° on seed 7.
 //
 // D307 IS UNCHANGED. The entrance chunk still swaps its heightfield collider for a trimesh with a
 // genuinely carved hole; the hole just got much smaller (3×2 cells = 12.5 × 8.33m, all of it under
@@ -183,7 +202,7 @@ export function buildCreviceLine(site: { x: number; z: number }, terrain: Terrai
       const a = (k / 4) * Math.PI * 2;
       terrH = Math.min(terrH, terrain.pureHeightAt(st.x + Math.cos(a) * 2.5, st.z + Math.sin(a) * 2.5));
     }
-    const maxFloor = terrH - T.CREVICE_HEIGHT - 1.0;
+    const maxFloor = terrH - T.CREVICE_HEIGHT - T.CREVICE_COVER_CLEAR;
     if (st.floorY > maxFloor) st.floorY = maxFloor;
     if (st.floorY > stations[i - 1].floorY) st.floorY = stations[i - 1].floorY;   // monotone descent
   }
@@ -225,33 +244,81 @@ export function buildCreviceLine(site: { x: number; z: number }, terrain: Terrai
   return { stations, cumS, totalS: totalS2, gy, maxSlopeDeg };
 }
 
-/** Nearest-point projection of an XZ point onto the slot polyline. */
+// ── Smooth CSG (cycle 7) ────────────────────────────────────────────────────
+//
+// Surface nets places ONE vertex per sign-changing cell, so it can represent a smooth surface and a
+// sharp EDGE only badly: a sharp convex edge (min of two solids) comes out as a row of thin blades,
+// and a sharp concave crease (max) that crosses the grid at a shallow angle comes out as a regular
+// staircase that `computeVertexNormals` lights as a comb of triangular teeth. Both were shipping
+// (cycle-7 adversarial critique, sev1). The cure is constructional, not a tuning value: round every
+// edge of the tor's field by more than a voxel, so nothing the polygonizer sees is ever sharp.
+//
+// `smin` is IQ's polynomial smooth-min (the same one caveSdf.ts uses on corridor mouths), so the two
+// surfaces of the entrance are built with the same operator.
+
+function smin(a: number, b: number, k: number): number {
+  const h = Math.max(0, k - Math.abs(a - b)) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+/** …and its dual: rounds a CONCAVE crease by ADDING material (a fillet in the corner). */
+function smax(a: number, b: number, k: number): number {
+  const h = Math.max(0, k - Math.abs(a - b)) / k;
+  return Math.max(a, b) + h * h * k * 0.25;
+}
+
+/** Projection of an XZ point onto the slot polyline — SOFT, not nearest-wins.
+ *
+ *  ⚠ THE CYCLE-7 SLIVER BUG LIVED HERE, and it had been shipping since cycle 4. A hard
+ *  nearest-segment projection is DISCONTINUOUS on the inside of a bend: along the angle bisector the
+ *  two adjacent segments are equidistant, so `s` (and with it `floorY`, `halfW`, `perp`) jumps by
+ *  ~2·d·sin(θ/2) between neighbouring grid columns. At the first knee that is 0.45m of arc per metre
+ *  of offset — which the roof term multiplies by CREVICE_SKY_SLOPE into a ~1m STEP in the ceiling
+ *  between adjacent columns, and the polygonizer answers a step with a fan of sub-voxel triangles.
+ *  The first knee sits at s≈6.8 and the roof closes at s≈7.2, so the fan landed exactly on the
+ *  lintel: the "thicket of thin blades" flanking the aperture in every threshold frame. Four earlier
+ *  hypotheses (crease fillets, edge rounding, ceiling relief, the SDF slot interpenetrating) each
+ *  fixed something real and none of them touched this.
+ *
+ *  So the segments are combined with an exponential SOFTMIN instead. Every field the tor reads is now
+ *  continuous across a knee, and the blended value is always BETWEEN the two segments' values — which
+ *  is what keeps the non-leak invariant safe for free: the cave SDF unions its slot primitives, so
+ *  its floor at a knee is the LOWER of the two and its ceiling the HIGHER, and a value in between is
+ *  by definition inside that envelope. */
 interface SlotProj { s: number; perp: number; floorY: number; halfW: number; }
+const _pjS: number[] = [], _pjP: number[] = [], _pjF: number[] = [], _pjD: number[] = [];
 function projectSlot(line: CreviceLine, x: number, z: number): SlotProj {
-  let best = Infinity, bs = 0, bperp = 0, bfloor = line.gy;
   const st = line.stations;
-  for (let i = 1; i < st.length; i++) {
+  const n = st.length - 1;
+  let best = Infinity;
+  for (let i = 1; i <= n; i++) {
     const ax = st[i - 1].x, az = st[i - 1].z;
     const dx = st[i].x - ax, dz = st[i].z - az;
     const len2 = dx * dx + dz * dz || 1;
     let t = ((x - ax) * dx + (z - az) * dz) / len2;
     // Extend past the ends so the projection is defined outside the polyline too (the mouth
     // approach lives at s < 0, and the fissure runs on past the tor's far face).
-    if (i === 1) t = Math.min(t, 1); else if (i === st.length - 1) t = Math.max(t, 0); else t = Math.min(1, Math.max(0, t));
+    if (i === 1) t = Math.min(t, 1); else if (i === n) t = Math.max(t, 0); else t = Math.min(1, Math.max(0, t));
     const px = ax + dx * t, pz = az + dz * t;
     const d = Math.hypot(x - px, z - pz);
-    if (d < best) {
-      best = d;
-      const segLen = Math.sqrt(len2);
-      bs = line.cumS[i - 1] + segLen * t;
-      // signed side (left/right of the segment) — used for per-side asymmetry
-      bperp = ((x - ax) * dz - (z - az) * dx) / segLen;
-      // Before the mouth (s<0) the floor is FLAT at the mouth level, never extrapolated up the ramp:
-      // extrapolating raised the approach channel ~2m above the sand, so the KCC met a wall where
-      // the doorway should be and climbed over the tor instead (round-7 cave-walk, slot1 X).
-      bfloor = bs <= 0 ? st[0].floorY : st[i - 1].floorY + (st[i].floorY - st[i - 1].floorY) * t;
-    }
+    const segLen = Math.sqrt(len2);
+    const s = line.cumS[i - 1] + segLen * t;
+    _pjD[i - 1] = d;
+    _pjS[i - 1] = s;
+    // signed side (left/right of the segment) — used for per-side asymmetry
+    _pjP[i - 1] = ((x - ax) * dz - (z - az) * dx) / segLen;
+    // Before the mouth (s<0) the floor is FLAT at the mouth level, never extrapolated up the ramp:
+    // extrapolating raised the approach channel ~2m above the sand, so the KCC met a wall where
+    // the doorway should be and climbed over the tor instead (round-7 cave-walk, slot1 X).
+    _pjF[i - 1] = s <= 0 ? st[0].floorY : st[i - 1].floorY + (st[i].floorY - st[i - 1].floorY) * t;
+    if (d < best) best = d;
   }
+  const SOFT = Tuning.CREVICE_PROJ_SOFT;
+  let wsum = 0, bs = 0, bperp = 0, bfloor = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.exp(-(_pjD[i] - best) / SOFT);
+    wsum += w; bs += w * _pjS[i]; bperp += w * _pjP[i]; bfloor += w * _pjF[i];
+  }
+  bs /= wsum; bperp /= wsum; bfloor /= wsum;
   return { s: bs, perp: bperp, floorY: bfloor, halfW: halfWAt(Math.max(0, bs), line.totalS) };
 }
 
@@ -309,15 +376,60 @@ export function spawnCaveEntrance(
   //    + multi-octave relief. Evaluated ONCE per grid column — the whole field is 2.5D apart from
   //    the fissure walls, which is what keeps a 0.32m grid affordable. ──
   const APRON = T.CREVICE_APRON_RISE, AMARG = T.CREVICE_APRON_MARGIN, AFALL = T.CREVICE_APRON_FALL;
+  // R5 — a WIND-DRIFT stretch: the apron's falloff runs further on its lee side, so the sand does not
+  // meet the rock along a symmetric outline. The bearing is seed-picked (site rand) but fixed per
+  // site, exactly like the fin's side bias.
+  const arand = makeRng((seed ^ 0x0a9d01) >>> 0);
+  const driftAng = arand() * Math.PI * 2;
+  const driftX = Math.cos(driftAng), driftZ = Math.sin(driftAng);
   const holeDist = (x: number, z: number): number => {
     const dx = Math.max(block.xMin - AMARG - x, 0, x - (block.xMax + AMARG));
     const dz = Math.max(block.zMin - AMARG - z, 0, z - (block.zMax + AMARG));
-    return Math.hypot(dx, dz);
+    const d = Math.hypot(dx, dz);
+    if (d <= 0) return 0;
+    // Lee-side stretch: shorten the effective distance downwind so the ramp reaches further out.
+    const nx = dx / d, nz = dz / d;
+    const lee = Math.max(0, nx * driftX + nz * driftZ);
+    return Math.max(0, d - lee * lee * T.CREVICE_APRON_DRIFT);
   };
+  /** SIGNED distance to the CARVED TERRAIN HOLE rect (negative inside). The intact one-sided terrain
+   *  sheet exists everywhere this is positive, so the fissure may only be open ABOVE the surface
+   *  where it is negative — see CREVICE_ROOF_UNDER. */
+  const holeSigned = (x: number, z: number): number => {
+    const dx = Math.max(block.xMin - x, x - block.xMax);
+    const dz = Math.max(block.zMin - z, z - block.zMax);
+    const ox = Math.max(dx, 0), oz = Math.max(dz, 0);
+    return ox > 0 || oz > 0 ? Math.hypot(ox, oz) : Math.max(dx, dz);
+  };
+
+  // ── THE HORN (cycle-7 sev1: 78m findability). One narrow splinter of the same rock, standing a
+  //    few metres off the crack — an ASYMMETRIC skyline break. Everything about it is a pure function
+  //    of the world seed (its own rand stream, never the shared procgen one), and its side is the
+  //    same parity that mirrors the descent's first knee.
+  const hrand = makeRng((seed ^ 0x40217e) >>> 0);
+  const hornSide = (seed & 1) === 0 ? 1 : -1;
+  const hornS = T.CREVICE_HORN_S_MIN + hrand() * (T.CREVICE_HORN_S_MAX - T.CREVICE_HORN_S_MIN);
+  const hornOff = hornSide * (T.CREVICE_HORN_OFF_MIN + hrand() * (T.CREVICE_HORN_OFF_MAX - T.CREVICE_HORN_OFF_MIN));
+  const hornAng = hrand() * Math.PI;
+  const hornH = T.CREVICE_TOR_FIN_H + T.CREVICE_HORN_RISE * (0.86 + hrand() * 0.28);
+  const hornCos = Math.cos(hornAng), hornSin = Math.sin(hornAng);
+  const hornP = pointAt(line, hornS), hornP2 = pointAt(line, hornS + 0.6);
+  let hux = hornP2.x - hornP.x, huz = hornP2.z - hornP.z;
+  const hul = Math.hypot(hux, huz) || 1; hux /= hul; huz /= hul;
+  const hornX = hornP.x + -huz * hornOff, hornZ = hornP.z + hux * hornOff;
 
   // Grid AABB: the hole + apron + fall, unioned with the slot's own extent (the fissure has to run
   // out of the tor's far face into the SDF slot, so the grid must contain that face).
-  const R = AMARG + AFALL + 1.4;
+  // The grid must contain the apron's FULL reach, drift tail included. R4 sized it as
+  // AMARG+AFALL+1.4 = 4.6m while `colBound` stays positive out to ~4.8m, so the solid was already
+  // truncated at the grid face — harmlessly, because out there the slab is 1.5-2.7m underground.
+  // The cycle-7 lee-side drift moved that truncation OUT to where the slab surfaces, and the open
+  // face showed on the sand as a row of angular fins with a black void behind them (seed 1337,
+  // app15, apron tip). Sized from the actual terms now, not by eye.
+  const R = AMARG + AFALL + T.CREVICE_APRON_DRIFT + 1.8;
+  // The whaleback swell's ellipse: the carved hole's own footprint, grown a little.
+  const swCx = (block.xMin + block.xMax) * 0.5, swCz = (block.zMin + block.zMax) * 0.5;
+  const swRx = (block.xMax - block.xMin) * 0.5 + 3.0, swRz = (block.zMax - block.zMin) * 0.5 + 3.0;
   let gx0 = block.xMin - R, gx1 = block.xMax + R, gz0 = block.zMin - R, gz1 = block.zMax + R;
   for (const s of st) {
     if (s.x < gx0 + 3 || s.x > gx1 - 3) { /* the slot leaves the tor — that is expected */ }
@@ -333,10 +445,9 @@ export function spawnCaveEntrance(
   const colBot = new Float32Array(cw * cd);        // underside Y
   const colFloor = new Float32Array(cw * cd);      // fissure floor Y at this column
   const colHW = new Float32Array(cw * cd);         // fissure half-width
-  const colRoof = new Float32Array(cw * cd);       // fissure roof Y (BIG where open to the sky)
+  const colRoof = new Float32Array(cw * cd);       // fissure roof Y (far above the rock top where open to the sky)
   const colPerp = new Float32Array(cw * cd);       // signed distance from the slot axis
   const colBound = new Float32Array(cw * cd);      // horizontal closure term
-  const BIG = 1e4;
   let yLo = Infinity, yHi = -Infinity;
   const SKY = T.CREVICE_SKY_RUN, TAPER = T.CREVICE_SKY_TAPER;
   const smoothstep = (a: number, b: number, x: number): number => {
@@ -358,14 +469,46 @@ export function spawnCaveEntrance(
       // absence showed as black void wedges on the sand (scen-cave-look-r2-threshold.png). Coverage
       // of every carved cell is a correctness invariant, not a look choice — so it is also clamped
       // outright inside the hole rect below, independent of any noise value.
+      // R5 — THREE octaves of outline wobble, not one. R4's single 16m-wavelength term could not
+      // break a 13m straight edge, so the apron kept the carve rect's straight polygonal boundary
+      // and read as terraced plates (cycle-7 sev2). The 6m and 2.5m octaves are what actually
+      // dissolve a straight run into lobes and scallops.
       const d0 = holeDist(wx, wz);
-      const dbWob = d0 - (0.55 + 0.95 * (noise3(wx * 0.06 + 91, 5.5, wz * 0.06 + 37) * 0.5 + 0.5));
-      let apron = APRON - Math.min(1, Math.max(0, dbWob) / AFALL) * (APRON + 2.1);
+      const edgeWob = (noise3(wx * 0.06 + 91, 5.5, wz * 0.06 + 37) * 0.46
+                     + noise3(wx * 0.17 + 12, 2.9, wz * 0.17 + 64) * 0.34
+                     + noise3(wx * 0.40 + 55, 8.2, wz * 0.40 + 19) * 0.20) * 0.5 + 0.5;
+      // R6 — the wobble is SIGNED now. R3 made it expand-only on the grounds that covering every
+      // carved cell is a correctness invariant — true, but that invariant is already enforced
+      // outright by the `d0 <= 0.001` clamp below, so expand-only bought nothing and cost 1.5m of
+      // extra skirt on every side.
+      const dbWob = d0 - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
+      // …and the profile is TWO-STAGE: a walkable ramp off the rock (the KCC has to be able to step
+      // up onto the apron from the sand — a hard rim here means you cannot reach the mouth), then a
+      // fast dive well under the sheet. R4's single 2.3m ramp to −2.1 spent its whole length near
+      // terrain level, which is what made the outcrop read as a 26m lily pad lying on the desert.
+      const ramp = Math.min(1, Math.max(0, dbWob) / T.CREVICE_APRON_RAMP);
+      const dive = Math.min(1, Math.max(0, dbWob - T.CREVICE_APRON_RAMP) / AFALL);
+      // R7 — THE WHALEBACK SWELL. The rock that covers the carved hole was a geometrically FLAT
+      // 0.55m-proud table ~19 × 15m across; at 15-40m that is a lily pad lying on the sand no matter
+      // what its outline does, which is why three rounds of edge work never fixed the "terraced
+      // plates" read. A broad low dome over the hole is what the file header claimed the tor was in
+      // the first place ("a whaleback tor"), and it costs one term.
+      const swU = (wx - swCx) / swRx, swV = (wz - swCz) / swRz;
+      const swD = Math.hypot(swU, swV);
+      const swell = swD >= 1 ? 0 : T.CREVICE_TOR_SWELL * Math.pow(1 - swD, 1.2);
+      let apron = (APRON + swell) - ramp * (APRON + swell + 0.30) - dive * 3.1;
+      // R6 — the apron's RELIEF fades out with the apron itself. Without this the ledge noise and the
+      // tor's general relief (±1.3m between them) are the same size as the whole falloff, so the
+      // buried outer skirt keeps breaking back through the sand: a 26m flat shelf with a ragged rim
+      // lying on the desert — the "lily pad" R3 named and R4/R5 never actually killed, because they
+      // reshaped the OUTLINE and left the amplitude alone.
+      const aFade = 1 - Math.min(1, Math.max(0, dbWob) / AFALL);
       // R4 — break the apron out of a flat plateau into low bedrock LEDGES. R3's apron read as a
       // poured concrete platform: 23m across and geometrically flat, because the only relief it got
       // was the 0.30-weighted tail of the fin's noise term.
-      apron += (noise3(wx * 0.13 + 5, 9.1, wz * 0.13 + 44) * 0.34 + noise3(wx * 0.36 + 23, 4.4, wz * 0.36 + 2) * 0.16) * 0.9;
-      if (d0 <= 0.001) apron = APRON;                 // inside hole+margin: full cover, always
+      apron += (noise3(wx * 0.13 + 5, 9.1, wz * 0.13 + 44) * 0.34 + noise3(wx * 0.36 + 23, 4.4, wz * 0.36 + 2) * 0.16
+              + noise3(wx * 0.72 + 63, 1.7, wz * 0.72 + 88) * 0.07) * 1.25 * aFade;
+      if (d0 <= 0.001) apron = APRON + swell;         // inside hole+margin: full cover, always
       // The fin. R1 used perpFade² and got a pair of sharp CONES ("Mount Fuji with a notch"). Real
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
       // a plateau out to FIN_PLATEAU then a hard shoulder, and the top is clamped flat-ish.
@@ -374,14 +517,31 @@ export function spawnCaveEntrance(
       const plateau = 1 - smoothstep(T.CREVICE_TOR_FIN_PLATEAU, T.CREVICE_TOR_FIN_SPREAD, ap0);
       // Per-side asymmetry — one wall of a fissure is always the taller one.
       const sideBias = pr.perp > 0 ? 1.0 : 0.78;
-      const fin = T.CREVICE_TOR_FIN_H * along * plateau * sideBias;
-      let top = terrH + Math.max(apron, fin);
+      // R5 — SHOULDERS. The fin used to hold full height straight across the crack, so at silhouette
+      // scale the split was a hairline scratch on a smooth dome and the tor read as one lump at 78m.
+      // Dropping the fin toward the crack turns the fissure into a real NOTCH in the outline.
+      const notch = 1 - T.CREVICE_TOR_FIN_NOTCH * (1 - smoothstep(0.2, T.CREVICE_TOR_FIN_SHOULDER, ap0));
+      const fin = T.CREVICE_TOR_FIN_H * along * plateau * sideBias * notch;
+      // R5 — THE HORN. A near-vertical splinter with a ragged plan outline, rising out of the fin.
+      // `max` (not sum) means it emerges from the fin rather than sitting on it like a hat.
+      const hnx = wx - hornX, hnz = wz - hornZ;
+      const hnu = (hnx * hornCos + hnz * hornSin) / T.CREVICE_HORN_LEN;
+      const hnv = (-hnx * hornSin + hnz * hornCos) / T.CREVICE_HORN_WID;
+      const hnd = Math.max(0, Math.hypot(hnu, hnv)
+        + noise3(wx * 0.38 + 77, 3.9, wz * 0.38 + 12) * T.CREVICE_HORN_RAG);
+      const horn = hnd >= 1 ? 0 : hornH * along * Math.pow(1 - hnd, 0.9);
+      // Heightfields are combined with a SMOOTH max: a hard `max` leaves a gradient crease along the
+      // curve where two of them cross, and a crease in a heightfield is a crease in the 3D field —
+      // the polygonizer answers those with blades and stair-steps, same failure family as the rims.
+      const prom = smax(fin, horn, 0.75);
+      let top = terrH + smax(apron, prom, 0.6);
       // Relief: strong on the fin, gentle on the apron. Three octaves, the coarsest wide enough to
       // break the plateau into distinct blocks rather than dimple it.
       const relief = noise3(wx * 0.055, 3.1, wz * 0.055) * 0.60
                    + noise3(wx * 0.16 + 11, 7.3, wz * 0.16 + 5) * 0.28
                    + noise3(wx * 0.44 + 29, 2.2, wz * 0.44 + 17) * 0.12;
-      top += relief * T.CREVICE_TOR_NOISE * (0.55 + 0.45 * Math.min(1, fin / Math.max(0.5, T.CREVICE_TOR_FIN_H * 0.45)));
+      top += relief * T.CREVICE_TOR_NOISE
+           * (0.12 + 0.43 * aFade + 0.45 * Math.min(1, prom / Math.max(0.5, T.CREVICE_TOR_FIN_H * 0.45)));
       colTop[o] = top;
       colBot[o] = Math.min(terrH - 3.0, pr.floorY - 1.8);
       // The tor's fissure floor sits 12cm ABOVE the SDF slot floor, not below it. Carving below
@@ -389,13 +549,36 @@ export function spawnCaveEntrance(
       // floor ran on past the tor's wall base and then dropped to the tor's carve floor) — deeper
       // than the KCC's 0.3m autostep, so a capsule that drifted into it on the climb out was wedged.
       // That was the `ascent=FAIL` on half the seed net. Above, the tor owns the walking surface.
-      colFloor[o] = pr.floorY + 0.12;
+      // R5 — a little relief on the walking surface too. Kept strictly POSITIVE-biased so the tor's
+      // floor never dips below the SDF slot floor it sits 12cm above (the 45cm gutter that wedged the
+      // capsule on the climb out in cycle 4, round 7).
+      colFloor[o] = pr.floorY + 0.12
+        + (noise3(wx * 0.33 + 5, 1.9, wz * 0.33 + 91) * 0.5 + 0.5) * T.CREVICE_FLOOR_RELIEF;
       colHW[o] = pr.halfW;
       colPerp[o] = pr.perp;
       // Roof: open to the sky over the first SKY metres, then closes to the slot ceiling.
-      const closed = smoothstep(SKY, SKY + TAPER, pr.s);
-      colRoof[o] = closed <= 0 ? BIG : (closed >= 1 ? pr.floorY + T.CREVICE_HEIGHT
-        : pr.floorY + T.CREVICE_HEIGHT + (1 - closed) * 60);
+      // R5 — the closure line WANDERS (CREVICE_ROOF_WOBBLE). Round 4's lip was a mathematical
+      // smoothstep of arc length, i.e. a dead-straight line across the slot: from inside, the sky
+      // opening ended in a hard-edged bright quad that read as a glowing card (cycle-7 sev2).
+      const roofWob = (noise3(wx * 0.105 + 13, 2.2, wz * 0.105 + 71) * 0.68
+                     + noise3(wx * 0.330 + 5, 6.4, wz * 0.330 + 9) * 0.32) * T.CREVICE_ROOF_WOBBLE;
+      const sClose = SKY + TAPER * 0.5 - roofWob;
+      // …and the ceiling itself carries rock relief, for exactly the reason the walls do: a bare
+      // plane tilted 27° to the voxel grid quantizes into a fringe of thin triangles. `smax` on the
+      // lintel's leading kink for the same reason — a gradient crease is a sharp edge to the
+      // polygonizer even when the surfaces either side of it are smooth.
+      const roofRel = (noise3(wx * 0.34 + 8, 5.1, wz * 0.34 + 66) * 0.66
+                     + noise3(wx * 0.83 + 44, 9.7, wz * 0.83 + 22) * 0.34) * T.CREVICE_ROOF_RELIEF;
+      const taperRoof = pr.floorY + T.CREVICE_HEIGHT - T.CREVICE_ROOF_DROP + roofRel
+        + smax(0, sClose - pr.s, 0.9) * T.CREVICE_SKY_SLOPE;
+      // …and the SAFETY NET behind the whole lamina fix: outside the carved terrain hole the roof is
+      // clamped under the surface, so the intact one-sided sheet can never poke into the open crack
+      // again on any seed, whatever the cover guard did to this station's floor. The clamp is lifted
+      // (a) inside the hole and (b) anywhere before the taper starts — otherwise it would roof over
+      // the approach ramp behind the mouth, where `pr.s` is negative and there is no hole either.
+      const hrw = holeSigned(wx, wz) + noise3(wx * 0.19 + 31, 4.7, wz * 0.19 + 63) * 0.55;
+      const openFree = Math.max(1 - smoothstep(-0.9, 0.3, hrw), 1 - smoothstep(SKY * 0.5, SKY, pr.s));
+      colRoof[o] = Math.min(taperRoof, terrH - T.CREVICE_ROOF_UNDER + openFree * 120);
       colBound[o] = AFALL + 1.0 - Math.max(0, dbWob);  // >0 inside the tor's footprint, <0 outside
       if (colBot[o] < yLo) yLo = colBot[o];
       if (top > yHi) yHi = top;
@@ -407,7 +590,10 @@ export function spawnCaveEntrance(
 
   // ── Field: solid slab (bot..top) ∩ footprint, minus the fissure. Positive = rock. ──
   const field = new Float32Array(cw * ch * cd);
-  const WN = T.CREVICE_WALL_NOISE, WNF = T.CREVICE_WALL_NOISE_FLOOR;
+  const WN = T.CREVICE_WALL_NOISE, WNO = T.CREVICE_WALL_NOISE_OUT, WNF = T.CREVICE_WALL_NOISE_FLOOR;
+  const WWOB = T.CREVICE_WALL_WOBBLE, WWF = T.CREVICE_WALL_WOBBLE_FREQ;
+  const KE = T.CREVICE_EDGE_ROUND * VOX;      // convex-edge rounding (rims)
+  const KC = T.CREVICE_CREASE_FILL * VOX;     // concave-crease fillet (floor/wall corner)
   for (let k = 0; k <= nz; k++) {
     for (let i = 0; i <= nx; i++) {
       const c = k * cw + i;
@@ -415,17 +601,37 @@ export function spawnCaveEntrance(
       const perp = colPerp[c], bound = colBound[c];
       const ap = Math.abs(perp);
       const wx = gx0 + i * VOX, wz = gz0 + k * VOX;
+      // The wall plane's LOW-FREQUENCY lateral wander (see CREVICE_WALL_WOBBLE). Per column, so a
+      // whole vertical band of wall shifts together — that is what stops the wall running
+      // near-parallel to a grid axis, which is the other half of the sawtooth fix.
+      const wob = noise3(wx * WWF + 211, 1.3, wz * WWF + 47) * WWOB;
+      // THE SLIVER FIX (cycle-7 R6, and the last of the aperture shrapnel). The fissure rim is a
+      // CONVEX edge and wants a fat smooth-min — except in ONE place: the lintel's leading edge,
+      // where the rock between the ceiling (`roof`) and the rock top (`top`) is thinner than the
+      // rounding radius. There `smin` blends "below the top" (∇ = −y) against "above the ceiling"
+      // (∇ = +y), the two gradients CANCEL, and surface nets — which places its vertex by walking
+      // that gradient — emits a fringe of sub-voxel triangles. Everywhere else the two surfaces meet
+      // at ~90° and the same radius is exactly right, so the radius is capped by the LOCAL rock
+      // thickness rather than lowered globally (which would put the rim blades back).
+      const kEdge = roof >= top ? KE : Math.min(KE, Math.max(0.12, (top - roof) * 0.45));
       for (let j = 0; j <= ny; j++) {
         const wy = gy0 + j * VOX;
-        let f = Math.min(top - wy, wy - bot, bound);
+        // Convex edges (slab top/bottom against the footprint boundary) rounded, not mitred.
+        let f = smin(smin(top - wy, wy - bot, KE), bound, KE);
         if (f > -1.2 && ap < hw + 2.2) {
-          // Fissure walls get 3D rock noise, attenuated toward the floor so the WALKABLE width
-          // stays honest (the crevice character lives above head height, where you look).
+          // Fissure walls get 3D rock noise. Cycle-7: the attenuation toward the floor used to run
+          // to 0.10 (0.03m of relief against a 0.32m grid) and THAT is what quantized into the
+          // sawtooth comb. It now bottoms out at CREVICE_WALL_NOISE_FLOOR ≈ half a voxel, and part
+          // of the budget is spent on the per-column wobble above rather than on fine grain.
           const att = WNF + (1 - WNF) * Math.min(1, Math.max(0, (wy - fl - 0.9) / 2.4));
-          const wn = (noise3(wx * 0.33 + 61, wy * 0.26, wz * 0.33 + 13) * 0.68
-                    + noise3(wx * 0.78 + 7, wy * 0.61, wz * 0.78 + 41) * 0.32) * WN * att;
-          const dFis = Math.max(ap - (hw + wn), fl - wy, wy - roof);
-          f = Math.min(f, dFis);
+          const raw = wob + (noise3(wx * 0.33 + 61, wy * 0.26, wz * 0.33 + 13) * 0.68
+                           + noise3(wx * 0.78 + 7, wy * 0.61, wz * 0.78 + 41) * 0.32) * (1 - WWOB) * att;
+          // ASYMMETRIC: gouges bite deep, bulges stay inside the SDF slot (CREVICE_WALL_NOISE_OUT).
+          const wn = raw >= 0 ? raw * WNO : raw * WN;
+          // The floor/wall crease gets a FILLET (smooth-max adds rock in the corner): a sharp
+          // concave line crossing the grid at ~27° is exactly what stair-steps.
+          const dFis = smax(smax(ap - (hw + wn), fl - wy, KC), wy - roof, KC);
+          f = smin(f, dFis, kEdge);
         }
         field[(k * ch + j) * cw + i] = f;
       }

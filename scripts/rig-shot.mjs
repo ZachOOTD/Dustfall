@@ -83,7 +83,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -94,6 +94,13 @@ if (argv.sdfbench) process.env.VITE_CAVE_SDF_BENCH = '1';
 if (String(argv.cave) === '0') process.env.VITE_CAVE = '0';
 const FRAMES = Number(argv.frames || 10);
 const INTERVAL = Number(argv.interval || 300); // ms between strip frames
+
+// GL backend selector — MODULE scope so a scenario can LABEL its own measurements with the backend
+// they were taken on (the cave-audit perf table is meaningless without it). `--gl=swiftshader` is the
+// same switch as RIG_GL=swiftshader, exposed as a flag so a software-renderer run still goes through
+// `npm run rig -- …` (the SPEED RULES' zero-prompt path) instead of needing a shell env prefix.
+// See main() for what each mode passes to chromium.
+const GL_MODE = argv.gl || process.env.RIG_GL || 'angle';
 
 /** Enter gameplay LIVE (ticking) — dev loadout, pointer-lock gate forced open,
  *  unpaused, canvas sized, daylight for legibility. Does NOT pause/pose. */
@@ -2492,6 +2499,17 @@ const SCENARIOS = {
       const reached = new Set();
       const tour = cavep.tour;
       const trace = [];
+      // 2026-07-26 — GATE HONESTY: RECORD THE LEGS THAT FAIL SILENTLY.
+      // The Euler tour revisits junction chambers, and a revisit leg that stalls is tolerated (the
+      // node is already in `reached`, so it can't "fail"). That tolerance is correct — a revisit is
+      // not new coverage — but it was SILENT, and silence made the gate lie. Real case, seed 4242:
+      // the capsule walked into dead-end pocket 9, could not walk back OUT, and the legs 9>6, 6>3,
+      // 3>2 all stalled unreported; the first NEW node after them (5) then failed, so the gate
+      // printed "could not reach node 5 (pocket) from 2" and dumped the floor profile of the 2→5
+      // corridor — which is perfectly walkable and 60m from where the capsule actually was. A whole
+      // investigation went hunting a corridor pinch that does not exist. A stranded capsule is now
+      // named at the point it stranded, and the strand list rides the fail message + the result line.
+      const strands = [];
       for (let ti = 0; ti < tour.length; ti++) {
         const n = byId(tour[ti]);
         const thresh = Math.max(1.4, n.rx * 0.6);
@@ -2528,7 +2546,12 @@ const SCENARIOS = {
         const p1 = at();
         trace.push(`${tour[ti]}:${ok ? 'ok' : 'X'} (${p1.x.toFixed(1)},${p1.z.toFixed(1)},${p1.y.toFixed(1)}) moved${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)}`);
         if (ok) reached.add(n.id);
-        else if (!reached.has(n.id)) {
+        else if (reached.has(n.id)) {
+          // A revisit leg that stalled: not a coverage failure, but the capsule is NOT where the
+          // tour thinks it is, so every later leg is measured from the wrong place. Record it.
+          const ps = at();
+          strands.push(`${ti > 0 ? tour[ti - 1] : '?'}>${n.id}@(${ps.x.toFixed(1)},${ps.z.toFixed(1)},y${ps.y.toFixed(1)})d${Math.hypot(ps.x - n.x, ps.z - n.z).toFixed(1)}`);
+        } else {
           const p = at();
           // diagnostic: the castDown floor profile from the previous tour node to this one
           const prevN = ti > 0 ? byId(tour[ti - 1]) : n;
@@ -2553,7 +2576,12 @@ const SCENARIOS = {
             const hit = ctx.physics.world.castRay(ray, 8, true, undefined, undefined, undefined, body);
             fwd.push(hit ? hit.timeOfImpact.toFixed(1) : '∞');
           }
-          fails.push(`march: could not reach node ${n.id} (${n.kind}) from ${prevN.id} — ended (${p.x.toFixed(1)},${p.z.toFixed(1)},y${p.y.toFixed(1)}); fwdClear@[.3/1/1.7]=[${fwd.join(' ')}]; floorΔ/head [${prof.join(' ')}]`);
+          // The strand list comes FIRST: when it is non-empty the capsule never made it back to
+          // `prevN`, so the fwdClear/floor profile below describes a corridor it was never in, and
+          // the real defect is at the FIRST strand. Read that before reading anything else.
+          fails.push(`march: could not reach node ${n.id} (${n.kind}) from ${prevN.id}` +
+            (strands.length ? ` — ⚠ STRANDED EARLIER, the tour never returned: [${strands.join(' ')}] — diagnose the FIRST of those, not this leg` : '') +
+            ` — ended (${p.x.toFixed(1)},${p.z.toFixed(1)},y${p.y.toFixed(1)}); fwdClear@[.3/1/1.7]=[${fwd.join(' ')}]; floorΔ/head [${prof.join(' ')}]`);
           break;   // a broken link stalls the rest of the tour; one failure is enough
         }
         await frames(4);
@@ -2697,13 +2725,16 @@ const SCENARIOS = {
         // DEEPER cycle 4 — the crevice, reported SEPARATELY from the corridor slope ceiling.
         entSlope: borep.descentAngleDeg, entMouthW: borep.mouthClearW, entPinchW: borep.pinchClearW,
         entTorTris: borep.torTris, entMs: borep.msTor, slotTrace, ascTrace,
-        trace, tourStr: tour.join('>'),
+        trace, tourStr: tour.join('>'), strands,
         nodesXY: nodes.map((n) => `${n.id}<-${n.parent}:(${n.x.toFixed(1)},${n.z.toFixed(1)},${n.y.toFixed(1)})r${n.rx.toFixed(1)}h${n.height.toFixed(1)}`),
       };
     });
     const pass = r.fails.length === 0;
-    console.log(`CAVE-WALK pass=${pass ? 1 : 0} seed=${r.seed ?? '?'} digest=${r.digest ?? '?'} chambers=${r.chambers ?? '?'} edges=${r.edges ?? '?'} reached=${r.reached ?? '?'}/${r.chambers ?? '?'} tour=${r.tour ?? '?'} eggDepth=${r.eggDepth ?? '?'}m eggRx=${r.eggRx ?? '?'} slope=${r.maxSlope ?? '?'}° headroom=${r.minHeadroom ?? '?'} chamHead=${r.chamMinHead ?? '?'} cover=${r.minCover ?? '?'} ascent=${r.exited ? 'OUT' : 'FAIL'} tris=${r.tris ?? '?'} fails=${r.fails.length}`);
+    console.log(`CAVE-WALK pass=${pass ? 1 : 0} seed=${r.seed ?? '?'} digest=${r.digest ?? '?'} chambers=${r.chambers ?? '?'} edges=${r.edges ?? '?'} reached=${r.reached ?? '?'}/${r.chambers ?? '?'} tour=${r.tour ?? '?'} eggDepth=${r.eggDepth ?? '?'}m eggRx=${r.eggRx ?? '?'} slope=${r.maxSlope ?? '?'}° headroom=${r.minHeadroom ?? '?'} chamHead=${r.chamMinHead ?? '?'} cover=${r.minCover ?? '?'} ascent=${r.exited ? 'OUT' : 'FAIL'} tris=${r.tris ?? '?'} strands=${(r.strands ?? []).length} fails=${r.fails.length}`);
     if (r.fails.length) console.log('[cave-walk] ' + JSON.stringify(r.fails.slice(0, 12)));
+    // Strands are reported on PASSING runs too — a tour that covered every chamber but had to
+    // fight its way out of one of them is the early warning for the flake that eventually goes red.
+    if (r.strands && r.strands.length) console.log(`[cave-walk] ⚠ STRANDED LEGS (tolerated, node already reached): [${r.strands.join(' ')}]`);
     console.log(`CAVE-CREVICE seed=${r.seed ?? '?'} slope=${r.entSlope ?? '?'}° mouthW=${r.entMouthW ?? '?'}m pinchW=${r.entPinchW ?? '?'}m torTris=${r.entTorTris ?? '?'} ms=${r.entMs ?? '?'}`);
     if (r.slotTrace) console.log(`[cave-walk] descent=[${r.slotTrace.join(' ')}] ascent=[${(r.ascTrace ?? []).join(' ')}]`);
     console.log(`[cave-walk] kinds=[${r.kinds ?? '?'}]`);
@@ -2756,6 +2787,68 @@ const SCENARIOS = {
     });
     const tag = argv.tag ? `cave-look-${argv.tag}` : 'cave-look';
     await caveShotSet(page, tag);
+  },
+
+  // ── cave-audit (DEEPER cycle 7) — THE FULL-TREE VISUAL AUDIT SET ────────────────────────────
+  //
+  //   `cave-look` is the ITERATION loop: it inherits `cave-walk`'s framings, and half of those are
+  //   rig-lit greybox shots (a flat 0.85 ambient + a fat fill PointLight) that exist so a builder can
+  //   read FORM while sculpting. They are not what a player sees. This scenario is the AUDIT: every
+  //   frame is the REAL player's-eye read at REAL shipping settings, across the WHOLE tree, so fresh
+  //   critics grade the cave a player actually walks through rather than a lit-for-inspection model.
+  //
+  //   WHAT MAKES IT HONEST (the poolShotSet discipline, extended from one pool to the whole cave):
+  //     · ONE exposure, `CAVE_AUDIT_EXPOSURE`, equal to src/core/scene.ts's toneMappingExposure.
+  //       `cave-look`/`cave-walk` shoot at 1.15-1.55, i.e. 10-48% hot; nothing here is brightened.
+  //     · The light model is not hand-set. Every framing PINS THE PLAYER at the stand point and runs
+  //       the REAL tick chain (updateLighting → updateCaveAtmosphere) for a few frames, so ambient /
+  //       sun / moon / fog colour+density / the mouth shaft are whatever the SHIPPING depth-fade
+  //       gives at that spot — daylight at 78m out, the ramp-lit throat, true black in the deep tree.
+  //       Then it pauses (the pause gate freezes lighting) and shoots. No probe-invented lights.
+  //     · The carried light is the shipping torch/flashlight tuning at the flame offset the game uses.
+  //     · NOTHING is hidden except the first-person body + view model. The exterior shots keep the
+  //       real sky, terrain and weather fog, because "does the tor read as a landmark at 78m" is only
+  //       answerable in the real desert.
+  //     · Floors are snapped with a REAL physics castDown, not a node's nominal floorY, so the eye is
+  //       1.68m above the surface the capsule would actually stand on.
+  //
+  //   Every frame also prints a `[cave-metric]` line (readPixels over the whole frame: mean/percentile
+  //   luminance, the sub-L16 fraction, and the top/middle/bottom band means) so critics get NUMBERS
+  //   alongside pixels — "the ceiling is a dark smoky band" is a claim a band mean can corroborate.
+  //
+  //   ALSO MEASURED HERE: the CAVE_ROCK_BUMP perf residual. `caveBumpPerf` renders a fixed cave
+  //   framing N times with the shipping bump shader and N times with a rig-local NO-BUMP clone of the
+  //   same material (a uniform of 0 would NOT answer the question — the shader still evaluates all
+  //   eight value-noise samples and multiplies by zero), and reports mean/p95 frame ms for both. Run
+  //   it with `--gl=swiftshader` for the low-end (software raster) answer and on the default GPU for
+  //   reference. Nothing shipping changes: the clone lives for the length of the measurement.
+  //
+  //   Run: npm run rig -- --scenario=cave-audit --port=52xx [--seed=1337] [--only=shots|perf]
+  //        npm run rig -- --scenario=cave-audit --port=52xx --only=perf --gl=swiftshader
+  'cave-audit': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0; g.setTime(0.42);      // clear mid-morning — the surface read the tor gets
+      ctx.flags.thirdPerson = false;                    // FIRST person: this audit is the player's eye
+      ctx.three.renderer.setSize(1280, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1280 / 720; cam.updateProjectionMatrix(); }
+    });
+    const seed = Number(argv.seed ?? 1337);
+    const only = String(argv.only || 'both');
+    if (only !== 'perf') {
+      await caveAuditShotSet(page, `caveaudit-${seed}` + (argv.hidesky ? '-nosky' : '') + (argv.tag ? '-' + argv.tag : ''), {
+        framings: argv.framings ? String(argv.framings).split(',').map((s) => s.trim()) : null,
+        hideSky: !!argv.hidesky,
+        keepHud: !!argv.keephud,
+        hideGroup: argv.hidegroup ? String(argv.hidegroup) : null,
+      });
+    }
+    if (only !== 'shots') {
+      await caveBumpPerf(page, { samples: Number(argv.perfsamples || 0) || undefined });
+    }
   },
 
   // ── pool-fill (DEEPER cycle 6) — THE UNDERGROUND-WATER GATE ────────────────────────────────
@@ -3283,13 +3376,38 @@ const SCENARIOS = {
       const caveGen = await import('/src/world/caveGen.ts');
       const seed = cavep.seed;
       const runs = [];
+      let layout = null;
       for (let k = 0; k < 2; k++) {
-        runs.push(caveGen.cavePoolLayout(seed, cavep.junction, ctx.terrain)
+        layout = caveGen.cavePoolLayout(seed, cavep.junction, ctx.terrain);
+        runs.push(layout
           .map((p) => `${p.nodeId}:${p.x.toFixed(4)}:${p.z.toFixed(4)}:${p.waterY.toFixed(4)}:${p.radius.toFixed(4)}`).join('|'));
       }
-      const live = (cavep.pools || []).map((p) => `${p.node}:${p.x.toFixed(3)}:${p.z.toFixed(3)}`).join('|');
-      const rebuilt = runs[0].split('|').map((s) => { const a = s.split(':'); return `${a[0]}:${(+a[1]).toFixed(3)}:${(+a[2]).toFixed(3)}`; }).join('|');
-      return { stable: runs[0] === runs[1], matchesLive: live === rebuilt, a: runs[0], b: runs[1], live, rebuilt };
+      // ⚠ COMPARE NUMBERS, NOT FORMATTED STRINGS. Until cycle 7 this diffed the live list stringified
+      // at 3dp against the rebuilt list stringified at 4dp AND THEN RE-ROUNDED to 3dp — a double
+      // rounding, so any coordinate whose 4th/5th decimals landed near a …x5 boundary reported a
+      // "determinism" failure of exactly one unit in the last printed digit. It fired the moment this
+      // cycle's entrance work moved a pool by a few centimetres (seed 1337: -101.824 vs -101.825).
+      // That is the project's own named failure mode — a gate that measures the wrong thing — so it
+      // is fixed rather than tolerated: elementwise on the RAW floats, 0.1mm, node ids must match.
+      const livePools = (cavep.pools || []);
+      // 5mm. The live junction reaches this comparison through the probe's userData (rounded on the
+      // way), so a pure re-derivation from it lands sub-millimetre away from the live layout — 4e-4m
+      // on seed 7 — with nothing wrong. The teeth this check actually has are `stable ×2` (any hidden
+      // Math.random) and gross placement drift: a real RNG or rule change moves a pool by METRES.
+      const EPS = 5e-3;
+      let matchesLive = layout.length === livePools.length;
+      const diffs = [];
+      for (let i = 0; matchesLive && i < layout.length; i++) {
+        const a = layout[i], b = livePools[i];
+        const dx = Math.abs(a.x - b.x), dz = Math.abs(a.z - b.z);
+        if (a.nodeId !== b.node || dx > EPS || dz > EPS) {
+          matchesLive = false;
+          diffs.push(`#${i} n${a.nodeId}/n${b.node} dx=${dx.toExponential(2)} dz=${dz.toExponential(2)}`);
+        }
+      }
+      const live = livePools.map((p) => `${p.node}:${p.x.toFixed(3)}:${p.z.toFixed(3)}`).join('|');
+      const rebuilt = layout.map((p) => `${p.nodeId}:${p.x.toFixed(3)}:${p.z.toFixed(3)}`).join('|');
+      return { stable: runs[0] === runs[1], matchesLive, diffs, a: runs[0], b: runs[1], live, rebuilt };
     }).catch((e) => ({ error: String(e && e.message || e) }));
 
     // ── 6. THE PER-CAVE EMITTER ISOLATION PROOF (round-13 fix 1) ──────────────────────────────
@@ -3334,7 +3452,7 @@ const SCENARIOS = {
     if (det.error) fails.push(`determinism check could not run: ${det.error}`);
     else {
       if (!det.stable) fails.push(`pool placement NOT deterministic — run A "${det.a}" vs run B "${det.b}"`);
-      if (!det.matchesLive) fails.push(`rebuilt pool placement differs from the LIVE cave — live "${det.live}" vs rebuilt "${det.rebuilt}"`);
+      if (!det.matchesLive) fails.push(`rebuilt pool placement differs from the LIVE cave (>0.1mm) — ${(det.diffs || []).join(", ")} | live "${det.live}" vs rebuilt "${det.rebuilt}"`);
     }
     if (iso.error) fails.push(`per-cave emitter isolation check could not run: ${iso.error}`);
     else {
@@ -15487,7 +15605,7 @@ async function main() {
   // Content gates (determinism/streaming/walk) are pixel-independent, so the
   // backend can't change their result; only screenshots differ, and those are
   // A/B-validated before adoption. Falls back to swiftshader on any doubt.
-  const glMode = process.env.RIG_GL || 'angle';   // DEFAULT GPU (2026-07-13): validated identical digest + correct renders, ~10× faster, CPU-cool. RIG_GL=swiftshader forces the old software path.
+  const glMode = GL_MODE;   // DEFAULT GPU (2026-07-13): validated identical digest + correct renders, ~10× faster, CPU-cool. RIG_GL=swiftshader (or --gl=swiftshader) forces the old software path.
   const glArgs = glMode === 'angle'
     ? ['--enable-webgl', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist']
     : ['--enable-webgl', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
@@ -16408,4 +16526,657 @@ async function poolShotSet(page, prefix, opts = {}) {
       look: [Q.x, Q.y, Q.z] }, 'pool2-far');
   }
   return metrics;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   DEEPER cycle 7 — THE CAVE AUDIT SET + the CAVE_ROCK_BUMP perf answer.
+
+   See the `cave-audit` scenario above for the WHY. These two helpers are the whole implementation:
+     · caveAuditShotSet — 17 REAL-settings framings across the whole tree, each with pixel metrics.
+     · caveBumpPerf     — the bump-shader A/B frame-time table (shipping shader vs a no-bump clone).
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+// MUST equal src/core/scene.ts's `renderer.toneMappingExposure`. The audit's entire claim is that it
+// shows the shipping read; a shot taken hot is a shot that grades a cave nobody plays. Do not raise.
+const CAVE_AUDIT_EXPOSURE = 1.05;
+const CAVE_AUDIT_EYE = 1.68;          // m — eye above the SNAPPED physics floor (Tuning.PLAYER_HEIGHT class)
+
+/** Resolve every framing's camera/stand/look IN THE PAGE (that is where `castDown` and the probes
+ *  live), then shoot them one by one from node. Returns the metrics map, keyed by framing name.
+ *  Writes verification/scen-<prefix>-<name>.png. */
+async function caveAuditShotSet(page, prefix, opts = {}) {
+  const only = opts.framings ? new Set(opts.framings) : null;
+  const hideSky = !!opts.hideSky;
+
+  const plan = await page.evaluate((EYE) => {
+    const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+    let p = null, b = null;
+    ctx.three.scene.traverse((o) => {
+      if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe;
+      if (o.userData && o.userData.caveEntranceProbe) b = o.userData.caveEntranceProbe;
+    });
+    if (!p || !b) return null;
+
+    const nodes = p.nodes;
+    const ent = nodes.find((n) => n.kind === 'entrance') || nodes[0];
+    const hall = nodes.find((n) => n.kind === 'hall') || ent;
+    const egg = nodes.find((n) => n.id === p.eggId) || hall;
+    // "A mid gallery" = the biggest ordinary chamber that is neither the hall nor the egg room —
+    // the space the tree is mostly MADE of, and therefore the one the read has to hold up in.
+    const gallery = nodes.filter((n) => n.kind === 'pocket')
+      .sort((a, c) => (c.rx * c.height) - (a.rx * a.height))[0] || hall;
+    const sq = p.edges.find((e) => e.squeeze) || p.edges[0];
+    const sqa = nodes.find((n) => n.id === sq.a) || ent;
+    const sqb = nodes.find((n) => n.id === sq.b) || hall;
+    const wps = b.waypoints;
+
+    // Nearest bioluminescent cap to the gallery + the chamber it belongs to (for the stand-off dir).
+    const want = new THREE.Color(T.CAVE_FUNGI_EMISSIVE_HEX).getHexString();
+    const wp = new THREE.Vector3(); let fungi = null, fd = 1e9;
+    ctx.three.scene.traverse((o) => {
+      if (!o.isMesh || !o.material || !o.material.emissive) return;
+      if (o.material.emissive.getHexString() !== want) return;
+      o.getWorldPosition(wp);
+      const d = Math.hypot(wp.x - gallery.x, wp.z - gallery.z);
+      if (d < fd) { fd = d; fungi = { x: +wp.x.toFixed(2), y: +wp.y.toFixed(2), z: +wp.z.toFixed(2), d: +d.toFixed(1) }; }
+    });
+    let fnode = null;
+    if (fungi) {
+      let bd = 1e9;
+      for (const n of nodes) { const d = Math.hypot(n.x - fungi.x, n.z - fungi.z); if (d < bd) { bd = d; fnode = n; } }
+    }
+    const pools = (p.pools || []).slice().sort((a, c) => c.r - a.r).map((q) => {
+      const n = nodes.find((x) => x.id === q.node) || { x: q.x, z: q.z, y: q.y - 0.26 };
+      return { x: q.x, y: q.y, z: q.z, r: q.r, nx: n.x, nz: n.z, floorY: n.y, node: q.node };
+    });
+
+    // THE FLOOR SNAP — the real collider, not a node's nominal floorY. A chamber's polygonized floor
+    // sits up to the displacement amplitude away from its analytic centre height, and the audit's
+    // whole point is that the eye is where the CAPSULE would put it.
+    const floorAt = (x, z, guess) => {
+      const h = g.castDown(x, z, guess + 3.0, true);
+      return h ? +h.hitY.toFixed(3) : guess;
+    };
+
+    const specs = [];
+
+    // ── A. ENTRANCE APPROACH — daylight, real sun, real weather fog, NO carried light. The 78m
+    //    frame is the one the "small dark bump" residual lives in, so it is shot first and framed
+    //    exactly like a player walking in on a 3/4 line rather than dead down the slot axis.
+    for (const d of [78, 40, 15]) {
+      const x = b.mouthX - d, z = b.centerZ + d * 0.30;
+      const fy = ctx.terrain.pureHeightAt(x, z);
+      specs.push({
+        name: 'app' + d, light: 'none', tag: 'exterior',
+        stand: [x, fy, z], cam: [x, fy + EYE, z],
+        look: [b.mouthX, b.gy + b.torHeight * 0.50, b.centerZ],
+      });
+    }
+    // The threshold: standing on the apron at the mouth, looking IN. The "do I commit?" frame — and
+    // the one that shows whether the crack reads as a way down or as a black smear.
+    {
+      const wm = wps[2], wd = wps[Math.min(wps.length - 1, 5)];
+      specs.push({
+        name: 'threshold', light: 'none', tag: 'exterior',
+        stand: [wm.x, wm.y, wm.z], cam: [wm.x, wm.y + EYE, wm.z],
+        look: [wd.x, wd.y + 0.7, wd.z],
+      });
+    }
+
+    // ── B. THE DESCENT — inside the fissure slot. Torch out (a player descending has one lit).
+    //    `slot-wall-up` deliberately aims UP a side wall at torch range: that is where the sawtooth
+    //    spike residual lives, and a shot aimed down the slot axis never looks at it.
+    {
+      const si = (f) => wps[Math.min(wps.length - 1, Math.max(3, 3 + Math.round((wps.length - 4) * f)))];
+      const a = si(0.20), c = si(0.58);
+      specs.push({
+        name: 'slot-upper', light: 'torch', tag: 'descent',
+        stand: [a.x, a.y, a.z], cam: [a.x, a.y + EYE, a.z], look: [c.x, c.y + 1.0, c.z],
+      });
+      const m0 = si(0.45), m1 = si(0.66);
+      let hx = m1.x - m0.x, hz = m1.z - m0.z; const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl;
+      specs.push({
+        name: 'slot-wall-up', light: 'torch', tag: 'descent',
+        stand: [m0.x, m0.y, m0.z], cam: [m0.x, m0.y + EYE, m0.z],
+        look: [m0.x + (-hz) * 2.2, m0.y + 4.2, m0.z + hx * 2.2],
+      });
+      const h0 = wps[wps.length - 1];
+      specs.push({
+        name: 'slot-handoff', light: 'torch', tag: 'descent',
+        stand: [h0.x, h0.y, h0.z], cam: [h0.x, h0.y + EYE, h0.z],
+        look: [ent.x, ent.y + 1.2, ent.z],
+      });
+    }
+
+    // ── C. CHAMBERS — one frame per distinct SPACE, walking the tree. Aimed the way a player looks:
+    //    at the rock in front of them (the cycle-3 lesson), except `hall-wide`, which deliberately
+    //    asks the opposite question — what do you see down the LONGEST sightline the cave has?
+    {
+      const t = 0.25;
+      const x = sqa.x + (sqb.x - sqa.x) * t, z = sqa.z + (sqb.z - sqa.z) * t;
+      const fy = floorAt(x, z, sqa.y + (sqb.y - sqa.y) * t);
+      specs.push({ name: 'squeeze', light: 'torch', tag: 'chamber',
+        stand: [x, fy, z], cam: [x, fy + EYE, z], look: [sqb.x, sqb.y + 1.1, sqb.z] });
+    }
+    // THE CYCLE-3 LESSON, APPLIED: aim at rock the TORCH REACHES. A torch is 1.8 candela at
+    // distance 12 with quadratic decay, so a chamber wall 8m off receives ~1/16th of what a wall 2m
+    // off does — round 1 of this set framed the gallery across its full width and graded a black
+    // rectangle. The gallery frame now stands half a radius out and looks at the NEAR wall ~3m away,
+    // with the chamber curving off to one side so the shot still carries the space, not just a patch.
+    const galleryStand = (() => {
+      const gx = gallery.x - gallery.rx * 0.50, gz = gallery.z - gallery.rx * 0.15;
+      return { x: gx, z: gz, y: floorAt(gx, gz, gallery.y) };
+    })();
+    const galleryLook = [gallery.x - gallery.rx * 1.05, gallery.y + gallery.height * 0.22, gallery.z + gallery.rx * 0.28];
+    specs.push({ name: 'gallery', light: 'torch', tag: 'chamber',
+      stand: [galleryStand.x, galleryStand.y, galleryStand.z],
+      cam: [galleryStand.x, galleryStand.y + EYE, galleryStand.z], look: galleryLook });
+    {
+      const hx = hall.x - hall.rx * 0.86, hz = hall.z;
+      const fy = floorAt(hx, hz, hall.y);
+      specs.push({ name: 'hall-wide', light: 'torch', tag: 'chamber',
+        stand: [hx, fy, hz], cam: [hx, fy + EYE, hz],
+        look: [hall.x + hall.rx * 1.05, hall.y + hall.height * 0.28, hall.z] });
+    }
+    {
+      // A FIXED 3.2m stand-off, not a fraction of rx: the egg chamber is the biggest room in the
+      // cave (rx ≈ 9.5m), so 0.6·rx put the camera 6m from the dais — outside useful torch range.
+      const ex = egg.x - 3.2 * 0.90, ez = egg.z - 3.2 * 0.44;
+      const fy = floorAt(ex, ez, egg.y);
+      specs.push({ name: 'egg-dais', light: 'torch', tag: 'chamber',
+        stand: [ex, fy, ez], cam: [ex, fy + EYE, ez],
+        look: [egg.x, egg.y + 1.15, egg.z] });          // the dais top (buildDais H=0.9 + egg centre)
+    }
+
+    // ── D. CEILINGS + the NEAR-FIELD WALL. The named residual is a "dark smoky band at 8-15m", so
+    //    two frames pitch up at ~75° (not 90° — a dead-vertical lookAt is degenerate against the up
+    //    vector, and no player holds that pose anyway): one in a gallery, one in the tallest room.
+    //    Plus one wall at ~2m, which is where the torch actually lands and where the rock either
+    //    reads as carved stone or does not.
+    {
+      const off = Math.max(1.0, gallery.height * 0.26);
+      const fy = floorAt(gallery.x, gallery.z, gallery.y);
+      specs.push({ name: 'ceil-gallery', light: 'torch', tag: 'ceiling',
+        stand: [gallery.x, fy, gallery.z], cam: [gallery.x, fy + EYE, gallery.z],
+        look: [gallery.x + off, fy + gallery.height * 0.98, gallery.z + off * 0.35] });
+    }
+    {
+      const hx = hall.x + hall.rx * 0.30, hz = hall.z - hall.rx * 0.18;
+      const off = Math.max(1.2, hall.height * 0.28);
+      const fy = floorAt(hx, hz, hall.y);
+      specs.push({ name: 'ceil-hall', light: 'torch', tag: 'ceiling',
+        stand: [hx, fy, hz], cam: [hx, fy + EYE, hz],
+        look: [hx + off, fy + hall.height * 1.00, hz + off * 0.35] });
+    }
+    {
+      const ux = hall.x + hall.rx * 0.75, uz = hall.z;         // ~0.25·rx ≈ 2m off the wall
+      const fy = floorAt(ux, uz, hall.y);
+      specs.push({ name: 'wall-2m', light: 'torch', tag: 'ceiling',
+        stand: [ux, fy, uz], cam: [ux, fy + EYE, uz],
+        look: [hall.x + hall.rx * 1.15, fy + 1.35, hall.z] });
+    }
+
+    // ── E. LIGHT CONTEXTS. `flash-gallery` is the SAME camera as `gallery` so the carried light is
+    //    the only variable between the two frames. `fungi-only` kills the torch entirely — the cave
+    //    lit by nothing but its own bioluminescence. `pool-rock` is the joint frame the "leopard
+    //    mottle competes with the water" finding needs: water and rock, one composition, one light.
+    specs.push({ name: 'flash-gallery', light: 'flashlight', tag: 'light',
+      stand: [galleryStand.x, galleryStand.y, galleryStand.z],
+      cam: [galleryStand.x, galleryStand.y + EYE, galleryStand.z], look: galleryLook });
+    if (fungi && fnode) {
+      let dx = fungi.x - fnode.x, dz = fungi.z - fnode.z; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+      const fx = fungi.x - dx * 1.8, fz = fungi.z - dz * 1.8;
+      const fy = floorAt(fx, fz, fungi.y);
+      specs.push({ name: 'fungi-only', light: 'none', tag: 'light',
+        stand: [fx, fy, fz], cam: [fx, fy + EYE, fz], look: [fungi.x, fungi.y, fungi.z] });
+    }
+    if (pools.length) {
+      const P = pools[0];
+      let ix = P.nx - P.x, iz = P.nz - P.z; const il = Math.hypot(ix, iz) || 1; ix /= il; iz /= il;
+      const cx = P.x + ix * (P.r + 1.6), cz = P.z + iz * (P.r + 1.6);
+      const fy = floorAt(cx, cz, P.floorY + 0.4);
+      specs.push({ name: 'pool-rock', light: 'torch', tag: 'light',
+        stand: [cx, fy, cz], cam: [cx, fy + EYE, cz],
+        look: [P.x - ix * P.r * 0.55, P.y + 0.30, P.z - iz * P.r * 0.55] });
+    }
+
+    return {
+      specs,
+      info: {
+        nodes: nodes.length,
+        kinds: nodes.map((n) => n.kind).join(','),
+        ent: 'n' + ent.id + ' rx' + ent.rx.toFixed(1) + ' h' + ent.height.toFixed(1),
+        hall: 'n' + hall.id + ' rx' + hall.rx.toFixed(1) + ' h' + hall.height.toFixed(1),
+        gallery: 'n' + gallery.id + ' rx' + gallery.rx.toFixed(1) + ' h' + gallery.height.toFixed(1),
+        egg: 'n' + egg.id + ' rx' + egg.rx.toFixed(1) + ' h' + egg.height.toFixed(1),
+        squeeze: (sq.squeeze ? 'SQUEEZE ' : 'fallback-edge ') + 'n' + sq.a + '-n' + sq.b + ' halfW' + sq.halfW.toFixed(2),
+        slotWaypoints: wps.length - 3,
+        mouth: '(' + b.mouthX.toFixed(1) + ',' + b.centerZ.toFixed(1) + ') gy=' + b.gy.toFixed(2) + ' torH=' + b.torHeight,
+        descentDeg: b.descentAngleDeg, mouthClearW: b.mouthClearW,
+        pools: pools.length, fungiDist: fungi ? fungi.d : null,
+      },
+    };
+  }, CAVE_AUDIT_EYE);
+
+  if (!plan) throw new Error('cave-audit: no caveGenProbe / caveEntranceProbe in the scene — the cave did not build (VITE_CAVE_TEST off, or a placement regression)');
+  console.log('[cave-audit] cave: ' + JSON.stringify(plan.info));
+
+  const metrics = {};
+  for (const s of plan.specs) {
+    if (only && !only.has(s.name)) continue;
+
+    // ── 1. PIN + LET THE REAL TICK LIGHT IT. The shipping depth-fade decides ambient/sun/fog/shaft;
+    //    the rig does not get to choose them. Pause afterwards (the pause gate freezes lighting, so
+    //    the values survive into the render below).
+    const live = await page.evaluate(async (spec) => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+      ctx.flags.paused = false;
+      const pin = () => {
+        ctx.player.body.body.setTranslation({ x: spec.stand[0], y: spec.stand[1] + 0.85, z: spec.stand[2] }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      };
+      for (let i = 0; i < 5; i++) { pin(); await raf(); }
+      pin();
+      ctx.flags.paused = true;
+      const fog = ctx.three.scene.fog;
+      const A = ctx.caveAtmosphere;
+      return {
+        dark: A ? +A.darkness.toFixed(3) : null,
+        amb: +ctx.lights.ambient.intensity.toFixed(4),
+        sun: +ctx.lights.sun.intensity.toFixed(4),
+        shaft: A ? +A.shaft.intensity.toFixed(2) : null,
+        fogD: fog ? +fog.density.toFixed(4) : null,
+        fogC: fog ? '#' + fog.color.getHexString() : null,
+      };
+    }, s);
+
+    // ── 2. FRAME, RENDER, MEASURE. Shipping exposure; shipping carried-light tuning at the flame
+    //    offset; nothing hidden but the first-person body + view model.
+    const m = await page.evaluate(({ spec, exp }) => {
+      const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+      const cam = ctx.three.camera;
+      ctx.three.renderer.toneMappingExposure = exp;
+      cam.position.set(spec.cam[0], spec.cam[1], spec.cam[2]);
+      cam.lookAt(spec.look[0], spec.look[1], spec.look[2]);
+      cam.updateMatrixWorld(true);
+
+      const st = { added: [], hidden: [], torchI: 0, dom: [] };
+      const hide = (o) => { if (o && o.visible) { st.hidden.push(o); o.visible = false; } };
+      hide(ctx.player.rig && ctx.player.rig.group);
+      hide(ctx.player.viewModel && ctx.player.viewModel.group);
+      // ── DEEPER cycle 7, METRIC HYGIENE. The [cave-metric] line reads the WebGL framebuffer, which
+      //    has never contained the HUD — but `page.screenshot()` composites the DOM on top, and the
+      //    critics grade the PNG. In a frame whose 99th percentile is L≈2, the hotbar swatch (L≈220)
+      //    and the crosshair (L≈112) ARE the maxima: every "max=" a critic quotes off the image is
+      //    the UI, not the rock. So the HUD is hidden for the shot — same spirit as hiding the FP
+      //    body + view model, which this set already did. `--keephud` restores the old behaviour.
+      if (!spec.keepHud) {
+        for (const sel of ['#hud', '#hotbar', '#crosshair', '#devPanel', '#devBadge', '#interactPrompt',
+                           '#toasts', '#statusBars', '#compass', '#perfHud', '#clock']) {
+          document.querySelectorAll(sel).forEach((el) => {
+            if (el.style.display !== 'none') { st.dom.push([el, el.style.display]); el.style.display = 'none'; }
+          });
+        }
+        // Belt + braces: anything that is a direct child of <body> other than the renderer canvas is
+        // UI chrome by construction in this project (each UI module owns its own root element).
+        for (const el of Array.from(document.body.children)) {
+          if (el === ctx.three.renderer.domElement || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+          if (el.style.display !== 'none') { st.dom.push([el, el.style.display]); el.style.display = 'none'; }
+        }
+      }
+      // `--hidesky` — the A/B leg for the SKY-BLEED question. The sky dome and the sun sprite are
+      // built with `depthTest: false` (src/world/sky.ts), so they draw OVER solid geometry no matter
+      // what is in front of them. Underground that is not academic: in a chamber whose 99th
+      // percentile is L≈2, a single L≈220 blob is the sun painted onto the rock. This leg hides
+      // every depth-test-disabled object so the same framing can be measured without them; the
+      // difference in `maxL` is the bleed. Off by default — the audit's default is what SHIPS.
+      if (spec.hideSky) {
+        ctx.three.scene.traverse((o) => {
+          if ((o.isMesh || o.isSprite || o.isPoints) && o.material && o.material.depthTest === false) hide(o);
+        });
+      }
+      // `--hidegroup=caveGen|caveEntrance` — a SURFACE-ATTRIBUTION leg. The entrance is two separate
+      // watertight solids that overlap by design (the tor's fissure sits INSIDE the cave SDF's slot),
+      // so when a defect appears in the crack — slivers, z-fighting shrapnel, a stray dark blade —
+      // "which of the two surfaces is that?" is the first question and is otherwise unanswerable from
+      // a screenshot. Hiding one names the culprit in one frame. Diagnostic only; never a shipping read.
+      if (spec.hideGroup) {
+        for (const nm of String(spec.hideGroup).split('|')) {
+          const g2 = ctx.three.scene.getObjectByName(nm.trim());
+          if (g2) g2.traverse((o) => { if (o.isMesh) hide(o); });
+        }
+      }
+      if (ctx.player.viewModel) {
+        st.torchI = ctx.player.viewModel.heldPointLight.intensity;
+        ctx.player.viewModel.heldPointLight.intensity = 0;   // the rig carries its own, below
+      }
+      // DEEPER cycle 7 — the carried light also drives the cave-rock BOUNCE + envelope uniforms, and
+      // it must do so through the game's OWN setter (`__game.setCaveRockLight` → the same
+      // `setCaveRockLightState` updateCaveAtmosphere calls). Re-deriving the bounce formula in the
+      // harness is exactly the D165 failure mode: the rig would be grading a light model that does
+      // not ship. `intensity` here is the same number the game feeds it (held point + spot × frac).
+      g.setCaveRockLight(0, 0, 0, 0);       // default: nothing lit — the no-free-light baseline
+      if (spec.light && spec.light !== 'none') {
+        const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+        const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+        // Where the game actually puts the flame: ahead + right + a little below the eye.
+        const lp = cam.position.clone().addScaledVector(fwd, 0.45).addScaledVector(right, 0.30);
+        lp.y -= 0.28;
+        if (spec.light === 'flashlight') {
+          const sp = new THREE.SpotLight(T.FLASHLIGHT_LIGHT_COLOR_HEX, T.FLASHLIGHT_LIGHT_INTENSITY,
+            T.FLASHLIGHT_LIGHT_DISTANCE, T.FLASHLIGHT_LIGHT_ANGLE_RAD, T.FLASHLIGHT_LIGHT_PENUMBRA, 1.2);
+          sp.position.copy(lp); sp.target.position.set(spec.look[0], spec.look[1], spec.look[2]);
+          ctx.three.scene.add(sp, sp.target); st.added.push(sp, sp.target);
+          g.setCaveRockLight(lp.x, lp.y, lp.z, T.FLASHLIGHT_LIGHT_INTENSITY * T.CAVE_BOUNCE_SPOT_FRAC);
+        } else {
+          const tl = new THREE.PointLight(T.TORCH_LIGHT_COLOR_HEX, T.TORCH_LIGHT_INTENSITY, T.TORCH_LIGHT_DISTANCE, 2);
+          tl.position.copy(lp); ctx.three.scene.add(tl); st.added.push(tl);
+          g.setCaveRockLight(lp.x, lp.y, lp.z, T.TORCH_LIGHT_INTENSITY);
+        }
+      }
+
+      const R = ctx.three.renderer, gl = R.getContext();
+      const W = R.domElement.width, H = R.domElement.height;
+      R.render(ctx.three.scene, cam);
+      const px = new Uint8Array(W * H * 4);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      window.__shotRestore = st;
+
+      // Whole-frame luminance statistics. `dark%` (< L16) is the "is there anything to look at"
+      // number; the three BAND means are top/middle/bottom thirds of the IMAGE (readPixels row 0 is
+      // the BOTTOM of the frame, and this accounts for it) — a ceiling that dies into a smoky band
+      // shows up as bandTop collapsing relative to bandMid.
+      const N = W * H;
+      const L = new Float32Array(N);
+      let sum = 0, dark = 0, black = 0, hot = 0;
+      const band = [0, 0, 0], bandN = [0, 0, 0];
+      const third = H / 3;
+      for (let k = 0, i = 0; k < N; k++, i += 4) {
+        const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+        L[k] = l; sum += l;
+        if (l < 16) dark++;
+        if (l < 4) black++;
+        if (l > 200) hot++;
+        const y = (k / W) | 0;
+        const bi = y < third ? 0 : y < third * 2 ? 1 : 2;    // 0 = bottom rows, 2 = top rows
+        band[bi] += l; bandN[bi]++;
+      }
+      const S = L.slice(); S.sort();
+      const q = (f) => +S[Math.min(N - 1, Math.floor(f * N))].toFixed(2);
+      const f2 = (v) => +v.toFixed(2);
+
+      // ── THE OUTPUT-ENVELOPE INSTRUMENT (DEEPER cycle 7). The cycle's root-cause finding is that the
+      //    whole interior renders into ~18 of 255 output codes, so the lighting ratio that IS there
+      //    cannot be seen. Three numbers make that measurable rather than a claim:
+      //      · codes   — distinct 8-bit LUMINANCE values present in the frame (the envelope width).
+      //      · rgbVals — distinct packed RGB triples (a stricter envelope: dither widens this first).
+      //      · run*    — horizontal runs of pixels with an IDENTICAL RGB triple. A frame that is
+      //                  quantization-limited is made of long flat runs with Mach steps between them;
+      //                  a dithered frame's runs collapse to ~1px. `runP8` = % of pixels living in a
+      //                  run of ≥8px (the pool's post-dither reference is ~39%), `runMed` = the run
+      //                  length of the MEDIAN PIXEL, `runMax` = the longest single run.
+      const codeSeen = new Uint8Array(256);
+      const rgbSeen = new Set();
+      let runP8 = 0, runMax = 0;
+      const runHist = new Uint32Array(4097);      // run length (clamped) → pixels living in such a run
+      for (let y = 0; y < H; y++) {
+        let base = y * W * 4;
+        let prev = -1, runLen = 0;
+        for (let x = 0; x <= W; x++) {
+          let key = -1;
+          if (x < W) {
+            const i = base + x * 4;
+            key = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
+            codeSeen[Math.round(L[y * W + x])] = 1;
+            rgbSeen.add(key);
+          }
+          if (key === prev && x < W) { runLen++; continue; }
+          if (runLen > 0) {
+            if (runLen >= 8) runP8 += runLen;
+            if (runLen > runMax) runMax = runLen;
+            runHist[Math.min(4096, runLen)] += runLen;
+          }
+          prev = key; runLen = 1;
+        }
+      }
+      let acc = 0, runMed = 0;
+      for (let k = 1; k <= 4096; k++) { acc += runHist[k]; if (acc >= N / 2) { runMed = k; break; } }
+      let codes = 0; for (let k = 0; k < 256; k++) if (codeSeen[k]) codes++;
+
+      return {
+        res: W + 'x' + H,
+        meanL: f2(sum / N), p05: q(0.05), p50: q(0.50), p95: q(0.95), p99: q(0.99), maxL: f2(S[N - 1]),
+        darkPct: f2((100 * dark) / N), blackPct: f2((100 * black) / N), hotPct: f2((100 * hot) / N),
+        bandTop: f2(band[2] / bandN[2]), bandMid: f2(band[1] / bandN[1]), bandBot: f2(band[0] / bandN[0]),
+        codes, rgbVals: rgbSeen.size, runP8: f2((100 * runP8) / N), runMed, runMax,
+      };
+    }, { spec: Object.assign({ hideSky, keepHud: !!opts.keepHud, hideGroup: opts.hideGroup || null }, s), exp: CAVE_AUDIT_EXPOSURE });
+
+    await page.waitForTimeout(160);
+    const file = 'scen-' + prefix + '-' + s.name + '.png';
+    try { await page.screenshot({ path: join(OUT, file), fullPage: false, timeout: 60000 }); }
+    catch (e) { console.log('[cave-audit] ' + s.name + ' shot flaked (' + e.name + ')'); }
+
+    metrics[s.name] = Object.assign({ live }, m);
+    console.log('[cave-metric] ' + s.name.padEnd(14) + ' ' + s.tag.padEnd(8) +
+      ' light=' + String(s.light).padEnd(10) +
+      ' at=(' + s.cam.map((v) => v.toFixed(1)).join(',') + ')' +
+      ' | dark=' + live.dark + ' amb=' + live.amb + ' sun=' + live.sun + ' shaft=' + live.shaft +
+      ' fog=' + live.fogD + live.fogC +
+      ' | meanL=' + m.meanL + ' p50=' + m.p50 + ' p95=' + m.p95 + ' p99=' + m.p99 + ' max=' + m.maxL +
+      ' <16=' + m.darkPct + '% <4=' + m.blackPct + '%' +
+      ' bands(T/M/B)=' + m.bandTop + '/' + m.bandMid + '/' + m.bandBot +
+      ' | codes=' + m.codes + ' rgb=' + m.rgbVals + ' run>=8=' + m.runP8 + '% runMed=' + m.runMed + ' runMax=' + m.runMax +
+      ' -> ' + file);
+
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; const st = window.__shotRestore; if (!st) return;
+      for (const o of st.added) ctx.three.scene.remove(o);
+      for (const o of st.hidden) o.visible = true;
+      for (const [el, d] of (st.dom || [])) el.style.display = d;
+      window.__game.setCaveRockLight(0, 0, 0, 0);   // leave no modelled carried light behind
+      if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
+      window.__shotRestore = null;
+    });
+  }
+  console.log('CAVE-AUDIT exposure=' + CAVE_AUDIT_EXPOSURE + ' framings=' + Object.keys(metrics).length + ' prefix=' + prefix);
+  return metrics;
+}
+
+/** DEEPER cycle 7 — DOES CAVE_ROCK_BUMP COST TOO MUCH ON A LOW-END GPU?
+ *
+ *  The bump is ~8 value-noise evaluations (64 hashes) per cave fragment, flagged as the cycle's one
+ *  real perf risk when it shipped and never measured. This measures it.
+ *
+ *  THE A/B HAS TO BE A SHADER SWAP, NOT A UNIFORM. Setting `uCaveBump = 0` changes nothing about the
+ *  cost: the fragment shader still runs `caveRockGrad()` in full and then multiplies the result by
+ *  zero. So the OFF leg swaps in a rig-local CLONE of each cave material with `onBeforeCompile`
+ *  neutered and a different `customProgramCacheKey` — same Lambert/vertexColors/flatShading/FrontSide
+ *  material, compiled WITHOUT the bump code. Shipping defaults are untouched; the clones are dropped
+ *  when the measurement ends.
+ *
+ *  METHOD. Two framings (a 2m wall, where cave rock fills the frame — the worst case; and the hall's
+ *  long sightline — a typical play view), each measured as render→readPixels(1px) so the GPU is
+ *  actually forced to finish before the clock stops. Legs are INTERLEAVED (bump, no-bump, bump,
+ *  no-bump) so thermal/scheduler drift cannot masquerade as the effect, and each leg re-warms after
+ *  the program switch so no shader compile lands in a sample. Frame coverage (the % of the frame
+ *  that is cave surface) is reported alongside, because cost-per-frame without coverage is unreadable.
+ *
+ *  Run the low-end answer with `--gl=swiftshader` (software raster) and the reference on the GPU. */
+async function caveBumpPerf(page, opts = {}) {
+  const SAMPLES = opts.samples || (GL_MODE === 'swiftshader' ? 8 : 24);
+  const WARM = GL_MODE === 'swiftshader' ? 2 : 4;
+  const BURST = GL_MODE === 'swiftshader' ? 1 : 12;   // renders per timed sample — see `measure` below
+  const rows = await page.evaluate(async ({ SAMPLES, WARM, BURST, EYE }) => {
+    const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+    const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+    let p = null;
+    ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe; });
+    if (!p) return { error: 'no caveGenProbe' };
+    const hall = p.nodes.find((n) => n.kind === 'hall') || p.nodes[0];
+
+    // Pin the player in the hall and let the REAL tick set the cave light model, then freeze it —
+    // the fragment cost depends on the lighting the shader actually evaluates.
+    ctx.flags.paused = false;
+    for (let i = 0; i < 5; i++) {
+      ctx.player.body.body.setTranslation({ x: hall.x, y: hall.y + 0.9, z: hall.z }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      await raf();
+    }
+    ctx.flags.paused = true;
+    ctx.three.renderer.toneMappingExposure = 1.05;
+    if (ctx.player.rig && ctx.player.rig.group) ctx.player.rig.group.visible = false;
+    if (ctx.player.viewModel) { ctx.player.viewModel.group.visible = false; ctx.player.viewModel.heldPointLight.intensity = 0; }
+
+    const floorAt = (x, z, guess) => { const h = g.castDown(x, z, guess + 3.0, true); return h ? h.hitY : guess; };
+    const wx = hall.x + hall.rx * 0.75, wz = hall.z, wy = floorAt(wx, wz, hall.y);
+    const hx = hall.x - hall.rx * 0.86, hy = floorAt(hx, hall.z, hall.y);
+    const framings = [
+      { name: 'perf-wall', cam: [wx, wy + EYE, wz], look: [hall.x + hall.rx * 1.15, wy + 1.35, hall.z] },
+      { name: 'perf-hall', cam: [hx, hy + EYE, hall.z], look: [hall.x + hall.rx * 1.05, hall.y + hall.height * 0.28, hall.z] },
+    ];
+
+    // Every mesh drawn with a bump-patched cave material (the interior surface AND the crevice tor,
+    // which carries its own strength uniform on the same program).
+    const meshes = [];
+    ctx.three.scene.traverse((o) => {
+      if (o.isMesh && o.material && o.material.userData && o.material.userData.bumpU) meshes.push(o);
+    });
+    if (!meshes.length) return { error: 'no bump-patched cave meshes found - the material wiring moved' };
+    const origMat = new Map(); for (const m of meshes) origMat.set(m, m.material);
+    const noBump = new Map();
+    for (const m of meshes) {
+      const src = m.material;
+      if (noBump.has(src)) continue;
+      const c = src.clone();
+      c.onBeforeCompile = function () { /* NO bump patch - that is the whole point of this leg */ };
+      c.customProgramCacheKey = function () { return 'caveAudit-noBump-v1'; };
+      c.needsUpdate = true;
+      noBump.set(src, c);
+    }
+    const setLeg = (bump) => { for (const m of meshes) m.material = bump ? origMat.get(m) : noBump.get(origMat.get(m)); };
+
+    const R = ctx.three.renderer, gl = R.getContext();
+    const W = R.domElement.width, H = R.domElement.height;
+    const one = new Uint8Array(4);
+    const cam = ctx.three.camera;
+    const out = [];
+
+    for (const f of framings) {
+      cam.position.set(f.cam[0], f.cam[1], f.cam[2]);
+      cam.lookAt(f.look[0], f.look[1], f.look[2]);
+      cam.updateMatrixWorld(true);
+      // The shipping torch, at the flame offset — the light the fragment shader is evaluating.
+      const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+      const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+      const lp = cam.position.clone().addScaledVector(fwd, 0.45).addScaledVector(right, 0.30); lp.y -= 0.28;
+      const tl = new THREE.PointLight(T.TORCH_LIGHT_COLOR_HEX, T.TORCH_LIGHT_INTENSITY, T.TORCH_LIGHT_DISTANCE, 2);
+      tl.position.copy(lp); ctx.three.scene.add(tl);
+
+      // COVERAGE — what fraction of the frame is actually cave surface (the fragments that pay).
+      setLeg(true);
+      R.render(ctx.three.scene, cam);
+      const a = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, a);
+      for (const m of meshes) m.visible = false;
+      R.render(ctx.three.scene, cam);
+      const b = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, b);
+      for (const m of meshes) m.visible = true;
+      const covMask = new Uint8Array(W * H);
+      let cov = 0;
+      for (let i = 0; i < W * H; i++) {
+        const k = i * 4;
+        if (a[k] !== b[k] || a[k + 1] !== b[k + 1] || a[k + 2] !== b[k + 2]) { covMask[i] = 1; cov++; }
+      }
+
+      // ── THE A/B PROOF. This project's canonical failure is a gate that measures the wrong thing
+      //    and launders it as verified. A perf A/B whose OFF leg silently still ran the bump shader
+      //    would report "+2%, affordable" off two identical programs. So: render both legs and
+      //    DIFFERENCE THE PIXELS over the cave-covered region. The bump perturbs the shading normal,
+      //    so removing it MUST change the image. A near-zero diff means the swap did not take, and
+      //    the frame-time table below is meaningless — reported, loudly, rather than assumed.
+      setLeg(false);
+      R.render(ctx.three.scene, cam);
+      const c2 = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, c2);
+      setLeg(true);
+      let abSum = 0, abN = 0, abHit = 0;
+      const lum = (q, i) => 0.2126 * q[i] + 0.7152 * q[i + 1] + 0.0722 * q[i + 2];
+      for (let i = 0; i < W * H; i++) {
+        if (!covMask[i]) continue;
+        const d = Math.abs(lum(a, i * 4) - lum(c2, i * 4));
+        abSum += d; abN++; if (d >= 2) abHit++;
+      }
+
+      // ONE SAMPLE = A BURST OF `BURST` RENDERS, then ONE readPixels, divided through.
+      //
+      // Round 1 of this measurement timed render -> readPixels ONE frame at a time and reported the
+      // bump shader as 15% FASTER than no bump - i.e. pure noise carrying a sign. The reason: a
+      // 1-pixel readPixels on the default framebuffer costs a full GPU round-trip (~6ms here through
+      // ANGLE), which utterly swamped a sub-millisecond shading delta. Bursting amortises that fixed
+      // cost across BURST frames, so what is left is dominated by the thing being measured. On the
+      // software rasteriser one frame is already the dominant cost, so BURST is 1 there.
+      const measure = () => {
+        const t = performance.now();
+        for (let k = 0; k < BURST; k++) R.render(ctx.three.scene, cam);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one);   // forces the pipeline to finish
+        return (performance.now() - t) / BURST;
+      };
+      const on = [], off = [];
+      const half = Math.ceil(SAMPLES / 2);
+      // INTERLEAVED **and order-swapped**: pass 0 runs bump -> no-bump, pass 1 runs no-bump -> bump,
+      // so neither thermal drift nor a first-leg warm-up advantage can masquerade as the effect.
+      for (let pass = 0; pass < 2; pass++) {
+        for (const bump of (pass === 0 ? [true, false] : [false, true])) {
+          setLeg(bump);
+          for (let i = 0; i < WARM; i++) measure();
+          const dst = bump ? on : off;
+          for (let i = 0; i < half; i++) dst.push(measure());
+        }
+      }
+      setLeg(true);
+      ctx.three.scene.remove(tl);
+
+      const stat = (arr) => {
+        const s = arr.slice().sort((x, y) => x - y);
+        return {
+          n: s.length,
+          mean: +(s.reduce((q, v) => q + v, 0) / s.length).toFixed(2),
+          p50: +s[Math.floor(s.length * 0.5)].toFixed(2),
+          p95: +s[Math.min(s.length - 1, Math.floor(s.length * 0.95))].toFixed(2),
+          min: +s[0].toFixed(2), max: +s[s.length - 1].toFixed(2),
+        };
+      };
+      out.push({
+        framing: f.name, res: W + 'x' + H, covPct: +((100 * cov) / (W * H)).toFixed(1),
+        abMeanDL: abN ? +(abSum / abN).toFixed(3) : 0,
+        abChangedPct: abN ? +((100 * abHit) / abN).toFixed(1) : 0,
+        on: stat(on), off: stat(off),
+      });
+    }
+
+    for (const m of meshes) m.material = origMat.get(m);
+    for (const c of noBump.values()) c.dispose();
+    // The INTERIOR strength is what the measured fragments actually run (the tor carries its own,
+    // far weaker uniform) — labelling this with the legacy CAVE_ROCK_BUMP would report a number no
+    // shipping fragment uses.
+    return { rows: out, meshes: meshes.length, bump: T.CAVE_ROCK_BUMP_INTERIOR };
+  }, { SAMPLES, WARM, BURST, EYE: CAVE_AUDIT_EYE });
+
+  if (rows.error) { console.log('[cave-perf] ERROR ' + rows.error); return rows; }
+  console.log('[cave-perf] gl=' + GL_MODE + ' CAVE_ROCK_BUMP_INTERIOR=' + rows.bump + ' patchedMeshes=' + rows.meshes +
+    ' samples=' + SAMPLES + '/leg burst=' + BURST + ' (order-swapped interleave x2)');
+  for (const r of rows.rows) {
+    const d = +(r.on.mean - r.off.mean).toFixed(2);
+    const pct = +((100 * d) / r.off.mean).toFixed(1);
+    if (r.abMeanDL < 0.05) {
+      console.log('[cave-perf] !! ' + r.framing + ' A/B PROOF FAILED: the no-bump leg renders an IDENTICAL image ' +
+        '(meanDL=' + r.abMeanDL + ') — the material swap did not take, so the frame times below compare a program to itself');
+    }
+    console.log('[cave-perf] ' + r.framing.padEnd(10) + ' ' + r.res + ' caveCoverage=' + r.covPct + '%' +
+      ' abProof(meanDL/changed%)=' + r.abMeanDL + '/' + r.abChangedPct + '%' +
+      ' | bumpON  mean=' + r.on.mean + 'ms p50=' + r.on.p50 + ' p95=' + r.on.p95 + ' min=' + r.on.min + ' max=' + r.on.max +
+      ' | bumpOFF mean=' + r.off.mean + 'ms p50=' + r.off.p50 + ' p95=' + r.off.p95 + ' min=' + r.off.min + ' max=' + r.off.max +
+      ' | BUMP COST = ' + (d >= 0 ? '+' : '') + d + 'ms (' + (pct >= 0 ? '+' : '') + pct + '%)');
+  }
+  return rows;
 }

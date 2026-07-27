@@ -898,24 +898,157 @@ export const Tuning = {
   CREVICE_SLOPE_DEG: 27,               // ° — nominal descent slope; each leg's run is sized from its drop
   CREVICE_BEND_DEG: 26,                // ° — heading bend at the first knee (mirrored by seed parity)
   CREVICE_BEND2_DEG: 18,               // ° — heading bend back at the second knee
-  CREVICE_HALF_W_MOUTH: 1.25,          // m — half clear width at the mouth (2.5m — a person + a pack, no more)
-  CREVICE_HALF_W_PINCH: 1.32,          // m — the tightest point, right where the rock closes overhead (2.64m clear). Was 1.05
+  CREVICE_HALF_W_MOUTH: 1.44,          // m — half clear width at the mouth (2.88m). Cycle-7 R1: was 1.25 (2.50m). The
+                                       //     floor/wall crease is now FILLETED (CREVICE_CREASE_FILL) and the wall noise
+                                       //     runs at full-ish strength down to the floor (CREVICE_WALL_NOISE_FLOOR
+                                       //     0.10→0.55), both of which eat walkable width at the sand line — so the
+                                       //     nominal width is taken back here. Net clear at foot level ≈ 2.3-2.5m, i.e.
+                                       //     the crevice read is UNCHANGED; only the artefact is gone.
+  CREVICE_HALF_W_PINCH: 1.50,          // m — the tightest point, right where the rock closes overhead (3.00m). Was 1.05
                                        //     (2.1m): the KCC could walk DOWN it but wedged on the climb back out on
                                        //     3 of 6 gate seeds. Same lesson as CAVE_GEN_GALLERY_HALF_W 2.3→2.8 in
                                        //     Underworld — a climbing capsule needs lateral room to recover.
   CREVICE_HALF_W_DEEP: 2.5,            // m — widens as it approaches the cave (3.6m)
   CREVICE_HEIGHT: 3.0,                 // m — clear height of the roofed slot
   CREVICE_SDF_MARGIN: 0.62,            // m — the cave-SDF slot is this much WIDER than the tor fissure, so the
-                                       //     tor's walls are always the nearer surface (never a backface void)
-  CREVICE_SKY_RUN: 6.5,                // m — run over which the fissure is open to the sky (the rest is roofed)
-  CREVICE_SKY_TAPER: 2.6,              // m — the roof closes over this distance (the "committing" beat)
-  CREVICE_WALL_NOISE: 0.30,            // m — 3D rock noise on the fissure walls (full value above head height)
-  CREVICE_WALL_NOISE_FLOOR: 0.10,      // × the above, at floor level — keeps the walkable width honest
+                                       //     tor's walls are always the nearer surface (never a backface void).
+                                       //     Cycle-7 R4: was 0.62, and 0.62 IS NOT A MARGIN — the SDF slot's own
+                                       //     surface moves INWARD by up to CAVE_GEN_DISP_IN (0.30) + CAVE_SDF_MICRO_AMP
+                                       //     (0.075) + the smooth-min blend (~0.275). Vertically the budget was
+                                       //     0.62×0.6 = 0.37m against 0.375m of inward push, i.e. the two surfaces
+                                       //     INTERPENETRATE at the roofed ceiling — which is what the thicket of thin
+                                       //     black slivers fringing the aperture actually was: coincident-surface
+                                       //     shrapnel, not a polygonizer edge artefact. The first fix raised this to
+                                       //     1.30 — and cave-walk seed 2024 then failed its ASCENT: past the tor's far
+                                       //     face the SDF slot is the only surface, so a wider margin is a 1.3m lateral
+                                       //     ALCOVE either side of the walkway with the tor's wall end as a lip, and the
+                                       //     capsule wedged in it on the climb out. Exactly cycle 4's 45cm-gutter bug,
+                                       //     one term over. So the LATERAL margin stays at its known-good 0.62 and the
+                                       //     vertical clearance is bought separately by CREVICE_ROOF_DROP, which costs
+                                       //     the KCC nothing because nobody walks on a ceiling.
+  CREVICE_ROOF_DROP: 0.45,             // m — the TOR's fissure ceiling sits this far BELOW the nominal slot height, so the
+                                       //     separation from the SDF slot's ceiling is 0.45 + 0.62×0.6 = 0.82m — comfortably
+                                       //     over the SDF's own inward ceiling push (CAVE_GEN_DISP_IN 0.30 +
+                                       //     CAVE_SDF_MICRO_AMP 0.075 = 0.375m), which is what was interpenetrating and
+                                       //     shedding sliver shrapnel into the roofed slot.
+                                       //     ⚠ WHY IT IS DONE THIS WAY. The obvious fix — make the SDF slot TALLER — was
+                                       //     tried first and is wrong twice over: a taller slot needs more cover clearance,
+                                       //     more cover clearance DEEPENS the guarded stations, deeper stations move the
+                                       //     junction, and the junction is the origin of the whole room graph. The cave
+                                       //     moved ~1m, every chamber with it, and `pool-fill` seed 7 went red (the wade
+                                       //     probe's entry point ended up inside rock). Lowering the tor's own ceiling by
+                                       //     the same amount buys the identical separation and touches NOTHING outside this
+                                       //     file: same graph, same pools, same digests. Clear height in the roofed slot is
+                                       //     then 2.55m, which is more crevice-like anyway.
+  CREVICE_COVER_CLEAR: 1.0,            // m — clearance the cover guard keeps between the slot ceiling and the terrain
+                                       //     sheet (was a hard-coded 1.0; named so the arithmetic below is checkable).
+                                       //     ⚠ FLAGGED, NOT CHANGED: the SDF slot's ceiling sits 0.37m above the nominal
+                                       //     height and CAVE_GEN_DISP can bulge it 0.95m further, so a guarded station
+                                       //     really wants ~1.32m here, not 1.0 — a ceiling that pokes above
+                                       //     `pureHeightAt` gets CUT and leaves a hole in the roof of the descent. This is
+                                       //     pre-existing and the guard only binds on low terrain ahead of the mouth, so
+                                       //     no seed on the net shows it. Raising it MOVES THE WHOLE CAVE (see
+                                       //     CREVICE_ROOF_DROP), so it belongs to a cycle that can re-baseline the room
+                                       //     graph, not to an entrance fix round.
+  CREVICE_SKY_RUN: 6.0,                // m — run over which the fissure is open to the sky (the rest is roofed).
+                                       //     Cycle-7 R1: 6.5→6.0. THE ROOF-LAMINA ROOT CAUSE. The roof crossed the
+                                       //     rock top at s≈8.57 → x≈site.x+8.40, and the carved terrain hole ends at
+                                       //     x=site.x+8.33 (3 cells). So the closure landed 7cm PAST the hole edge and
+                                       //     the INTACT one-sided terrain sheet poked into the open fissure as a
+                                       //     sunlit sand shelf — the "floating paper-thin blade with a hard-cut
+                                       //     bottom edge and a pure-black underside". It was never rock: it was the
+                                       //     desert floor seen edge-on through the crack (the speckles in the
+                                       //     cycle-7 threshold frames are the hardpan texture). Closure now lands at
+                                       //     s≈7.2 → x≈site.x+7.1, ~1.2m inside the hole, and CREVICE_ROOF_UNDER
+                                       //     clamps it by construction so no seed can leak the sheet again.
+  CREVICE_SKY_TAPER: 1.7,              // m — the roof closes over this distance (the "committing" beat)
+  CREVICE_SKY_SLOPE: 2.6,              // — the roof's rise per metre of run BACK toward the mouth (≈69°), i.e. the
+                                       //     closure is a slanting rock wedge coming down over your head. R4 built it
+                                       //     as a smoothstep from +60m over 2.6m of run: a pseudo-distance with
+                                       //     |∇| ≈ 23, which surface nets cannot place vertices for — that is where the
+                                       //     thin black BLADES flanking the aperture came from (a badly-scaled field,
+                                       //     not a bad shape). At 2.6 the term is |∇| ≈ 2.8 and behaves.
+  CREVICE_PROJ_SOFT: 1.1,              // m — softmin width for the slot-polyline projection (see projectSlot). Below
+                                       //     ~0.5 the knee discontinuity comes back; above ~1.5 the bends soften into
+                                       //     one long curve and the 'following a joint in the rock' read is lost.
+  CREVICE_ROOF_WOBBLE: 0.55,            // m — the closure line wanders this far along the slot, per column, from a
+                                       //     2-octave noise. Kills the dead-straight lip (the "hard-edged bright quad"
+                                       //     sky opening on seed 1337) without moving the mean closure point.
+  CREVICE_ROOF_UNDER: 0.9,             // m — OUTSIDE the carved terrain hole the fissure roof is clamped this far
+                                       //     BELOW the terrain surface. The non-leak safety net for the lamina bug:
+                                       //     air above the sheet is only ever allowed where the sheet was removed.
+  CREVICE_WALL_NOISE: 0.62,            // m — INWARD 3D rock noise on the fissure walls (full value above head height).
+                                       //     Cycle-7 R2: was 0.30 symmetric, which is only ~5° of surface slope at the
+                                       //     octave wavelengths in play — LESS than the surface-nets planar-aliasing
+                                       //     artefact itself (~0.1 voxel of systematic vertex error), so the walls read
+                                       //     as a regular diagonal flute lattice with a scalloped tooth line at the
+                                       //     floor. Real relief has to out-slope the artefact, not sit under it: 0.62
+                                       //     inward gives ~27° at the 3.0m octave and ~29° at the 1.28m octave.
+  CREVICE_WALL_NOISE_OUT: 0.22,        // m — …and the OUTWARD half, kept small ON PURPOSE. The non-leak invariant is
+                                       //     "the tor's fissure is always inside the enclosing SDF slot", and the SDF
+                                       //     slot's own walls can move IN by up to CAVE_GEN_DISP_IN + micro + the
+                                       //     smooth-min blend (~0.65m) — so the tor may only bulge out by well under
+                                       //     CREVICE_SDF_MARGIN. Asymmetric noise buys the relief without spending the
+                                       //     margin (this is strictly SAFER than the 0.30 symmetric it replaces).
+  CREVICE_ROOF_RELIEF: 0.30,           // m — relief on the fissure CEILING. Cycle-7 R5: the walls and (R2) the floor
+                                       //     got relief, but the roofed slot's ceiling was still a bare mathematical
+                                       //     plane tilted 27° to the voxel grid — and a bare plane at a shallow angle
+                                       //     to the grid is precisely the thing surface nets answers with a regular
+                                       //     fringe of thin triangles. That fringe hung along the lintel in every
+                                       //     threshold frame. Proven to be the TOR's geometry, not the cave SDF's, by
+                                       //     the `--hidegroup=caveGen` attribution leg. MUST stay under the vertical
+                                       //     half of CREVICE_SDF_MARGIN (0.78m) or the tor's ceiling pokes through the
+                                       //     SDF slot's.
+  CREVICE_FLOOR_RELIEF: 0.055,         // m — gentle relief on the fissure FLOOR (λ≈3m → ~6° of extra local slope on a
+                                       //     27° ramp, nowhere near the KCC's 50°). Round 4's floor was an exactly
+                                       //     planar ramp and read as poured concrete under the carved walls.
+  CREVICE_WALL_NOISE_FLOOR: 0.55,      // × the above, at floor level. Cycle-7 R1: was 0.10 → 0.03m of relief against a
+                                       //     0.32m grid, i.e. a near-planar wall crossing the voxel grid at a shallow
+                                       //     angle. That quantized into a REGULAR period-2-cell staircase and
+                                       //     computeVertexNormals lit every step as a triangular tooth: the sawtooth
+                                       //     comb that ran along both walls at the floor line, legible at 78m. 0.55 puts
+                                       //     floor-level relief at 0.165m ≈ 0.5 voxel, above the quantization step.
+  CREVICE_WALL_WOBBLE: 0.42,           // × CREVICE_WALL_NOISE spent on a LOW-frequency lateral wander of the wall plane
+                                       //     (rather than on fine grain). The second half of the sawtooth fix: a wall
+                                       //     that never runs near-parallel to a grid axis cannot stair-step regularly.
+  CREVICE_WALL_WOBBLE_FREQ: 0.075,     // 1/m — ~13m wavelength: two or three lazy undulations down the slot.
+  CREVICE_EDGE_ROUND: 1.2,             // × voxel — smooth-min radius on the tor's CONVEX edges (the fissure rim where
+                                       //     the wall meets the rock top). Surface nets cannot represent a sharp convex
+                                       //     edge: it emits thin blades. That is the "thicket of thin blades" on seed
+                                       //     7's upper-left wall, and the spikes down both rims at torch range.
+  CREVICE_CREASE_FILL: 1.4,            // × voxel — smooth-max radius on the CONCAVE floor/wall crease. Fills the corner
+                                       //     with a talus-like fillet whose curvature is ~1.5 voxels, so the crease no
+                                       //     longer crosses the grid as a sharp line that can quantize into teeth.
+  CREVICE_HORN_RISE: 4.5,              // m — the horn's tip above CREVICE_TOR_FIN_H. Cycle-7 sev1 (78m findability):
+                                       //     contrast was already 30-36%, but the tor is 3.5:1 wide-and-low and broke
+                                       //     the horizon by ~1.4° of arc, so it read as a pebble. ONE narrow splinter
+                                       //     of the SAME rock — not an arch, not a monument, not a glow.
+  CREVICE_HORN_LEN: 2.85,              // m — splinter half-extent along its own long axis (base ~5.7m)
+  CREVICE_HORN_WID: 1.72,               // m — …and across it (base ~3.0m). A blade, not a cone.
+  CREVICE_HORN_OFF_MIN: 2.9,           // m — perpendicular offset from the slot axis (seed-picked in [MIN,MAX], side
+  CREVICE_HORN_OFF_MAX: 4.4,           //     by the same seed parity that mirrors the descent's first knee)
+  CREVICE_HORN_S_MIN: 1.3,             // m — arc length along the slot at which the horn stands (seed-picked)
+  CREVICE_HORN_S_MAX: 4.9,
+  CREVICE_HORN_RAG: 0.22,              // × — noise on the splinter's plan outline, so it is not an ellipse
+  CREVICE_TOR_FIN_NOTCH: 0.40,         // × — the fin is LOWERED by this fraction as it approaches the crack, so the
+                                       //     fissure reads as a real notch in the SILHOUETTE at 78m instead of a hairline
+                                       //     scratch across a smooth dome. Shoulders beside a slot, which is what a
+                                       //     split tor actually looks like.
+  CREVICE_TOR_FIN_SHOULDER: 2.6,       // m — half-width over which that notch recovers to full fin height
+  CREVICE_APRON_EDGE: 3.0,            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
+                                       //     single 16m-wavelength octave, which cannot break a 13m straight edge — the
+                                       //     apron kept the carve rect's straight polygonal boundary (cycle-7 sev2).
+  CREVICE_TOR_SWELL: 1.9,              // m — broad dome over the carved hole, so the covering rock is a whaleback
+                                       //     rather than a table. See the R7 note in caveEntrance.ts.
+  CREVICE_APRON_RAMP: 1.0,             // m — the WALKABLE part of the apron's outer ramp (0.85m of drop → ~40°, under
+                                       //     the KCC's 50° climb). Beyond it the apron dives under the sheet fast.
+  CREVICE_APRON_DRIFT: 1.1,            // m — the apron's falloff is stretched this much further on its lee side, so the
+                                       //     sand meets rock as a wind drift rather than as a symmetric plate.
   CREVICE_TOR_FIN_H: 5.2,              // m — the tor's rock fin, above local terrain (the landmark read)
   CREVICE_TOR_FIN_PLATEAU: 3.6,        // m — the fin holds full height this far either side of the crack (a blocky
                                        //     bedrock plateau; round 1's squared falloff gave two Fuji-shaped cones)
   CREVICE_TOR_FIN_SPREAD: 7.4,         // m — perpendicular distance over which the fin falls to the apron
-  CREVICE_TOR_BUMP: 0.05,              // shader normal-perturbation for the tor (cf. CAVE_ROCK_BUMP 1.15 — that is
+  CREVICE_TOR_BUMP: 0.05,              // shader normal-perturbation for the tor (cf. CAVE_ROCK_BUMP_INTERIOR 0.85 — that is
                                        //     tuned for torch-lit interior rock and reads as camouflage in sunlight)
   CREVICE_TOR_NOISE: 1.15,             // m — multi-octave relief on the tor's top surface
   CREVICE_APRON_RISE: 0.55,             // m — the rock apron sits this far proud of the terrain over the carved hole
@@ -990,7 +1123,49 @@ export const Tuning = {
   // that the 0.45m grid actually resolves it instead of aliasing.
   CAVE_SDF_MICRO_AMP: 0.075,           // m — un-attenuated micro-relief amplitude (gives flat floors facets)
   CAVE_SDF_MICRO_FREQ: 0.40,           // 1/m — ~2.5m wavelength (≈5.5 voxels — resolved, not aliased)
-  CAVE_ROCK_BUMP: 1.15,                // normal-perturbation strength for the cave surface's sub-voxel rock relief (0 = off)
+  // ── DEEPER cycle 7 — THE OUTPUT ENVELOPE + ROCK MICRO-DETAIL ──────────────────────────────────
+  // The cycle-7 adversarial audit root-caused four separate "the interior reads wrong" residuals to
+  // ONE chain: the LIGHTING RATIO inside torch radius is healthy (8-11× bright/dark quartile) but the
+  // whole interior lands in ~25 of 255 output codes, so nothing that ratio does is visible. Measured
+  // baseline (cave-audit, seed 1337, exposure 1.05): `gallery` p95 = 12.4 / 26 distinct codes,
+  // `wall-2m` p95 = 9.9 / 25 codes, `ceil-hall` p95 = 2.35. These six keys widen the envelope WITHOUT
+  // touching the dark floor — every one of them is multiplied by either the player's carried light or
+  // by the DIRECT light term, so unlit rock is bit-identical to before (the `fungi-only` framing is
+  // the standing canary: meanL 0.29, 99.78% below L4, and it must not move).
+  //
+  // ⚠ ZACH'S TASTE DIALS. LIT_GAIN / LIT_WHITE / BOUNCE_FRAC are the "how legible is torch-lit rock"
+  // knobs and BOUNCE_* is "how much of the ceiling do you get back". They are deliberately NOT a
+  // brightness raise on the cave: CAVE_DARK_AMBIENT_FLOOR (0.03) and CAVE_DARK_SUN_FLOOR (0) are
+  // untouched, so with no carried light the cave is exactly as black as it has always been.
+  CAVE_LIT_GAIN: 4.2,                  // × the DIRECT (torch/flashlight/lantern) diffuse term on cave rock. 1 = shipped behaviour. The whole envelope fix: 4.2× on linear light moves a torch-lit wall at 2m from output code ~23 to ~50, i.e. from "a shape you infer" to "stone you read", while leaving the AMBIENT/indirect term — the thing that decides how black unlit rock is — completely alone
+  CAVE_LIT_WHITE: 0.42,                // linear soft-shoulder white point for the gain (`x·G/(1+x·G/W)`). Without it the gain also multiplies the near-field hotspot and a wall at 0.5m clips to white; with it the extra codes go to the MID range where the rock actually is
+  CAVE_LIT_GAIN_DEPTH0: 0.72,          // cave-darkness factor at which the gain starts ramping in (0 = mouth, 1 = deep tree). The daylit trench + the shaft-lit ramp keep their shipped response, so the DESCENT still reads as light running out
+  CAVE_LIT_GAIN_DEPTH1: 0.97,          // …and where it reaches full CAVE_LIT_GAIN
+  // Carried-light BOUNCE — the ceiling fix. Physically: torchlight hits the floor and some of it comes
+  // back up. Implemented as a term in the cave-rock shader (NOT a second PointLight — an extra light
+  // is a lights-hash change that recompiles every program in the game for a fill that only rock needs)
+  // whose strength is strictly proportional to the carried light's intensity, so it is EXACTLY zero
+  // with no torch/flashlight/lantern out. No free light.
+  CAVE_BOUNCE_FRAC: 0.38,              // × the carried light's live intensity. The bounce budget
+  CAVE_BOUNCE_REF_M: 5.0,              // m — reference distance of the inverse-square-ish falloff (1/(1+(d/ref)²)); larger = flatter, reaches further up
+  CAVE_BOUNCE_DIST_M: 26,              // m — hard cutoff (quartic-faded, like a PointLight's `distance`). Ceilings sit at 8-15m and the hall is 16m across, so this covers the room and dies before the next one
+  CAVE_BOUNCE_UP_BIAS: 0.72,           // 0..1 — how much of the bounce is reserved for DOWN-facing rock (ceilings). Floor-bounced light arrives from below, so a ceiling gets (1) and a floor gets (1 - this)
+  CAVE_BOUNCE_COLOR_HEX: 0x6b5540,     // the bounce is floor-coloured, not flame-coloured: warm but desaturated by one reflection off dusty tan rock
+  CAVE_BOUNCE_SPOT_FRAC: 0.42,         // × a FLASHLIGHT's intensity when it feeds the bounce. A beam puts most of its output into a cone somewhere ahead, so it returns less diffuse fill per candela than an omnidirectional flame
+  // Rock micro-detail. The audit measured 89% of the interior's tonal variance surviving a 128×
+  // downsample — i.e. the surface had exactly ONE texture octave (the 0.61m "leopard" blobs) and no
+  // structure below it. MICRO adds two finer normal octaves + an albedo speckle; STRATA adds the
+  // anisotropic bedding read (a consistent per-cave axis) that makes it carved geology instead of pelt.
+  CAVE_ROCK_TILT_MAX: 0.72,            // asymptotic tangent-space normal swing from the bump field (~32°). Smooth saturation, not a clamp. Round 1 of cycle 7 shipped without it and the newly-visible rock read DALMATIAN — the 4-octave gradient exceeded 3.0 in places, flipping fragments past N·L=0 into hard-edged black craters
+  CAVE_ROCK_BUMP_INTERIOR: 0.85,       // normal-perturbation strength for the cave interior's sub-voxel rock relief (0 = off). SUPERSEDES cycle 3's CAVE_ROCK_BUMP (1.15), which is DELETED rather than left sitting there superseded — the same relief now sits on rock that is ~4× brighter and carries two more octaves, so it reads far louder at the old value, and a stale constant nobody reads is a trap for whoever tunes this next
+  CAVE_ROCK_MICRO: 0.85,               // strength of the sub-10cm normal octaves (0 = the shipped two-octave bump)
+  CAVE_ROCK_GRAIN: 0.13,               // ± albedo modulation from a ~4cm value-noise speckle (the 1-pixel variance the downsample test could not find)
+  CAVE_ROCK_STRATA: 0.20,              // amplitude of the anisotropic bedding octave in the normal field
+  CAVE_ROCK_STRATA_TINT: 0.160,        // +/- albedo modulation from the SAME bedding field. Layering reads as TONE, not as relief — pushing it into the normal is what makes crater-y rock. The vertex colours carry the 7.4m + 2.0m bands; this is the ~30cm set
+  CAVE_ROCK_STRATA_FREQ: 3.1,          // 1/m — bedding-plane frequency ACROSS the beds (~32cm layers)
+  CAVE_ROCK_STRATA_STRETCH: 0.16,      // × frequency ALONG the beds — small = long, laterally-coherent layers
+  CAVE_ROCK_DITHER: 1.15,              // ± this many 8-bit levels of interleaved-gradient dither on cave rock, applied in OUTPUT space (after tone-map + sRGB encode) — the same proven fix CAVE_POOL_DITHER shipped for the water. At the interior's ~25-code envelope a 1-level step is a visible Mach band; this breaks it into grain
+  CAVE_SOLID_BUMP: 0.55,               // CAVE_ROCK_BUMP_INTERIOR equivalent for the SOLID kit (speleothems + the egg dais). Lower: a stalagmite is 0.5m across, so the 0.61m octave would swamp it — the fine octaves carry it instead
   // Speleothems (stalactites / stalagmites / columns) — the signature cave read. Floor features are
   // placed BEYOND the 0.72·rx floor-grid the walk gate samples (RING_MIN) and clear of corridor
   // mouths (MOUTH_CLEAR_DEG), so they never block the walk path or trip the headroom/floor asserts.
@@ -1308,6 +1483,7 @@ export const Tuning = {
   // AAH — dust-motes storm cross-fade window. Hard cut at 0.8 (AAG)
   // is jarring; smoothstep 0.7→0.9 cross-fades into ambientDust's
   // peak-storm dominance instead of popping out.
+  DUST_MOTES_CAVE_MUL: 0.32,       // × DUST_MOTES_OPACITY at full cave containment (DEEPER cycle 7). The mote material is toneMapped:false so motes pop in lantern light; underground that made them BRIGHTER than the torch-lit rock behind them (L≈48 against a rock range topping out ~L50). Surface world untouched (d=0 → ×1)
   DUST_MOTES_STORM_FADE_START: 0.7,
   DUST_MOTES_STORM_FADE_END: 0.9,
 
@@ -1745,7 +1921,7 @@ export const Tuning = {
   FLASHLIGHT_LIGHT_DISTANCE: 25,
   FLASHLIGHT_LIGHT_INTENSITY: 3.0,
   FLASHLIGHT_LIGHT_ANGLE_RAD: 0.45,     // SpotLight `angle` — narrow beam
-  FLASHLIGHT_LIGHT_PENUMBRA: 0.3,
+  FLASHLIGHT_LIGHT_PENUMBRA: 0.62,   // DEEPER cycle 7: 0.3 -> 0.62. The shipped 0.3 DOES produce a real penumbra band in three (smoothstep between cos(angle) and cos(angle*(1-penumbra))), but at 0.45 rad that band is only ~0.135 rad wide and, on rock rendering into ~25 output codes, the whole gradient spanned 1-2 codes and read as a STEP. Wider band + the cycle-7 dither/envelope work is what actually makes it a soft edge
   FLASHLIGHT_LIGHT_COLOR_HEX: 0xe4f0ff, // cool white
 
   // Title screen (animated main menu) — Session CC-3.

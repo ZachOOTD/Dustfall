@@ -29,6 +29,7 @@ import type { CaveEntranceProbe } from './caveEntrance.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import { updateCavePoolWater } from './cavePools.ts';   // DEEPER cycle 6 — the pool ripple clock
+import { setCaveRockLightState } from './caveGen.ts';  // DEEPER cycle 7 — the rock light-response uniforms
 
 export interface CaveAtmosphere {
   /** Cave XZ bounding box (node footprints + the bore trench), pre-expanded by the AABB margin. */
@@ -120,6 +121,27 @@ export function updateCaveAtmosphere(ctx: GameContext, atmo: CaveAtmosphere, dt:
     fog.density += (Tuning.CAVE_FOG_DENSITY - fog.density) * d;
     fog.color.lerp(atmo._fogColor.setHex(Tuning.CAVE_FOG_HEX), d);
   }
+
+  // ── DEEPER cycle 7 — publish the cave-rock light response (the envelope gain + the carried-light
+  //    bounce). ONE place, so "how bright is torch-lit rock" and "how much comes back off the floor"
+  //    can never disagree between the game and the audit rig (which calls the SAME setter through
+  //    `__game.setCaveRockLight`). NO FREE LIGHT: `carried` is read from the held lights, which
+  //    updateViewModel zeroes every frame unless a LIT emitter is equipped — so with nothing out this
+  //    resolves to intensity 0 and the shader's bounce block adds exactly vec3(0).
+  //    One frame of latency (updateViewModel runs later in the tick than this) is deliberate and
+  //    invisible on a fill term; it costs nothing and avoids a second tick-order constraint.
+  const vm = ctx.player.viewModel;
+  const pt = vm ? vm.heldPointLight : null;
+  const sp = vm ? vm.heldSpotLight : null;
+  const ptI = pt ? pt.intensity : 0;
+  // A flashlight is a directed beam: most of its output lands in a cone somewhere ahead, so it
+  // returns less diffuse bounce per candela than an omnidirectional flame does.
+  const spI = sp ? sp.intensity * Tuning.CAVE_BOUNCE_SPOT_FRAC : 0;
+  const src = ptI >= spI ? pt : sp;
+  setCaveRockLightState(
+    src ? src.position.x : p.x, src ? src.position.y : p.y, src ? src.position.z : p.z,
+    ptI + spI, d,
+  );
 
   // The mouth shaft — warm daylight down the ramp, bright at noon → faint at night. Only enabled
   // when the player is near the cave (within the AABB + margin), so it never touches the far surface.

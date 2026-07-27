@@ -19,6 +19,27 @@ export interface DustMotes {
   cameraRef: THREE.PerspectiveCamera;
 }
 
+/** DEEPER cycle 7 — SOFT POINT SPRITES. A bare `PointsMaterial` renders every point as a HARD,
+ *  AXIS-ALIGNED SQUARE of the flat point colour. On the desert that mostly hides in the haze; in a
+ *  cave the audit measured squares up to 29px across floating in front of the rock, which reads as a
+ *  rendering artefact, not as dust. This gives each point a radial alpha falloff off `gl_PointCoord`
+ *  — no texture (the zero-asset policy), no extra draw call, ~4 ALU per particle fragment.
+ *  Exported because BOTH particle layers (fine motes + the tan wind drift) need it. */
+export function softenPointSprites(mat: THREE.PointsMaterial): void {
+  mat.onBeforeCompile = (shader): void => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <clipping_planes_fragment>',
+      `#include <clipping_planes_fragment>
+      {
+        float moteR = length(gl_PointCoord - vec2(0.5));
+        float moteA = 1.0 - smoothstep(0.14, 0.5, moteR);
+        if (moteA <= 0.004) discard;
+        diffuseColor.a *= moteA;
+      }`,
+    );
+  };
+}
+
 export function createDustMotes(
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
@@ -53,6 +74,8 @@ export function createDustMotes(
     sizeAttenuation: true,
   });
 
+  softenPointSprites(mat);
+
   const particles = new THREE.Points(geo, mat);
   particles.frustumCulled = false;
   scene.add(particles);
@@ -76,7 +99,13 @@ export function updateDustMotes(ctx: GameContext): void {
   const t = (storm - fadeStart) / (fadeEnd - fadeStart);
   const k = Math.max(0, Math.min(1, t));
   const fade = 1 - k * k * (3 - 2 * k);   // smoothstep falloff (1 → 0)
-  const targetOpacity = Tuning.DUST_MOTES_OPACITY * fade;
+  // DEEPER cycle 7 — UNDERGROUND the motes were OUT-READING THE ROCK. The material is toneMapped:false
+  // (deliberate: motes should pop in lantern light at night), so in a cave whose lit rock tops out
+  // around L50 a mote drew at L≈48 — brighter than most of the stone it floats in front of, which is
+  // backwards. Scaled by the cave containment factor, so the desert layer is untouched at d=0.
+  const caveD = ctx.caveAtmosphere ? ctx.caveAtmosphere.darkness : 0;
+  const caveMul = 1 - caveD * (1 - Tuning.DUST_MOTES_CAVE_MUL);
+  const targetOpacity = Tuning.DUST_MOTES_OPACITY * fade * caveMul;
   if (Math.abs(m.particleMat.opacity - targetOpacity) > 1e-3) {
     m.particleMat.opacity = targetOpacity;
   }

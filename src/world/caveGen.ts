@@ -475,6 +475,37 @@ function buildDais(node: CaveNode, cnoise: Noise3, depthT: number): THREE.Buffer
   return geo;
 }
 
+/** THE SPELEOTHEM CLEARANCE CONTRACT, as one number. A speleothem's surface never sits further than
+ *  `r0 · SPELEO_MAX_RADIUS_FACTOR + SPELEO_RADIUS_EPS` from its (bent) axis, at ANY height — this is
+ *  what `addSpeleothems`'s placement margins are sized against, and floor stalagmites + columns are
+ *  collider-bearing, so it is a KCC clearance contract and not a cosmetic one. 1.22 is the maximum
+ *  the ORIGINAL linear-taper + flute profile could reach at its base; every profile since has been
+ *  clamped to it so the walkable envelope of a chamber never moves when the silhouette is restyled.
+ *  Enforced by `assertSpeleothemEnvelope` below — change the profile freely, but a change that makes
+ *  a speleothem exceed this cannot ship silently. */
+export const SPELEO_MAX_RADIUS_FACTOR = 1.22;
+const SPELEO_RADIUS_EPS = 0.02;               // the flat additive term that keeps a tip from degenerating
+
+/** Fail-loud dev assert for the contract above, measured on the EMITTED vertices rather than on the
+ *  formula — the point is to survive a future edit that adds a term the clamp does not cover (a
+ *  post-multiply, a second noise octave applied after the min, a widened eps). Dev-only: this is a
+ *  generator invariant, and the cave is generated hundreds of times per session in a probe run.
+ *  Precedent: the UNDERWORLD dev assert that stops an untraversable cave from shipping silently. */
+function assertSpeleothemEnvelope(maxRR: number, r0: number): void {
+  if (!import.meta.env.DEV) return;
+  const bound = r0 * SPELEO_MAX_RADIUS_FACTOR + SPELEO_RADIUS_EPS;
+  if (maxRR > bound + 1e-6) {
+    throw new Error(
+      `[caveGen] SPELEOTHEM CLEARANCE CONTRACT VIOLATED: profile reaches r=${maxRR.toFixed(4)} about its axis, ` +
+      `bound is r0(${r0.toFixed(4)})·${SPELEO_MAX_RADIUS_FACTOR}+${SPELEO_RADIUS_EPS}=${bound.toFixed(4)}. ` +
+      `Floor speleothems are COLLIDER-BEARING (baked into the chamber trimesh), so a fatter profile ` +
+      `narrows real KCC clearance that addSpeleothems' placement margins were sized against. Either ` +
+      `re-clamp the profile to SPELEO_MAX_RADIUS_FACTOR, or raise the factor AND widen floorOk's margin ` +
+      `in the same change — and re-run \`npm run rig -- --scenario=cave-walk\` on several seeds.`,
+    );
+  }
+}
+
 /** A single speleothem cone (stalactite hanging DOWN from `apexY` a length `len`, or stalagmite/
  *  column rising UP from the floor). `up` = +1 rises from base, −1 hangs from apex. Slightly bent +
  *  fluted (noise per ring) so it reads as dripstone, not a party hat. Solid (rule 7). WORLD space. */
@@ -482,23 +513,55 @@ function buildSpeleothem(
   x: number, z: number, baseY: number, topY: number, r0: number,
   cnoise: Noise3, depthT: number, hangDown: boolean, bendScale: number,
 ): THREE.BufferGeometry {
-  const RINGS = 6, SEGS = 8;
+  // DEEPER cycle 7 — DRIPSTONE, NOT TRAFFIC CONES. The shipped profile was a LINEAR taper
+  // (r0·(1−t)) with a ±22% angular flute at 8 segments, which is geometrically a smooth cone: the
+  // audit's read was "orange traffic cones". Real speleothems are grown by accretion, so they are
+  // fat-based with a long thin tip (a POWER taper), they neck and bulge along their length, and they
+  // carry vertical flutes/ribs from the drip channels. Three changes: the power profile, an
+  // along-axis bulge octave, and a stronger, WORLD-ANCHORED angular flute (the old flute sampled
+  // (cos φ, i, sin φ) with no world term, so every speleothem in the cave had the SAME flute pattern).
+  // Resolution goes 6×8 → 8×12 rings×segments (104 → 204 tris each) because a 12% flute is invisible
+  // at 8 segments.
+  //
+  // THE ENVELOPE IS PRESERVED ON PURPOSE. `shape` is clamped to SPELEO_MAX_RADIUS_FACTOR — the same
+  // 1.22 maximum the shipped flute could reach — so the widest point of a speleothem is exactly as
+  // wide as before, which is what the placement code's clearance margins (floorOk: baseR + 0.2 off
+  // the walk grid) were sized against. Rule 9 is satisfied by construction: floor stalagmites +
+  // columns are pushed into `meshes`, and the chamber collider is baked from those same meshes, so
+  // the collision follows the new silhouette in the same change.
+  //
+  // ⚠ READ THIS BEFORE BLAMING THIS FUNCTION FOR A `cave-walk` MARCH FAILURE. "Preserved envelope"
+  // means preserved MAXIMUM, not preserved profile: at mid-height the power+bulge form is genuinely
+  // FATTER than the old linear taper (measured at t=0.5: up to ~1.5× the old radius there). That
+  // sounds like it should narrow corridors, and it does not, for a reason worth writing down — the
+  // KCC capsule stands ON the floor, so what blocks it is the MAX radius over its whole vertical
+  // span, and for a floor-rising speleothem that max is at the BASE under both profiles. The bulge
+  // only ever fills space that was already inside the base radius's shadow. This was investigated
+  // and measured on 2026-07-26 against a 3cf3d73 A/B (the cycle-7 tree and the pristine base flake
+  // on seed 4242 at the SAME rate with the SAME signature); it is not a clearance regression.
+  const RINGS = 8, SEGS = 12;
   const stride = SEGS + 1;
   const H = topY - baseY;                  // signed (hang: topY<baseY)
   const pos = new Float32Array((RINGS + 1) * stride * 3 + 3);
   const col = new Float32Array((RINGS + 1) * stride * 3 + 3);
   const bendA = cnoise(x * 0.3, 9.1, z * 0.3) * 0.5 * bendScale, bendB = cnoise(x * 0.3 + 4, 9.1, z * 0.3) * 0.5 * bendScale;
-  let vi = 0;
+  let vi = 0, maxRR = 0;
   for (let i = 0; i <= RINGS; i++) {
     const t = i / RINGS;                   // 0 base → 1 tip
-    const rr = r0 * (1 - t) * (0.85 + cnoise(t * 6, x, z) * 0.15) + 0.02;
+    // Power taper: fat base, long thin tip (an accreted drip form), broken by a slow bulge/neck
+    // octave along the axis so the silhouette has waists and shoulders instead of a straight edge.
+    const prof = Math.pow(1 - t, 0.74) * (1 + cnoise(t * 4.2 + 11, x * 0.7, z * 0.7) * 0.26);
+    const wob = 0.92 + cnoise(t * 6, x, z) * 0.08;
     const yy = baseY + H * t;
     const bx = x + bendA * t * t * 1.6, bz = z + bendB * t * t * 1.6;   // gentle taper-bend
     for (let j = 0; j <= SEGS; j++) {
       const ph = (j / SEGS) * Math.PI * 2;
-      const flute = 1 + cnoise(Math.cos(ph) * 3, i * 1.7, Math.sin(ph) * 3) * 0.22;   // fluted ridges
-      const wx = bx + Math.cos(ph) * rr * flute;
-      const wz = bz + Math.sin(ph) * rr * flute;
+      // World-anchored so neighbouring speleothems flute DIFFERENTLY, and deep enough to read.
+      const flute = 1 + cnoise(Math.cos(ph) * 3.4 + x * 0.13, i * 1.1, Math.sin(ph) * 3.4 + z * 0.13) * 0.24;
+      const rr = r0 * Math.min(SPELEO_MAX_RADIUS_FACTOR, prof * wob * flute) + SPELEO_RADIUS_EPS;
+      if (rr > maxRR) maxRR = rr;
+      const wx = bx + Math.cos(ph) * rr;
+      const wz = bz + Math.sin(ph) * rr;
       pos[vi * 3] = wx; pos[vi * 3 + 1] = yy; pos[vi * 3 + 2] = wz;
       caveVertexColor(hangDown ? 'ceiling' : 'floor', wx, yy, wz, depthT, cnoise, _tmpCol);
       col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
@@ -519,6 +582,7 @@ function buildSpeleothem(
     }
   }
   for (let j = 0; j < SEGS; j++) { const p0 = RINGS * stride + j; idx.push(p0, tip, p0 + 1); }
+  assertSpeleothemEnvelope(maxRR, r0);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -782,10 +846,49 @@ export const caveSurfaceMaterial = _caveSurface;
 // and on a sunlit exterior under a directional sun the same value reads as violent camouflage
 // mottling (round 1: the tor looked leopard-spotted from 13m). `customProgramCacheKey` is the same
 // constant on both, so this is still ONE compiled program — a uniform doing a uniform's job.
-const _caveBumpU = { value: Tuning.CAVE_ROCK_BUMP };
+const _caveBumpU = { value: Tuning.CAVE_ROCK_BUMP_INTERIOR };
 _caveSurface.userData.bumpU = _caveBumpU;
+
+// ── DEEPER cycle 7 — THE OUTPUT ENVELOPE + THE CARRIED-LIGHT BOUNCE ─────────────────────────────
+// Three GLOBAL uniform objects, shared by every material this patch touches (there is one player, so
+// there is one carried light and one depth factor; a per-material copy could only ever disagree).
+// `updateCaveAtmosphere` writes them once per frame on the cave's own pause-gated tick — so when the
+// game is paused they hold, and when no cave exists they stay at their zero defaults and the shader
+// collapses to EXACTLY the shipped cycle-6 response (gain 1, bounce 0).
+//
+//  · uCaveLitDepth — the live cave-darkness factor, remapped through CAVE_LIT_GAIN_DEPTH0/1. It is
+//    the LIT-GAIN's gate: 0 anywhere the sky still reaches (the trench, the ramp, the surface tor),
+//    1 in the deep tree. Keeps the descent's falling-light read intact.
+//  · uCaveBounce   — xyz = the carried light's world position, w = its bounce intensity (already
+//    multiplied by CAVE_BOUNCE_FRAC and by the darkness factor). w = 0 with no light out. THE
+//    no-free-light invariant lives in this one number.
+const _caveLitDepthU = { value: 0 };
+const _caveBounceU = { value: new THREE.Vector4(0, 0, 0, 0) };
+const _caveBounceColU = { value: new THREE.Color(Tuning.CAVE_BOUNCE_COLOR_HEX).convertSRGBToLinear() };
+
+/** DEEPER cycle 7 — per-frame publish of the cave-rock light-response uniforms. Called from
+ *  `updateCaveAtmosphere` (pause-gated, cave-scoped). `intensity` is the carried light's LIVE
+ *  intensity (0 when nothing is lit) and `darkness` the containment factor at the player. */
+export function setCaveRockLightState(
+  x: number, y: number, z: number, intensity: number, darkness: number,
+): void {
+  const T = Tuning;
+  const t = Math.min(1, Math.max(0,
+    (darkness - T.CAVE_LIT_GAIN_DEPTH0) / Math.max(1e-4, T.CAVE_LIT_GAIN_DEPTH1 - T.CAVE_LIT_GAIN_DEPTH0)));
+  _caveLitDepthU.value = t * t * (3 - 2 * t);
+  // The bounce is gated by the SAME depth factor as the gain: a torch carried down the daylit trench
+  // must not paint fill light onto rock the sun is already doing a better job of.
+  _caveBounceU.value.set(x, y, z, Math.max(0, intensity) * T.CAVE_BOUNCE_FRAC * _caveLitDepthU.value);
+}
+
 function caveRockBumpPatch(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
   shader.uniforms.uCaveBump = (this.userData.bumpU as { value: number }) ?? _caveBumpU;
+  // Per-material: the crevice TOR is a sunlit exterior and keeps gain 1 (a 4× boost on a
+  // directional-sun term is a blown-out white rock, not a legible cave).
+  shader.uniforms.uCaveLitGain = (this.userData.litGainU as { value: number }) ?? { value: Tuning.CAVE_LIT_GAIN };
+  shader.uniforms.uCaveLitDepth = _caveLitDepthU;
+  shader.uniforms.uCaveBounce = _caveBounceU;
+  shader.uniforms.uCaveBounceCol = _caveBounceColU;
   shader.vertexShader = 'varying vec3 vCaveWPos;\n' + shader.vertexShader.replace(
     '#include <begin_vertex>',
     '#include <begin_vertex>\n  vCaveWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;',
@@ -793,6 +896,10 @@ function caveRockBumpPatch(this: THREE.Material, shader: THREE.WebGLProgramParam
   shader.fragmentShader = `
     varying vec3 vCaveWPos;
     uniform float uCaveBump;
+    uniform float uCaveLitGain;
+    uniform float uCaveLitDepth;
+    uniform vec4 uCaveBounce;
+    uniform vec3 uCaveBounceCol;
     float caveHash(vec3 p) {
       p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
       p *= 17.0;
@@ -806,10 +913,48 @@ function caveRockBumpPatch(this: THREE.Material, shader: THREE.WebGLProgramParam
                  mix(mix(caveHash(i + vec3(0,0,1)), caveHash(i + vec3(1,0,1)), f.x),
                      mix(caveHash(i + vec3(0,1,1)), caveHash(i + vec3(1,1,1)), f.x), f.y), f.z);
     }
-    // Two octaves: 0.6m grit over 0.22m tooth. Amplitudes chosen so the finer octave contributes
-    // roughly the same SLOPE as the coarser (a·f near-constant), which is the fBm-for-rock case.
+    // DEEPER cycle 7 — FOUR octaves, not two, plus a BEDDING octave.
+    //
+    // Cycle 3 shipped 0.61m grit over 0.22m tooth. The cycle-7 audit measured the consequence: 89% of
+    // the interior's tonal variance survived a 128× downsample, i.e. the rock had exactly ONE visible
+    // texture scale — the 0.61m octave, which at torch range subtends 64-128px and reads as LEOPARD
+    // SPOTS rather than stone. Two things changed:
+    //   · the coarse octave is DEMOTED (0.62 → 0.40) and two finer ones (~9cm, ~4cm-class through the
+    //     albedo speckle below) added, so the amplitude spectrum has a slope instead of a spike;
+    //   · a compressed-along-Y octave adds ANISOTROPIC BEDDING. Rock in a cave is layered, and layers
+    //     are the single strongest "this was deposited and then cut" cue. CAVE_STRATA_SCALE is a
+    //     const vector, not a per-cave rotation: the bedding axis is world +Y everywhere, which is
+    //     what actual sedimentary strata do, and keeps this seed-free (no determinism surface).
+    // Cost: 4 value-noise evaluations per height sample (was 2) x 4 gradient taps = 16 hashes-worth
+    // more per fragment. Measured against the shipped shader by cave-audit --only=perf.
+    const vec3 CAVE_STRATA_SCALE = vec3(${Tuning.CAVE_ROCK_STRATA_STRETCH.toFixed(4)},
+                                        1.0,
+                                        ${Tuning.CAVE_ROCK_STRATA_STRETCH.toFixed(4)});
+    // PER-OCTAVE anti-alias weights, set once per fragment from the world-space pixel footprint.
+    // Cycle 3 faded the WHOLE perturbation by one footprint term, which is wrong in the case that
+    // matters most: a wall seen at a grazing angle has a huge footprint even when it is 1m away, so
+    // the nearest, largest surface in the frame got the LEAST detail (visible in this cycle's round-4
+    // wall-2m shot as a smooth, obviously-polygonal near wall). An octave only aliases once its
+    // wavelength approaches the footprint, so each gets its own weight and the big form survives to
+    // any range while the grit rolls off where it would sparkle.
+    float caveOW1 = 1.0, caveOW2 = 1.0, caveOW3 = 1.0, caveOWS = 1.0;
+    // …and the footprint itself is ANISOTROPY-AWARE. length(fwidth(wp)) is the SUM of both screen
+    // axes' world-space steps, so a wall seen at a grazing angle — the biggest, nearest surface in a
+    // corridor frame — reports a footprint 10-30× a head-on wall at the same distance and loses all
+    // of its detail. The compression is along ONE axis only; the other still resolves fine detail.
+    // Weighting toward the SMALLER axis keeps grazing walls textured and still rolls everything off
+    // at true distance (where both axes grow together).
+    float caveFootprint() {
+      float fa = length(dFdx(vCaveWPos)), fb = length(dFdy(vCaveWPos));
+      return mix(min(fa, fb), max(fa, fb), 0.30);
+    }
     float caveRockH(vec3 p) {
-      return caveVN(p * 1.65) * 0.62 + caveVN(p * 4.60 + 31.7) * 0.24;
+      float h = caveVN(p * 1.65) * (${(0.46).toFixed(3)} * caveOW1)
+              + caveVN(p * 4.60 + 31.7) * (0.20 * caveOW2)
+              + caveVN(p * 11.30 + 7.90) * (0.065 * ${Tuning.CAVE_ROCK_MICRO.toFixed(3)} * caveOW3);
+      h += (caveVN(p * CAVE_STRATA_SCALE * ${Tuning.CAVE_ROCK_STRATA_FREQ.toFixed(3)} + 61.3) - 0.5)
+           * (${Tuning.CAVE_ROCK_STRATA.toFixed(3)} * caveOWS);
+      return h;
     }
     vec3 caveRockGrad(vec3 p) {
       const float E = 0.035;
@@ -825,23 +970,151 @@ function caveRockBumpPatch(this: THREE.Material, shader: THREE.WebGLProgramParam
       // Distance fade: past a few metres the finest octaves alias into shimmer, so the perturbation
       // is rolled off by the on-screen world-space footprint. Big forms keep reading at range; the
       // grit only exists where the player can actually resolve it.
-      float foot = length(fwidth(vCaveWPos));
-      float fade = 1.0 / (1.0 + foot * 24.0);
-      vec3 gg = caveRockGrad(vCaveWPos) * (uCaveBump * fade);
-      normal = normalize(normal - (gg - normal * dot(gg, normal)));
+      float foot = caveFootprint();
+      caveOW1 = 1.0 / (1.0 + foot * 2.0);     // ~0.61m form — survives to any range a player can see
+      caveOWS = 1.0 / (1.0 + foot * 7.0);     // ~0.32m bedding relief
+      caveOW2 = 1.0 / (1.0 + foot * 9.0);     // ~0.22m tooth
+      caveOW3 = 1.0 / (1.0 + foot * 22.0);    // ~0.09m grit — the only octave that can really sparkle
+      vec3 gg = caveRockGrad(vCaveWPos) * uCaveBump;
+      // DEEPER cycle 7 — SATURATE THE TILT. The raw gradient of a 4-octave field routinely exceeds 3,
+      // i.e. a 70°+ normal swing, and once the envelope fix made the rock actually visible that read
+      // as a DALMATIAN floor: whole fragments flipped past N·L = 0 into hard black craters with sharp
+      // edges (worst under the flashlight). Rock has relief; it does not have pits every 20cm. This is
+      // a smooth saturation, not a clamp — small gradients pass through untouched (the micro-tooth
+      // survives) and only the tail is compressed, so the surface keeps its texture and loses the
+      // craters. CAVE_ROCK_TILT_MAX is the asymptotic tangent-space swing.
+      //
+      // SHAPE MATTERS. The obvious saturation (M·g/(g+M)) compresses SMALL gradients as hard as large
+      // ones, so when the raw field sits above the knee the whole surface collapses to a near-CONSTANT
+      // tilt magnitude that only varies in direction — which renders as smooth mud with the polygon
+      // facets showing straight through (round 2 of this cycle did exactly that). g·M/sqrt(g²+M²) is
+      // near-IDENTITY below the knee and asymptotic above it: the micro-tooth passes through intact
+      // and only the crater-making tail is bent.
+      vec3 gt = gg - normal * dot(gg, normal);
+      float gtl2 = dot(gt, gt);
+      gt *= ${Tuning.CAVE_ROCK_TILT_MAX.toFixed(3)}
+            * inversesqrt(gtl2 + ${(Tuning.CAVE_ROCK_TILT_MAX * Tuning.CAVE_ROCK_TILT_MAX).toFixed(5)});
+      normal = normalize(normal - gt);
+    }`,
+  ).replace(
+    '#include <color_fragment>',
+    `#include <color_fragment>
+    {
+      // MICRO-GRAIN IN THE ALBEDO. One extra noise sample (not four — this is not in the gradient),
+      // at ~4cm. The audit's "1px vs 8px stdev ratio is flat" finding is precisely a missing
+      // per-pixel term: the normal octaves above give the surface RELIEF, this gives it TOOTH.
+      float caveG = caveVN(vCaveWPos * 26.0 + 13.7) - 0.5;
+      // BEDDING, IN THE ALBEDO. The normal field carries only a modest strata octave — relief is the
+      // wrong channel for layering, and pushing it there is what makes craters. What actually reads as
+      // "this rock was DEPOSITED in beds and then cut" is a tonal band: darker/lighter layers stacked
+      // along the bedding axis. Same compressed-along-Y noise as the normal octave, sharpened toward
+      // its extremes so the layers have EDGES instead of being a soft wash. The vertex colours already
+      // carry 7.4m + 2.0m bands (caveVertexColor); this is the ~30cm set that only a per-fragment
+      // sample can resolve, and it lands directly in the scale gap the audit's downsample test found.
+      float caveSB = caveVN(vCaveWPos * CAVE_STRATA_SCALE * ${Tuning.CAVE_ROCK_STRATA_FREQ.toFixed(3)} + 4.1) - 0.5;
+      caveSB = sign(caveSB) * pow(abs(caveSB) * 2.0, 0.65);
+      // NEAR-FIELD TOOTH. At 1m every octave above is HUGE on screen — the 4cm speckle covers ~40px —
+      // so the surface a player has their face against still has no per-pixel structure. This ~8mm
+      // octave supplies it, weighted to die within ~1.5m so it can never sparkle at range. It is the
+      // literal answer to the audit's "89% of tonal variance survives a 128x downsample".
+      float caveNear = 1.0 / (1.0 + caveFootprint() * 110.0);
+      float caveG2 = caveVN(vCaveWPos * 118.0 + 71.3) - 0.5;
+      diffuseColor.rgb *= 1.0 + caveG * ${Tuning.CAVE_ROCK_GRAIN.toFixed(3)} * 2.0
+                              + caveG2 * ${Tuning.CAVE_ROCK_GRAIN.toFixed(3)} * 1.5 * caveNear
+                              + caveSB * ${Tuning.CAVE_ROCK_STRATA_TINT.toFixed(3)};
+    }`,
+  ).replace(
+    '#include <aomap_fragment>',
+    `#include <aomap_fragment>
+    {
+      // ── (1) THE LIT-ROCK ENVELOPE. Multiply the DIRECT term only — the torch/flashlight/lantern
+      //    contribution — through a soft shoulder. reflectedLight.indirectDiffuse (ambient, i.e. the
+      //    CAVE_DARK_AMBIENT_FLOOR that decides how black unlit rock is) is deliberately untouched,
+      //    so this widens the envelope of the LIT read without lifting the dark floor by one code.
+      //    Ramped in by depth (uCaveLitDepth) so the daylit trench keeps its shipped response.
+      float caveGain = mix(1.0, uCaveLitGain, uCaveLitDepth);
+      vec3 caveLit = reflectedLight.directDiffuse * caveGain;
+      reflectedLight.directDiffuse = caveLit / (1.0 + caveLit / ${Tuning.CAVE_LIT_WHITE.toFixed(4)});
+
+      // ── (2) CARRIED-LIGHT BOUNCE — the ceiling fix, and the one place "no free light" could be
+      //    broken. uCaveBounce.w is the carried light's intensity × CAVE_BOUNCE_FRAC × the depth
+      //    factor, so with nothing lit this whole block adds exactly vec3(0). Weighted toward
+      //    DOWN-facing rock because floor-bounced light arrives from below — which is the entire
+      //    reason ceilings above the torch's 11-12m cutoff currently render at code 1-4.
+      if (uCaveBounce.w > 0.0001) {
+        vec3 caveWN = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
+        float caveBD = length(vCaveWPos - uCaveBounce.xyz);
+        float caveCut = clamp(1.0 - pow(caveBD / ${Tuning.CAVE_BOUNCE_DIST_M.toFixed(1)}, 4.0), 0.0, 1.0);
+        float caveAtt = caveCut * caveCut
+          / (1.0 + (caveBD / ${Tuning.CAVE_BOUNCE_REF_M.toFixed(2)}) * (caveBD / ${Tuning.CAVE_BOUNCE_REF_M.toFixed(2)}));
+        float caveFace = mix(1.0 - ${Tuning.CAVE_BOUNCE_UP_BIAS.toFixed(3)}, 1.0,
+                             clamp(-caveWN.y, 0.0, 1.0));
+        reflectedLight.indirectDiffuse +=
+          uCaveBounceCol * (uCaveBounce.w * caveAtt * caveFace) * diffuseColor.rgb;
+      }
+    }`,
+  ).replace(
+    '#include <dithering_fragment>',
+    `#include <dithering_fragment>
+    // ── (3) OUTPUT DITHER, the pool's proven fix applied to the rock (see CAVE_POOL_DITHER). In
+    //    OUTPUT space — after tone-map AND sRGB encode — because sRGB's slope near black is ~12×, so
+    //    a ±1/255 perturbation added in linear space arrives down here as a dozen levels. At the
+    //    interior's ~25-code envelope every 1-level step is a visible Mach band across metres of
+    //    wall; interleaved-gradient noise breaks them into film grain.
+    //    GATED BY LUMINANCE, which the pool's copy does not need to be: a symmetric ±0.5-level
+    //    perturbation applied to a pixel that is EXACTLY 0 is rectified by the clamp (the negative
+    //    half floors, the positive half rounds up), so it lifts true black by ~0.3 of a code. On a
+    //    water surface that is irrelevant; on a cave whose no-free-light canary is "the fungi-only
+    //    frame is black", it is exactly the invariant we are not allowed to spend. The weight is 0
+    //    below ~1 code and 1 by ~3, so the dither exists everywhere there is anything to band.
+    {
+      float caveIgn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      float caveOL = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+      float caveDW = smoothstep(0.0039, 0.0118, caveOL);
+      gl_FragColor.rgb += vec3((caveIgn - 0.5) * (${Tuning.CAVE_ROCK_DITHER.toFixed(3)} / 255.0) * caveDW);
     }`,
   );
 }
+// DEEPER cycle 7 — THE CAVE BODY IS SMOOTH-SHADED NOW. Cycle 3 R1 chose `flatShading: true` for a
+// defensible reason: the smooth SDF surface read as "a soft brown wash" and the flat-shaded dais
+// out-read the whole cavern. But that choice was made BEFORE the same cycle's R4/R5 added the shader
+// bump — i.e. flat shading was standing in for surface detail the material did not yet have. It now
+// has four octaves + bedding + two albedo grain scales, and what flat shading contributes at 0.45m
+// voxels is no longer "carved facets" but VISIBLE POLYGONS: the cycle-7 audit's near-wall frames read
+// as a greybox because a 0.45m triangle is ~400px at 1m and its edges are sharper than any texture on
+// it. Smooth normals + a real bump is the correct division of labour.
+//   ⚠ `customProgramCacheKey` OVERRIDES three's default key entirely, so `flatShading` (which the
+//   default key WOULD have covered) has to be encoded by hand or the solid kit — still flat-shaded,
+//   because a stalagmite genuinely is a faceted dripstone — would silently share this program (D175).
+_caveSurface.flatShading = false;
+const caveRockKey = (m: THREE.Material): string => 'caveRockBump-v3:' + ((m as THREE.MeshLambertMaterial).flatShading ? 1 : 0);
 _caveSurface.onBeforeCompile = caveRockBumpPatch;
-_caveSurface.customProgramCacheKey = (): string => 'caveRockBump-v1';
+_caveSurface.customProgramCacheKey = function (this: THREE.Material): string { return caveRockKey(this); };
+// The SOLID kit (speleothems + the egg dais) runs the SAME program — before cycle 7 it was a bare
+// Lambert, so it got neither the envelope fix nor the dither and would have read as a different rock
+// from the walls it stands against. Its bump is lower (CAVE_SOLID_BUMP): the 0.61m octave is wider
+// than a stalagmite.
+// DEEPER cycle 7 (entrance round) — the SOLID kit follows the body SMOOTH. The cycle-7 comment above
+// kept it flat-shaded on the reasoning that "a stalagmite genuinely is a faceted dripstone", and that
+// was true while the body was flat too. Once the body went smooth the kit was the only faceted thing
+// in the cave, and the dais + speleothems out-read the cavern as POLYGONS rather than as dripstone —
+// A/B'd on `egg-dais` and `gallery`, both seeds. The cache key already encodes `flatShading`, so this
+// is one flag and no new program.
+_caveSolid.flatShading = false;
+_caveSolid.userData.bumpU = { value: Tuning.CAVE_SOLID_BUMP };
+_caveSolid.onBeforeCompile = caveRockBumpPatch;
+_caveSolid.customProgramCacheKey = function (this: THREE.Material): string { return caveRockKey(this); };
 
 /** A cave-rock surface material with its OWN bump strength (same program, different uniform).
- *  Used by the crevice tor, whose sunlit exterior needs a fraction of the interior's relief. */
-export function makeCaveRockMaterial(bump: number): THREE.MeshLambertMaterial {
+ *  Used by the crevice tor, whose sunlit exterior needs a fraction of the interior's relief — and,
+ *  since cycle 7, its own LIT GAIN of 1: the tor stands in the sun, and the interior's 4.2× direct
+ *  boost would render it as a white rock. (It is gated by depth as well, so this is belt + braces.) */
+export function makeCaveRockMaterial(bump: number, litGain = 1): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
   m.userData.bumpU = { value: bump };
+  m.userData.litGainU = { value: litGain };
   m.onBeforeCompile = caveRockBumpPatch;
-  m.customProgramCacheKey = (): string => 'caveRockBump-v1';
+  m.customProgramCacheKey = function (this: THREE.Material): string { return caveRockKey(this); };
   return m;
 }
 
@@ -1054,6 +1327,33 @@ export function startSpawnCave(
       if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi);
     }
 
+    // DEEPER cycle 7 — THE ARRIVAL CUE. `addFungi` deliberately skips the entrance chamber, so the
+    // hand-off frame (step out of the crevice slot into the first room) had nothing lit in it at all
+    // — the room is authored, but 2-3 stops under visibility, and the player's first look into the
+    // cave is a black wall. Fixed the way the cave's own breadcrumb design already works: ONE
+    // guaranteed bioluminescent cluster against the entrance chamber's wall, ~5-7m from the hand-off
+    // and off the arrival axis so it reads as something to walk TOWARD. NO new light source — the
+    // caps are emissive geometry, so the "no free light / torch is survival gear" rule is intact.
+    // Its own rand stream (never `frand`), so every other chamber's fungi are byte-identical.
+    {
+      const arrival = graph.nodes[0];
+      const arand = makeRng((seed ^ 0xa77111) >>> 0);
+      let ux = arrival.x - junction.x, uz = arrival.z - junction.z;
+      const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+      const side = (seed & 2) === 0 ? 1 : -1;
+      const lat = arrival.rx * (0.48 + arand() * 0.16) * side;
+      const fx = junction.x + ux * ul * 0.86 + -uz * lat;
+      const fz = junction.z + uz * ul * 0.86 + ux * lat;
+      const fy = arrival.floorY + Math.max(0, cnoise(fx * 0.5, 7.3, fz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
+      const cl = buildFungiCluster(arand, 0.35);
+      cl.position.set(fx, fy, fz);
+      for (const o of cl.children) o.traverse((m) => { (m as THREE.Mesh).receiveShadow = true; });
+      group.add(cl); cl.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
+      const cid = _fungiId++;
+      tagFungi(cl, cid);
+      fungi.push({ id: cid, group: cl, pos: new THREE.Vector3(fx, fy, fz), harvested: false, hovered: false });
+    }
+
     // DEEPER cycle 6 — STANDING WATER. Pools go in `decor`, NOT `meshes`: the water surface is
     // never baked into the trimesh collider. What you wade on is the SDF floor visible through it
     // (rule 9 — see cavePools.ts). They still ride the determinism digest below, so a pool that
@@ -1144,11 +1444,24 @@ export function startSpawnCave(
   };
 
   const step = (budgetMs: number): boolean => {
-    const deadline = budgetMs === Infinity ? Infinity : performance.now() + budgetMs;
+    const sliced = budgetMs !== Infinity;
+    const deadline = sliced ? performance.now() + budgetMs : Infinity;
     while (stage !== 'done') {
       if (stage === 'graph') { doGraph(); stage = 'sdf'; }
-      else if (stage === 'sdf') { if (!sdfJob!.step(budgetMs)) return false; stage = 'dress'; }
-      else if (stage === 'dress') { doDress(); stage = 'finalize'; }
+      // DEEPER cycle 7 — HAND EACH ATOMIC STAGE ITS OWN FRAME. The deadline is only checked at the
+      // BOTTOM of this loop, so when the SDF job happened to finish with budget left over, the loop
+      // fell straight through and ran `dress` (and sometimes `finalize`) in the SAME call. Two
+      // consequences, both bad: the real frame cost was sdf-tail + dress + bake stacked into one
+      // hitch, and — because caveStream attributes a step to the stage it ENTERED at — that atomic
+      // cost was booked against the DIVISIBLE slice budget, where it is invisible next to the
+      // separately-reported atomic number. Cycle 7's heavier speleothem kit made that leak visible:
+      // the chunk-perf gate's divisible slice went 16.1ms → 22.2ms (tripwire 20) while the atomic
+      // number barely moved, which reads as "the SDF slicing regressed" and is not what happened.
+      // Breaking after the SDF completes keeps each indivisible stage on its own frame, so the two
+      // budgets measure what they claim to. `sliced` guards the SYNC preload path (step(Infinity)),
+      // which is driven by a `while (!job.step(Infinity))` loop and so is correct either way.
+      else if (stage === 'sdf') { if (!sdfJob!.step(budgetMs)) return false; stage = 'dress'; if (sliced) break; }
+      else if (stage === 'dress') { doDress(); stage = 'finalize'; if (sliced) break; }
       else if (stage === 'finalize') { doFinalize(); stage = 'done'; }
       if (performance.now() >= deadline) break;
     }

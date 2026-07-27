@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { softenPointSprites } from './dustMotes.ts';
 
 export interface AmbientDust {
   particles: THREE.Points;
@@ -47,6 +48,8 @@ export function createAmbientDust(
     sizeAttenuation: true,
   });
 
+  softenPointSprites(mat);   // DEEPER cycle 7 — round point sprites, not hard squares
+
   const particles = new THREE.Points(geo, mat);
   particles.frustumCulled = false;
   scene.add(particles);
@@ -68,14 +71,20 @@ export function updateAmbientDust(ctx: GameContext, dt: number): void {
 
   // When the storm is building or active, OR it's night, hide our layer entirely.
   const storm = ctx.weather.intensity;
-  const wantVisible = storm < Tuning.AMBIENT_DUST_SUPPRESS_STORM && dayFactor > 0;
+  // DEEPER cycle 7 — and NOT underground. This layer is the desert's prevailing-WIND drift; the cave
+  // audit found it drifting through sealed chambers 30m below the sheet, where there is no wind and
+  // no daylight to carry tan dust. The cave has its own air (the finer dustMotes layer, dimmed to sit
+  // under the rock's lit range). Gated on the same containment factor everything else underground
+  // uses, so the surface world is untouched.
+  const caveD = ctx.caveAtmosphere ? ctx.caveAtmosphere.darkness : 0;
+  const wantVisible = storm < Tuning.AMBIENT_DUST_SUPPRESS_STORM && dayFactor > 0 && caveD < 0.995;
   if (a.particles.visible !== wantVisible) a.particles.visible = wantVisible;
   if (!wantVisible) return;
 
   // Opacity fades down as we approach the storm suppression threshold so the
   // handoff feels smooth instead of popping off — and down to 0 across dusk.
   const fade = 1 - storm / Tuning.AMBIENT_DUST_SUPPRESS_STORM;
-  a.particleMat.opacity = Tuning.AMBIENT_DUST_OPACITY * fade * dayFactor;
+  a.particleMat.opacity = Tuning.AMBIENT_DUST_OPACITY * fade * dayFactor * (1 - caveD);
 
   // Drift + wrap. Identical structure to weather.ts.
   _camPos.copy(a.cameraRef.position);

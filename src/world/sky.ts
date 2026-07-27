@@ -1204,6 +1204,18 @@ export function updateSky(ctx: GameContext, dt: number): void {
   // ACAB — clouds dim the sun disc (overcast veils it).
   bundle.sunMat.opacity = Math.min(1, Math.max(0, sy * 5 + 0.1)) * (1 - cloudiness * 0.82);
   bundle.sun.visible = aboveHorizon > -0.05;
+  // DEEPER cycle 7 — THE SUN THROUGH ROCK. The disc ships with depthTest:false (unlike the moon,
+  // which was given depthTest:true when it punched through terrain) so that at sunrise it reads as
+  // GLARE over a dune rather than a sprite being clipped by it. Underground that is not a stylistic
+  // choice, it is a bug: in a chamber whose 99th percentile is L≈2 the audit measured an L≈239 disc
+  // painted onto solid rock in every upward framing (slot-wall-up max 239 → 32 with the sprite
+  // hidden). The fix keeps the surface behaviour EXACTLY as shipped and turns depth testing on ONLY
+  // where the player is inside the cave — occlusion is the correct semantics there, and it still
+  // lets the disc show through the OPEN trench, which a blanket visibility gate would not.
+  // `depthTest` is read per-draw by WebGLState, so flipping it costs nothing and never recompiles.
+  // (depthTest TRUE == "respect occlusion" — so it is ON underground, OFF on the surface, which is
+  // the shipped behaviour and therefore a byte-identical surface render.)
+  bundle.sunMat.depthTest = !!(ctx.caveAtmosphere && ctx.caveAtmosphere.darkness > 0);
 
   // ── Moon: opposite the sun, faded by nightMix and the storm. ──
   _moonDir.copy(ctx.time.sunDir).multiplyScalar(-1);

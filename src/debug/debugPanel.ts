@@ -53,6 +53,7 @@ import { FEATURES } from '../config/features.ts';        // Underworld review �
 import { caveEntranceSite } from '../world/caveEntrance.ts';     // Underworld review — gotoCave warp target
 import { farCaveJunction } from '../world/caveStream.ts';        // DEEPER cycle 5 — streamed-cave probe hook
 import { cavePoolLiveMaterials } from '../world/cavePools.ts';   // DEEPER cycle 6 round-13 — per-cave water-material leak canary
+import { setCaveRockLightState } from '../world/caveGen.ts';     // DEEPER cycle 7 — cave-rock light-response probe hook
 
 declare global {
   interface Window {
@@ -491,6 +492,12 @@ interface DebugApi {
   /** Queue a STREAMED cave build at a world site (cycle 8 supplies real sites; this is the hook the
    *  chunk-perf gate drives). Returns the resident key, or null with the cave flag off. */
   requestCave: (x: number, z: number, seed: number) => string | null;
+  /** DEEPER cycle 7 — publish the cave-rock light response (envelope gain + carried-light bounce)
+   *  through the SAME setter `updateCaveAtmosphere` uses. Exists so the cave-audit rig, which pauses
+   *  and then models a carried torch itself, drives the shipping code path instead of re-deriving
+   *  the bounce formula (a harness that re-derives is a harness that can be wrong while looking
+   *  right — D165). `intensity` = the modelled carried-light intensity; 0 restores "nothing lit". */
+  setCaveRockLight: (x: number, y: number, z: number, intensity: number) => void;
 }
 
 /** Hooks main.ts supplies for actions that need its boot-scope closures
@@ -1097,6 +1104,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     requestCave: (x, z, seed) => {
       if (!ctx.caveStream) return null;
       return ctx.caveStream.request(`far:${Math.round(x)},${Math.round(z)}`, farCaveJunction(ctx.terrain, x, z), seed >>> 0);
+    },
+    setCaveRockLight: (x, y, z, intensity) => {
+      setCaveRockLightState(x, y, z, intensity, ctx.caveAtmosphere?.darkness ?? 0);
     },
     castDown(x, z, fromY = 100, excludePlayer = false) {
       // excludePlayer (M7-S2 walk probe): a ray cast from the capsule's own
