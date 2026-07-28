@@ -1,50 +1,57 @@
-# Next session — campaign DEEPER, the post-walk-test ladder (Zach's direction, 2026-07-28)
+# Next session — campaign DEEPER is PAUSED after cycle 11 (Zach's call, 2026-07-28 evening)
 
-**State:** active on `campaign/2026-07-24-deeper` (9/20 cycles, ~9.15M/**14M** — ceiling raised
-by Zach). Cycle 9 SHIPPED, gate of record 24/24 GREEN. The hazard checkpoint was RESOLVED IN
-PERSON: **no hazards — caves are a place to EXPLORE.** His verbatim feedback: steering.md
-2026-07-28. Boot from `docs/campaign/campaign-state.json` + `steering.md` as always.
+**State:** `campaign/2026-07-24-deeper`, tree clean, push HELD. 11/20 cycles, ~11.2M/14M.
+`status: paused`. Boot from `docs/campaign/campaign-state.json` (its `paused_note` is the resume
+brief) + `steering.md`. **The gate runner, the STALL RULE and EFFICIENCY WATCH are all in force —
+read steering.md §EFFICIENCY WATCH before dispatching anything.**
 
-## The remaining ladder (his feedback, in priority order)
+## Resume order
 
-**Cycle 10 — LIGHT & DARKNESS INTEGRITY** (the bugs he saw, plus the dial he asked for):
-1. **Deep-cave darkness must not track surface daylight.** Observed: caves brighter by day,
-   darker by night — the deep ambient floor multiplies a day-varying base. Fix: constant deep
-   darkness (the mouth light shaft + threshold zone STAY sun-tracked — that's a real opening).
-   Gate: a deep-chamber framing at noon vs midnight must measure identical.
-2. **Sun AND moon visible through terrain/cave rock — fix for ALL caves.** Cycle 7 gated the sun
-   sprite's depthTest on being inside THE ORIGIN cave; kind/streamed caves still show both
-   bodies. Root-cause the inside-detection for streamed caves, cover the moon too, surface look
-   byte-identical, and add the upward-view max-pixel assert to the kinds/audit gate.
-3. **Carried-light strength UP: torch, flashlight, lantern** (his call; dials in tuning.ts; he
-   fine-tunes by feel next test). Note the cycle-7 envelope/bounce scale with carried light —
-   re-verify the pool pixel gates (ratio-based, should hold) and the no-free-light canaries
-   (must stay exact).
+**1. Finish cycle 11's gate of record (~30 min).**
+```
+node scripts/verify-chunks.mjs --legs=cave-kinds,cave-streamed
+```
+The full run was stopped at the pause with **22 of 24 legs GREEN** (salvaged verdicts:
+`verification/gate-logs/20260728T231336Z-*.txt`), including `pool-fill` ×2 which carries cycle
+11's own new **LANTERN-RT** and **CAVE-COLD** sub-gates, and `cave-walk-7a`. `cave-kinds` never
+started and `cave-streamed-7` was mid-flight — unrun, not known-bad. Run it under the
+ORCHESTRATOR'S own tracked shell (stall rule), and do disjoint work in the window.
 
-**Cycle 11 — LANTERN BREADCRUMBS + COLD ATMOSPHERE:** deployable/retrievable lanterns using the
-EXISTING lantern item (place on ground, pick back up — route breadcrumbs); cave temperature
-reads colder with depth but CLAMPED non-damaging (never below the damage threshold). Both are
-feel items — rule 8 + his re-test.
+**2. Cycle 12 — the dead-explorer beat.** [cycle-12-plan.md](campaign/cycle-12-plan.md) is written
+and symbol-verified: `makeSkeleton()` already poses a human skeleton *"slumped against the back
+wall, died writing"* with an arm reaching toward a journal; `placeJournal` gives the read UI and
+persistence free; `spawnLootContainerAt` already serves the origin cave's caches. So it is
+composition + lifecycle, **plus one rule-8 close-read pass on the skeleton** (it has a genuine
+rule-7 violation today — zero-thickness eye sockets). Host: the **warren** kind. Digests provably
+unaffected (the digest is computed before any resident sink attaches; anchors aren't hashed).
+It also fixes a found bug: streamed-cave loot doesn't persist as taken → an infinite battery farm
+(additive `caveBeats` record, SAVE_VERSION stays 18).
 
-**Cycle 12 — THE SKELETON & JOURNAL:** an authored story beat in one of the caves — a dead
-explorer: skeleton (real thickness, rule 7), a readable journal (the Skyfall crash-log idiom),
-a loot cache (numbers FLAGGED for Zach per the economy gate, not baked). Seed-pure placement;
-decide egg-cave vs a streamed-cave rare roll and surface the choice.
+**TWO ITEMS ARE ZACH'S** — hold as flagged one-liners, do not bake:
+- **Q4, the loot-cache contents.** Proposed: `lantern_kit` + 2 `metal_pipe` + 2 `wiring` +
+  1 `battery` + 3-4 `scrap`. Hand-authored, `lootRegistry` untouched.
+- **Q9, the journal text** (plan §6, 5 entries). Defaults are safe if he doesn't answer, but the
+  economy-gate rule says loot is his.
 
-**Cycle 13 — INTEGRATION:** perf pass (the ~160ms tor arrival hitch — the slicing lever),
-docs/changelog/D-entries sweep, backlog reconciliation, morning summary → the final descent
-walk-test (charter checkpoint 3).
+**3. Cycle 13 — integration:** the ~160-175ms tor arrival hitch (slicing lever named), docs +
+D-entries + backlog sweep, then the final descent walk-test (charter checkpoint 3).
 
-**Parked (unchanged):** shaft skylight (unscheduled idea) · warren history props · corridor
-differentiation · canonical speleothem tips + egg-dais read (digest re-baseline decisions) ·
-pocket-9 wedge trap + floorOk margin · taste dials. **Zach has MORE tuning feedback pending —
-capture same-day when it arrives; it may reorder cycles 11-13.**
+## Owed to Zach / pending from him
 
-## Standing rules (unchanged)
+- **More tuning feedback** he hasn't given yet — capture same-day; it may reorder 12/13.
+- **The process reflection he asked for**, once the cave work lands. Evidence gathered:
+  the framework loop is one-directional (**16 undrained post-mortems**, `shared-memory/`
+  untouched since **Jul 17**, before this campaign); **`rig-shot.mjs` is 19,651 lines** against
+  94k of `src/`; the fixed cost per change no longer scales with the change; this chat is long
+  and a fresh file-booted session would be sharper. Worth comparing deliberately against Odyssey.
+- Parked decisions: shaft skylight · warren history props · corridor differentiation · canonical
+  speleothem tips + egg-dais read (digest re-baselines) · pocket-9 wedge trap · taste dials
+  (density, kind weights, darkness, light strengths, jerrycan/scrap numbers, `CAVE_COLD_FLOOR`).
+
+## Standing rules
 
 Fable plans / Opus executes · one code-writing agent at a time · never `git stash` · push HELD ·
-SPEED RULES + EFFICIENCY WATCH (gate iteration via `--legs=` + `--serial` for march legs; full
-suite once per cycle by the orchestrator; tee-to-file; measure-before-dispatch; right-sized
-critic waves; per-cycle efficiency retro) · rule 8 for visual/feel · trust the playtest · NO
-creature underground · NO damage mechanics underground (2026-07-28) · determinism D290 · origin
-digests d8f15005/99e0015b.
+**agents END at "report and stop" — the orchestrator runs every long gate under its own tracked
+shell and never idles through one** · `--legs=` for iteration, `--serial` for march legs ·
+rule 8 for visual/feel · trust the playtest · **NO creature and NO damage mechanics underground** ·
+determinism D290 · origin digests `d8f15005` / `99e0015b`.

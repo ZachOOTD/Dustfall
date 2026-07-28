@@ -6,6 +6,78 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## PAUSED (2026-07-28 evening) — Zach: "pause cleanly now and pick back up from here later"
+
+**Where things stand.** Cycles 10 and 11 shipped and are committed; cycle 12's plan is written and
+verified. Tree clean at the pause commit; loop stopped, agents stopped, machine quiet.
+
+**Gate state, precisely** (this is the one thing to read on resume): the cycle-11 gate of record
+was stopped mid-run with **22 of 24 legs GREEN**, salvaged per-leg from
+`verification/gate-logs/20260728T231336Z-*.txt`. That includes `pool-fill` ×2 — which carries
+cycle 11's own new sub-gates **LANTERN-RT** and **CAVE-COLD** — and `cave-walk-7a`, i.e. the
+dt-coupling reclassification is holding. `verify` / `verify:loot` / `verify:placement` /
+`verify:colliders` all green separately. **OWED: `node scripts/verify-chunks.mjs
+--legs=cave-kinds,cave-streamed` (~30 min).** `cave-kinds` never started; `cave-streamed-7` was
+mid-flight. Neither is known-bad — they are simply unrun.
+
+**Then cycle 12** ([cycle-12-plan.md](cycle-12-plan.md), committed): build the dead-explorer beat.
+**Two items are Zach's call**, held as flagged one-liners rather than baked: **Q4** the loot-cache
+contents (proposed: `lantern_kit` + 2 `metal_pipe` + 2 `wiring` + 1 `battery` + 3-4 `scrap` —
+hand-authored, `lootRegistry` untouched so `verify:loot` cannot move) and **Q9** the drafted
+5-entry journal text (plan §6).
+
+**Also pending from him:** more tuning feedback he hasn't given yet, and a **process reflection**
+he asked for once the cave work lands. The agenda, from the evidence gathered this session:
+the framework loop is one-directional (16 undrained post-mortems; `shared-memory/` untouched
+since Jul 17, i.e. before this campaign); `rig-shot.mjs` is 19,651 lines against 94k of `src/`;
+the fixed cost per change no longer scales with the size of the change; and this chat is long
+enough that a fresh file-booted session would be sharper and cheaper.
+
+## Cycle 11 — lanterns underground + cave cold (2026-07-28) — SHIPPED
+
+- **Planned:** Zach's asks — deployable lanterns using the existing item; colder caves that never
+  damage. **What the recon found instead: both were LIVE BUGS**, and it found them by reading,
+  inside cycle 10's gate window at zero wall-clock cost.
+
+- **G1 — placeables could not be placed underground** (`d645f88`). Every placeable computed its Y
+  from `terrain.heightAt`, the SURFACE sampler: a lantern, campfire, bedroll, tent or sled placed
+  in a cave landed tens of metres up **inside solid rock**, and the ghost preview lied about it.
+  New `src/world/placementGround.ts` casts down against LIVE colliders (5m drop, player excluded)
+  and snaps to the analytic height within 0.25m, so open-desert placement stays byte-identical to
+  what shipped. **Fixed at nine sites, not the six named** — grep showed largeTent/locker/stake
+  carry the identical line, and fixing six of nine identical bugs would have been arbitrary.
+  Proof: the lantern lands at y −22.71 with collider identity = **the cave body**; the old path
+  gave y +7.89 — thirty metres up inside rock.
+
+- **CAVE COLD — the shipped behaviour was BACKWARDS**, so this is a fix, not an addition:
+  underground, exposure still ran off the surface clock, so shade-heat **warmed** you by day and
+  `COLD_NIGHT_DRAIN` could reach −1 and **kill you at night**. INV-COLD: a cave branch
+  pre-empting shelter/sun walks temperature toward `caveColdTarget(depth, kind, wet)` and never
+  past it, **in both directions** — a freezing descender is warmed toward the target, which is
+  the clause that makes "never damages" total rather than conditional. The clamp binds the
+  TARGET, at the function's last line, after every multiplier; `depth ≤ 0` is exactly a no-op.
+- **Measured deviation:** `CAVE_COLD_FLOOR` is **−0.48**, not the plan's −0.55 — the gate proved
+  −0.55 makes the plan's own defaults jointly unsatisfiable (the worst stack lands outside
+  `HEALTH_REGEN_TEMP_MAX`, silently stopping regen in the deepest wet cave, which its own Q6
+  forbids).
+
+- **Gates** (both ride `pool-fill`, no 25th leg): **LANTERN-RT** and **CAVE-COLD**, `pass=1` on
+  both seeds — collider identity, lit-check, a 25m KCC walk plus a 400m far-field relocation (the
+  range eviction actually runs at), real RMB retrieve, pool-slot release, save/reload with
+  `SAVE_VERSION === 18` asserted, cap refusal, bounce 0.95→0 exact; 112 real-tick cold cells with
+  `damageCells: 0`. **Red-proofs recorded — including one that corrected the plan:** −1.4 alone
+  cannot reach the damage line (TARGET_MAX is −0.45), so the damage assertion was additionally
+  proven with `TARGET_MAX = −1.2` → 4,500 damage ticks, player died. Both restored.
+
+- **Three probe defects found and fixed en route**, one worth remembering: a NaN reaching
+  `setTranslation` **poisons the Rapier wasm module**, after which every later call reports
+  "recursive use of an object" — that error is always a *downstream* symptom.
+
+- **Spend:** ~1.3M (campaign ~11.2M / 14M; cycle 11/20).
+- **Commits:** `d645f88` (+ `3d5e177` cycle-12 recon).
+- **Walk-test affordance:** a **"lantern trail"** dev button drops a real breadcrumb trail through
+  the actual deploy path — the "can I find my way back?" read in one click instead of six crafts.
+
 ## Cycle 10 — light & darkness integrity (2026-07-28) — SHIPPED
 
 - **Planned:** Zach's three walk-test asks (steering.md 2026-07-28) after he cancelled the hazards.
