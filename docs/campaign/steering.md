@@ -75,6 +75,37 @@ written down the SAME DAY (the 4-day gap that produced this campaign's cycle 1 w
 
 ## Notes
 
+### 2026-07-28 — Zach: walk-test verdict + the NEW remaining ladder (supersedes the hazard plan)
+> *"i don't want these hazards, i want the caves more a place to explore, the temperature should
+> be colder but not cold enough to damage the player. i like the lanterns, we already have
+> lanterns in the game so can use those. also think we need to increase the light strength of the
+> flashlilght, lantern, and torch. and make sure that the sunlight doesn't make the caves
+> brighter, i noticed the caves are brighter during the day and darker at night so the light
+> looks like it is penetrating the terrain or something like that, also i can see the sun
+> slightly through the terrain and i think the moon as well so need to fix that. there should be
+> a journal and a skeleton in one of the caves with some loot. if we're getting close to budget
+> can increase it."*
+
+**Effects (all DECIDED):**
+1. **HAZARDS CANCELLED.** The hazard-spec-review milestone is RESOLVED in person: verdict = no
+   damage mechanics underground. Caves are a place to EXPLORE. The spec doc stays as a record;
+   its lantern + cold ideas carry forward stripped of damage.
+2. **Cave cold = atmosphere only** — temperature reads colder underground but is CLAMPED above
+   any damage threshold. Never hurts.
+3. **Deployable lanterns YES, using the EXISTING lantern item** (place + retrieve as route
+   breadcrumbs).
+4. **Carried-light strength UP** — torch, flashlight, lantern dials (he will fine-tune by feel).
+5. **Daylight must not reach the deep cave** — the interior currently brightens by day/darkens by
+   night (ambient coupling), and the sun (and likely moon) discs show through terrain. Both are
+   bugs to fix: constant deep-cave darkness (the mouth shaft stays sun-tracked — a real opening),
+   and no sky body ever visible through rock, any cave, either body.
+6. **A skeleton + journal + loot cache in one of the caves** — an authored story beat (loot
+   numbers flagged for Zach per the economy gate).
+7. **Ceiling raised on his authorization**: 10M → 14M.
+8. The repair-descent milestone is SATISFIED by today's walk-test (feedback above is the record;
+   no D-1..D-4-class defects reported). More tuning feedback to come — capture same-day when it
+   lands.
+
 ### 2026-07-25 — Zach: run the whole remaining ladder unattended
 > *"ok keep working through all of the remaining cycles. I am going to be gone all day so want to
 > see significant progress when i return"*

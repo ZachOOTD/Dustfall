@@ -1,6 +1,13 @@
 # Environmental hazard spec — DEEPER checkpoint 2
 
-**Status: AWAITING ZACH. Nothing here is built.** This is the charter's checkpoint-2 document
+> **REVIEWED 2026-07-28 — VERDICT: NO HAZARDS.** Zach, at the walk-test checkpoint: *"i don't
+> want these hazards, i want the caves more a place to explore, the temperature should be colder
+> but not cold enough to damage the player. i like the lanterns."* Kept as the decision record.
+> What carries forward, stripped of all damage: deployable lanterns (the existing item, cycle
+> 11), cave cold as pure non-damaging atmosphere (cycle 11), and the shaft-skylight appendix
+> idea (unscheduled). Nothing else in this spec gets built.
+
+**Status: RESOLVED — rejected in person (see above).** This was the charter's checkpoint-2 document
 ("*a hazard spec review — a doc, not a walk-test: exactly which environmental hazards, how each is
 telegraphed, and how each interacts with the light economy. Cheap to read; exists so an unfair
 hazard can't ship overnight*"). Written 2026-07-28, branch `campaign/2026-07-24-deeper`.
