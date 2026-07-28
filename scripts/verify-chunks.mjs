@@ -77,11 +77,14 @@ const argv = Object.fromEntries(process.argv.slice(2).map((a) => {
 }));
 
 const SERIAL = argv.serial === true || String(argv.serial) === '1';
-// jobs=4 is not a guess. MEASURED 2026-07-27: the parallel phase is ~48 min of summed leg time
-// with `cave-kinds` in the quiet phase, and its longest single leg is `cave-streamed-7` at ~9 min.
-// At jobs=3 the phase runs ~16 min; at jobs=4 it runs ~12-13 min, at which point the quiet phase
-// (~19 min, serial by construction) dominates the suite and more workers buy contention for
-// nothing. Parallel-phase legs carry no clock-coupled assertions, so concurrency there costs
+// jobs=4 is not a guess. MEASURED 2026-07-27: the parallel phase was ~48 min of summed leg time
+// with `cave-kinds` in the quiet phase, and its longest single leg was `cave-streamed-7` at ~9 min.
+// At jobs=3 the phase ran ~16 min; at jobs=4 ~12-13 min. REVISED 2026-07-28: every MARCH leg
+// (cave-walk ×4, cave-streamed ×2) moved to the quiet phase after seed-7 false-reds under load
+// (see their solo notes) — the quiet phase now dominates (~50 min) and the suite runs ~55 min.
+// That is the price of verdicts that don't move with machine load; still ~½ the old serial 90.
+// Future lever, unmeasured: a jobs=2 march phase might hold verdicts — measure before trusting.
+// Parallel-phase legs carry no clock-coupled assertions, so concurrency there costs
 // wall-clock only, never a verdict.
 const JOBS = Math.max(1, Number(argv.jobs ?? 4));
 // A settle window between the parallel phase and the quiet timing phase: Windows
@@ -232,7 +235,13 @@ for (const seed of DET_SEEDS) {
 for (const seed of DET_SEEDS) {
   for (const half of ['a', 'b']) {
     leg({
-      name: `cave-walk-${seed}${half}`, group: 'cave-walk', scenario: 'cave-walk', seed, timeout: 600000, est: 5,
+      // solo: KCC marches are dt-coupled — machine load changes per-step translation and can flip
+      // a verdict on marginal geometry. MEASURED twice on seed 7's interior (2026-07-27/28): the
+      // `a` half red at jobs=4 (reached 7/10, node 7→8 fwdClear 0.3-0.8) while `b` passed GREEN in
+      // the SAME batch on the SAME stable digest, and the same tree marched 10/10 serial. A march
+      // belongs in the quiet phase; the wall-clock cost is real and accepted (verdict integrity
+      // outranks the 35-min target — EFFICIENCY WATCH #1's own escape clause).
+      name: `cave-walk-${seed}${half}`, group: 'cave-walk', scenario: 'cave-walk', seed, timeout: 600000, est: 5, solo: true,
       re: /CAVE-WALK pass=(\d) seed=(\S+) kind=(?:\S+) digest=(\S+) chambers=(\d+) .* reached=(\d+)\/(\d+)/,
       row(m) {
         // The row for cave-walk is emitted by the per-seed aggregate (it needs both halves).
@@ -316,7 +325,9 @@ for (const seed of DET_SEEDS) {
 //       the tour kept measuring from the wrong place.
 for (const seed of DET_SEEDS) {
   leg({
-    name: `cave-streamed-${seed}`, group: 'cave-streamed', scenario: 'cave-streamed', seed, timeout: 1500000, est: 9,
+    // solo: contains a full KCC march (see the cave-walk solo note — dt-coupled, load can flip
+    // marginal-geometry verdicts; cave-streamed-7 false-failed under load 2026-07-27, 528s vs 310s).
+    name: `cave-streamed-${seed}`, group: 'cave-streamed', scenario: 'cave-streamed', seed, timeout: 1500000, est: 9, solo: true,
     re: /CAVE-STREAMED pass=(\d) seed=(\S+) sites=(\d+) marched=(\d+) voided=(\d+) marchOk=(\d+)\/(\d+) ascentOut=(\d+)\/(\d+) minChambers=(\d+) strands=(\d+) voidPoints=(\d+) voidRays=(\d+) escapes=(\d+) excused=(\d+) culled=(\d+) holes=(\d+) fails=(\d+)/,
     row(m) {
       // The vacuous-pass guard, harness side: a green row off zero marched / zero void-sampled
