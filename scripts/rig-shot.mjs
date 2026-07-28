@@ -5925,6 +5925,7 @@ const SCENARIOS = {
           chambers: pr.nodes.length, edges: pr.edges.length,
           eggRx: +pr.nodes[pr.eggId].rx.toFixed(1), eggDepth: +pr.depthBelowSurface.toFixed(1),
           fungiClusters: pr.fungiClusters, rubbleHeaps: pr.rubbleHeaps, scrapAnchors: pr.scrapAnchors,
+          fungiWallShelves: pr.fungiWallShelves ?? -1, fungiWallHidden: pr.fungiWallHidden ?? -1,
           pools: pr.pools.length, poolR: pr.pools.map((q) => q.r),
           squeezes: pr.edges.filter((e) => e.squeeze).length,
           corridorH: +Math.min.apply(null, pr.edges.map((e) => e.height)).toFixed(2),
@@ -6081,7 +6082,7 @@ const SCENARIOS = {
       details.push(
         `${kind.padEnd(8)} @(${site.x.toFixed(0)},${site.z.toFixed(0)}) seed=${site.seed} digest=${arrive.digest} ` +
         `chambers=${arrive.chambers} depth=${arrive.eggDepth}m eggRx=${arrive.eggRx} squeeze=${arrive.squeezes}/${arrive.edges} corrH=${arrive.corridorH}m ` +
-        `fungi=${arrive.fungiClusters} pools=${arrive.pools} rubble=${arrive.rubbleHeaps} scrap=${arrive.scrapAnchors}/${arrive.scrapPickups} ` +
+        `fungi=${arrive.fungiClusters} shelves=${arrive.fungiWallShelves}(hidden ${arrive.fungiWallHidden}) pools=${arrive.pools} rubble=${arrive.rubbleHeaps} scrap=${arrive.scrapAnchors}/${arrive.scrapPickups} ` +
         `extent=${arrive.extent}m/${arrive.minSpacing}m tris=${arrive.tris}/${arrive.colliderTris} meshes=${arrive.meshes} ` +
         `clear=${arrive.minClear}m@s${arrive.minClearAt ? arrive.minClearAt.s : '?'}(model ${arrive.modelClear}) ` +
         `tor=${arrive.torMs}ms fin=${arrive.finMs}ms slice=${arrive.sliceMs}ms atomic=${arrive.atomicMs}ms(${arrive.atomicStage}) frame=${arrive.worstFrameMs}ms | ` +
@@ -17173,11 +17174,25 @@ async function caveKindShots(page, kind, residentKey) {
     const out = [];
     // 1 — the deepest room, from its rim looking across the middle at HEAD height (not at 45% of the
     //     dome: that pitched the frame into the black and hid the floor read).
+    //
+    //     …EXCEPT FOR `flooded` (close-out finding 5 — a BROKEN INSTRUMENT, not a bad asset). The
+    //     `room` frame is the kind's primary read, and for every other kind the deepest chamber IS
+    //     the kind's best room. But the deepest chamber is the EGG chamber, which is DRY BY
+    //     CONSTRUCTION (the pool placer keeps clear of the dais), so the flooded cave's headline
+    //     frame contained no water at all — it graded the one kind whose whole identity is standing
+    //     water on the one room that cannot have any. Flooded frames its largest POOLED chamber, and
+    //     the look target drops so the waterline is in shot rather than above it.
     {
+      let R = egg, lookF = 0.30;
+      if (p.kind === 'flooded' && p.pools && p.pools.length) {
+        const big = p.pools.slice().sort((a, b) => b.r - a.r)[0];
+        const n = byId.get(big.node);
+        if (n) { R = n; lookF = 0.12; }
+      }
       const a = 0.62, ux = Math.cos(a), uz = Math.sin(a);
-      const sx = egg.x + ux * egg.rx * 0.80, sz = egg.z + uz * egg.rx * 0.80;
-      const fy = floorAt(sx, sz, egg.y);
-      out.push({ name: 'room', cam: [sx, fy + EYE, sz], look: [egg.x - ux * egg.rx * 0.5, egg.y + egg.height * 0.30, egg.z - uz * egg.rx * 0.5] });
+      const sx = R.x + ux * R.rx * 0.80, sz = R.z + uz * R.rx * 0.80;
+      const fy = floorAt(sx, sz, R.y);
+      out.push({ name: 'room', cam: [sx, fy + EYE, sz], look: [R.x - ux * R.rx * 0.5, R.y + R.height * lookF, R.z - uz * R.rx * 0.5] });
     }
     // 1b — THE VAULT READ. Stand in the middle of the deepest room and pitch UP. This is the shot
     //      that answers "is the height legible or is it a black void" for fungal AND shaft; the
@@ -17221,6 +17236,32 @@ async function caveKindShots(page, kind, residentKey) {
         const sx = q.x + ux * q.rx * 0.72, sz = q.z + uz * q.rx * 0.72;
         const fy = floorAt(sx, sz, q.y);
         out.push({ name: 'pocket', cam: [sx, fy + EYE, sz], look: [q.x - ux * q.rx * 0.8, q.y + q.height * 0.34, q.z - uz * q.rx * 0.8] });
+      }
+    }
+    // 2d — A WALL SHELF, CLOSE UP (close-out). The r3 "sconce / floating orb" finding was caught by
+    //      accident, in a pocket framing that happened to contain a shelf; the frame that could
+    //      prove or disprove it did not exist. Wall shelves DECLARE their mount now
+    //      (`userData.wallShelf`, with the rock normal they were anchored to), so this stands 1.7m
+    //      straight out along that normal and looks back at the rock — the one angle where "is this
+    //      attached to anything?" is answerable.
+    {
+      let best = null, bd = 1e9;
+      res.cave.group.traverse((o) => {
+        const w = o.userData && o.userData.wallShelf;
+        if (!w || !o.visible) return;
+        const d = Math.hypot(w.x - egg.x, w.z - egg.z);
+        if (d < bd) { bd = d; best = w; }
+      });
+      if (best) {
+        // A GRAZING 3/4, never dead-on down the normal: a cap photographed along its own axis is a
+        // flat disc no matter how it is mounted, which answers nothing. Off to one side and below,
+        // so the mount, the stalk and the rock behind are all in the frame.
+        const tl = Math.hypot(best.nz, -best.nx) || 1;
+        const tx = best.nz / tl, tz = -best.nx / tl;
+        const sx = best.x + best.nx * 1.05 + tx * 1.05;
+        const sy = best.y + best.ny * 1.05 - 0.55;
+        const sz = best.z + best.nz * 1.05 + tz * 1.05;
+        out.push({ name: 'shelf', cam: [sx, sy, sz], look: [best.x, best.y, best.z] });
       }
     }
     // 3 — the kind's signature feature, framed from ~2.6m away at eye height. Every target now

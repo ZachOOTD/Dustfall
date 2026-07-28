@@ -736,6 +736,151 @@ function addSpeleothems(
 // discipline verbatim: off the chamber floor grid the march samples, out of the corridor-mouth
 // sectors, and spaced from anything already placed.
 
+// ── THE REAL-ROCK SAMPLERS (cycle-9 CLOSE-OUT) ────────────────────────────────────────────────
+//
+// Every float the close-out critic found had ONE root cause: the dressing was seated against the
+// ANALYTIC room — `node.floorY` for the floor, the ellipsoid `rx·√(1-yn²)` for the wall — while the
+// room the player actually stands in is the SDF SURFACE, and the two disagree by the displacement
+// amplitude (up to CAVE_GEN_DISP_IN 0.30 + CAVE_SDF_MICRO_AMP 0.075, and more where a chamber's
+// dome is clipped by a neighbour). A salvage plate seated on the plane hung a metre over the sand;
+// wall shelves pulled a flat 4% inside the ellipsoid still ended up in mid-air wherever the SDF
+// came in wider. Pulling harder is not a fix, it is a bigger guess.
+//
+// So: MEASURE THE ROCK. Both samplers read the SDF surface that has already been built and is in
+// hand at the dress stage — no raycast against the scene, no BVH dependency, no collider (the
+// trimesh is not baked until `finalize`), and exactly as deterministic as the mesh they read.
+// This is `procgen-surface-placement.md` ("sample the REAL surface, don't assume the part's shape")
+// and `cavePools.makeFloorSampler`'s idiom, generalised so the dressing can use it too.
+
+/** Real floor height of the cave ROCK at (x, z); `fallback` when there is no data (or the answer is
+ *  implausible, which is a clipped-dome corner, not a floor). */
+type RockFloor = (x: number, z: number, fallback: number) => number;
+
+/** One up-facing-vertex height grid per chamber, max-splatted at the polygonization spacing. */
+function makeRockFloorSampler(geometry: THREE.BufferGeometry, rooms: CaveNode[]): RockFloor {
+  const CELL = Tuning.CAVE_SDF_VOXEL;
+  type Grid = { x0: number; z0: number; n: number; base: number; h: Float32Array };
+  const grids: Grid[] = rooms.map((r) => {
+    const reach = r.rx * 1.05 + 1.0;
+    const n = Math.ceil((reach * 2) / CELL) + 2;
+    return { x0: r.x - reach - CELL, z0: r.z - reach - CELL, n, base: r.floorY, h: new Float32Array(n * n).fill(-Infinity) };
+  });
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const nrm = geometry.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  const pa = pos.array as ArrayLike<number>;
+  const na = nrm ? (nrm.array as ArrayLike<number>) : null;
+  for (let i = 0, n3 = pos.count * 3; i < n3; i += 3) {
+    // FLOOR-FACING VERTICES ONLY. The same column carries the ceiling and the walls; a wall vertex
+    // max-splatted into the grid would seat a boulder halfway up the room. The surface is wound INTO
+    // the cavity, so a floor normal points UP.
+    if (na && na[i + 1] < 0.30) continue;
+    const x = pa[i], y = pa[i + 1], z = pa[i + 2];
+    for (let gi = 0; gi < grids.length; gi++) {
+      const g = grids[gi];
+      if (y < g.base - 1.8 || y > g.base + 1.8) continue;
+      const cx = Math.floor((x - g.x0) / CELL), cz = Math.floor((z - g.z0) / CELL);
+      if (cx < 0 || cz < 0 || cx >= g.n || cz >= g.n) continue;
+      const o = cz * g.n + cx;
+      if (y > g.h[o]) g.h[o] = y;
+    }
+  }
+  return (x: number, z: number, fallback: number): number => {
+    let best = Number.NaN, bestD = Infinity;
+    for (const g of grids) {
+      const fx = (x - g.x0) / CELL, fz = (z - g.z0) / CELL;
+      if (fx < 0 || fz < 0 || fx >= g.n - 1 || fz >= g.n - 1) continue;
+      const d = Math.abs(fx - g.n * 0.5) + Math.abs(fz - g.n * 0.5);
+      if (d >= bestD) continue;
+      const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz;
+      const o = iz * g.n + ix;
+      const c00 = g.h[o], c10 = g.h[o + 1], c01 = g.h[o + g.n], c11 = g.h[o + g.n + 1];
+      let v: number;
+      if (c00 > -Infinity && c10 > -Infinity && c01 > -Infinity && c11 > -Infinity) {
+        v = (c00 * (1 - tx) + c10 * tx) * (1 - tz) + (c01 * (1 - tx) + c11 * tx) * tz;
+      } else {
+        v = Math.max(c00, c10, c01, c11);
+        if (!(v > -Infinity)) continue;
+      }
+      best = v; bestD = d;
+    }
+    if (Number.isNaN(best)) return fallback;
+    // A max-splat over a 45cm cell biases HIGH by about the micro-relief amplitude, and a high
+    // answer is the failure mode we are here to kill (it hovers), so bias back down: an object
+    // seated on this beds INTO the rock rather than perching on the cell's tallest vertex.
+    const y = best - Tuning.CAVE_SDF_MICRO_AMP * 0.5;
+    // …and never trust an answer that is nowhere near the room we asked about (a clipped dome, a
+    // corridor floor caught by the grid's corner). Same tooth as the shot helper's floor clamp.
+    return Math.abs(y - fallback) > 2.5 ? fallback : y;
+  };
+}
+
+/** A wall hit: distance along the cast bearing + the rock's INWARD normal at the hit. */
+interface WallHit { d: number; nx: number; ny: number; nz: number; }
+/** Cast from a chamber's own vertical axis OUTWARD along (ux, uz) at height y; first hit = the real
+ *  wall, whatever shape the SDF gave it. `null` = nothing within `maxD` (a corridor mouth, or a
+ *  height where the dome has already closed). */
+type WallCast = (node: CaveNode, y: number, ux: number, uz: number, maxD: number) => WallHit | null;
+
+function makeWallCaster(geometry: THREE.BufferGeometry, rooms: CaveNode[]): WallCast {
+  // Per room, the SDF triangles that could possibly be its wall — filtered ONCE (one pass over the
+  // index, ~68k triangles) so each ray tests a few thousand instead of the whole cave. No BVH: this
+  // is a one-shot worldgen pass over a couple of dozen rays.
+  const idx = geometry.getIndex();
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const pa = pos.array as ArrayLike<number>;
+  const tris = new Map<number, number[]>();
+  const boxes = rooms.map((r) => ({
+    id: r.id, x: r.x, z: r.z, rr: (r.rx * 1.7 + 1.8) ** 2,
+    y0: r.floorY - 1.0, y1: r.floorY + r.height + 1.5,
+  }));
+  for (const b of boxes) tris.set(b.id, []);
+  const count = idx ? idx.count : pos.count;
+  const ia = idx ? (idx.array as ArrayLike<number>) : null;
+  for (let t = 0; t + 2 < count; t += 3) {
+    const a = (ia ? ia[t] : t) * 3, b2 = (ia ? ia[t + 1] : t + 1) * 3, c = (ia ? ia[t + 2] : t + 2) * 3;
+    const cx = (pa[a] + pa[b2] + pa[c]) / 3, cy = (pa[a + 1] + pa[b2 + 1] + pa[c + 1]) / 3, cz = (pa[a + 2] + pa[b2 + 2] + pa[c + 2]) / 3;
+    for (const b of boxes) {
+      if (cy < b.y0 || cy > b.y1) continue;
+      const dx = cx - b.x, dz = cz - b.z;
+      if (dx * dx + dz * dz > b.rr) continue;
+      tris.get(b.id)!.push(a, b2, c);
+    }
+  }
+  return (node, y, ux, uz, maxD): WallHit | null => {
+    const list = tris.get(node.id);
+    if (!list || !list.length) return null;
+    const ox = node.x, oz = node.z;
+    let bt = maxD, bnx = 0, bny = 0, bnz = 0, found = false;
+    for (let i = 0; i < list.length; i += 3) {
+      const a = list[i], b = list[i + 1], c = list[i + 2];
+      const ax = pa[a], ay = pa[a + 1], az = pa[a + 2];
+      const e1x = pa[b] - ax, e1y = pa[b + 1] - ay, e1z = pa[b + 2] - az;
+      const e2x = pa[c] - ax, e2y = pa[c + 1] - ay, e2z = pa[c + 2] - az;
+      // Möller–Trumbore with dir = (ux, 0, uz).
+      const px = -uz * e2y, py = uz * e2x - ux * e2z, pz = ux * e2y;
+      const det = e1x * px + e1y * py + e1z * pz;
+      if (det > -1e-9 && det < 1e-9) continue;
+      const inv = 1 / det;
+      const tx = ox - ax, ty = y - ay, tz = oz - az;
+      const u = (tx * px + ty * py + tz * pz) * inv;
+      if (u < 0 || u > 1) continue;
+      const qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+      const v = (ux * qx + uz * qz) * inv;
+      if (v < 0 || u + v > 1) continue;
+      const tt = (e2x * qx + e2y * qy + e2z * qz) * inv;
+      if (tt <= 0.05 || tt >= bt) continue;
+      bt = tt; found = true;
+      let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+      // Face the normal back INTO the room (the ray left the axis heading out, so the inward normal
+      // must oppose it). This is what a shelf's stem is oriented along.
+      if (nx * ux + nz * uz > 0) { nx = -nx; ny = -ny; nz = -nz; }
+      bnx = nx; bny = ny; bnz = nz;
+    }
+    return found ? { d: bt, nx: bnx, ny: bny, nz: bnz } : null;
+  };
+}
+
 /** One boulder, WORLD space, as a displaced icosahedron squashed toward the floor. */
 function buildBoulder(
   x: number, y: number, z: number, r: number, cnoise: Noise3, depthT: number, squash: number,
@@ -753,8 +898,23 @@ function buildBoulder(
       + cnoise(px * 5.7 + z * 0.17, py * 5.7 + 9.4, pz * 5.7 + x * 0.17) * 0.11;
     const wx = x + px * n, wy = y + py * n * squash, wz = z + pz * n;
     pos.setXYZ(i, wx, wy, wz);
-    caveVertexColor('floor', wx, wy, wz, depthT, cnoise, _tmpCol);
-    col[i * 3] = _tmpCol.r; col[i * 3 + 1] = _tmpCol.g; col[i * 3 + 2] = _tmpCol.b;
+    // CLOSE-OUT FIX (finding 4). r4 coloured every boulder with the 'floor' role, whose dominant
+    // term is `caveFloorSediment` — a 3-10m-wavelength pooled-sand wash. Over a 60cm body that
+    // wash is ONE value, so the whole heap came out as flat untextured beige cards next to walls
+    // carrying visible strata. A fallen ceiling block is WALL rock: it gets the strata/stain
+    // palette, with the floor role ramped in smoothly by the vertex's own up-ness so the crown
+    // still catches sediment and the flanks do not. On top of that, a boulder-local mottle at a
+    // 28cm wavelength — the cave-wide palette's finest term is 1.25m, i.e. invisible at this size,
+    // which is the other half of why these read as cardboard. Sampled on the UNDISPLACED local
+    // position (+ the world offset) exactly like the displacement, so the icosahedron's duplicated
+    // seam vertices get identical colours and no crack appears along an edge.
+    const upn = Math.max(-1, Math.min(1, py / Math.max(1e-6, r)));
+    caveVertexColor('wall', wx, wy, wz, depthT, cnoise, _tmpCol, upn);
+    const mot = cnoise(px * 7.3 + x * 0.53, py * 7.3 + 2.7, pz * 7.3 + z * 0.53) * 0.055
+              + cnoise(px * 15.1 + z * 0.29, py * 15.1 + 8.2, pz * 15.1 + x * 0.29) * 0.028;
+    col[i * 3] = Math.max(0.02, _tmpCol.r + mot);
+    col[i * 3 + 1] = Math.max(0.02, _tmpCol.g + mot * 0.94);
+    col[i * 3 + 2] = Math.max(0.02, _tmpCol.b + mot * 0.86);
   }
   pos.needsUpdate = true;
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -777,23 +937,53 @@ function buildBoulder(
  *  a genuine cross-section at a grazing angle. Rule 9: collider-bearing, and placed INSIDE the
  *  heap's own already-cleared footprint so it inherits the clearance the heap was tested against. */
 function buildStrippedPlate(w: number, h: number, d: number, rust: number, rand: () => number): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(w, h, d);
+  // ── CLOSE-OUT FIX (finding 1, the shape half). r5 built this as a ONE-SEGMENT box, so the "torn"
+  //    top edge had exactly TWO movable vertices: the tear could only ever produce a single straight
+  //    slanted cut, i.e. a symmetric WEDGE. Two of those crossed at a heap read — correctly — as an
+  //    orange CHEVRON, a waypoint arrow, which is the one thing a piece of scenery must never look
+  //    like. A torn sheet needs a torn EDGE (7 columns, each pulled down by its own hash) and a
+  //    plate stripped off a hull is BENT, not flat. Rule 7 survives all of it: every deformation
+  //    moves the front and back faces by the SAME amount, so the wall thickness `d` is preserved and
+  //    the cut edges still show a real cross-section.
+  //
+  //    FIXED RNG BUDGET (procgen-surface-placement.md). The old version pulled a `rand()` PER VERTEX
+  //    inside the colour loop, so the number of draws it consumed depended on the box's tessellation
+  //    — change the segment counts and every downstream placement in the rubble stream moves. Three
+  //    draws are pulled up front and the loops are RNG-free.
+  const bendAmp = (rand() - 0.5) * w * 0.16;      // ± a real curve across the plate's width
+  const shear = (rand() - 0.5) * 0.34;            // the top edge is not parked over the bottom edge
+  const tone = 0.86 + rand() * 0.24;
+  const geo = new THREE.BoxGeometry(w, h, d, 6, 2, 1);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const col = new Float32Array(pos.count * 3);
   const base = new THREE.Color(rust);
+  const halfW = w * 0.5, halfH = h * 0.5;
   for (let i = 0; i < pos.count; i++) {
-    // TEAR THE TOP EDGE. Only the upper rim is displaced, laterally and in depth — the bottom stays
-    // square (it is the cut/torn sheet's straight edge that reads as man-made) and the plate stays
-    // a closed solid because both faces' shared rim vertices get the same offset from the same hash.
     const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
-    if (py > 0) {
-      const s = Math.sin(px * 37.1 + 11.3) * 0.5 + Math.sin(px * 91.7 + 4.1) * 0.5;
-      pos.setY(i, py - h * (0.06 + 0.14 * Math.abs(s)));
-      pos.setX(i, px + s * w * 0.03);
+    const u = px / (halfW || 1);                                  // -1 … +1 across the width
+    const vt = (py + halfH) / (h || 1);                           // 0 bottom … 1 top
+    // Every offset below is keyed on the ORIGINAL (px, py) only, so the front face, the back face,
+    // the side caps and the top cap all agree at a shared rim and the solid stays closed.
+    const s = 0.5 + 0.5 * Math.sin(u * 9.7 + 2.3) * Math.sin(u * 23.1 + 5.9);
+    let nx = px, ny = py, nz = pz;
+    if (py > halfH * 0.25) {                                      // the TOP row only — a torn rim
+      ny = py - h * (0.04 + 0.26 * s);
+      nx = px + (s - 0.5) * w * 0.06;
     }
-    const t = 0.72 + 0.28 * (py > 0 ? 1 : 0) + (i % 3) * 0.035;
-    col[i * 3] = base.r * t; col[i * 3 + 1] = base.g * t * (0.94 + rand() * 0.001); col[i * 3 + 2] = base.b * t;
-    void pz;
+    nx += shear * w * 0.25 * vt;                                  // lean the sheet
+    nz += bendAmp * (u * u - 0.42);                               // BEND about the vertical
+    pos.setXYZ(i, nx, ny, nz);
+    // Oxide, mottled — a uniform orange box is what read as a signpost. Darker in the middle of the
+    // sheet where water sat, lighter along the cut edges where the metal is fresh.
+    const edge = Math.max(Math.abs(u) > 0.86 ? 1 : 0, vt > 0.72 ? 1 : 0);
+    const patch = 0.5 + 0.5 * Math.sin(u * 5.1 + vt * 7.7) * Math.sin(u * 12.3 - vt * 3.1);
+    const t = tone * (0.60 + 0.26 * patch + 0.20 * edge);
+    // A rust plate under a torch is not a saturated orange: pull the whole thing toward the cave's
+    // own cold grey by a fixed fraction so it reads as METAL in the frame, not as a marker.
+    const gy = 0.24;
+    col[i * 3] = (base.r * (1 - gy) + 0.20 * gy) * t;
+    col[i * 3 + 1] = (base.g * (1 - gy) + 0.21 * gy) * t;
+    col[i * 3 + 2] = (base.b * (1 - gy) + 0.23 * gy) * t;
   }
   pos.needsUpdate = true;
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -823,6 +1013,10 @@ function addRubble(
   outSpots?: Array<{ node: number; x: number; z: number; r: number }>,
   /** Stripped hull plates leaning on each heap (canonical 0 — see `buildStrippedPlate`). */
   salvagePlates = 0,
+  /** CLOSE-OUT — the REAL rock height under a point (`makeRockFloorSampler`). Every boulder and
+   *  every plate is seated against THIS, never against `node.floorY`: the analytic plane is what
+   *  hung r5's salvage plate a metre over unbroken sand. */
+  floorH?: RockFloor,
 ): number {
   if (count <= 0) return 0;
   const T = Tuning;
@@ -873,13 +1067,19 @@ function addRubble(
         // least ~28% of the footprint off-axis, on its own bearing, so the pile interlocks sideways.
         const br = (0.28 + 0.72 * t) * heapR * 0.86;
         const r0 = (0.24 + rand() * 0.30) * scale * (1.30 - 0.50 * t);
-        const squash = 0.62 + rand() * 0.22;
+        // CLOSE-OUT (finding 4): 0.62 squash flattened a boulder to under two-thirds of its own
+        // width, and the icosahedron's angular relief turned that into knife-edged SLABS — cardboard
+        // with a sharp rim, the exact rule-7 read. A collapsed ceiling drops blocks, not shingles.
+        const squash = 0.74 + rand() * 0.22;
         const bx = cx + Math.cos(ba) * br, bz = cz + Math.sin(ba) * br;
         // The cone's surface height at this radius, then seat the boulder into it. `Math.max(0, …)`
-        // is the no-float guarantee: a boulder can never end up above the floor plane on its own.
+        // is the no-float guarantee: a boulder can never end up above the floor on its own — and
+        // "the floor" is now the REAL ROCK under THIS boulder, sampled from the SDF surface, not the
+        // chamber's nominal plane (which the r4 frames showed a slab hovering over).
+        const bfy = floorH ? floorH(bx, bz, floorY) : floorY;
         const surf = peak * (1 - t) * (1 - t);
         const bodyH = r0 * squash;
-        const by = floorY + Math.max(0, surf - bodyH * 0.55) + bodyH * (0.10 + rand() * 0.30) - bodyH * 0.40;
+        const by = bfy + Math.max(0, surf - bodyH * 0.55) + bodyH * (0.10 + rand() * 0.30) - bodyH * 0.40;
         const m = new THREE.Mesh(buildBoulder(bx, by, bz, r0, cnoise, depthT, squash), _caveSolid);
         m.castShadow = false; m.receiveShadow = true;
         // Tag the heap so a diagnostic can FIND one. The cycle-9 shot helper guessed at "a small
@@ -888,15 +1088,39 @@ function addRubble(
         m.userData.rubbleHeap = { x: cx, z: cz, floorY, r: heapR };
         group.add(m); meshes.push(m);                            // collider-bearing (rule 9)
       }
-      // Stripped plates, leaning on the pile we just built (inside its cleared footprint).
+      // ── Stripped plates, STANDING AT THE HEAP'S FOOT AND LEANING ON IT. ──────────────────────
+      //    r5 dropped each plate at `floorY + ph·0.42` with a free Euler on all three axes: the
+      //    height was a guess against the analytic plane (it hung ~1m over the real sand), the free
+      //    roll meant the bottom edge was never parallel to anything, and there was no contact with
+      //    the heap it was supposedly leaning on. All three are fixed by construction here:
+      //      · the BASE POINT is on the heap's rim and its height is the sampled ROCK, embedded;
+      //      · the plate is tipped about a HORIZONTAL axis perpendicular to the lean, so its bottom
+      //        edge stays level and lies ON the floor over its whole width;
+      //      · it leans INWARD, toward the heap centre, so its upper half rests against the cone.
       for (let s = 0; s < salvagePlates; s++) {
-        const pw = 0.55 + rand() * 0.55, ph = 0.50 + rand() * 0.45, pd = 0.12 + rand() * 0.05;
+        const pw = 0.55 + rand() * 0.55, ph = 0.62 + rand() * 0.52, pd = 0.14 + rand() * 0.06;
         const geo = buildStrippedPlate(pw, ph, pd, Tuning.CAVE_SALVAGE_PLATE_HEX, rand);
         const m = new THREE.Mesh(geo, _caveSolid);
         const pa = rand() * Math.PI * 2;
-        const pr = heapR * (0.45 + rand() * 0.40);
-        m.position.set(cx + Math.cos(pa) * pr, floorY + ph * 0.42, cz + Math.sin(pa) * pr);
-        m.rotation.set((0.34 + rand() * 0.34), pa + Math.PI * 0.5 + (rand() - 0.5) * 0.6, (rand() - 0.5) * 0.3);
+        const pr = heapR * (1.06 + rand() * 0.32);                 // at the FOOT, on open floor —
+                                                                   //   the ground contact has to be
+                                                                   //   visible, not hidden behind
+                                                                   //   the boulders it leans on
+        const bxp = cx + Math.cos(pa) * pr, bzp = cz + Math.sin(pa) * pr;
+        const fyp = floorH ? floorH(bxp, bzp, floorY) : floorY;
+        const lx = -Math.cos(pa), lz = -Math.sin(pa);              // lean toward the heap centre
+        const tilt = 0.40 + rand() * 0.26;                         // 23-38° off vertical
+        // axis = up × lean  ⇒  tipping about it swings local +Y toward the heap and keeps local X
+        // (the bottom edge) horizontal.
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(lz, 0, -lx).normalize(), tilt);
+        // …then a small ROLL about the lean direction, so one bottom corner rides a bump instead of
+        // both sitting on a machined line. Bounded (±0.14 rad over a ≤1.1m plate ⇒ ≤8cm) so the
+        // opposite corner is still inside the 8cm embed below and nothing lifts off the rock.
+        const roll = (rand() - 0.5) * 0.28;
+        q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(lx, 0, lz).normalize(), roll));
+        m.quaternion.copy(q);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+        m.position.set(bxp + up.x * ph * 0.5, fyp + up.y * ph * 0.5 - 0.08, bzp + up.z * ph * 0.5);
         m.castShadow = false; m.receiveShadow = true;
         group.add(m); meshes.push(m);                          // collider-bearing (rule 9)
       }
@@ -927,7 +1151,13 @@ function buildMushroom(h: number, capR: number, rand: () => number): THREE.Group
   const grp = new THREE.Group();
   const stalkR = Math.max(0.012, capR * (0.28 + rand() * 0.12));
   const bend = (rand() - 0.5) * 0.5;
-  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(stalkR * 0.8, stalkR, h, 6), _fungiStalk);
+  // CLOSE-OUT (sev-3, "popsicle"): a 6-sided prism is honest at 4cm and a visible hexagon at 10cm,
+  // which is what a cathedral-scale cap's stalk is. The count is a pure function of the RADIUS, so
+  // it is an LOD rule and not a kind branch — and every CANONICAL stalk is under the threshold by
+  // construction (canonical capR ≤ CAVE_FUNGI_CAP_MAX_R 0.16 ⇒ stalkR ≤ 0.064), which is why the
+  // origin cave's mushroom geometry — and therefore the origin digest — cannot move.
+  const segs = stalkR > 0.07 ? 10 : 6;
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(stalkR * 0.8, stalkR, h, segs), _fungiStalk);
   stalk.position.y = h * 0.5;
   stalk.rotation.z = bend * 0.6;
   grp.add(stalk);
@@ -936,6 +1166,11 @@ function buildMushroom(h: number, capR: number, rand: () => number): THREE.Group
   cap.scale.set(1, 0.72 + rand() * 0.2, 1);
   cap.position.set(Math.sin(bend) * h * 0.5, h - capR * 0.15, 0);
   grp.add(cap);
+  // Publish the CAP's own footprint (its lateral offset from this mushroom's origin, and its
+  // radius) so a cluster can enforce silhouette separation on the caps themselves rather than on
+  // the stalk bases — the caps are what merge, and a bent stalk puts its cap up to h/2 away.
+  grp.userData.capOffX = Math.sin(bend) * h * 0.5;
+  grp.userData.capR = capR;
   grp.traverse((o) => { const mm = o as THREE.Mesh; if (mm.isMesh) mm.receiveShadow = true; });
   return grp;
 }
@@ -957,7 +1192,63 @@ function buildFungiCluster(
     m.rotation.y = rand() * Math.PI * 2;
     cl.add(m);
   }
+  relaxClusterCaps(cl, spread);
   return cl;
+}
+
+/** ── CLOSE-OUT FIX (finding 2) — CAPS MAY TOUCH, THEY MAY NOT ENGULF. ────────────────────────────
+ *
+ *  A cluster draws each mushroom's (angle, radius) independently inside a ~35cm disc, so nothing
+ *  stopped two 16cm caps landing 3cm apart. At arm's length that is not two mushrooms, it is ONE
+ *  lumpy white mass with a bump on it — `scen-kind-shaft-signature-r4.png` was read by a fresh
+ *  critic as a CARTOON SNOWMAN, stems entirely swallowed. The whole defect is silhouette merge, and
+ *  it is a PLACEMENT problem: the shared cap/stalk materials are cycle-6/7 hero work and stay frozen.
+ *
+ *  THE RULE: the lateral distance between two caps' centres is at least `SEP·(rA + rB)`. At 0.86 two
+ *  equal caps overlap by ~14% of their diameter — they read as crowded and touching, which is what a
+ *  bloom looks like, and never as one blob. Enforced by RELAXATION, not by re-placement, and that is
+ *  the load-bearing choice: a pair that already satisfies the rule is not moved by one float, so
+ *  every canonical cluster that was already legal is byte-identical, and no cluster anywhere changes
+ *  a single mushroom's SIZE — which is why the cave-walk vertex digest (d8f15005 at the origin)
+ *  cannot move, since it hashes each mesh's local geometry.
+ *
+ *  It consumes ZERO `rand()` draws (the tie-break for a perfectly-coincident pair is derived from
+ *  the pair's own indices), so the fungi stream downstream of any cluster is untouched. */
+function relaxClusterCaps(cl: THREE.Group, spread: number): void {
+  const items = cl.children.map((o, i) => {
+    const ox = (o.userData.capOffX as number) ?? 0;
+    const ry = (o as THREE.Object3D).rotation.y;
+    return { o, i, r: (o.userData.capR as number) ?? 0, dx: ox * Math.cos(ry), dz: -ox * Math.sin(ry) };
+  }).filter((it) => it.r > 0);
+  if (items.length < 2) return;
+  const SEP = 0.86;
+  // The cluster may grow, but not without bound: it still has to sit in the annulus its chamber gave
+  // it. 2.6× the authored spread is the ceiling (a 6-cap canonical cluster settles well inside it).
+  const maxR = spread * 2.6 + 0.05;
+  for (let it = 0; it < 16; it++) {
+    let moved = false;
+    for (let a = 0; a < items.length; a++) {
+      for (let b = a + 1; b < items.length; b++) {
+        const A = items[a], B = items[b];
+        const ax = A.o.position.x + A.dx, az = A.o.position.z + A.dz;
+        const bx = B.o.position.x + B.dx, bz = B.o.position.z + B.dz;
+        let dx = bx - ax, dz = bz - az;
+        let d = Math.hypot(dx, dz);
+        const need = SEP * (A.r + B.r);
+        if (d >= need) continue;
+        if (d < 1e-4) { const t = a * 2.39996 + b * 0.7; dx = Math.cos(t); dz = Math.sin(t); d = 1; }
+        const push = ((need - d) * 0.5) / d;
+        A.o.position.x -= dx * push; A.o.position.z -= dz * push;
+        B.o.position.x += dx * push; B.o.position.z += dz * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  for (const it of items) {
+    const l = Math.hypot(it.o.position.x, it.o.position.z);
+    if (l > maxR) { const k = maxR / l; it.o.position.x *= k; it.o.position.z *= k; }
+  }
 }
 
 /** UNDERWORLD cycle 3 — a HARVESTABLE fungi cluster. E on it yields 1-2 alien_fruit (the
@@ -973,6 +1264,12 @@ export interface CaveFungiCluster {
 
 let _fungiId = 1;
 
+/** CLOSE-OUT instrument — wall-shelf anchor accounting for the CURRENT build (reset per cave, read
+ *  into the probe). A shelf that finds no rock is hidden rather than left in mid-air, and a kind
+ *  whose "glow ladder" is quietly 70% hidden is a defect the frames alone would never name. */
+let _fungiWallTotal = 0;
+let _fungiWallHidden = 0;
+
 function tagFungi(root: THREE.Object3D, id: number): void {
   root.traverse((o) => { o.userData.interactType = 'harvest'; o.userData.interactId = id; o.userData.interactRegistry = 'caveFungi'; });
 }
@@ -985,14 +1282,44 @@ function addFungi(
   node: CaveNode, cnoise: Noise3, rand: () => number,
   group: THREE.Group, decor: THREE.Mesh[], clusters: CaveFungiCluster[],
   p: CaveKindParams,
+  /** CLOSE-OUT — casts against the REAL SDF wall (`makeWallCaster`). Optional so the pure-placement
+   *  call paths still work; without it the shelves fall back to the analytic ellipsoid. */
+  wallCast?: WallCast,
 ): void {
   const rx = node.rx, floorY = node.floorY;
   const nClusters = p.fungiClusterMin
     + Math.floor(rand() * (p.fungiClusterMax - p.fungiClusterMin + 1));
+  // CLOSE-OUT — clusters must not land on top of EACH OTHER either. `relaxClusterCaps` fixes the
+  // merge INSIDE a cluster, but a vaulted kind seeds 5-8 clusters per room at independent (angle,
+  // radius) draws, so two whole clusters can occupy the same square metre and the result is the
+  // same white mass by another route (the c1 fungal/pocket frame, bottom centre). Pushed apart
+  // deterministically after the draw — RNG-free, and a no-op for a cluster that was already clear,
+  // so a canonical room whose clusters never collided is untouched.
+  const clusterSpots: Array<{ x: number; z: number; r: number }> = [];
   for (let c = 0; c < nClusters; c++) {
     const ang = rand() * Math.PI * 2;
     const fr = 0.45 + rand() * 0.42;                    // mid → outer floor (toward the walls)
-    const x = node.x + Math.cos(ang) * rx * fr, z = node.z + Math.sin(ang) * rx * fr;
+    let x = node.x + Math.cos(ang) * rx * fr, z = node.z + Math.sin(ang) * rx * fr;
+    {
+      const myR = 0.35 * p.fungiCapScale * 2.0 + 0.25;  // the relaxed cluster's own reach
+      for (let it = 0; it < 6; it++) {
+        let moved = false;
+        for (const q of clusterSpots) {
+          let dx = x - q.x, dz = z - q.z;
+          let d = Math.hypot(dx, dz);
+          const need = myR + q.r;
+          if (d >= need) continue;
+          if (d < 1e-4) { dx = Math.cos(c * 2.39996); dz = Math.sin(c * 2.39996); d = 1; }
+          const k = (need - d) / d;
+          x += dx * k; z += dz * k; moved = true;
+        }
+        if (!moved) break;
+      }
+      // …but never pushed out of the room it was seeded in.
+      const dl = Math.hypot(x - node.x, z - node.z), lim = rx * 0.90;
+      if (dl > lim) { const k = lim / dl; x = node.x + (x - node.x) * k; z = node.z + (z - node.z) * k; }
+      clusterSpots.push({ x, z, r: myR });
+    }
     // Sit on the actual bumpy floor (matches the mesh floor micro-bump).
     const fy = floorY + Math.max(0, cnoise(x * 0.5, 7.3, z * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
     // Spread scales with cap size — otherwise a cathedral-scale cluster is a bouquet of caps all
@@ -1016,22 +1343,88 @@ function addFungi(
     const ry = node.height * 0.6, cyc = floorY + node.height - ry;
     const shelves = p.fungiWallShelves + Math.floor(rand() * p.fungiWallShelvesSpan);
     for (let s = 0; s < shelves; s++) {
-      const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
+      const ang = rand() * Math.PI * 2;
       const hFrac = p.fungiWallLoFrac + rand() * p.fungiWallSpanFrac;   // fraction up the wall
       const wy = floorY + node.height * hFrac;
-      // approx shell radius at this height on the ellipsoid (relative to the vertical centre)
-      const yn = Math.max(-0.98, Math.min(0.98, (wy - cyc) / ry));
-      // …pulled 4% INSIDE the analytic shell. The chamber the player sees is the SDF surface, not
-      // this ellipsoid, and the two disagree by the displacement amplitude; a shelf placed exactly
-      // on the analytic wall is buried in rock whenever the SDF came in tighter. Which is what the
-      // r2 vault frame showed: one visible cap out of ten.
-      const wallR = rx * Math.sqrt(Math.max(0.02, 1 - yn * yn)) * 0.96 - 0.05;
-      const x = node.x + ux * wallR, z = node.z + uz * wallR;
-      const wc = p.fungiWallCapScale;
-      const m = buildMushroom((0.08 + rand() * 0.1) * wc, Tuning.CAVE_FUNGI_CAP_MAX_R * (0.4 + rand() * 0.4) * wc, rand);
-      m.position.set(x, wy, z);
-      m.rotation.z = Math.PI * 0.5;                     // lay it horizontal, growing off the wall
-      m.rotation.y = Math.atan2(uz, ux);
+      // ── CLOSE-OUT FIX (finding 3) — ANCHOR ON THE ROCK, NOT ON THE ELLIPSOID. ────────────────
+      //    The 4% inward pull was a GUESS at how far the SDF undercuts the analytic shell, and the
+      //    close-out frames showed exactly what a guess buys: caps hanging in open air with their
+      //    stems projecting into space (fungal/pocket 1035,160 and 360,290) and a stemless cap
+      //    floating in the middle of the vault (fungal/vault 967,578). The shell is measured now —
+      //    one ray from the chamber's own axis straight out along the shelf's bearing; the first
+      //    triangle it meets IS the wall, whatever the displacement did to it, and the triangle's
+      //    normal is what the stem grows along, so the fungus sits FLUSH on a sloped, undercut or
+      //    bulging surface instead of at a cardinal yaw. If a bearing finds no rock in reach (it
+      //    went down a corridor mouth, or the dome has already closed at that height) it retries on
+      //    GOLDEN-ANGLE offsets — RNG-FREE, so the fungi stream is untouched and every chamber
+      //    downstream is byte-identical — and a shelf that finds nothing at all is HIDDEN rather
+      //    than parked in mid-air. It is still built and still counted, so the mesh set (and the
+      //    digest) is exactly what it was.
+      const yn0 = Math.max(-0.98, Math.min(0.98, (wy - cyc) / ry));
+      const analyticR = rx * Math.sqrt(Math.max(0.02, 1 - yn0 * yn0));
+      // A hit much further out than the analytic wall is the ray having escaped down a CORRIDOR
+      // MOUTH and struck the far side of the tube — mounting a shelf there would put it in a
+      // doorway metres from the room it belongs to. Cap the reach, and require a wall-ish face.
+      const maxD = analyticR * 1.30 + 0.9;
+      let hit: WallHit | null = null, hx = Math.cos(ang), hz = Math.sin(ang);
+      for (let k = 0; k < 8 && !hit; k++) {
+        const a2 = ang + k * 2.39996;
+        const cx2 = Math.cos(a2), cz2 = Math.sin(a2);
+        const h2 = wallCast ? wallCast(node, wy, cx2, cz2, maxD) : null;
+        if (h2 && h2.d > 0.6 && Math.abs(h2.ny) < 0.88) { hit = h2; hx = cx2; hz = cz2; }
+      }
+      // ── THE SCONCE (finding 3, second half). `fungiWallCapScale` is aimed at a shelf 8m up, which
+      //    has to be big to subtend any angle at all — but it was applied FLAT across the band, so
+      //    the shelves at 18% of the dome (head height, right next to the player) came out 2.4×
+      //    the size of the ground fungi three metres away and hotter with it: glowing sconces on a
+      //    wall, not fungus. The scale now RAMPS with height up the band, so a low shelf is close to
+      //    ground scale and only the ones the player has to crane at get the full multiplier.
+      //    Canonical is `fungiWallCapScale = 1`, so this evaluates to exactly 1 at every height and
+      //    the canonical cap geometry — hence the digest — is untouched.
+      const bandT = p.fungiWallSpanFrac > 1e-6
+        ? Math.min(1, Math.max(0, (hFrac - p.fungiWallLoFrac) / p.fungiWallSpanFrac)) : 0;
+      const wc = 1 + (p.fungiWallCapScale - 1) * (0.25 + 0.75 * bandT);
+      const stemH = (0.08 + rand() * 0.1) * wc;
+      const m = buildMushroom(stemH, Tuning.CAVE_FUNGI_CAP_MAX_R * (0.4 + rand() * 0.4) * wc, rand);
+      if (hit) {
+        // Seat the stalk's base INSIDE the rock so there is never a gap at the mount, and grow it
+        // along the surface's own inward normal (a full quaternion — a yaw cannot pitch a shelf to
+        // lie flush on a sloping wall; see procgen-surface-placement.md), BIASED UPWARD. A bracket
+        // fungus that grows dead-normal off a vertical wall presents its cap face-on to anyone
+        // standing in the room, so the stem hides behind it and — against unlit rock — the whole
+        // thing reads as a glowing ORB stuck to nothing, which is the second half of the critic's
+        // "sconce" finding. Up-and-out puts the stem in the silhouette and the cap's underside
+        // toward the player, which is what a shelf fungus actually looks like.
+        const n = new THREE.Vector3(hit.nx, hit.ny, hit.nz).normalize();
+        const grow = n.clone().addScaledVector(new THREE.Vector3(0, 1, 0), 0.55).normalize();
+        // HUG THE ROCK. The stalk is sunk most of its own length into the wall, so the cap's rim
+        // overlaps the stone's silhouette instead of standing a third of a metre off it. A cap
+        // floating clear of a wall in the dark is an ORB whatever is attached to it — the whole
+        // point of the shelf read is that you can see the rock it came out of. Position only, so
+        // no geometry (and no digest) moves. Sunk far enough that the mount can never show a gap,
+        // and NO further: burying the whole stalk trades the orb read for a cap glued flat to the
+        // rock, which is the same picture with a different explanation. The stalk keeps ~85% of its
+        // length in the room.
+        const embed = 0.05 + stemH * 0.15;
+        const px = node.x + hx * hit.d - n.x * embed;
+        const py = wy - n.y * embed;
+        const pz = node.z + hz * hit.d - n.z * embed;
+        m.position.set(px, py, pz);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), grow);
+        // DECLARE the mount (close-out): the critic found the floating shelves by luck, in a POCKET
+        // framing that happened to contain one. A diagnostic must be able to FIND one on purpose —
+        // same lesson as `userData.rubbleHeap` in r4, where the shot helper guessed and kept framing
+        // stalagmites instead of the feature it existed to prove.
+        m.userData.wallShelf = { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z };
+      } else {
+        // No rock found on any bearing — do not invent one. (Kept in the scene graph and in `decor`
+        // so the mesh set is unchanged; simply not drawn.)
+        const wallR = analyticR * 0.96 - 0.05;
+        m.position.set(node.x + hx * wallR, wy, node.z + hz * wallR);
+        m.visible = false;
+        _fungiWallHidden++;
+      }
+      _fungiWallTotal++;
       group.add(m); m.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
     }
   }
@@ -1413,6 +1806,13 @@ export interface CaveGenProbe {
   /** ms — `makeFloorSampler`'s linear pass over the SDF positions, the one cost the water feature
    *  adds to the ATOMIC dress stage. Measured, not assumed (the cycle-5 hitch-budget lesson). */
   msPoolSampler: number;
+  /** CLOSE-OUT — wall-clock of the two real-rock sampler passes (floor grid + wall triangle
+   *  buckets) added to the ATOMIC dress stage. Measured, not assumed. */
+  msRockSamplers: number;
+  /** CLOSE-OUT — wall-shelf fungi placed, and how many found no rock to sit on (hidden, never left
+   *  floating). A high hidden fraction means the kind's glow ladder is not being built. */
+  fungiWallShelves: number;
+  fungiWallHidden: number;
   digest: string;
   nodes: Array<{ id: number; x: number; y: number; z: number; rx: number; height: number; kind: CaveNodeKind; parent: number }>;
   edges: Array<{ a: number; b: number; halfW: number; height: number; squeeze: boolean }>;
@@ -1519,6 +1919,7 @@ export function startSpawnCave(
   let rubbleHeaps = 0;
   let scrapAnchors: THREE.Vector3[] = [];
   let msMesh = 0;
+  let msRockSamplers = 0;                   // CLOSE-OUT — the two real-rock sampler passes
   let out: SpawnedCave | null = null;
   // VITE_CAVE_SDF_BENCH=1 only — re-polygonizes at the measurement resolutions (cost numbers).
   let benchNoise: Noise3 | null = null;
@@ -1541,6 +1942,7 @@ export function startSpawnCave(
 
     group = new THREE.Group();
     group.name = 'caveGen';
+    _fungiWallTotal = 0; _fungiWallHidden = 0;   // CLOSE-OUT — wall-shelf anchor accounting
     meshes = []; decor = []; fungi = []; pools = [];
     rubbleHeaps = 0; scrapAnchors = [];
 
@@ -1594,6 +1996,16 @@ export function startSpawnCave(
       console.log('CAVE-SDF-BENCH ' + JSON.stringify(bench));
     }
 
+    // ── CLOSE-OUT — MEASURE THE ROCK ONCE, BEFORE ANY DRESSING IS SEATED. Two linear passes over
+    //    the SDF surface that was just built: a per-chamber floor-height grid and a per-chamber
+    //    triangle bucket for wall casts. Everything that touches the cave's surface (rubble,
+    //    salvage plates, scrap caches, wall-shelf fungi) is placed against these instead of against
+    //    the analytic room. Cost is measured, not assumed — see `msRockSamplers` on the probe.
+    const tRock = performance.now();
+    const rockFloor = makeRockFloorSampler(sdf.geometry, graph.nodes);
+    const wallCast = makeWallCaster(sdf.geometry, graph.nodes);
+    msRockSamplers = +(performance.now() - tRock).toFixed(1);
+
     const heapSpots: Array<{ node: number; x: number; z: number; r: number }> = [];
     for (const node of graph.nodes) {
       const dT = depthOf(node);
@@ -1610,9 +2022,9 @@ export function startSpawnCave(
       // exactly the branch this cycle exists to avoid). Never in the entrance hall: that room is the
       // hand-off frame and the crevice's walk line, and it is the one room every player crosses.
       if (node.kind !== 'entrance') {
-        rubbleHeaps += addRubble(node, kp.rubblePerChamber, dirsByNode.get(node.id) ?? [], cnoise, dT, rrand, group, meshes, kp.rubbleScale, kp.rubbleHeight, heapSpots, kp.salvagePlates);
+        rubbleHeaps += addRubble(node, kp.rubblePerChamber, dirsByNode.get(node.id) ?? [], cnoise, dT, rrand, group, meshes, kp.rubbleScale, kp.rubbleHeight, heapSpots, kp.salvagePlates, rockFloor);
       }
-      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi, kp);
+      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi, kp, wallCast);
     }
 
     // DEEPER cycle 9 — SCRAP ANCHORS (the warren's salvage). Positions only; the pickups themselves
@@ -1657,7 +2069,8 @@ export function startSpawnCave(
         for (let k = 0; k < kp.scrapClusterSize; k++) {
           const ja = scrand() * Math.PI * 2, jr = 0.18 + scrand() * 0.45;
           const sx = cxp + Math.cos(ja) * jr, sz = czp + Math.sin(ja) * jr;
-          const sy = n.floorY + Math.max(0, cnoise(sx * 0.5, 7.3, sz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP + 0.02;
+          // CLOSE-OUT: the flake sits on the ROCK, not on the nominal plane plus a noise guess.
+          const sy = rockFloor(sx, sz, n.floorY + Math.max(0, cnoise(sx * 0.5, 7.3, sz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP) + 0.02;
           scrapAnchors.push(new THREE.Vector3(sx, sy, sz));
         }
       }
@@ -1750,9 +2163,10 @@ export function startSpawnCave(
         depthMin: kp.gateDepthMin, depthMax: kp.gateDepthMax,
       },
       fungiClusters: fungi.length, rubbleHeaps, scrapAnchors: scrapAnchors.length,
+      fungiWallShelves: _fungiWallTotal, fungiWallHidden: _fungiWallHidden,
       kindDripScale: kp.dripIntervalScale,
       eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
-      colliderTris, msCollider, msMesh, msPoolSampler: lastFloorSamplerMs,
+      colliderTris, msCollider, msMesh, msPoolSampler: lastFloorSamplerMs, msRockSamplers,
       digest: caveDigest(graph, allMeshes),
       nodes: graph.nodes.map((n) => ({ id: n.id, x: n.x, y: n.floorY, z: n.z, rx: n.rx, height: n.height, kind: n.kind, parent: n.parent })),
       edges: graph.edges.map((e) => ({ a: e.a, b: e.b, halfW: e.halfW, height: e.height, squeeze: e.squeeze })),
