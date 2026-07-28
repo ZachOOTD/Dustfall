@@ -619,6 +619,10 @@ function addSpeleothems(
   /** DEEPER cycle 9 — the kind's speleothem density. EXACTLY 1 for canonical, and every count is
    *  `Math.round(n × 1)`, so the canonical cave's dripstone is bit-identical. */
   speleoDensity = 1,
+  /** cycle-9 LOOK PASS — × on the COLUMN count and on stalactite LENGTH. Both default to 1 and
+   *  neither adds or removes a single `rand()` draw at 1, so canonical stays bit-identical. */
+  columnScale = 1,
+  dropScale = 1,
 ): void {
   const T = Tuning;
   const rx = node.rx, floorY = node.floorY, height = node.height;
@@ -647,7 +651,7 @@ function addSpeleothems(
 
   // ── Floor stalagmites + columns (collider-bearing). ──
   const nStalag = Math.round((kind === 'egg' ? 5 : kind === 'hall' ? 4 : kind === 'entrance' ? 0 : rx > 3.6 ? 2 : 1) * speleoDensity);
-  const nColumn = Math.round((kind === 'egg' ? 2 : kind === 'hall' ? 1 : 0) * speleoDensity);
+  const nColumn = Math.round((kind === 'egg' ? 2 : kind === 'hall' ? 1 : 0) * speleoDensity * columnScale);
   const placeFloor = (isColumn: boolean): void => {
     for (let a = 0; a < 26; a++) {
       const ang = rand() * Math.PI * 2;
@@ -703,7 +707,9 @@ function addSpeleothems(
     const maxLen = apexY - (floorY + T.CAVE_SPELEO_STALACTITE_CLEAR);
     if (maxLen < 0.4) continue;
     const big = i < nTip * 0.35;
-    const len = Math.min(big ? 1.0 + rand() * 2.2 : 0.35 + rand() * 0.9, maxLen * 0.92);
+    // `dropScale` multiplies the DRAWN length, never the clamp: `maxLen` still keeps every tip
+    // ≥ CAVE_SPELEO_STALACTITE_CLEAR above the floor, so no kind can hang one into head height.
+    const len = Math.min((big ? 1.0 + rand() * 2.2 : 0.35 + rand() * 0.9) * dropScale, maxLen * 0.92);
     const baseR = big ? 0.28 + rand() * 0.32 : 0.12 + rand() * 0.18;
     const geo = buildSpeleothem(x, z, apexY, apexY - len, baseR, cnoise, depthT, true, 1.0);
     const m = new THREE.Mesh(geo, _caveSolid); m.receiveShadow = true;
@@ -756,6 +762,45 @@ function buildBoulder(
   return geo;
 }
 
+/** DEEPER cycle-9 LOOK PASS — a STRIPPED PLATE: a torn sheet of hull metal leaning on a rubble heap.
+ *
+ *  WHY IT EXISTS. The warren's claim is "somebody worked down here", and rounds 1-4 proved that
+ *  loose `scrap` pickups cannot carry it on their own: one flake per room reads as litter, and even
+ *  grouped into caches at the foot of a rubble spill they are still just small orange chips on a
+ *  stone floor. There is no MAN-MADE LANGUAGE in the frame — nothing straight, nothing cut. Two
+ *  rectangular plates fix that in one object: a straight edge is the only silhouette in a cave that
+ *  cannot be geology.
+ *
+ *  WHAT IT COSTS. Nothing new: no material (it rides `_caveSolid` with rust VERTEX COLOURS, so the
+ *  cave is still one program), no ItemId, no loot table, no interaction — it is scenery beside the
+ *  pickups, not a pickup. Rule 7: a real box with ≥12cm of depth, FrontSide, so the torn edge shows
+ *  a genuine cross-section at a grazing angle. Rule 9: collider-bearing, and placed INSIDE the
+ *  heap's own already-cleared footprint so it inherits the clearance the heap was tested against. */
+function buildStrippedPlate(w: number, h: number, d: number, rust: number, rand: () => number): THREE.BufferGeometry {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const col = new Float32Array(pos.count * 3);
+  const base = new THREE.Color(rust);
+  for (let i = 0; i < pos.count; i++) {
+    // TEAR THE TOP EDGE. Only the upper rim is displaced, laterally and in depth — the bottom stays
+    // square (it is the cut/torn sheet's straight edge that reads as man-made) and the plate stays
+    // a closed solid because both faces' shared rim vertices get the same offset from the same hash.
+    const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+    if (py > 0) {
+      const s = Math.sin(px * 37.1 + 11.3) * 0.5 + Math.sin(px * 91.7 + 4.1) * 0.5;
+      pos.setY(i, py - h * (0.06 + 0.14 * Math.abs(s)));
+      pos.setX(i, px + s * w * 0.03);
+    }
+    const t = 0.72 + 0.28 * (py > 0 ? 1 : 0) + (i % 3) * 0.035;
+    col[i * 3] = base.r * t; col[i * 3 + 1] = base.g * t * (0.94 + rand() * 0.001); col[i * 3 + 2] = base.b * t;
+    void pz;
+  }
+  pos.needsUpdate = true;
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** `count` rubble heaps in one chamber. Each heap is 4-7 part-buried boulders around a centre; the
  *  heap's footprint is what the clearance test is run against, so the KCC meets it exactly as it
  *  meets a stalagmite. Returns the number actually placed (a tight room may fit none). */
@@ -765,6 +810,19 @@ function addRubble(
   mouthDirs: Array<{ x: number; z: number }>,
   cnoise: Noise3, depthT: number, rand: () => number,
   group: THREE.Group, meshes: THREE.Mesh[],
+  /** cycle-9 LOOK PASS — × on footprint and boulder radius. See `CaveKindParams.rubbleScale`. */
+  scale = 1,
+  /** …and × on the CONE HEIGHT, which is a separate dial for a hard geometric reason: the footprint
+   *  is bounded by the chamber (a heap has to fit in the annulus between the march's floor grid and
+   *  the wall, which in a 3m-radius pocket is under a metre), but the HEIGHT is bounded by nothing.
+   *  A collapsed ceiling is a steep pile, so height is where the read has to come from. */
+  heightScale = 1,
+  /** OUT — every heap placed, appended as {node, x, z, r}. The warren's scrap caches land NEXT TO
+   *  one (see the scrap pass): broken rock plus salvaged metal in the same corner is what turns two
+   *  orange flakes from litter into evidence that somebody worked here. */
+  outSpots?: Array<{ node: number; x: number; z: number; r: number }>,
+  /** Stripped hull plates leaning on each heap (canonical 0 — see `buildStrippedPlate`). */
+  salvagePlates = 0,
 ): number {
   if (count <= 0) return 0;
   const T = Tuning;
@@ -787,25 +845,63 @@ function addRubble(
       if (blockedByMouth) continue;
       const fr = lerp(T.CAVE_SPELEO_RING_MIN, T.CAVE_SPELEO_RING_MAX, rand());
       const cx = node.x + ux * rx * fr, cz = node.z + uz * rx * fr;
-      const heapR = 0.85 + rand() * 0.55;                       // the heap's footprint radius
+      // Footprint. Scaled by the kind, then CLAMPED to the ANNULUS the chamber actually has spare —
+      // from the march's 0.72·rx floor grid out to the ~0.94·rx wall. Measured, not guessed: a fixed
+      // 2× footprint placed ZERO heaps in a re-proportioned collapsed shaft (8 chambers × 3 heaps ×
+      // 24 attempts, all rejected), i.e. the kind's defining feature silently disappeared while every
+      // other number in the report stayed green.
+      const heapR = Math.min((0.85 + rand() * 0.55) * scale, Math.max(0.45, rx * 0.21));
       let clear = true;
       for (const gp of grid) if (Math.hypot(cx - gp.x, cz - gp.z) < heapR + 0.2) { clear = false; break; }
       if (clear) for (const q of placed) if (Math.hypot(cx - q.x, cz - q.z) < heapR + q.r + 0.5) { clear = false; break; }
       if (!clear) continue;
-      const n = 4 + Math.floor(rand() * 4);
+      // A TALUS CONE, not a scatter. Cycle 9 laid every boulder flat on the floor plane inside one
+      // 0.85m disc, so the crown of a "collapsed ceiling" sat ~0.5m off the floor and the frames
+      // read as gravel. The heap is now a filled cone of height `peak`: boulders march from the
+      // centre out to the rim in order (never at random radii — with 4-7 bodies a random spread
+      // leaves holes in the profile and the high ones read as FLOATING rocks), each one bigger near
+      // the middle, each SEATED so its top meets the cone surface and its base is buried in what is
+      // under it. Silhouette: a steep lumpy pile you walk around. It is one solid to the KCC.
+      const peak = heapR * 0.85 * heightScale;
+      const n = Math.round((4 + Math.floor(rand() * 4)) * (0.5 + 0.5 * heightScale));
       for (let b = 0; b < n; b++) {
-        const ba = rand() * Math.PI * 2, br = rand() * heapR * 0.72;
-        const r0 = 0.24 + rand() * 0.30;
+        const ba = rand() * Math.PI * 2;
+        const t = Math.min(1, (b + 0.30 + rand() * 0.55) / n);   // centre → rim, in order
+        // Lateral offset never goes to zero. With `br = t·heapR` the first two or three boulders sit
+        // on the SAME vertical axis and the r3 frames showed a stacked-disc CAIRN — a deliberate
+        // human marker, which is the exact opposite of "the ceiling fell in". Every boulder keeps at
+        // least ~28% of the footprint off-axis, on its own bearing, so the pile interlocks sideways.
+        const br = (0.28 + 0.72 * t) * heapR * 0.86;
+        const r0 = (0.24 + rand() * 0.30) * scale * (1.30 - 0.50 * t);
         const squash = 0.62 + rand() * 0.22;
         const bx = cx + Math.cos(ba) * br, bz = cz + Math.sin(ba) * br;
-        // Part-buried: the boulder's centre sits BELOW the floor plane by ~40% of its squashed
-        // height, so nothing floats and the heap grows out of the rock instead of resting on it.
-        const by = floorY + r0 * squash * (0.10 + rand() * 0.35) - r0 * squash * 0.40;
+        // The cone's surface height at this radius, then seat the boulder into it. `Math.max(0, …)`
+        // is the no-float guarantee: a boulder can never end up above the floor plane on its own.
+        const surf = peak * (1 - t) * (1 - t);
+        const bodyH = r0 * squash;
+        const by = floorY + Math.max(0, surf - bodyH * 0.55) + bodyH * (0.10 + rand() * 0.30) - bodyH * 0.40;
         const m = new THREE.Mesh(buildBoulder(bx, by, bz, r0, cnoise, depthT, squash), _caveSolid);
         m.castShadow = false; m.receiveShadow = true;
+        // Tag the heap so a diagnostic can FIND one. The cycle-9 shot helper guessed at "a small
+        // solid near a chamber floor" and kept framing STALAGMITES, i.e. the one framing meant to
+        // prove the kind's defining feature was never actually of that feature.
+        m.userData.rubbleHeap = { x: cx, z: cz, floorY, r: heapR };
         group.add(m); meshes.push(m);                            // collider-bearing (rule 9)
       }
+      // Stripped plates, leaning on the pile we just built (inside its cleared footprint).
+      for (let s = 0; s < salvagePlates; s++) {
+        const pw = 0.55 + rand() * 0.55, ph = 0.50 + rand() * 0.45, pd = 0.12 + rand() * 0.05;
+        const geo = buildStrippedPlate(pw, ph, pd, Tuning.CAVE_SALVAGE_PLATE_HEX, rand);
+        const m = new THREE.Mesh(geo, _caveSolid);
+        const pa = rand() * Math.PI * 2;
+        const pr = heapR * (0.45 + rand() * 0.40);
+        m.position.set(cx + Math.cos(pa) * pr, floorY + ph * 0.42, cz + Math.sin(pa) * pr);
+        m.rotation.set((0.34 + rand() * 0.34), pa + Math.PI * 0.5 + (rand() - 0.5) * 0.6, (rand() - 0.5) * 0.3);
+        m.castShadow = false; m.receiveShadow = true;
+        group.add(m); meshes.push(m);                          // collider-bearing (rule 9)
+      }
       placed.push({ x: cx, z: cz, r: heapR });
+      if (outSpots) outSpots.push({ node: node.id, x: cx, z: cz, r: heapR });
       made++;
       break;
     }
@@ -844,12 +940,16 @@ function buildMushroom(h: number, capR: number, rand: () => number): THREE.Group
   return grp;
 }
 
-/** A cluster of 2..MAX mushrooms of varied height crowded within ~`spread` of a point. */
-function buildFungiCluster(rand: () => number, spread: number): THREE.Group {
+/** A cluster of 2..MAX mushrooms of varied height crowded within ~`spread` of a point.
+ *  `perMax`/`capScale` default to the canonical constants — same draws, same values. */
+function buildFungiCluster(
+  rand: () => number, spread: number,
+  perMax: number = Tuning.CAVE_FUNGI_PER_CLUSTER_MAX, capScale = 1,
+): THREE.Group {
   const cl = new THREE.Group();
-  const n = 2 + Math.floor(rand() * (Tuning.CAVE_FUNGI_PER_CLUSTER_MAX - 1));
+  const n = 2 + Math.floor(rand() * (perMax - 1));
   for (let i = 0; i < n; i++) {
-    const capR = Tuning.CAVE_FUNGI_CAP_MAX_R * (0.42 + rand() * 0.58);
+    const capR = Tuning.CAVE_FUNGI_CAP_MAX_R * (0.42 + rand() * 0.58) * capScale;
     const h = capR * (2.2 + rand() * 3.4);
     const m = buildMushroom(h, capR, rand);
     const a = rand() * Math.PI * 2, rr = rand() * spread;
@@ -895,7 +995,9 @@ function addFungi(
     const x = node.x + Math.cos(ang) * rx * fr, z = node.z + Math.sin(ang) * rx * fr;
     // Sit on the actual bumpy floor (matches the mesh floor micro-bump).
     const fy = floorY + Math.max(0, cnoise(x * 0.5, 7.3, z * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
-    const cl = buildFungiCluster(rand, 0.35);
+    // Spread scales with cap size — otherwise a cathedral-scale cluster is a bouquet of caps all
+    // intersecting each other inside a 35cm disc.
+    const cl = buildFungiCluster(rand, 0.35 * p.fungiCapScale, p.fungiPerCluster, p.fungiCapScale);
     cl.position.set(x, fy, z);
     for (const o of cl.children) o.traverse((m) => { (m as THREE.Mesh).receiveShadow = true; });
     group.add(cl); cl.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
@@ -905,19 +1007,28 @@ function addFungi(
     tagFungi(cl, cid);
     clusters.push({ id: cid, group: cl, pos: new THREE.Vector3(x, fy, z), harvested: false, hovered: false });
   }
-  // Optional wall shelf fungi — a few small caps jutting horizontally from the wall at head height.
+  // Optional wall shelf fungi — caps jutting horizontally off the wall. For most kinds that is a
+  // few at head height (canonical: 2-4 over 0.28..0.62 of the room). For a VAULTED kind it is the
+  // load-bearing height cue: a ladder of glow climbing 16%→90% of the dome, because emissive
+  // geometry is the only light this cave is allowed to add (no free light — torch/lantern only) and
+  // a torch physically cannot reach an 11m ceiling. All four dials are canonical-neutral.
   if (rand() < p.fungiWallChance) {
     const ry = node.height * 0.6, cyc = floorY + node.height - ry;
-    const shelves = 2 + Math.floor(rand() * 3);
+    const shelves = p.fungiWallShelves + Math.floor(rand() * p.fungiWallShelvesSpan);
     for (let s = 0; s < shelves; s++) {
       const ang = rand() * Math.PI * 2, ux = Math.cos(ang), uz = Math.sin(ang);
-      const hFrac = 0.28 + rand() * 0.34;               // fraction up the wall
+      const hFrac = p.fungiWallLoFrac + rand() * p.fungiWallSpanFrac;   // fraction up the wall
       const wy = floorY + node.height * hFrac;
       // approx shell radius at this height on the ellipsoid (relative to the vertical centre)
       const yn = Math.max(-0.98, Math.min(0.98, (wy - cyc) / ry));
-      const wallR = rx * Math.sqrt(Math.max(0.02, 1 - yn * yn)) - 0.05;
+      // …pulled 4% INSIDE the analytic shell. The chamber the player sees is the SDF surface, not
+      // this ellipsoid, and the two disagree by the displacement amplitude; a shelf placed exactly
+      // on the analytic wall is buried in rock whenever the SDF came in tighter. Which is what the
+      // r2 vault frame showed: one visible cap out of ten.
+      const wallR = rx * Math.sqrt(Math.max(0.02, 1 - yn * yn)) * 0.96 - 0.05;
       const x = node.x + ux * wallR, z = node.z + uz * wallR;
-      const m = buildMushroom(0.08 + rand() * 0.1, Tuning.CAVE_FUNGI_CAP_MAX_R * (0.4 + rand() * 0.4), rand);
+      const wc = p.fungiWallCapScale;
+      const m = buildMushroom((0.08 + rand() * 0.1) * wc, Tuning.CAVE_FUNGI_CAP_MAX_R * (0.4 + rand() * 0.4) * wc, rand);
       m.position.set(x, wy, z);
       m.rotation.z = Math.PI * 0.5;                     // lay it horizontal, growing off the wall
       m.rotation.y = Math.atan2(uz, ux);
@@ -1483,6 +1594,7 @@ export function startSpawnCave(
       console.log('CAVE-SDF-BENCH ' + JSON.stringify(bench));
     }
 
+    const heapSpots: Array<{ node: number; x: number; z: number; r: number }> = [];
     for (const node of graph.nodes) {
       const dT = depthOf(node);
       // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
@@ -1491,13 +1603,14 @@ export function startSpawnCave(
         dm.castShadow = false; dm.receiveShadow = true; dm.userData.eggDais = true;
         group.add(dm); meshes.push(dm);
       }
-      addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor, kp.speleoDensity);
+      addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor,
+        kp.speleoDensity, kp.speleoColumnScale, kp.speleoDropScale);
       // DEEPER cycle 9 — rubble heaps. Density 0 for every kind but the collapsed shaft, and the
       // call is unconditional so the ONE code path is what runs (an `if (kind === …)` here is
       // exactly the branch this cycle exists to avoid). Never in the entrance hall: that room is the
       // hand-off frame and the crevice's walk line, and it is the one room every player crosses.
       if (node.kind !== 'entrance') {
-        rubbleHeaps += addRubble(node, kp.rubblePerChamber, dirsByNode.get(node.id) ?? [], cnoise, dT, rrand, group, meshes);
+        rubbleHeaps += addRubble(node, kp.rubblePerChamber, dirsByNode.get(node.id) ?? [], cnoise, dT, rrand, group, meshes, kp.rubbleScale, kp.rubbleHeight, heapSpots, kp.salvagePlates);
       }
       if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi, kp);
     }
@@ -1507,14 +1620,46 @@ export function startSpawnCave(
     // that room already carries the objective and the deep cache — and never on the corridor
     // centreline, so a scrap flake can never read as blocking a mouth.
     if (kp.scrapPerCave > 0) {
-      const cands = graph.nodes.filter((n) => n.kind !== 'egg');
-      for (let i = 0; i < kp.scrapPerCave && cands.length; i++) {
-        const n = cands[Math.floor(scrand() * cands.length)];
-        const ang = scrand() * Math.PI * 2;
-        const fr = 0.30 + scrand() * 0.48;
-        const sx = n.x + Math.cos(ang) * n.rx * fr, sz = n.z + Math.sin(ang) * n.rx * fr;
-        const sy = n.floorY + Math.max(0, cnoise(sx * 0.5, 7.3, sz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP + 0.02;
-        scrapAnchors.push(new THREE.Vector3(sx, sy, sz));
+      // …and never in the ENTRANCE chamber either (cycle-9 look pass). That room sits under the
+      // crevice throat with real sky in the frame, so a cache there is lit by daylight and reads as
+      // roadside litter at a hole in the ground rather than as salvage somebody carried DOWN. It is
+      // also the composed hand-off frame cycle 7 built, and the one room every player crosses.
+      const cands = graph.nodes.filter((n) => n.kind !== 'egg' && n.kind !== 'entrance');
+      // cycle-9 LOOK PASS — CACHES, not litter. `scrapPerCave` (Zach's number) is unchanged; what
+      // changed is that the flakes land in `scrapClusterSize`-sized piles AGAINST A WALL instead of
+      // one lone flake per room at a random radius. A single object dropped in the middle of each of
+      // six rooms is the visual grammar of scatter; two or three touching, dumped in a corner, is
+      // the grammar of somebody having stopped and worked there — which is the whole claim the
+      // "salvage warren" makes. Same RNG stream, same total count.
+      const caches = Math.round(kp.scrapPerCave / kp.scrapClusterSize);
+      // Prefer a corner that already has BROKEN ROCK in it. Two orange flakes alone on a clean floor
+      // still read as litter no matter how they are grouped — r3 proved that. Two flakes at the foot
+      // of a rubble spill read as a dig. Heaps are drawn from the eligible rooms only, and the fall
+      // back to a bare wall spot keeps the count exact when a kind has no rubble at all.
+      const okHeaps = heapSpots.filter((h) => cands.some((n) => n.id === h.node));
+      for (let i = 0; i < caches && cands.length; i++) {
+        const useHeap = okHeaps.length > 0 && scrand() < 0.8;
+        let n: CaveNode, cxp: number, czp: number;
+        if (useHeap) {
+          const h = okHeaps[Math.floor(scrand() * okHeaps.length)];
+          n = graph.nodes.find((q) => q.id === h.node)!;
+          // Just off the heap, on the room-centre side, so the flakes sit at its foot in the open.
+          let dx = n.x - h.x, dz = n.z - h.z;
+          const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+          const off = h.r + 0.55 + scrand() * 0.5;
+          cxp = h.x + dx * off; czp = h.z + dz * off;
+        } else {
+          n = cands[Math.floor(scrand() * cands.length)];
+          const ang = scrand() * Math.PI * 2;
+          const fr = 0.62 + scrand() * 0.22;                 // out by the wall, off the walk line
+          cxp = n.x + Math.cos(ang) * n.rx * fr; czp = n.z + Math.sin(ang) * n.rx * fr;
+        }
+        for (let k = 0; k < kp.scrapClusterSize; k++) {
+          const ja = scrand() * Math.PI * 2, jr = 0.18 + scrand() * 0.45;
+          const sx = cxp + Math.cos(ja) * jr, sz = czp + Math.sin(ja) * jr;
+          const sy = n.floorY + Math.max(0, cnoise(sx * 0.5, 7.3, sz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP + 0.02;
+          scrapAnchors.push(new THREE.Vector3(sx, sy, sz));
+        }
       }
     }
 
@@ -1536,7 +1681,7 @@ export function startSpawnCave(
       const fx = junction.x + ux * ul * 0.86 + -uz * lat;
       const fz = junction.z + uz * ul * 0.86 + ux * lat;
       const fy = arrival.floorY + Math.max(0, cnoise(fx * 0.5, 7.3, fz * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
-      const cl = buildFungiCluster(arand, 0.35);
+      const cl = buildFungiCluster(arand, 0.35 * kp.fungiCapScale, kp.fungiPerCluster, kp.fungiCapScale);
       cl.position.set(fx, fy, fz);
       for (const o of cl.children) o.traverse((m) => { (m as THREE.Mesh).receiveShadow = true; });
       group.add(cl); cl.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });

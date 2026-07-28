@@ -5713,6 +5713,7 @@ const SCENARIOS = {
     const ALL = ['warren', 'fungal', 'flooded', 'shaft'];
     const KINDS = argv.kinds ? String(argv.kinds).split(',').map((k) => k.trim()).filter(Boolean) : ALL;
     const DO_MARCH = argv.march === undefined ? 1 : Number(argv.march);
+    const DO_VOID = argv.void === undefined ? 1 : Number(argv.void);
     const DO_SHOTS = Number(argv.shots || 0);
     // `--siteOffset=N` shifts which nearest-sites the kinds land on. It exists for ONE reason and it
     // is a diagnostic one: when a kind fails at its site, the only way to tell a KIND defect from a
@@ -6003,10 +6004,15 @@ const SCENARIOS = {
         strandTotal += st;
         if (st) console.log(`[cave-kinds] ⚠ ${kind} STRANDED ${st} leg(s) — the capsule could not walk back out of a chamber it had reached: [${w.strands.join(' ')}]`);
       }
-      const v = await SCENARIOS['cave-void'](page, { residentKey: key, noShots: true, noThrow: true });
-      voided++;
+      // `--void=0` is an ITERATION flag only (a look pass reshoots the same cave a dozen times and
+      // the sweep is ~40s of that loop). The permanent gate never passes it, and `--void=0` also
+      // suppresses the pass line below so a skipped sweep can never be reported as a green one.
+      const v = DO_VOID
+        ? await SCENARIOS['cave-void'](page, { residentKey: key, noShots: true, noThrow: true })
+        : { skipped: true, escapes: 0, excused: 0, points: 0, rays: 0 };
+      if (DO_VOID) voided++;
       if (v.fatal) fails.push(`${kind} void: ${v.fatal}`);
-      else {
+      else if (DO_VOID) {
         escTotal += v.escapes;
         if (v.escapes > 0) {
           fails.push(`${kind} void: ${v.escapes} unexcused escapes (${v.escapeRate}%) across ${v.leakyPoints}/${v.points} points`);
@@ -6015,6 +6021,12 @@ const SCENARIOS = {
         if (v.excused > 0) fails.push(`${kind} void: ${v.excused} rays excused through a declared opening — the origin cave excuses none`);
       }
       per[kind].walk = w; per[kind].voidSweep = v;
+
+      // Smoke shots are DIAGNOSTIC, never load-bearing: a framing that throws must not take the
+      // walk/void result down with it. THEY RUN BEFORE THE TEARDOWN LEG — the teardown deliberately
+      // teleports 5km away and EVICTS the resident, so shooting after it silently produced zero
+      // warren frames ("no resident to shoot") for the whole of cycle 9.
+      if (DO_SHOTS) { try { await caveKindShots(page, kind, key); } catch (e) { console.log(`[cave-kinds] ${kind} shots failed: ${e.message}`); } }
 
       // ── THE SCRAP TEARDOWN LEG (warren only). ────────────────────────────────────────────
       //   A cave's scrap pickups live OUTSIDE the cave's scene graph — in `ctx.pickups` — so the
@@ -6065,10 +6077,6 @@ const SCENARIOS = {
         }
       }
 
-      // Smoke shots are DIAGNOSTIC, never load-bearing: a framing that throws must not take the
-      // walk/void result down with it.
-      if (DO_SHOTS) { try { await caveKindShots(page, kind, key); } catch (e) { console.log(`[cave-kinds] ${kind} shots failed: ${e.message}`); } }
-
       const secs = ((Date.now() - t0) / 1000).toFixed(0);
       details.push(
         `${kind.padEnd(8)} @(${site.x.toFixed(0)},${site.z.toFixed(0)}) seed=${site.seed} digest=${arrive.digest} ` +
@@ -6103,7 +6111,8 @@ const SCENARIOS = {
     // Vacuous-pass guards on the run itself.
     if (built < KINDS.length) fails.push(`only ${built}/${KINDS.length} kinds built`);
     if (DO_MARCH && marched === 0) fails.push('no kind was marched — the gate would have passed by measuring nothing');
-    if (voided === 0) fails.push('no kind was void-sampled — the gate would have passed by measuring nothing');
+    if (DO_VOID && voided === 0) fails.push('no kind was void-sampled — the gate would have passed by measuring nothing');
+    if (!DO_VOID) console.log('[cave-kinds] ⚠ --void=0: the watertightness sweep DID NOT RUN. This run is an iteration shot, not a gate result.');
 
     const pass = fails.length === 0;
     console.log(`CAVE-KINDS pass=${pass ? 1 : 0} seed=${picked.seed} kinds=${KINDS.length} built=${built} marched=${marched} voided=${voided} sites=${dist.sites} strands=${strandTotal} escapes=${escTotal} fails=${fails.length}`);
@@ -17140,6 +17149,7 @@ main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit
  */
 async function caveKindShots(page, kind, residentKey) {
   const EYE = 1.68;
+  const TAG = argv.tag ? `-${String(argv.tag)}` : '';
   const specs = await page.evaluate(({ KEY, EYE }) => {
     const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
     const res = ctx.caveStream.residents().find((r) => r.key === KEY);
@@ -17147,22 +17157,42 @@ async function caveKindShots(page, kind, residentKey) {
     const p = res.cave.probe;
     const nodes = p.nodes;
     const egg = nodes.find((n) => n.id === p.eggId) || nodes[0];
-    // The floor snap: the polygonized floor, not the node's analytic height (the audit's lesson —
-    // the eye belongs where the CAPSULE would put it).
-    const floorAt = (x, z, guess) => { const h = g.castDown(x, z, guess + 3.0, true); return h ? h.hitY : guess; };
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    // THE FLOOR SNAP — with a SANITY CLAMP (cycle-9-look round 1). The old version cast from
+    // `guess + 3` and took whatever it hit; when the guess was a ceiling feature or a scene object
+    // whose Y was wrong the ray escaped the cave and returned the DESERT SURFACE, and two of the
+    // four shipped `signature` frames were of the outside of the tor under an orange sky. A cave
+    // shot that renders sky is a broken instrument, not a bad asset. So: cast from inside the room's
+    // own dome, and reject any hit that is not within ±3.5m of the room floor we asked about.
+    const floorAt = (x, z, guess, span) => {
+      const h = g.castDown(x, z, guess + (span === undefined ? 2.5 : span), true);
+      if (!h) return guess;
+      if (Math.abs(h.hitY - guess) > 3.5) return guess;
+      return h.hitY;
+    };
     const out = [];
-    // 1 — the deepest room, from its rim looking across the middle.
+    // 1 — the deepest room, from its rim looking across the middle at HEAD height (not at 45% of the
+    //     dome: that pitched the frame into the black and hid the floor read).
     {
       const a = 0.62, ux = Math.cos(a), uz = Math.sin(a);
       const sx = egg.x + ux * egg.rx * 0.80, sz = egg.z + uz * egg.rx * 0.80;
       const fy = floorAt(sx, sz, egg.y);
-      out.push({ name: 'room', cam: [sx, fy + EYE, sz], look: [egg.x - ux * egg.rx * 0.5, egg.y + egg.height * 0.45, egg.z - uz * egg.rx * 0.5] });
+      out.push({ name: 'room', cam: [sx, fy + EYE, sz], look: [egg.x - ux * egg.rx * 0.5, egg.y + egg.height * 0.30, egg.z - uz * egg.rx * 0.5] });
+    }
+    // 1b — THE VAULT READ. Stand in the middle of the deepest room and pitch UP. This is the shot
+    //      that answers "is the height legible or is it a black void" for fungal AND shaft; the
+    //      across-the-room framing cannot answer it because the ceiling leaves the frame.
+    {
+      const a = 2.1, ux = Math.cos(a), uz = Math.sin(a);
+      const sx = egg.x + ux * egg.rx * 0.30, sz = egg.z + uz * egg.rx * 0.30;
+      const fy = floorAt(sx, sz, egg.y);
+      out.push({ name: 'vault', cam: [sx, fy + EYE, sz], look: [egg.x - ux * egg.rx * 0.9, egg.y + egg.height * 0.95, egg.z - uz * egg.rx * 0.9] });
     }
     // 2 — down a corridor from just inside its mouth. Prefer a squeeze (that is what the warren
     //     changed); fall back to whatever the tree has.
     {
       const e = p.edges.find((q) => q.squeeze) || p.edges[0];
-      const A = nodes.find((n) => n.id === e.a), B = nodes.find((n) => n.id === e.b);
+      const A = byId.get(e.a), B = byId.get(e.b);
       const D = Math.hypot(B.x - A.x, B.z - A.z) || 1;
       const hx = (B.x - A.x) / D, hz = (B.z - A.z) / D;
       const s0 = A.rx + 1.0;
@@ -17170,9 +17200,39 @@ async function caveKindShots(page, kind, residentKey) {
       const fy = floorAt(sx, sz, A.y + (B.y - A.y) * (s0 / D));
       out.push({ name: 'corridor', cam: [sx, fy + EYE, sz], look: [B.x, B.y + 1.4, B.z] });
     }
-    // 3 — the kind's signature feature, framed from ~2.6m away at eye height.
+    // 2b — THE ARRIVAL FRAME. Standing on the entrance chamber's floor at the crevice hand-off,
+    //      looking in. This is literally the player's FIRST five seconds of the kind, so it is the
+    //      frame the whole look pass is graded on.
+    {
+      const a0 = nodes[0];
+      let ux = a0.x - p.junction.x, uz = a0.z - p.junction.z;
+      const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+      const sx = a0.x - ux * a0.rx * 0.85, sz = a0.z - uz * a0.rx * 0.85;
+      const fy = floorAt(sx, sz, a0.y);
+      out.push({ name: 'arrival', cam: [sx, fy + EYE, sz], look: [a0.x + ux * a0.rx * 0.9, a0.y + a0.height * 0.32, a0.z + uz * a0.rx * 0.9] });
+    }
+    // 2c — THE SMALLEST SIDE POCKET, from its rim. The warren's claustrophobia claim lives here (the
+    //      egg chamber is by construction the biggest room in EVERY kind, so it can never show it).
+    {
+      const pockets = nodes.filter((n) => n.kind !== 'egg' && n.id !== nodes[0].id).sort((a, b) => a.rx - b.rx);
+      const q = pockets[0];
+      if (q) {
+        const a = 1.4, ux = Math.cos(a), uz = Math.sin(a);
+        const sx = q.x + ux * q.rx * 0.72, sz = q.z + uz * q.rx * 0.72;
+        const fy = floorAt(sx, sz, q.y);
+        out.push({ name: 'pocket', cam: [sx, fy + EYE, sz], look: [q.x - ux * q.rx * 0.8, q.y + q.height * 0.34, q.z - uz * q.rx * 0.8] });
+      }
+    }
+    // 3 — the kind's signature feature, framed from ~2.6m away at eye height. Every target now
+    //     carries the NODE it belongs to, so the floor snap has an honest guess and the clamp above
+    //     can catch an escape instead of shipping a picture of the sky.
     {
       let tgt = null;
+      const nearestNode = (x, z) => {
+        let best = nodes[0], bd = 1e9;
+        for (const n of nodes) { const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; best = n; } }
+        return best;
+      };
       const pools = (p.pools || []).slice().sort((a, b) => b.r - a.r);
       if (pools.length) tgt = { x: pools[0].x, y: pools[0].y, z: pools[0].z, r: Math.max(1.6, pools[0].r) };
       // fungi / rubble / scrap are all SCENE objects; find the nearest to the deepest room.
@@ -17184,39 +17244,47 @@ async function caveKindShots(page, kind, residentKey) {
         if (o.material.emissive.getHexString() !== want) return;
         o.getWorldPosition(wp);
         const d = Math.hypot(wp.x - egg.x, wp.z - egg.z);
-        if (d < fd) { fd = d; fung = { x: wp.x, y: wp.y, z: wp.z, r: 0.9 }; }
+        if (d < fd) { fd = d; fung = { x: wp.x, y: wp.y, z: wp.z, r: 1.4 }; }
       });
       const K = p.kind;
       if (K === 'fungal' && fung) tgt = fung;
       if (K === 'warren') {
+        // The SCRAP ANCHORS, straight off the built cave — the pickup list was the wrong source (it
+        // is spawned by the resident sink, may not be populated yet, and carries no node).
+        const anc = (res.cave.scrapAnchors || []).map((v) => ({ x: v.x, y: v.y, z: v.z }));
         let best = null, bd = 1e9;
-        for (const q of ctx.pickups.list) {
-          if (q.itemId !== 'scrap' || !q.transient) continue;
-          const d = Math.hypot(q.pos.x - egg.x, q.pos.z - egg.z);
-          if (d < bd && d < 400) { bd = d; best = { x: q.pos.x, y: q.pos.y, z: q.pos.z, r: 0.7 }; }
-        }
-        if (best) tgt = best;
+        for (const q of anc) { const d = Math.hypot(q.x - egg.x, q.z - egg.z); if (d < bd) { bd = d; best = q; } }
+        if (best) tgt = { x: best.x, y: best.y, z: best.z, r: 1.1 };
       }
       if (K === 'shaft') {
-        // The rubble heaps are the only collider-bearing icosahedra in the group: pick the mesh whose
-        // bounding sphere is small and which sits within a metre of a chamber floor.
+        // Rubble heaps DECLARE themselves (`userData.rubbleHeap`). The previous version guessed —
+        // "a small solid near a chamber floor" — and framed stalagmites instead, so the one shot
+        // that exists to prove this kind's defining feature never showed it.
         let best = null, bd = 1e9;
         res.cave.group.traverse((o) => {
-          if (!o.isMesh || !o.geometry) return;
-          if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
-          const bs = o.geometry.boundingSphere;
-          if (!bs) return;
-          if (bs.radius > 0.9 || bs.radius < 0.15) return;
-          const d = Math.hypot(bs.center.x - egg.x, bs.center.z - egg.z);
-          if (d < bd) { bd = d; best = { x: bs.center.x, y: bs.center.y, z: bs.center.z, r: 1.0 }; }
+          const h = o.userData && o.userData.rubbleHeap;
+          if (!h) return;
+          const d = Math.hypot(h.x - egg.x, h.z - egg.z);
+          if (d < bd) { bd = d; best = { x: h.x, y: h.floorY, z: h.z, r: Math.max(1.3, h.r) }; }
         });
         if (best) tgt = best;
       }
       if (tgt) {
-        const off = tgt.r + 2.4;
-        const sx = tgt.x + off * 0.78, sz = tgt.z + off * 0.62;
-        const fy = floorAt(sx, sz, tgt.y);
-        out.push({ name: 'signature', cam: [sx, fy + EYE, sz], look: [tgt.x, tgt.y + 0.2, tgt.z] });
+        // STAND ON THE ROOM-CENTRE SIDE OF THE TARGET. The previous version backed the eye off along
+        // a FIXED bearing (+0.78,+0.62); every signature target (pool rim, scrap cache, rubble heap,
+        // wall fungi) sits out near the wall, so half the time that put the camera INSIDE THE ROCK —
+        // and the cave shell is FrontSide, so from inside the rock you see straight out to the
+        // desert. Three of cycle 9's four `signature` frames were pictures of the sky for this
+        // reason. Backing off toward the chamber centre cannot leave the cavity.
+        const nd0 = nearestNode(tgt.x, tgt.z);
+        let bx = nd0.x - tgt.x, bz = nd0.z - tgt.z;
+        const bl = Math.hypot(bx, bz);
+        if (bl < 0.4) { bx = 1; bz = 0; } else { bx /= bl; bz /= bl; }
+        const off = Math.min(tgt.r + 2.4, Math.max(1.6, nd0.rx * 0.9));
+        const sx = tgt.x + bx * off, sz = tgt.z + bz * off;
+        const nd = nearestNode(sx, sz);
+        const fy = floorAt(sx, sz, nd.y);
+        out.push({ name: 'signature', cam: [sx, fy + EYE, sz], look: [tgt.x, Math.max(tgt.y, fy) + 0.35, tgt.z] });
       }
     }
     return out;
@@ -17256,13 +17324,17 @@ async function caveKindShots(page, kind, residentKey) {
       g.setCaveRockLight(lp.x, lp.y, lp.z, T.TORCH_LIGHT_INTENSITY);
       ctx.three.renderer.render(ctx.three.scene, cam);
       window.__kindShotRestore = { hidden, dom, torchI, light: tl };
-      return true;
+      // THE BROKEN-INSTRUMENT TOOTH. An interior shot whose eye is ABOVE the desert surface is a
+      // picture of the outside of the tor; grading one of those is how a look pass ships a lie.
+      const surf = ctx.terrain.heightAt(cam.position.x, cam.position.z);
+      return { ok: true, above: cam.position.y > surf - 0.5, eye: +cam.position.y.toFixed(1), surf: +surf.toFixed(1) };
     }, spec);
     if (!st) continue;
+    if (st.above) console.log(`[cave-kinds] ⚠ ${kind}/${spec.name} EYE IS ABOVE GROUND (${st.eye}m vs surface ${st.surf}m) — framing is broken, not the asset`);
     await page.waitForTimeout(120);
     try {
-      await page.screenshot({ path: join(OUT, `scen-kind-${kind}-${spec.name}.png`), fullPage: false, timeout: 60000 });
-      console.log(`[cave-kinds] saved scen-kind-${kind}-${spec.name}.png`);
+      await page.screenshot({ path: join(OUT, `scen-kind-${kind}-${spec.name}${TAG}.png`), fullPage: false, timeout: 60000 });
+      console.log(`[cave-kinds] saved scen-kind-${kind}-${spec.name}${TAG}.png`);
     } catch (e) { console.log(`[cave-kinds] ${kind}/${spec.name} shot flaked (${e.name})`); }
     await page.evaluate(() => {
       const g = window.__game; const ctx = g.ctx;

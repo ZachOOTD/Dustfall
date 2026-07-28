@@ -1319,6 +1319,7 @@ export const Tuning = {
   CAVE_FUNGI_PER_CLUSTER_MAX: 6,       // mushrooms per cluster (min 2)
   CAVE_FUNGI_EMISSIVE_HEX: 0x8fe6d8,   // cool teal-cyan bioluminescence
   CAVE_FUNGI_EMISSIVE_INT: 0.9,        // emissive intensity on the CAP (low — self-glow breadcrumb, reads in the dark; toneMapped so it never blows out)
+  CAVE_SALVAGE_PLATE_HEX: 0x6b4130,   // rusted hull plate stripped and left in a salvage warren — a warm oxide against the cave's cold grey rock. Carried as VERTEX COLOUR on the shared cave-solid material, so it costs no second shader program
   CAVE_FUNGI_STALK_HEX: 0xc8c2b0,      // pale bone-cream stalk (lit by the torch when near)
   CAVE_FUNGI_CAP_MAX_R: 0.16,          // m — largest cap radius
   CAVE_FUNGI_WALL_CHANCE: 0.35,        // chance a chosen chamber also gets a few wall-mounted shelf fungi

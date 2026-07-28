@@ -89,17 +89,64 @@ export interface CaveKindParams {
   // ── dressing ──
   /** × on the speleothem counts (stalagmites / columns / stalactites / nubbins). */
   speleoDensity: number;
+  /** × on the COLUMN count only (floor→ceiling spans), on top of `speleoDensity`.
+   *
+   *  WHY THIS IS A SEPARATE DIAL, and it is the whole fix for the "vaulted" kinds: at
+   *  TORCH_LIGHT_DISTANCE = 12m with quadratic decay, a torch CANNOT light a ceiling 11m overhead —
+   *  the cycle-9 `vault` framings of the fungal cavern and the collapsed shaft came back as pure
+   *  black, i.e. a 24m dome read EXACTLY like a 6m one. Height is therefore not a lighting problem
+   *  and cannot be solved with lights (the cave's "no free light" rule). It is a PARALLAX problem,
+   *  and the fix is geometry that starts inside torch range and leaves the top of the frame: a
+   *  column you can see the foot of, whose taper runs up into the dark, is read as tall. */
+  speleoColumnScale: number;
+  /** × on stalactite LENGTH. Same argument from the other end — a 4m drop hanging out of a black
+   *  ceiling puts a lit tip at head-plus-two and implies everything above it. Tips are still hard
+   *  clamped by `CAVE_SPELEO_STALACTITE_CLEAR`, so this can never eat headroom. */
+  speleoDropScale: number;
   fungiChambersMin: number;
   fungiChambersMax: number;
   fungiClusterMin: number;
   fungiClusterMax: number;
   fungiWallChance: number;
+  /** Mushrooms per floor cluster (max; min is always 2). */
+  fungiPerCluster: number;
+  /** × on cap radius (and therefore on stalk height, which is derived from it). The canonical
+   *  mushroom is a 16cm-cap breadcrumb; a cathedral needs organisms, not breadcrumbs. */
+  fungiCapScale: number;
+  /** Wall-shelf fungi: how many, and the band of the chamber's height they climb. The canonical
+   *  values reproduce the shipped `2 + rand()*3` shelves over hFrac 0.28..0.62 exactly. A kind that
+   *  raises the span turns the shelves into a LADDER of glow up the dome — the one height cue that
+   *  is allowed to actually emit light. */
+  fungiWallShelves: number;
+  fungiWallShelvesSpan: number;
+  fungiWallLoFrac: number;
+  fungiWallSpanFrac: number;
+  /** × on wall-shelf cap radius (separate from the floor scale: a shelf 8m up needs to be far
+   *  bigger than a shelf at your feet to subtend the same angle). */
+  fungiWallCapScale: number;
   /** Rubble heaps per chamber (a GENERAL capability — canonical 0). Collider-bearing, placed on the
    *  speleothem clearance discipline, so they behave exactly like a stalagmite to the KCC. */
   rubblePerChamber: number;
+  /** × on heap footprint AND boulder radius. Cycle 9 shipped heaps whose crown sat ~0.5m off the
+   *  floor: at torch range that reads as gravel, not as a collapsed ceiling. The heap is also built
+   *  as a real TALUS CONE now (see `addRubble`), so this scales a silhouette, not a scatter. The
+   *  footprint is clamped against the chamber radius, so a tall narrow room gets a proportional
+   *  heap instead of no heap at all. */
+  rubbleScale: number;
+  /** × on the heap's CONE HEIGHT — see `addRubble`. Footprint is bounded by the room; height is
+   *  not, so this is where a collapse read actually comes from. */
+  rubbleHeight: number;
+  /** Stripped hull plates leaning on each rubble heap (canonical 0). The one MAN-MADE silhouette a
+   *  salvage cave gets: a straight cut edge is the only thing in a cave that cannot be geology. */
+  salvagePlates: number;
   /** Loose `scrap` PICKUPS scattered on cave floors (a general capability — canonical 0). No loot
    *  table, no new ItemId, no drop rate: the plain scrap pickup the whole world already uses. */
   scrapPerCave: number;
+  /** How many of those flakes land TOGETHER at one spot. `scrapPerCave` is Zach's number and does
+   *  not move; this is the arrangement. Six flakes alone in six rooms read as LITTER — a random
+   *  object per room is the visual signature of scatter, not of people. The same six as three
+   *  two-flake caches dumped against a wall read as somebody having worked here. */
+  scrapClusterSize: number;
 
   // ── water (cycle 6) ──
   poolChambersMin: number;
@@ -154,13 +201,26 @@ export function canonicalCaveParams(): CaveKindParams {
     galleryH: T.CAVE_GEN_GALLERY_H,
     squeezeChance: T.CAVE_GEN_SQUEEZE_CHANCE,
     speleoDensity: 1,
+    speleoColumnScale: 1,
+    speleoDropScale: 1,
     fungiChambersMin: T.CAVE_FUNGI_CHAMBERS_MIN,
     fungiChambersMax: T.CAVE_FUNGI_CHAMBERS_MAX,
     fungiClusterMin: T.CAVE_FUNGI_CLUSTER_MIN,
     fungiClusterMax: T.CAVE_FUNGI_CLUSTER_MAX,
     fungiWallChance: T.CAVE_FUNGI_WALL_CHANCE,
+    fungiPerCluster: T.CAVE_FUNGI_PER_CLUSTER_MAX,
+    fungiCapScale: 1,
+    fungiWallShelves: 2,
+    fungiWallShelvesSpan: 3,
+    fungiWallLoFrac: 0.28,
+    fungiWallSpanFrac: 0.34,
+    fungiWallCapScale: 1,
     rubblePerChamber: 0,
+    rubbleScale: 1,
+    rubbleHeight: 1,
+    salvagePlates: 0,
     scrapPerCave: 0,
+    scrapClusterSize: 1,
     poolChambersMin: T.CAVE_POOL_CHAMBERS_MIN,
     poolChambersMax: T.CAVE_POOL_CHAMBERS_MAX,
     poolRFrac: T.CAVE_POOL_R_FRAC,
@@ -206,17 +266,34 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     depthMin: 24, depthMax: 32,          // a shallow salvage layer, not a descent
     corridorRunMin: 14.0,                // BINDS (canonical 8.0 is below drop/tan and almost never does)
     branchDropMax: 3.0,
-    hallRx: 5.6, hallH: 5.0,             // no cathedral in a warren
+    hallRx: 5.6, hallH: 4.4,             // no cathedral in a warren
     pocketRxMin: 2.6, pocketRxMax: 3.5,
-    pocketHMin: 4.0, pocketHMax: 4.8,
-    eggRx: 6.6, eggH: 6.0,               // still the biggest room (the gate asserts it), but modest
+    pocketHMin: 4.0, pocketHMax: 4.4,
+    eggRx: 6.2, eggH: 5.4,               // still the biggest room (the gate asserts it), but modest.
+                                         //   LOOK PASS: 6.6/6.0 put the one room the player lingers
+                                         //   in beyond torch reach in every direction, so the kind's
+                                         //   own deepest chamber was the frame that read LEAST tight.
     squeezeH: 2.6, galleryH: 3.0,        // cramped ceilings (gate floor 2.0m; assert floor 2.5m)
     squeezeChance: 0.88,                 // nearly every corridor is a squeeze
     speleoDensity: 0.7,                  // less dripstone: this is a dry, broken-up rock
+    speleoDropScale: 1.5,                // …but what there is hangs LOW. r2 shortened these and the
+                                         //   rooms got roomier: the tip is hard-clamped at
+                                         //   CAVE_SPELEO_STALACTITE_CLEAR (2.35m) anyway, so >1 just
+                                         //   means every big drop reaches that clamp — a ceiling
+                                         //   bristling down to just over your head, which is the
+                                         //   actual claustrophobia lever in a 4m room
     fungiChambersMin: 1, fungiChambersMax: 2,
     fungiClusterMin: 1, fungiClusterMax: 2,
     fungiWallChance: 0.15,
     scrapPerCave: 6,                     // ⚑ FLAGGED FOR ZACH — the only loot number this cycle sets
+    scrapClusterSize: 2,                 // …arranged as THREE CACHES OF TWO against the walls, not
+                                         //   six lone flakes in six rooms (see `scrapClusterSize`)
+    rubblePerChamber: 1, rubbleScale: 0.8, rubbleHeight: 1.0, salvagePlates: 2, // one small spill per
+                                         //   room, with two STRIPPED PLATES leaning on it, and the
+                                         //   scrap cache at its foot. r4 proved arrangement alone
+                                         //   cannot carry "somebody worked here": grouped flakes on
+                                         //   bare stone still read as chips. A straight cut edge can
+                                         //   caches sit beside them, so a corner reads as a dig
     poolChambersMin: 1, poolChambersMax: 1,
     poolRFrac: 0.24, poolRMax: 3.4,
     dripIntervalScale: 1.25,             // drier
@@ -243,9 +320,29 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     galleryHalfW: 3.3, galleryH: 4.4,    // ≥ canonical: wider is always safe for the KCC
     squeezeChance: 0.15,                 // galleries, not crawls
     speleoDensity: 1.15,
+    // ── THE VAULT READ (look pass). Cycle 9's `vault` frame of this kind was BLACK: an 11.5m dome
+    //    is past every light the game will give a player, so the height was not merely subtle, it
+    //    was absent. Both dials below buy parallax instead of light.
+    speleoColumnScale: 3.2,              // egg 2→7 columns, hall 1→4: a colonnade whose feet are lit
+    speleoDropScale: 1.9,                // 1-3.2m drops → 1.9-6.1m: tips land in torch range
     fungiChambersMin: 6, fungiChambersMax: 8,   // clamped to the chamber count → effectively ALL of them
-    fungiClusterMin: 4, fungiClusterMax: 7,
-    fungiWallChance: 0.9,
+    fungiClusterMin: 5, fungiClusterMax: 8,
+    fungiWallChance: 1.0,                // EVERY fungal chamber climbs (0.9 left one room bare)
+    fungiPerCluster: 8,                  // 2-8 per cluster: unequal MASSES, which is what separates
+    fungiCapScale: 1.5,                  //   a bioluminescent bloom from a string of fairy lights.
+                                         //   Cap 16cm→24cm, stalk to ~1.3m: organisms, not specks.
+                                         //   r2 ran this at 1.9 and 2-11: the caps went past
+                                         //   'mushroom' into flat vinyl discs (the shared cap
+                                         //   material is cycle-6/7 hero work and is NOT this pass's
+                                         //   to retune, so the size comes back to meet it), and the
+                                         //   cave hit 803 meshes / 169k tris in a streaming budget
+    fungiWallShelves: 5, fungiWallShelvesSpan: 6,   // 5-10 shelves per chamber…
+    fungiWallLoFrac: 0.18, fungiWallSpanFrac: 0.54, // …climbing 18%→72% of the dome: the glow LADDER.
+                                         //   r2's band ran to 90%, where the analytic wall has
+                                         //   diverged far enough from the SDF that the shelves were
+                                         //   inside the rock — 1 of ~10 was visible
+    fungiWallCapScale: 2.4,              // a shelf 8m up needs a far bigger cap to subtend the same
+                                         //   angle as one at your feet
     poolChambersMin: 2, poolChambersMax: 3,
     poolRFrac: 0.34, poolRMax: 6.0,
     gateChambersMin: 5, gateChambersMax: 9,
@@ -262,14 +359,20 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
   flooded: {
     depthMin: 30, depthMax: 40,
     hallRx: 8.5, hallH: 6.0,
-    pocketRxMin: 3.4, pocketRxMax: 5.0,
+    pocketRxMin: 3.8, pocketRxMax: 5.6,         // broad flat rooms hold broad water
     pocketHMin: 4.6, pocketHMax: 5.6,
     eggH: 8.0,
     squeezeChance: 0.32,
     poolChambersMin: 5, poolChambersMax: 9,     // clamped to the rooms that qualify → nearly all of them
-    poolRFrac: 0.52, poolRMin: 2.2, poolRMax: 7.2,
-    poolCenterFracMin: 0.20,                    // a bigger pool needs to sit nearer the centre to fit
-    poolCenterFracMax: 0.56,
+    // ── THE WADE (look pass). At 0.52 R-frac a pool covers ~27% of its room's floor disk and sits
+    //    OFF to one side — which is precisely the canonical cave's puddle, only larger, and the
+    //    cycle-9 frames read that way. The kind's claim is "you wade through the MIDDLE of it", so
+    //    the pool now nearly fills the room and is centred: at 0.70 the rim reaches ~0.85·rx and the
+    //    placer has almost no lateral freedom left, which is the point — there is no dry way round.
+    //    CAVE_POOL_DEPTH_M is still not a kind parameter: 26cm, wadeable, no swimming.
+    poolRFrac: 0.70, poolRMin: 2.2, poolRMax: 9.5,
+    poolCenterFracMin: 0.02,
+    poolCenterFracMax: 0.14,
     fungiChambersMin: 3, fungiChambersMax: 4,   // wet rock grows things
     fungiWallChance: 0.55,
     dripIntervalScale: 0.5,                     // the wet-audio bias: twice the drips, and cycle 6's
@@ -288,15 +391,23 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     pocketAttempts: 200,
     depthMin: 42, depthMax: 52,
     branchDropMax: 6.0,
-    hallRx: 6.5, hallH: 8.5,
-    pocketRxMin: 3.0, pocketRxMax: 4.0,
-    pocketHMin: 6.5, pocketHMax: 8.5,           // tall + narrow = a shaft, not a room
-    eggRx: 8.0, eggH: 10.5,
+    // ── THE SHAFT PROPORTION (look pass). Cycle 9's rooms were 16m wide and 10.5m tall — a ratio of
+    //    0.65, i.e. still a DOME, and the frames read as "a normal chamber that happens to be dark
+    //    up top". Every room is now taller than it is wide (ratio > 1.2), which is the silhouette
+    //    the kind is named after. Corridor widths and the 26° grade are untouched (scar tissue).
+    hallRx: 6.0, hallH: 11.0,
+    pocketRxMin: 3.0, pocketRxMax: 4.2,
+    pocketHMin: 8.0, pocketHMax: 11.0,          // tall + narrow = a shaft, not a room
+    eggRx: 7.4, eggH: 14.0,
     squeezeH: 3.0,
     galleryHalfW: 2.8, galleryH: 3.6,
     squeezeChance: 0.5,
     speleoDensity: 0.75,                        // the ceiling collapsed; the dripstone went with it
-    rubblePerChamber: 2,
+    speleoColumnScale: 2.2,                     // …but what is left SPANS: a column in a 14m room is
+    speleoDropScale: 1.6,                       //   a vertical line that leaves the top of the frame
+    rubblePerChamber: 3, rubbleScale: 1.5, rubbleHeight: 2.2, // heaps you walk AROUND, not gravel.
+                                                //   The height dial is doing the work: the footprint
+                                                //   is capped by the room, the crown is not
     fungiChambersMin: 1, fungiChambersMax: 2,
     fungiClusterMin: 1, fungiClusterMax: 3,
     fungiWallChance: 0.2,
@@ -385,6 +496,24 @@ export function assertCaveKindTable(): void {
     if (p.poolChambersMin < 1) at('poolChambersMin < 1 — every cave has water somewhere (cycle 6)');
     if (p.poolCenterFracMin >= p.poolCenterFracMax) at('poolCenterFracMin must be < poolCenterFracMax');
     if (p.scrapPerCave < 0 || p.rubblePerChamber < 0) at('negative dressing density');
+    // — the look-pass dressing dials. All are multipliers with a canonical value of 1 (or a literal
+    //   Tuning read), so a zero/negative here is a typo that would silently delete a kind's defining
+    //   feature and still march green.
+    for (const [n, v] of [
+      ['speleoColumnScale', p.speleoColumnScale], ['speleoDropScale', p.speleoDropScale],
+      ['fungiCapScale', p.fungiCapScale], ['fungiWallCapScale', p.fungiWallCapScale],
+      ['rubbleScale', p.rubbleScale],
+    ] as Array<[string, number]>) if (!(v > 0)) at(`${n} = ${v} — must be a positive multiplier`);
+    if (p.fungiPerCluster < 2) at(`fungiPerCluster ${p.fungiPerCluster} < 2 — a cluster of one is a mushroom`);
+    if (p.scrapClusterSize < 1) at('scrapClusterSize < 1');
+    if (p.salvagePlates < 0) at('negative salvagePlates');
+    if (p.salvagePlates > 0 && p.rubblePerChamber < 1)
+      at('salvagePlates > 0 with rubblePerChamber 0 — plates lean on heaps, so they would never be emitted');
+    if (p.scrapPerCave > 0 && p.scrapPerCave % p.scrapClusterSize !== 0)
+      at(`scrapPerCave ${p.scrapPerCave} is not a whole number of ${p.scrapClusterSize}-flake caches — the arrangement would silently drop or add a flake, and scrapPerCave is Zach's number`);
+    if (p.fungiWallShelves < 1 || p.fungiWallShelvesSpan < 1) at('fungiWallShelves/Span must be ≥ 1');
+    if (p.fungiWallLoFrac < 0.05 || p.fungiWallLoFrac + p.fungiWallSpanFrac > 0.95)
+      at(`wall-shelf band ${p.fungiWallLoFrac}..${(p.fungiWallLoFrac + p.fungiWallSpanFrac).toFixed(2)} of chamber height leaves the ellipsoid — shelves would float off the wall`);
   }
   // — canonical must be EXACTLY tuning, or the origin cave has silently moved —
   if (Object.keys(CAVE_KIND_OVERRIDES.canonical).length !== 0)
