@@ -53,6 +53,24 @@ efficiencies we should implement along the way"):**
 6. **Per-cycle efficiency retro.** Every cycle-close log entry includes one line: where the
    wall-clock actually went + any new efficiency lever spotted. New levers get proposed to Zach
    at checkpoints, implemented when cheap and obviously safe.
+7. **Dead-signal detection (Zach 2026-07-28 — "critical time that we are wasting").** When an
+   agent stops claiming work is "still running" but the harness reports NO live background
+   children, that work is ORPHANED — nobody will ever report it. The orchestrator acts
+   IMMEDIATELY: read the teed gate-logs / poll the filesystem, never wait on a notification
+   that cannot come. Long fallback wakeups are ONLY legal behind a genuinely tracked task.
+   Long-running gate suites run under the ORCHESTRATOR'S OWN tracked background shell
+   (harness-notified on exit), never inside an agent that might end its turn mid-run.
+8. **THE STALL RULE (Zach 2026-07-28, second occurrence — this is the one that keeps costing).**
+   Measured mechanism: an agent's shell caps at 10 min, a gate leg runs 20-55, so the agent
+   detaches the run and ends its turn; the harness reports the AGENT done while the gate keeps
+   running untracked, and the orchestrator then waits on a notification that cannot arrive.
+   THEREFORE, unconditionally:
+   - **Agent briefs END at "report and stop."** Agents run only `--legs=` iteration runs that
+     fit inside one turn (the ~60s `--march=0 --void=0` path). They NEVER run a full leg or the
+     full suite.
+   - **The orchestrator runs every long gate** under its own tracked background shell.
+   - **Never idle through one.** Dispatch disjoint read-only work (next-cycle prep, docs,
+     research) the moment a gate starts — the hazard spec proved this is free.
 
 **SPEED RULES (Zach 2026-07-20, in force):**
 1. Probes ONLY via `npm run rig -- --scenario=… --port=52xx` (zero permission prompts).
