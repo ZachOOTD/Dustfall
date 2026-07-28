@@ -8,6 +8,46 @@ import { playDeath } from '../audio/audio.ts';
 import { updateDeathScreenButtons } from '../ui/menus.ts';
 import { crashHeatAt } from '../world/meteorCrash.ts';   // Tier 4 (C) — crash-wreck interior heat hazard
 import { introActive } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro (T0.2) — no survival drain during the intro
+import { caveContainmentAt } from '../world/caveAtmosphere.ts';   // DEEPER cycle 11 — cave cold (pure, no tick-order constraint)
+import { getPlayerPos } from '../util/playerPos.ts';              // D297 — speeder-aware effective player pos
+
+// ── DEEPER cycle 11 — INV-COLD, THE BOOT ASSERT ────────────────────────────────────────────────
+//   The whole "a cave can never damage you" guarantee reduces to one inequality between two numbers
+//   in tuning.ts. Check it at module load so a future edit to either one cannot ship silently.
+//   Deliberately NOT a throw: a bad floor must be loud, but bricking the boot would also stop the
+//   CAVE-COLD gate's matrix from RUNNING — and that matrix is the thing that actually demonstrates
+//   the damage. So this screams, the gate measures, and both go red together.
+export const CAVE_COLD_FLOOR_OK =
+  Tuning.CAVE_COLD_FLOOR >= -1 + Tuning.CAVE_COLD_SAFETY_MARGIN
+  && Tuning.CAVE_COLD_FLOOR <= 0
+  && Tuning.CAVE_COLD_TARGET_MAX >= Tuning.CAVE_COLD_FLOOR;
+if (!CAVE_COLD_FLOOR_OK) {
+  // eslint-disable-next-line no-console
+  console.error(
+    `[survival] INV-COLD VIOLATED: CAVE_COLD_FLOOR=${Tuning.CAVE_COLD_FLOOR} must sit in ` +
+    `[${-1 + Tuning.CAVE_COLD_SAFETY_MARGIN}, 0] and at or below CAVE_COLD_TARGET_MAX ` +
+    `(${Tuning.CAVE_COLD_TARGET_MAX}). The cave can now freeze the player to death.`,
+  );
+}
+
+/** DEEPER cycle 11 — the temperature the cave equilibrates the player toward at this depth.
+ *
+ *  ALWAYS in [CAVE_COLD_FLOOR, 0], and that clamp is applied LAST — after the depth ramp and after
+ *  every multiplier — so no combination of kind × wetness can stack past it. This is the single
+ *  place INV-COLD is enforced; `updateStats` only ever walks temperature toward whatever this
+ *  returns and never past it, so the whole "cave cold never damages" guarantee lives here.
+ *
+ *  Exported so the CAVE-COLD gate can sweep it directly as well as through the real tick. */
+export function caveColdTarget(depthM: number, kind: string, wet: boolean): number {
+  if (!(depthM > 0)) return 0;                    // surface parity — exactly a no-op
+  const t = Math.min(1, depthM / Tuning.CAVE_COLD_DEPTH_FULL_M);
+  const ramp = t * t * (3 - 2 * t);               // smoothstep — the throat is not instantly cold
+  let target = Tuning.CAVE_COLD_TARGET_MAX * ramp;             // TARGET_MAX is negative
+  target *= Tuning.CAVE_COLD_KIND_MUL[kind] ?? 1;
+  if (wet) target *= Tuning.CAVE_COLD_WET_MUL;
+  // THE CLAMP. It binds the TARGET, not the rate — which is what makes the guarantee total.
+  return Math.max(Tuning.CAVE_COLD_FLOOR, Math.min(0, target));
+}
 
 export function updateStats(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
@@ -26,6 +66,18 @@ export function updateStats(ctx: GameContext, dt: number): void {
   // ambient (sun/night) branch + the bake run instead.
   const crashHeat = crashHeatAt(ctx);
 
+  // DEEPER cycle 11 — HOW DEEP UNDERGROUND, and in what. Pure + side-effect-free, so calling it from
+  // here (which runs BEFORE updateCaveAtmosphere in the tick) introduces no ordering constraint and
+  // no frame of latency. `caveAtmosphere` is null with FEATURES.caveTest off → caveDepth stays 0 →
+  // the branch below is never taken and the surface model is exactly what shipped.
+  let caveDepth = 0;
+  let caveKind = 'canonical';
+  if (ctx.caveAtmosphere) {
+    const c = caveContainmentAt(ctx.caveAtmosphere, getPlayerPos(ctx), ctx);
+    caveDepth = c.depth;
+    caveKind = c.kind;
+  }
+
   // Temperature — two-way.
   //   Positive side: sun exposure heats you up (capped at +1 = heatstroke).
   //   Negative side: cold nights without shelter chill you (down to -1 = freeze).
@@ -35,6 +87,28 @@ export function updateStats(ctx: GameContext, dt: number): void {
       t.temperature = Math.max(0, t.temperature - Tuning.HEAT_COOL_PER_SEC * 2 * dt);
     } else if (t.temperature < 0) {
       t.temperature = Math.min(0, t.temperature + Tuning.COLD_SHELTER_RECOVER * dt);
+    }
+  } else if (caveDepth > 0) {
+    // ── DEEPER cycle 11 — CAVE COLD. THIS BRANCH PRE-EMPTS SUN / NIGHT / TWILIGHT ────────────────
+    //   Underground, `exposure` still comes from the SURFACE clock, so before this branch existed a
+    //   cave was WARM BY DAY (the shade-heat floor gained on you at sun01≈0) and LETHAL BY NIGHT
+    //   (COLD_NIGHT_DRAIN walked you to -1 through fifty metres of rock). Exactly backwards. So the
+    //   cave is not an extra drain on top — it REPLACES the ambient term with an equilibrium.
+    //
+    //   Shelter still wins (the branch above): light a fire or pitch a tent down here and the cold
+    //   is fully neutralised. That is the verb the cold is asking for, and G1 is what makes it
+    //   possible to place a fire underground at all.
+    const wet = standingInWater(ctx);
+    const target = caveColdTarget(caveDepth, caveKind, wet);
+    const step = Tuning.CAVE_COLD_RATE_PER_SEC * dt;
+    // Monotone approach, NEVER past the target — in BOTH directions. Warming is not a courtesy: a
+    // player who descends already frozen from a night trek is pulled UP toward the floor, which is
+    // what makes "a cave can never damage you" total instead of conditional (and is physically
+    // true — a cave sits near the local mean annual temperature).
+    if (t.temperature > target) {
+      t.temperature = Math.max(target, t.temperature - step);
+    } else if (t.temperature < target) {
+      t.temperature = Math.min(target, t.temperature + step);
     }
   } else if (exposure > 0.2) {
     // Sun is up. Direct sun heats; SHADE (a dune's lee, a low-sun shadow) relieves it.
@@ -161,6 +235,27 @@ export function die(ctx: GameContext, cause: string): void {
   ctx.ui.setDeathCause(cause, ctx.time.daysSurvived + 1);
   ctx.input.controls.unlock();
   playDeath();
+}
+
+/** DEEPER cycle 11 — is the player standing at open water RIGHT HERE (feet, not just XZ)?
+ *
+ *  A deliberate twin of controller.ts's private `nearWaterSource` (the footstep-squelch test), kept
+ *  local rather than exported because the two ask different questions of the same registry and the
+ *  audio one is on the hot movement path. Both share the same APPROXIMATION, named here so nobody
+ *  rediscovers it: the check is a RADIUS around the source centre, not the pool polygon. Good enough
+ *  for a flavour multiplier on the cold target — and the target is re-clamped afterwards regardless,
+ *  so being generous with "wet" can never cost the player anything. */
+function standingInWater(ctx: GameContext): boolean {
+  const p = getPlayerPos(ctx);
+  const r2 = Tuning.FOOTSTEP_WET_RADIUS * Tuning.FOOTSTEP_WET_RADIUS;
+  const dyMax = Tuning.FOOTSTEP_WET_DY_M;
+  for (const w of ctx.waterSources.list) {
+    if (Math.abs(w.pos.y - p.y) > dyMax) continue;
+    const dx = w.pos.x - p.x;
+    const dz = w.pos.z - p.z;
+    if (dx * dx + dz * dz <= r2) return true;
+  }
+  return false;
 }
 
 function isSprinting(ctx: GameContext): boolean {

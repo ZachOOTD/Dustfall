@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { placementGroundYOrFeet } from './placementGround.ts';
 import {
   addShelterZone,
   removeShelterZone,
@@ -186,7 +187,7 @@ export function deployFire(ctx: GameContext): Fire | null {
   const pos = new THREE.Vector3()
     .copy(cam.position)
     .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
-  pos.y = ctx.terrain.heightAt(pos.x, pos.z);
+  pos.y = placementGroundYOrFeet(ctx, pos.x, pos.z);   // DEEPER cycle 11 (G1) — the live-collider floor, so this works underground
 
   // Reject if too close to an existing fire
   for (const f of ctx.fires.list) {

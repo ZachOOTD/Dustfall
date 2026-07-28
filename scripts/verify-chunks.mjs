@@ -285,11 +285,38 @@ for (const seed of DET_SEEDS) {
   leg({
     name: `pool-fill-${seed}`, group: 'pool-fill', scenario: 'pool-fill', seed, est: 4,
     re: /POOL-FILL pass=(\d) seed=(\S+) digest=(\S+) pools=(\d+) fails=(\d+)/,
-    row(m) {
+    row(m, out) {
       const ok = m[1] === '1';
-      return { ok, data: { digest: m[3] }, rows: [`pool-fill seed ${seed}: ${m[4]} pools, digest ${m[3]}, ${m[5]} fails  ${ok ? 'OK' : '*** FAIL ***'}`] };
+      const rows = [`pool-fill seed ${seed}: ${m[4]} pools, digest ${m[3]}, ${m[5]} fails  ${ok ? 'OK' : '*** FAIL ***'}`];
+      // ── DEEPER cycle 11 — two more probe lines from the SAME run (no extra boot, no 25th leg).
+      //    Same sub-row idiom chunk-perf uses for CAVE-BUILD. `pool-fill` is the only existing leg
+      //    that already boots a cave, walks it with the REAL KCC, and exercises inventory +
+      //    interaction — everything both of these gates need.
+      //      LANTERN-RT: place a lantern underground through the shipped LMB path, prove the landing
+      //        by COLLIDER IDENTITY (the cave body, not the terrain sheet), that it is lit, that a
+      //        real 25m KCC round trip leaves it alone, that RMB gives it back with its pool slot,
+      //        that it round-trips through save/load at SAVE_VERSION 18, that the cap refuses out
+      //        loud, and that nothing leaks.
+      //      CAVE-COLD: the depth × kind × wet × clock × start-temp matrix through the REAL
+      //        updateStats tick. PASS = nothing underground ever reaches the damage line, with a
+      //        vacuous-pass guard so "green because the cold never fired" cannot happen.
+      const lrt = out.match(/LANTERN-RT pass=(\d) fails=(\d+)/);
+      const okL = !!lrt && lrt[1] === '1';
+      rows.push(lrt
+        ? `lantern-rt seed ${seed}: ${lrt[2]} fails  ${okL ? 'OK' : '*** FAIL ***'}`
+        : `lantern-rt seed ${seed}: NO PROBE LINE (the lantern round-trip never reported)  *** FAIL ***`);
+      const cc = out.match(/CAVE-COLD pass=(\d) fails=(\d+)/);
+      const okC = !!cc && cc[1] === '1';
+      rows.push(cc
+        ? `cave-cold seed ${seed}: ${cc[2]} fails  ${okC ? 'OK' : '*** FAIL ***'}`
+        : `cave-cold seed ${seed}: NO PROBE LINE (the cold matrix never reported)  *** FAIL ***`);
+      return { ok: ok && okL && okC, data: { digest: m[3] }, rows };
     },
-    noLineRow: `pool-fill seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
+    noLineRow: [
+      `pool-fill seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
+      `lantern-rt seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
+      `cave-cold seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
+    ],
   });
 }
 

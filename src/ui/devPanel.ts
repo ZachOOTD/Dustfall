@@ -107,6 +107,13 @@ function makeActionsSection(): HTMLDivElement {
     ['flooded', () => { g()?.gotoCaveKind('flooded'); }],
     ['shaft', () => { g()?.gotoCaveKind('shaft'); }],
     ['canonical', () => { g()?.gotoCaveKind('canonical'); }],
+    // DEEPER cycle-11 walk-test — drop a breadcrumb trail through the REAL deploy path, so the
+    // "can I find my way back?" read can be felt in one click instead of six crafts.
+    ['lantern trail', () => {
+      const r = g()?.dropLanternTrail(3, 6) ?? [];
+      const set = r.filter((e) => e.ok).length;
+      toast(set === r.length ? `${set} lanterns down the corridor` : `${set}/${r.length} set — ${r.find((e) => !e.ok)?.reason ?? 'refused'}`);
+    }],
   ]);
   group('stats', [
     ['full', () => { g()?.setStats({ thirst: 1, hunger: 1, stamina: 1, health: 1, temperature: 0 }); toast('stats restored'); }],

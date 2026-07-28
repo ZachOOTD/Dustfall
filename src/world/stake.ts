@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { placementGroundYOrFeet } from './placementGround.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { addItem } from '../inventory/inventory.ts';
 
@@ -139,7 +140,7 @@ export function deployStake(ctx: GameContext): Stake | null {
   const pos = new THREE.Vector3()
     .copy(cam.position)
     .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
-  pos.y = ctx.terrain.heightAt(pos.x, pos.z);
+  pos.y = placementGroundYOrFeet(ctx, pos.x, pos.z);   // DEEPER cycle 11 (G1) — the live-collider floor, so this works underground
 
   for (const existing of ctx.stakes.list) {
     if (existing.pos.distanceToSquared(pos) < Tuning.STAKE_NEAR_DISTANCE_SQ) {

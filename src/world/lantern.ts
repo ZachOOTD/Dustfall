@@ -11,8 +11,9 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addItem } from '../inventory/inventory.ts';
-import { claimLight, releaseLight } from '../core/lightPool.ts';
+import { claimLight, releaseLight, hasFreeLight } from '../core/lightPool.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
+import { placementGroundY } from './placementGround.ts';   // DEEPER cycle 11 (G1)
 
 export interface Lantern {
   id: number;
@@ -251,9 +252,41 @@ function makeLanternVisual(): {
   return { group: g, globeMat };
 }
 
-/** Deploy a lantern PLACEMENT_DISTANCE_M ahead. Returns null if too
- *  close to an existing lantern. */
-export function deployLantern(ctx: GameContext): Lantern | null {
+/** DEEPER cycle 11 (G2) — the deploy result. `deployLantern` used to return `Lantern | null` and
+ *  items.ts printed one generic sentence for every failure, which is why the two worst failures were
+ *  invisible: a lantern placed underground silently teleported into rock, and a lantern placed with
+ *  the light pool exhausted spawned UNLIT AND SILENT. An unlit breadcrumb is the worst possible
+ *  outcome for the thing you leave behind to find your way out, so every refusal now carries its own
+ *  reason and its own diegetic line. */
+export interface LanternDeploy {
+  lantern: Lantern | null;
+  /** Why not, when `lantern` is null — machine-readable for the LANTERN-RT gate. */
+  reason: 'ok' | 'too_close' | 'no_ground' | 'cap' | 'no_light';
+  /** What the player is told. */
+  message: string;
+}
+
+/** Deploy a lantern PLACEMENT_DISTANCE_M ahead. */
+export function deployLantern(ctx: GameContext): LanternDeploy {
+  // G2 — THE CAP, checked before anything else so the refusal is about the rule and not about
+  // whichever resource happened to run out first.
+  if (ctx.lanterns.list.length >= Tuning.LANTERN_MAX_PLACED) {
+    return {
+      lantern: null, reason: 'cap',
+      message: `only ${Tuning.LANTERN_MAX_PLACED} lanterns will hold a charge — pack one up first`,
+    };
+  }
+  // G2 — and the pool, checked BEFORE spawning rather than discovered after. `spawnLanternAt` keeps
+  // its graceful unlit fallback because save-load must restore whatever the save says exists; the
+  // PLAYER-facing deploy refuses instead, because a lantern you chose to set down and that does not
+  // light is a bug the player has no way to read.
+  if (!hasFreeLight(ctx.lightPool)) {
+    return {
+      lantern: null, reason: 'no_light',
+      message: 'nothing left to power it — put out a fire or pack up a lantern',
+    };
+  }
+
   const cam = ctx.three.camera;
   const dir = new THREE.Vector3();
   cam.getWorldDirection(dir);
@@ -263,16 +296,23 @@ export function deployLantern(ctx: GameContext): Lantern | null {
   const pos = new THREE.Vector3()
     .copy(cam.position)
     .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
-  pos.y = ctx.terrain.heightAt(pos.x, pos.z);
+  // G1 — was `ctx.terrain.heightAt(pos.x, pos.z)`, which underground answers with the terrain sheet
+  // OVERHEAD: the lantern went tens of metres up into solid rock, invisible and unretrievable, and
+  // the save kept it there. The shared sampler asks the live colliders what is actually underfoot.
+  const groundY = placementGroundY(ctx, pos.x, pos.z);
+  if (groundY === null) {
+    return { lantern: null, reason: 'no_ground', message: 'nothing solid to set it on' };
+  }
+  pos.y = groundY;
 
   for (const existing of ctx.lanterns.list) {
     if (existing.pos.distanceToSquared(pos) < Tuning.LANTERN_NEAR_DISTANCE_SQ) {
-      return null;
+      return { lantern: null, reason: 'too_close', message: 'no room for the lantern here' };
     }
   }
 
   const rotationY = Math.atan2(dir.x, dir.z);
-  return spawnLanternAt(ctx, pos, rotationY);
+  return { lantern: spawnLanternAt(ctx, pos, rotationY), reason: 'ok', message: 'lantern set' };
 }
 
 export function spawnLanternAt(

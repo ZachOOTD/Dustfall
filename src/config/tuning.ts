@@ -163,6 +163,15 @@ export const Tuning = {
   // kit just outside arm's reach, at the edge of where the player would
   // expect to walk INTO the fire's shelter zone.
   PLACEMENT_DISTANCE_M: 2.2,
+  // ── DEEPER cycle 11 (G1) — THE PLACEMENT GROUND SAMPLER (world/placementGround.ts).
+  //    Every placeable used to take its Y from `terrain.heightAt` — the SURFACE sampler — so
+  //    deploying a lantern / fire / bedroll / tent / sled underground teleported it tens of metres
+  //    up INTO SOLID ROCK, invisible and unretrievable, and the ghost ring lied about it too. The
+  //    shared sampler casts a Rapier ray DOWN from just above the eye against the live colliders and
+  //    takes whatever it actually hits — a cave floor, a wreck deck, or the terrain sheet.
+  PLACEMENT_RAY_UP_M: 0.5,             // m above the camera the downcast starts. NOT y=100: from up there the ray hits the terrain sheet and never reaches a cave floor
+  PLACEMENT_RAY_DROP_M: 5.0,           // m of ray. From eye+0.5 that reaches ~3m below the feet — a step down, not a cliff. A miss underground means "no floor there" and the placement is refused
+  PLACEMENT_SURFACE_SNAP_M: 0.25,      // SURFACE PARITY: when the ray lands within this of terrain.heightAt, answer with the ANALYTIC height instead of the collider hit, so open-desert placement is byte-identical to what shipped (the heightfield collider is a discretised version of the same field, ±cm)
 
   // Session VV — fire entity constants (lifted from src/world/fire.ts).
   FIRE_INITIAL_FUEL_S: 90,           // burn time on fresh-kit deploy
@@ -627,6 +636,14 @@ export const Tuning = {
   LANTERN_LIGHT_COLOR_HEX: 0xffc080,     // warm yellow-orange
   LANTERN_FLICKER_AMP: 0.10,             // intensity multiplier amplitude
   LANTERN_NEAR_DISTANCE_SQ: 1.0 * 1.0,
+  // DEEPER cycle 11 (G2) — how many lanterns may stand in the world at once. The light pool is 30
+  // slots shared with fires / the leviathan interior / salvage-panel glows; before this cap,
+  // exhausting it spawned a lantern with NO light and NO message — an unlit breadcrumb, the worst
+  // possible failure for the thing you leave behind to find your way back. Past the cap the deploy
+  // is REFUSED with a reason instead. 6 marks a full branch of the cave tree with headroom.
+  // (If this is ever raised past ~12, add a distance gate to updateLanterns — it writes intensity
+  // every frame for every placed lantern regardless of range.)
+  LANTERN_MAX_PLACED: 6,
   // Locker — wooden chest. Bidirectional storage; pack-up refuses if
   // contents are non-empty.
   LOCKER_WIDTH_M: 1.0,
@@ -1238,6 +1255,42 @@ export const Tuning = {
   CAVE_SHAFT_DIST: 34,                 // m — shaft falloff distance (reaches the ramp + throat + entrance mouth, fades before the deep tree)
   CAVE_SHAFT_ANGLE_RAD: 0.72,          // shaft cone half-angle (a broad wash down the trench, not a torch beam)
   CAVE_SHAFT_PENUMBRA: 0.55,           // soft cone edge
+
+  // ── DEEPER cycle 11 — CAVE COLD (survival.ts). Zach: *"the temperature should be colder but not
+  //    cold enough to damage the player."* The shipped behaviour was BACKWARDS: underground the
+  //    branch chain still ran off the SURFACE clock, so by day the shade-heat floor WARMED you and
+  //    at night COLD_NIGHT_DRAIN walked you to -1 and killed you inside a cave. So this is not an
+  //    added drain — it is a branch that PRE-EMPTS the sun/night/twilight branches whenever the
+  //    player is underground and moves temperature toward a depth-derived NEGATIVE EQUILIBRIUM.
+  //
+  //    INV-COLD, the invariant the CAVE-COLD gate proves: `caveColdTarget()` is hard-clamped to
+  //    [CAVE_COLD_FLOOR, 0] and the tick only ever moves temperature TOWARD that target and never
+  //    past it. Because the clamp binds the TARGET and not the rate, no stacking of depth × kind ×
+  //    wetness × weather × time-of-day can escape it — "never damages" is true by construction, not
+  //    by tuning. A player who arrives colder than the floor is WARMED toward it (a real cave sits
+  //    near the local mean annual temperature: warmer than a desert night, cooler than noon), which
+  //    is what makes the guarantee total rather than conditional. depth ≤ 0 is exactly a no-op, so
+  //    the surface survival model is byte-identical to what shipped.
+  CAVE_COLD_TARGET_MAX: -0.45,         // temperature the deep cave equilibrates you toward at full depth. Below -COLD_VIGNETTE_THRESHOLD (0.3) so the blue tint reads; above HEALTH_REGEN_TEMP_MAX (0.5) so regen still runs down there (Q5/Q6)
+  // -0.48 and not the -0.55 the cycle-11 plan proposed, and the CAVE-COLD gate is what forced the
+  // change: the plan's own Q5/Q6/Q8 defaults are jointly unsatisfiable at -0.55. The worst stack is
+  // flooded (x1.25) while standing in water (x1.25) at full depth = -0.45 x 1.5625 = -0.703, which
+  // the clamp catches — but a clamp at -0.55 lands OUTSIDE HEALTH_REGEN_TEMP_MAX (0.5), so the
+  // deepest wet cave silently stopped health regen, which Q6 says it must not. -0.48 is the value
+  // that satisfies Q5 (a -0.45 target at depth), Q6 (|t| < 0.5, regen keeps running everywhere
+  // underground) and the safety margin at once, with MORE headroom to the damage line, not less.
+  CAVE_COLD_FLOOR: -0.48,              // HARD CLAMP on the target after every multiplier. Nothing underground can ever ask for colder than this
+  CAVE_COLD_SAFETY_MARGIN: 0.35,       // required gap between CAVE_COLD_FLOOR and the -1 damage line. A boot assert holds CAVE_COLD_FLOOR >= -1 + this; move the floor past it and the game screams
+  CAVE_COLD_DEPTH_FULL_M: 50,          // m below the terrain sheet at which the target reaches CAVE_COLD_TARGET_MAX (smoothstepped from 0 — the throat is not instantly cold)
+  CAVE_COLD_RATE_PER_SEC: 1 / 180,     // how fast temperature walks toward the target, both directions. ~1.5 min from neutral to the deep equilibrium; a descent reads as a slow chill, not a switch
+  CAVE_COLD_WET_MUL: 1.25,             // × on the TARGET while standing at a water source underground (wading reads colder). Re-clamped after (Q8)
+  CAVE_COLD_KIND_MUL: {                // × on the TARGET per cave kind, all re-clamped after (Q8)
+    canonical: 1.0,
+    warren: 1.0,
+    fungal: 0.75,                      // the fungal cavern is the warm one — the hazard spec's sanctuary idea, surviving stripped of its damage
+    flooded: 1.25,                     // standing water everywhere
+    shaft: 1.10,                       // a collapsed shaft breathes
+  } as Record<string, number>,
 
   // ── DEEPER cycle 5 — CAVE BUILD BUDGET + the RESIDENT CAP (caveStream.ts; walk-test D-4:
   //    "preload the caves on the starting loading screen so it doesn't slow down the game as much

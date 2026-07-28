@@ -3237,9 +3237,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     wieldLmb: 'place',
     thirdPersonScale: 1.30,   // ACE Tier 4B — thin post + small globe needs boost
     onUse(ctx, _slot) {
-      const l = deployLantern(ctx);
-      if (!l) return { consumed: false, message: 'no room for the lantern here' };
-      return { consumed: true, message: 'lantern set' };
+      // DEEPER cycle 11 (G2) — every refusal now carries its own reason and its own line (the cap,
+      // an exhausted light pool, no ground under the aim point), instead of one generic sentence.
+      const r = deployLantern(ctx);
+      if (!r.lantern) return { consumed: false, message: r.message };
+      return { consumed: true, message: r.message };
     },
     makeViewModel() {
       // ACL ITEMS — upgraded from plain post + MeshBasic globe to a

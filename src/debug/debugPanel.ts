@@ -7,7 +7,7 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { spawnBedrollAt } from '../world/bedroll.ts';   // M6 ③ (C39) — camp-studio render
 import { spawnTentAt } from '../world/tent.ts';
-import { spawnLanternAt } from '../world/lantern.ts';
+import { spawnLanternAt, deployLantern } from '../world/lantern.ts';
 import { updateStatVignette } from '../ui/statVignette.ts';   // M6 ④ (C40) — diegetic-probe
 import { setDiegeticActive } from '../ui/diegeticMode.ts';
 import { setStatsBarsVisible } from '../ui/hud.ts';
@@ -15,7 +15,7 @@ import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31)
 import { diurnalActivity01 } from '../enemies/diurnal.ts';   // M5 — __game.diurnalInfo
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
-import { updateStats, die } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe; C38 — triggerDeath
+import { updateStats, die, caveColdTarget, CAVE_COLD_FLOOR_OK } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe; C38 — triggerDeath
 import { spawnWormCrossing, updateWormHorizonCrossing, resetWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
@@ -55,7 +55,9 @@ import { CAVE_KIND_LIST, caveKindParams, caveKindWeights, pickCaveKind, type Cav
 import { caveSiteMinSpacingM } from '../world/caveSites.ts';   // DEEPER cycle 9 — the kinds gate's extent bar   // DEEPER cycle 9 — the kind table as gate-readable data   // Underworld review — gotoCave warp target; cycle 8 — the hole-block helper for the density gate
 import { farCaveJunction } from '../world/caveStream.ts';        // DEEPER cycle 5 — streamed-cave probe hook
 import { cavePoolLiveMaterials } from '../world/cavePools.ts';   // DEEPER cycle 6 round-13 — per-cave water-material leak canary
-import { setCaveRockLightState } from '../world/caveGen.ts';     // DEEPER cycle 7 — cave-rock light-response probe hook
+import { setCaveRockLightState, getCaveRockLightState } from '../world/caveGen.ts';     // DEEPER cycle 7 — cave-rock light-response probe hook
+import { caveContainmentAt } from '../world/caveAtmosphere.ts';   // DEEPER cycle 11 — cave-cold containment probe
+import { getPlayerPos as getPlayerPosDbg } from '../util/playerPos.ts';
 
 declare global {
   interface Window {
@@ -529,6 +531,20 @@ interface DebugApi {
    *  the bounce formula (a harness that re-derives is a harness that can be wrong while looking
    *  right — D165). `intensity` = the modelled carried-light intensity; 0 restores "nothing lit". */
   setCaveRockLight: (x: number, y: number, z: number, intensity: number) => void;
+  // ── DEEPER cycle 11 — deployable lanterns underground + cave cold ──────────────────────────
+  caveRockLight: () => { x: number; y: number; z: number; bounce: number; litDepth: number };
+  caveContainment: () => { key: string | null; depth: number; kind: string };
+  caveColdTarget: (depthM: number, kind: string, wet: boolean) => number;
+  caveColdFloorOk: () => boolean;
+  caveColdRun: (opts: {
+    depth: number; sunHeight: number; startTemp: number;
+    wet?: boolean; minutes?: number; inShelter?: boolean;
+  }) => {
+    depth: number; observedDepth: number; kind: string; inCave: boolean; wet: boolean;
+    sunHeight: number; startTemp: number; endTemp: number; minTemp: number; maxTemp: number;
+    firstTempStep: number; coldDamageTicks: number; ticks: number; healthLost: number; died: boolean;
+  };
+  dropLanternTrail: (n?: number, spacing?: number) => Array<{ ok: boolean; reason: string; y: number | null }>;
 }
 
 /** Hooks main.ts supplies for actions that need its boot-scope closures
@@ -1185,6 +1201,126 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     setCaveRockLight: (x, y, z, intensity) => {
       setCaveRockLightState(x, y, z, intensity, ctx.caveAtmosphere?.darkness ?? 0);
+    },
+    // ── DEEPER cycle 11 ──────────────────────────────────────────────────────────────────────
+    /** What the rock is actually being told to bounce (G4 canary — both directions). */
+    caveRockLight: () => getCaveRockLightState(),
+    /** Cave containment at the player: which cave, how deep, what kind. The pure test `updateStats`
+     *  reads for cave cold and `caveDarknessAt` reads for the light model — one source, so the gate
+     *  can never be told a different story than the game is acting on. */
+    caveContainment: () => {
+      if (!ctx.caveAtmosphere) return { key: null, depth: 0, kind: 'canonical' };
+      const c = caveContainmentAt(ctx.caveAtmosphere, getPlayerPosDbg(ctx), ctx);
+      return { key: c.key, depth: c.depth, kind: c.kind };
+    },
+    /** The clamped cave-cold target — the ONE function INV-COLD lives in. Exposed raw so the gate
+     *  can sweep the full kind × wet × depth space on the thing that owns the clamp, not on a
+     *  re-implementation of it. */
+    caveColdTarget: (depthM: number, kind: string, wet: boolean) => caveColdTarget(depthM, kind, wet),
+    /** Does tuning still satisfy `CAVE_COLD_FLOOR >= -1 + CAVE_COLD_SAFETY_MARGIN`? */
+    caveColdFloorOk: () => CAVE_COLD_FLOOR_OK,
+    /**
+     * DEEPER cycle 11 — the CAVE-COLD matrix, driven through the REAL `updateStats` tick.
+     *
+     * Not a re-implementation of the formula: the player capsule is moved to a real point inside the
+     * cave AABB at the requested depth, so the containment test, `pureHeightAt`, the branch order and
+     * the clamp are all the shipped ones. `wet` injects a real water source at the player's feet so
+     * the real `standingInWater` fires. devMode is forced OFF so the godmode floor cannot mask a
+     * death, and thirst/hunger are topped every tick so any health loss is temperature-attributable.
+     */
+    caveColdRun: (opts: { depth: number; sunHeight: number; startTemp: number; wet?: boolean; minutes?: number; inShelter?: boolean }) => {
+      const s = ctx.stats, p = ctx.player, tm = ctx.time, w = ctx.weather, f = ctx.flags;
+      const body = ctx.player.body.body;
+      const t0 = body.translation();
+      const snap = {
+        thirst: s.thirst, hunger: s.hunger, temperature: s.temperature, health: s.health, dead: s.dead,
+        inShelter: p.inShelter, sun01: p.sunExposure01, sunHeight: tm.sunHeight,
+        wInt: w.intensity, devMode: f.devMode, paused: f.paused,
+        pos: { x: t0.x, y: t0.y, z: t0.z }, sources: ctx.waterSources.list.length,
+        // isPlaying() reads controls.isLocked, and die() UNLOCKS. A surface cell that legitimately
+        // freezes to death would therefore make every LATER cell a silent no-op — the exact way a
+        // matrix goes green because it stopped running. Snapshot it and put it back.
+        isLocked: ctx.input.controls.isLocked,
+      };
+      // Stand at the cave's AABB centre, `depth` metres below the terrain sheet there. At depth 0
+      // this is ON the sheet, which is exactly the surface-parity case the gate needs.
+      const atmo = ctx.caveAtmosphere;
+      const cx = atmo ? (atmo.minX + atmo.maxX) * 0.5 : 0;
+      const cz = atmo ? (atmo.minZ + atmo.maxZ) * 0.5 : 0;
+      const surf = ctx.terrain.pureHeightAt(cx, cz);
+      body.setTranslation({ x: cx, y: surf - opts.depth, z: cz }, true);
+      if (opts.wet) {
+        ctx.waterSources.list.push({
+          id: -999, kind: 'pool', noun: 'pool', deepEnoughForLargeVessel: true,
+          pos: new THREE.Vector3(cx, surf - opts.depth, cz),
+        } as (typeof ctx.waterSources.list)[number]);
+      }
+      s.thirst = 1; s.hunger = 1; s.health = 1; s.dead = false;
+      s.temperature = opts.startTemp;
+      w.intensity = 0; f.paused = false; f.devMode = false;
+      p.inShelter = !!opts.inShelter;
+      p.sunExposure01 = opts.sunHeight > 0 ? 1 : 0;
+      tm.sunHeight = opts.sunHeight;
+
+      const contain = atmo ? caveContainmentAt(atmo, getPlayerPosDbg(ctx), ctx) : null;
+      const observedDepth = contain ? contain.depth : 0;
+      const observedKind = contain ? contain.kind : 'canonical';
+
+      const dt = 1 / 30;
+      const total = (opts.minutes ?? 30) * 60;
+      let minTemp = s.temperature, maxTemp = s.temperature, coldDamageTicks = 0, ticks = 0;
+      let firstTempStep: number | null = null;
+      for (let e = 0; e < total; e += dt) {
+        s.thirst = 1; s.hunger = 1;               // isolate the temperature path
+        // On the SURFACE, freezing to death at midnight is the shipped model and is not what this
+        // probe measures — top health there so the legacy path cannot leave a corpse behind.
+        // UNDERGROUND health is left alone: it is the signal, and INV-COLD says it cannot fall.
+        if (opts.depth <= 0) s.health = 1;
+        const before = s.temperature;
+        updateStats(ctx, dt);
+        if (firstTempStep === null) firstTempStep = s.temperature - before;
+        minTemp = Math.min(minTemp, s.temperature);
+        maxTemp = Math.max(maxTemp, s.temperature);
+        if (s.temperature <= -1) coldDamageTicks++;
+        ticks++;
+        if (s.dead) break;
+      }
+      const out = {
+        depth: opts.depth, observedDepth: +observedDepth.toFixed(3), kind: observedKind,
+        inCave: !!(contain && contain.key), wet: !!opts.wet, sunHeight: opts.sunHeight,
+        startTemp: opts.startTemp,
+        endTemp: +s.temperature.toFixed(6), minTemp: +minTemp.toFixed(6), maxTemp: +maxTemp.toFixed(6),
+        firstTempStep: firstTempStep === null ? 0 : +firstTempStep.toFixed(9),
+        coldDamageTicks, ticks, healthLost: +(1 - s.health).toFixed(6), died: s.dead,
+      };
+      // Restore everything.
+      if (opts.wet) ctx.waterSources.list.length = snap.sources;
+      s.thirst = snap.thirst; s.hunger = snap.hunger; s.temperature = snap.temperature;
+      s.health = snap.health; s.dead = snap.dead;
+      p.inShelter = snap.inShelter; p.sunExposure01 = snap.sun01; tm.sunHeight = snap.sunHeight;
+      w.intensity = snap.wInt; f.devMode = snap.devMode; f.paused = snap.paused;
+      ctx.input.controls.isLocked = snap.isLocked;
+      body.setTranslation(snap.pos, true);
+      return out;
+    },
+    /** Walk-test affordance — drop a trail of lanterns down the corridor ahead through the REAL
+     *  deploy path, so the breadcrumb read can be felt in one click. */
+    dropLanternTrail: (n = 3, spacing = 6) => {
+      const cam = ctx.three.camera;
+      const dir = new THREE.Vector3();
+      cam.getWorldDirection(dir); dir.y = 0;
+      if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1);
+      dir.normalize();
+      const start = cam.position.clone();
+      const out: Array<{ ok: boolean; reason: string; y: number | null }> = [];
+      for (let i = 0; i < n; i++) {
+        cam.position.copy(start).addScaledVector(dir, i * spacing);
+        cam.updateMatrixWorld(true);
+        const r = deployLantern(ctx);
+        out.push({ ok: !!r.lantern, reason: r.reason, y: r.lantern ? r.lantern.pos.y : null });
+      }
+      cam.position.copy(start); cam.updateMatrixWorld(true);
+      return out;
     },
     castDown(x, z, fromY = 100, excludePlayer = false) {
       // excludePlayer (M7-S2 walk probe): a ray cast from the capsule's own

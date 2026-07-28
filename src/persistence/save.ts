@@ -1190,7 +1190,17 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   ctx.lanterns.list.length = 0;
   if (save.lanterns) {
     let maxId = 0;
+    // DEEPER cycle 11 (G2) — the cap is enforced on the LOAD path too. The deploy path can only ever
+    // add one at a time, but a pre-cap save (or a hand-edited one) can carry an unbounded list, and
+    // every lantern restored past the pool's capacity would come back UNLIT while still holding a
+    // slot the player can never see. Positions are restored ABSOLUTE and un-reprojected, which is
+    // what lets an underground lantern round-trip exactly — do not "fix" that with a heightAt.
     for (const saved of save.lanterns) {
+      if (ctx.lanterns.list.length >= Tuning.LANTERN_MAX_PLACED) {
+        // eslint-disable-next-line no-console
+        console.warn(`[save] ${save.lanterns.length} lanterns in the save, cap is ${Tuning.LANTERN_MAX_PLACED} — the rest were dropped`);
+        break;
+      }
       const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
       spawnLanternAt(ctx, pos, saved.rotationY);
       if (saved.id > maxId) maxId = saved.id;

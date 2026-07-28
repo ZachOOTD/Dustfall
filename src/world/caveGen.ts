@@ -1729,6 +1729,14 @@ export function setCaveRockLightState(
   _caveBounceU.value.set(x, y, z, Math.max(0, intensity) * T.CAVE_BOUNCE_FRAC * _caveLitDepthU.value);
 }
 
+/** DEEPER cycle 11 — read back what the rock is actually being told. The G4 canary needs to prove
+ *  BOTH directions: a placed lantern feeds the bounce, and with nothing held and no lantern in range
+ *  the bounce is EXACTLY zero (no free light). A write-only uniform cannot be asserted on. */
+export function getCaveRockLightState(): { x: number; y: number; z: number; bounce: number; litDepth: number } {
+  const v = _caveBounceU.value;
+  return { x: v.x, y: v.y, z: v.z, bounce: v.w, litDepth: _caveLitDepthU.value };
+}
+
 function caveRockBumpPatch(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
   shader.uniforms.uCaveBump = (this.userData.bumpU as { value: number }) ?? _caveBumpU;
   // Per-material: the crevice TOR is a sunlit exterior and keeps gain 1 (a 4× boost on a

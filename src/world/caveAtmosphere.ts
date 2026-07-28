@@ -30,6 +30,7 @@ import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import { updateCavePoolWater } from './cavePools.ts';   // DEEPER cycle 6 — the pool ripple clock
 import { setCaveRockLightState } from './caveGen.ts';  // DEEPER cycle 7 — the rock light-response uniforms
+import type { CaveKind } from './caveKinds.ts';        // DEEPER cycle 11 — cave cold reads the kind
 
 export interface CaveAtmosphere {
   /** Cave XZ bounding box (node footprints + the bore trench), pre-expanded by the AABB margin. */
@@ -48,6 +49,49 @@ export interface CaveAtmosphere {
   inCaveKey: string | null;
   _fogColor: THREE.Color;
   _ambColor: THREE.Color;
+}
+
+/** DEEPER cycle 11 — what a world point's CAVE CONTAINMENT is, with no derived curve applied.
+ *
+ *  `caveDarknessAt` already performed this exact test, but it (a) had a side effect
+ *  (`atmo.inCaveKey = …`) and (b) only ever returned a smoothstep that SATURATES at
+ *  `CAVE_DARK_DEPTH_FADE` (~7 m). Cave COLD needs the raw depth all the way to ~50 m and must be
+ *  callable from `updateStats`, which runs EARLIER in the tick than `updateCaveAtmosphere` — so the
+ *  test is extracted here as a pure function. Pure ⇒ no new tick-order constraint, no frame of
+ *  latency, and no risk of the two callers disagreeing about where "underground" begins. */
+export interface CaveContainment {
+  /** Which cave contains the point ('origin', a streamed resident key), or null when none does
+   *  — INCLUDING when the point is inside a cave's XZ box but at or above the terrain sheet. */
+  key: string | null;
+  /** Metres below the terrain sheet. Exactly 0 whenever `key` is null. */
+  depth: number;
+  /** The containing cave's kind; 'canonical' for the origin/egg cave and when `key` is null. */
+  kind: CaveKind;
+}
+
+/** Scratch result — this function runs once or twice per frame in the hot tick and must not
+ *  allocate. Callers MUST read the fields immediately and MUST NOT retain the object. */
+const _containment: CaveContainment = { key: null, depth: 0, kind: 'canonical' };
+
+export function caveContainmentAt(
+  atmo: CaveAtmosphere, p: { x: number; y: number; z: number }, ctx: GameContext,
+): Readonly<CaveContainment> {
+  _containment.key = null; _containment.depth = 0; _containment.kind = 'canonical';
+  const m = Tuning.CAVE_DARK_AABB_MARGIN;
+  const { x, y, z } = p;
+  let key: string | null = null;
+  let kind: CaveKind = 'canonical';
+  if (!(x < atmo.minX - m || x > atmo.maxX + m || z < atmo.minZ - m || z > atmo.maxZ + m)) {
+    key = 'origin';
+  } else if (ctx.caveStream) {
+    const r = ctx.caveStream.occupied(p);        // allocation-free; reads x/z only
+    if (r) { key = r.key; kind = r.cave.probe.kind; }
+  }
+  if (!key) return _containment;
+  const depth = ctx.terrain.pureHeightAt(x, z) - y;   // how far below the surface sheet we are
+  if (depth <= 0) return _containment;                // on/above the surface → not contained
+  _containment.key = key; _containment.depth = depth; _containment.kind = kind;
+  return _containment;
 }
 
 /** Pure containment/darkness factor at a world point: 0 outside every cave footprint or at the
@@ -71,22 +115,15 @@ export interface CaveAtmosphere {
 export function caveDarknessAt(
   atmo: CaveAtmosphere, p: { x: number; y: number; z: number }, ctx: GameContext,
 ): number {
-  const m = Tuning.CAVE_DARK_AABB_MARGIN;
-  const { x, y, z } = p;
-  let key: string | null = null;
-  if (!(x < atmo.minX - m || x > atmo.maxX + m || z < atmo.minZ - m || z > atmo.maxZ + m)) {
-    key = 'origin';
-  } else if (ctx.caveStream) {
-    const r = ctx.caveStream.occupied(p);        // allocation-free; reads x/z only
-    if (r) key = r.key;
-  }
-  atmo.inCaveKey = null;
-  if (!key) return 0;
-  const surf = ctx.terrain.pureHeightAt(x, z);
-  const depth = surf - y;                        // how far below the surface sheet the player is
-  if (depth <= 0) return 0;                       // on/above the surface → not dark
-  atmo.inCaveKey = key;
-  const t = Math.min(1, depth / Tuning.CAVE_DARK_DEPTH_FADE);
+  // DEEPER cycle 11 — the containment test moved to the pure `caveContainmentAt` above; this is now
+  // a thin wrapper over it plus the ONE side effect (`inCaveKey`) it always had. Behaviour is
+  // bit-identical: `caveContainmentAt` returns key=null in exactly the two cases that used to
+  // return 0 with inCaveKey left null (outside every footprint, and inside a footprint but at or
+  // above the sheet), and the smoothstep is unchanged.
+  const c = caveContainmentAt(atmo, p, ctx);
+  atmo.inCaveKey = c.key;
+  if (!c.key) return 0;
+  const t = Math.min(1, c.depth / Tuning.CAVE_DARK_DEPTH_FADE);
   return t * t * (3 - 2 * t);                     // smoothstep 0→1 over the fade depth
 }
 
@@ -184,10 +221,38 @@ export function updateCaveAtmosphere(ctx: GameContext, atmo: CaveAtmosphere, dt:
   // returns less diffuse bounce per candela than an omnidirectional flame does.
   const spI = sp ? sp.intensity * Tuning.CAVE_BOUNCE_SPOT_FRAC : 0;
   const src = ptI >= spI ? pt : sp;
-  setCaveRockLightState(
-    src ? src.position.x : p.x, src ? src.position.y : p.y, src ? src.position.z : p.z,
-    ptI + spI, d,
-  );
+  let bx = src ? src.position.x : p.x;
+  let by = src ? src.position.y : p.y;
+  let bz = src ? src.position.z : p.z;
+  let bounce = ptI + spI;
+
+  // ── DEEPER cycle 11 (G4) — A PLACED LANTERN IS A LIGHT IN THE ROOM AND MUST FEED THE BOUNCE.
+  //    Cycle 7 read the HELD lights only, so standing beside your own deployed lantern the ceiling
+  //    went black in a way it does not with a torch in hand — the one light you leave behind to mark
+  //    a route was also the one light the rock refused to answer.
+  //    The comparison is on strength RECEIVED at the player, `intensity / max(1, dist²)`: held lights
+  //    sit at the player (dist ≈ 0, so the max() floor makes their metric their raw intensity), and a
+  //    lantern only takes the slot when it is genuinely the brightest thing near you. Hold a torch and
+  //    the torch wins immediately (torch ≈ 14 vs lantern 2.4). Bounded by the lantern's own
+  //    attenuation radius so a lantern two chambers back contributes nothing.
+  //    NO FREE LIGHT, unchanged: nothing held AND no lantern in range ⇒ `bounce` is exactly 0 and the
+  //    shader's bounce block adds vec3(0). That is the cycle-7 canary, still exact.
+  const lanternR2 = Tuning.LANTERN_LIGHT_DISTANCE * Tuning.LANTERN_LIGHT_DISTANCE;
+  let bestMetric = bounce;
+  for (const l of ctx.lanterns.list) {
+    const li = l.light;
+    if (!li || li.intensity <= 0) continue;
+    const dx = li.position.x - p.x, dy = li.position.y - p.y, dz = li.position.z - p.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > lanternR2) continue;
+    const metric = li.intensity / Math.max(1, d2);
+    if (metric > bestMetric) {
+      bestMetric = metric;
+      bounce = li.intensity;
+      bx = li.position.x; by = li.position.y; bz = li.position.z;
+    }
+  }
+  setCaveRockLightState(bx, by, bz, bounce, d);
 
   // The mouth shaft — warm daylight down the ramp, bright at noon → faint at night. Only enabled
   // when the player is near the cave (within the AABB + margin), so it never touches the far surface.

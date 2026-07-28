@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { placementGroundYOrFeet } from './placementGround.ts';
 import type { LootEntry } from './lootContainers.ts';
 // ACA — sled visual reworked from wood planks to scrap metal sheet.
 // woodGrainMaterial import retired (no callers in this module now).
@@ -392,7 +393,7 @@ export function deploySled(ctx: GameContext): Sled | null {
   const pos = new THREE.Vector3()
     .copy(cam.position)
     .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
-  pos.y = ctx.terrain.heightAt(pos.x, pos.z);
+  pos.y = placementGroundYOrFeet(ctx, pos.x, pos.z);   // DEEPER cycle 11 (G1) — the live-collider floor, so this works underground
 
   for (const existing of ctx.sleds.list) {
     if (existing.pos.distanceToSquared(pos) < Tuning.NEAR_SLED_DISTANCE_SQ) {

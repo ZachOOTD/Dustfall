@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { placementGroundYOrFeet } from './placementGround.ts';
 import type { LootEntry } from './lootContainers.ts';
 import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
@@ -112,7 +113,7 @@ export function deployLocker(ctx: GameContext): Locker | null {
   const pos = new THREE.Vector3()
     .copy(cam.position)
     .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
-  pos.y = ctx.terrain.heightAt(pos.x, pos.z);
+  pos.y = placementGroundYOrFeet(ctx, pos.x, pos.z);   // DEEPER cycle 11 (G1) — the live-collider floor, so this works underground
 
   for (const existing of ctx.lockers.list) {
     if (existing.pos.distanceToSquared(pos) < Tuning.LOCKER_NEAR_DISTANCE_SQ) {

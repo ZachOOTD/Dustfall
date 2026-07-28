@@ -24,6 +24,7 @@ import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
 import { getItemDef } from '../inventory/items.ts';
+import { placementGroundY } from '../world/placementGround.ts';
 import type { ItemId } from '../inventory/types.ts';
 
 interface GhostPreview {
@@ -140,7 +141,7 @@ export function updateGhostPreview(ctx: GameContext): void {
   }
 
   // Compute the deploy position — same math as deployFire/deployTent/etc.
-  // Camera-forward XZ × PLACEMENT_DISTANCE_M, Y from terrain.heightAt.
+  // Camera-forward XZ × PLACEMENT_DISTANCE_M, Y from the SHARED placement sampler.
   const cam = ctx.three.camera;
   cam.getWorldDirection(_fwd);
   _fwd.y = 0;
@@ -148,7 +149,17 @@ export function updateGhostPreview(ctx: GameContext): void {
   _fwd.normalize();
   const x = cam.position.x + _fwd.x * Tuning.PLACEMENT_DISTANCE_M;
   const z = cam.position.z + _fwd.z * Tuning.PLACEMENT_DISTANCE_M;
-  const y = ctx.terrain.heightAt(x, z);
+  // DEEPER cycle 11 (G1) — was `ctx.terrain.heightAt(x, z)`, the SURFACE sampler. Underground that
+  // put the ring tens of metres overhead inside solid rock, so the preview promised a landing spot
+  // that the deploy then did not honour. Sharing `placementGroundY` with the deploy path is what
+  // makes preview and outcome agree BY CONSTRUCTION rather than by two copies of the same formula.
+  const y = placementGroundY(ctx, x, z);
+  if (y === null) {
+    // No ground under the aim point (a pit, a drop) — the honest preview is no ring at all rather
+    // than a ring hovering over nothing. The lantern's deploy refuses for the same reason.
+    if (g.group.visible) g.group.visible = false;
+    return;
+  }
   g.group.position.set(x, y, z);
   if (!g.group.visible) g.group.visible = true;
 }

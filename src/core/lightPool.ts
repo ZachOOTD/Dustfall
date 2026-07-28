@@ -80,6 +80,14 @@ export function claimLight(pool: LightPool): THREE.PointLight | null {
   return null;
 }
 
+/** DEEPER cycle 11 — is a slot available WITHOUT taking it? Lets a consumer refuse up front and
+ *  tell the player why, instead of claiming, getting `null`, and materialising something that looks
+ *  like a light but isn't one. */
+export function hasFreeLight(pool: LightPool): boolean {
+  for (let i = 0; i < pool.inUse.length; i++) if (!pool.inUse[i]) return true;
+  return false;
+}
+
 /** Release a previously-claimed light back to the pool. Resets
  *  intensity to 0 + parks below the world. Safe to call with `null`
  *  (no-op) so callers don't need to guard the optional-light case. */

@@ -3594,6 +3594,519 @@ const SCENARIOS = {
     }
     console.log(`[pool-fill] emitterIsolation ${JSON.stringify(iso)}`);
 
+    // ══ DEEPER cycle 11, GATE A — LANTERN-RT ═══════════════════════════════════════════════════
+    //    The deployable lantern is the light Zach asked to keep using underground, and until this
+    //    cycle placing one in a cave put it tens of metres up INSIDE SOLID ROCK — because every
+    //    placeable took its Y from `terrain.heightAt`, the SURFACE sampler. The bug was invisible
+    //    from the surface and permanent once saved, so this gate proves the whole round trip on the
+    //    REAL paths (real LMB through items.ts, real KCC walking, real RMB pack-up, real save/load):
+    //
+    //      1. It lands on the CAVE FLOOR — proven by COLLIDER IDENTITY, not by a plausible number.
+    //         The hit collider must belong to the cave's own rigid body. A Y that merely looks right
+    //         is exactly what the old code produced on the surface; only identity separates "on the
+    //         cave floor" from "on the terrain sheet forty metres overhead".
+    //      2. It is actually LIT — the pool light exists, is above zero, and is at the lantern
+    //         rather than parked at PARK_Y = -10000 (an unlit breadcrumb is worse than none).
+    //      3. It survives a REAL KCC round trip, not a teleport (the leviathan-walk lesson:
+    //         teleported waypoints lie about traversability, and they would lie about eviction too).
+    //      4. RMB retrieve returns the kit, the list, AND the pool slot.
+    //      5. Save/reload puts it back at the same absolute position, still lit, at SAVE_VERSION 18
+    //         read from the SAVE ITSELF — so a stray version bump reds this gate.
+    //      6. The cap refuses the N+1th with a reason, and the refusal is not vacuous.
+    //      7. G4: a placed lantern feeds the cave-rock bounce, AND with it packed up the bounce is
+    //         EXACTLY zero again — the no-free-light canary, both directions.
+    const lrt = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+      const fails = []; const notes = {};
+      // Progress marker — a throw anywhere below names the stage it died at instead of leaving the
+      // next session to bisect. `wasmAlive` distinguishes "this gate broke Rapier" from "Rapier was
+      // already dead when this gate started".
+      notes.stage = 'init';
+      const S = (n) => { notes.stage = n; };
+      try { g.castDown(0, 0, 100, true); notes.wasmAlive = true; } catch (e) { notes.wasmAlive = String((e && e.message) || e); }
+      try {
+      ctx.flags.paused = false; ctx.flags.thirdPerson = false;
+
+      S('probe');
+      let cavep = null;
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) cavep = o.userData.caveGenProbe; });
+      if (!cavep) return { fails: ['no caveGenProbe'], notes };
+
+      // The cave's OWN rigid body → the set of collider handles that mean "this is cave rock".
+      S('cave-body');
+      const res = ctx.caveStream ? ctx.caveStream.residents() : [];
+      const origin = res.find((r) => r.key === 'origin') || res[0];
+      if (!origin || !origin.cave.body) return { fails: ['origin cave resident has no rigid body — cannot assert collider identity'], notes };
+      const caveHandles = new Set();
+      for (let i = 0; i < origin.cave.body.numColliders(); i++) caveHandles.add(origin.cave.body.collider(i).handle);
+      notes.caveColliders = caveHandles.size;
+
+      // Stand in the roomiest chamber that is genuinely deep (so the darkness/cold model is live).
+      // CaveGenProbe nodes carry `rx` + `height` and NO `rz`. Reading `rz` yields NaN, a NaN reaches
+      // `setTranslation`, and Rapier answers a NaN transform with an `unreachable` trap that poisons
+      // the whole wasm module for the rest of the run — every later Rapier call then reports
+      // "recursive use of an object". Use the field that exists.
+      const rooms = cavep.nodes.slice().sort((a, b) => b.rx - a.rx);
+      const room = rooms[0];
+      const body = ctx.player.body.body;
+      const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;
+      const at = () => { const t = body.translation(); return { x: t.x, y: t.y, z: t.z }; };
+      const look = (tx, ty, tz) => {
+        const cam = ctx.three.camera; const t = body.translation();
+        cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+        cam.lookAt(tx, ty, tz); cam.updateMatrixWorld(true);
+      };
+      // cave-walk's `face`: aim at a point 1m ahead at EYE HEIGHT, so the flattened heading is the
+      // only thing the pitch can influence. Used for walking; `look` is used for aiming at things.
+      const face = (dx, dz) => {
+        const cam = ctx.three.camera; const t = body.translation();
+        const L = Math.hypot(dx, dz) || 1;
+        cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+        cam.lookAt(t.x + dx / L, t.y + ctx.player.eyeOffset, t.z + dz / L);
+        cam.updateMatrixWorld(true);
+      };
+      const placeAt = async (wx, wy, wz) => {
+        body.setTranslation({ x: wx, y: wy + CAP + 0.2, z: wz }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true); ctx.player.velocityY = 0;
+        await frames(30);
+      };
+      await placeAt(room.x, room.y, room.z);
+      S('stand');
+      const cont = g.caveContainment();
+      notes.stand = { room: room.id, depth: +cont.depth.toFixed(2), key: cont.key, kind: cont.kind };
+      if (!cont.key || cont.depth <= 1) fails.push(`the probe is not underground (key=${cont.key}, depth=${cont.depth.toFixed(2)}m) — every assertion below would be vacuous`);
+
+      // Capture toasts so a refusal can be asserted on the words the PLAYER sees.
+      const toasts = [];
+      const realToast = ctx.ui.showToast;
+      ctx.ui.showToast = (m) => { toasts.push(m); return realToast.call(ctx.ui, m); };
+
+      const poolInUse = () => ctx.lightPool.inUse.reduce((a, b) => a + (b ? 1 : 0), 0);
+      // Count only LANTERN-OWNED scene objects. A raw `scene.children.length` is not a lantern
+      // canary in a streaming world: this gate saves, loads, and walks 400m and back, and on seed 7
+      // that legitimately left 15 more chunk children in the scene than it started with. A canary
+      // another system can move is a canary that will eventually be silenced for being noisy.
+      const lanternChildren = () => ctx.three.scene.children
+        .filter((o) => o.userData && o.userData.interactRegistry === 'lanterns').length;
+      const base = { pool: poolInUse(), lanterns: ctx.lanterns.list.length, children: lanternChildren() };
+      notes.baseline = base;
+
+      // ── REAL LMB deploy through the shipped item path (never deployLantern directly). ──
+      // The hotbar is 4 slots (HOTBAR_SLOT_COUNT) — writing past it would GROW the array and
+      // quietly invent inventory that the game does not have.
+      const clearInv = () => {
+        for (const s of ctx.inventory.slots) { s.item = null; s.count = 0; delete s.meta; }
+        for (const s of ctx.inventory.backpack) { s.item = null; s.count = 0; delete s.meta; }
+      };
+      const kitsHeld = () => ctx.inventory.slots.concat(ctx.inventory.backpack)
+        .reduce((a, s) => a + (s.item === 'lantern_kit' ? s.count : 0), 0);
+      const giveKit = () => {
+        clearInv();
+        ctx.inventory.slots[0].item = 'lantern_kit';
+        ctx.inventory.slots[0].count = 1;
+        ctx.inventory.selectedIdx = 0;
+      };
+      const clickPlace = async () => {
+        const before = ctx.lanterns.list.length;
+        ctx.input.mousePressed.add(0);
+        await raf(); await raf();
+        return ctx.lanterns.list.length > before ? ctx.lanterns.list[ctx.lanterns.list.length - 1] : null;
+      };
+      S('deploy');
+      giveKit();
+      // Look slightly down and forward — a real player's aim when setting something on the floor.
+      look(room.x + 3, room.y, room.z);
+      const lant = await clickPlace();
+      if (!lant) {
+        ctx.ui.showToast = realToast;
+        fails.push(`LMB deploy produced no lantern (toasts: ${JSON.stringify(toasts)})`);
+        return { fails, notes };
+      }
+      notes.placed = { x: +lant.pos.x.toFixed(2), y: +lant.pos.y.toFixed(2), z: +lant.pos.z.toFixed(2) };
+
+      // ── 1. COLLIDER IDENTITY — the thing it landed on must BE the cave. ──
+      S('identity');
+      const hit = g.castDown(lant.pos.x, lant.pos.z, lant.pos.y + 0.6, true);
+      notes.landing = hit
+        ? { hitY: +hit.hitY.toFixed(3), dY: +(hit.hitY - lant.pos.y).toFixed(3), handle: hit.colliderHandle, isCave: caveHandles.has(hit.colliderHandle) }
+        : null;
+      if (!hit) fails.push('nothing under the placed lantern at all — it is floating in the void');
+      else {
+        if (Math.abs(hit.hitY - lant.pos.y) > 0.05) fails.push(`lantern sits ${(lant.pos.y - hit.hitY).toFixed(2)}m off the floor under it (hitY ${hit.hitY.toFixed(2)} vs lantern ${lant.pos.y.toFixed(2)})`);
+        if (!caveHandles.has(hit.colliderHandle)) fails.push(`COLLIDER IDENTITY: the lantern is resting on collider ${hit.colliderHandle}, which is NOT part of the cave body — it landed on the terrain sheet (the terrain.heightAt bug)`);
+      }
+      // And the surface sampler must DISAGREE, or this cave is not deep enough to prove anything.
+      const surfHere = ctx.terrain.pureHeightAt(lant.pos.x, lant.pos.z);
+      notes.surfaceWouldHaveBeen = +surfHere.toFixed(2);
+      if (surfHere - lant.pos.y < 3) fails.push(`the terrain sheet is only ${(surfHere - lant.pos.y).toFixed(2)}m above the lantern — the old bug would have been invisible here, so this cell proves nothing (VACUOUS)`);
+
+      // ── 2. LIT. ──
+      notes.lit = lant.light ? { intensity: +lant.light.intensity.toFixed(3), y: +lant.light.position.y.toFixed(2) } : null;
+      if (!lant.light) fails.push('the placed lantern has NO pool light — an unlit breadcrumb');
+      else {
+        if (!(lant.light.intensity > 0)) fails.push(`placed lantern light intensity ${lant.light.intensity}`);
+        if (lant.light.position.y < -1000) fails.push(`the lantern's light is still PARKED at y=${lant.light.position.y} — it is claimed but not positioned`);
+        if (Math.abs(lant.light.position.y - lant.pos.y) > 2.0) fails.push(`the lantern's light is ${(lant.light.position.y - lant.pos.y).toFixed(1)}m from the lantern`);
+      }
+      if (poolInUse() !== base.pool + 1) fails.push(`pool inUse ${poolInUse()} after one placement (expected ${base.pool + 1})`);
+
+      // ── 7a. G4 — the rock answers a placed lantern, with nothing in hand. ──
+      await frames(4);
+      const rockLit = g.caveRockLight();
+      notes.bounceWithLantern = +rockLit.bounce.toFixed(4);
+      if (!(rockLit.bounce > 0)) fails.push('G4: a placed lantern within range contributes ZERO cave-rock bounce — the ceiling goes black beside your own light');
+
+      // ── 3. REAL KCC round trip. ──
+      const sideClear = (px, py, pz, dx, dz) => {
+        const half = ctx.player.body.halfHeight + ctx.player.body.radius;
+        const ray = new g.RAPIER.Ray({ x: px, y: py - half + 1.0, z: pz }, { x: dx, y: 0, z: dz });
+        const h = ctx.physics.world.castRay(ray, 4, true, undefined, undefined, undefined, body);
+        return h ? h.timeOfImpact : Infinity;
+      };
+      S('roundtrip');
+      let pathLen = 0, maxFromLantern = 0;
+      const walkToward = async (tx, tz, maxFrames, thresh) => {
+        let best = Infinity, stall = 0, reached = false;
+        const TH = thresh || 1.9;
+        for (let i = 0; i < maxFrames; i++) {
+          const p = at();
+          const dx = tx - p.x, dz = tz - p.z;
+          const dist = Math.hypot(dx, dz);
+          face(dx, dz);
+          ctx.input.keys['KeyA'] = false; ctx.input.keys['KeyD'] = false; ctx.input.keys['KeyS'] = false;
+          if (stall > 10) {
+            const fl = dist || 1; const ux = dx / fl, uz = dz / fl;
+            const lc = sideClear(p.x, p.y, p.z, -uz, ux), rc2 = sideClear(p.x, p.y, p.z, uz, -ux);
+            if (stall > 40 && (Math.floor(stall / 10) % 3 === 0)) { ctx.input.keys['KeyW'] = false; ctx.input.keys['KeyS'] = true; }
+            else { ctx.input.keys['KeyW'] = true; ctx.input.keys[lc >= rc2 ? 'KeyA' : 'KeyD'] = true; }
+          } else ctx.input.keys['KeyW'] = true;
+          await raf();
+          const q = at();
+          pathLen += Math.hypot(q.x - p.x, q.z - p.z);
+          maxFromLantern = Math.max(maxFromLantern, Math.hypot(q.x - lant.pos.x, q.z - lant.pos.z));
+          if (dist < TH) { reached = true; break; }
+          if (dist < best - 0.03) { best = dist; stall = 0; } else if (++stall > 200) break;
+        }
+        for (const k of ['KeyW', 'KeyA', 'KeyD', 'KeyS']) ctx.input.keys[k] = false;
+        return reached;
+      };
+      // Walk the REAL CORRIDORS. "Face the target and hold W" cannot round a corner, so a node three
+      // hops away is unreachable in a straight line — the first attempt stalled against a wall 8m out
+      // and reported a vacuous 4.6m round trip. Chain graph EDGES instead: every leg is a corridor
+      // the generator actually cut, and every leg is still a real KCC walk under gravity.
+      const adj = new Map();
+      for (const n of cavep.nodes) adj.set(n.id, []);
+      for (const e of cavep.edges) { adj.get(e.a).push(e.b); adj.get(e.b).push(e.a); }
+      const byId = new Map(cavep.nodes.map((n) => [n.id, n]));
+      // BFS out from the room; take the first node whose straight-line distance clears the bar, and
+      // keep the hop-by-hop path to it.
+      const prev = new Map([[room.id, null]]);
+      const q = [room.id];
+      let goal = null;
+      while (q.length && !goal) {
+        const cur = q.shift();
+        for (const nb of adj.get(cur) || []) {
+          if (prev.has(nb)) continue;
+          prev.set(nb, cur);
+          const nn = byId.get(nb);
+          if (Math.hypot(nn.x - lant.pos.x, nn.z - lant.pos.z) >= 14) { goal = nb; break; }
+          q.push(nb);
+        }
+      }
+      const path = [];
+      for (let c = goal; c !== null && c !== undefined; c = prev.get(c)) path.unshift(c);
+      const legs = path.slice(1).map((id) => byId.get(id));
+      const before = { x: lant.pos.x, y: lant.pos.y, z: lant.pos.z };
+      // cave-walk's proven leg recipe: aim at the MIDPOINT of the corridor first (a corridor bends,
+      // and "face the target and hold W" cannot round a corner), then the node, then one retry at a
+      // wider threshold. Every step is still real WASD under gravity — no waypoint teleports, which
+      // is the whole reason leviathan-walk was once green on an unclimbable ramp.
+      // SUB-STEP ALONG THE EDGE. Facing a chamber centre 20m away and holding W puts the capsule
+      // into the wall beside the corridor mouth — the first attempt walked 46.6m of real path
+      // without ever getting 3.1m from where it started, which is what a stuck-and-wiggling KCC
+      // looks like. The corridor is generated ALONG the edge segment, so aiming at successive
+      // fractions of it keeps every intermediate target inside the tube. Still real WASD under
+      // gravity, still refuses to teleport; a sub-step that misses just hands off to the next one.
+      const walkLeg = async (from, to) => {
+        const N = 8;
+        let last = false;
+        for (let i = 1; i <= N; i++) {
+          const t = i / N;
+          last = await walkToward(from.x + (to.x - from.x) * t, from.z + (to.z - from.z) * t, 500, 2.2);
+        }
+        return last || Math.hypot(at().x - to.x, at().z - to.z) < 3.5;
+      };
+      let outOk = legs.length > 0;
+      let cur = room;
+      for (const n of legs) { if (!(await walkLeg(cur, n))) { outOk = false; break; } cur = n; }
+      let backOk = true;
+      const homeward = legs.slice(0, -1).reverse().concat([room]);
+      for (const n of homeward) { if (!(await walkLeg(cur, n))) backOk = false; cur = n; }
+      notes.roundTrip = {
+        hops: path, outOk, backOk,
+        pathLen: +pathLen.toFixed(1), maxFromLantern: +maxFromLantern.toFixed(1),
+      };
+      // The property under test is "the world going on around it does not disturb it", and it is
+      // tested twice for two different reasons:
+      //   (a) 25m of REAL KCC walking with the player, physics and every per-frame system live.
+      //       Whether that walking gets OUT of the chamber is `cave-walk`'s question, not this
+      //       gate's — corridor traversability already has its own leg with its own teeth, and
+      //       asserting it a second time here would just make this gate red for someone else's bug.
+      //       `outOk` is recorded as evidence, not as a verdict.
+      //   (b) a deliberate FAR relocation (below), which is the only way to reach the distances the
+      //       cave streamer's eviction actually runs at. That one is stated as a relocation, not
+      //       dressed up as a walk — a teleport lies about traversability, which is exactly why it
+      //       is not being used for (a).
+      if (pathLen < 25) fails.push(`round trip walked only ${pathLen.toFixed(1)}m of real KCC path (need 25m) — the walk-away assertion is vacuous`);
+      if (ctx.lanterns.list.indexOf(lant) < 0) fails.push('the lantern was REMOVED from the registry during the round trip (evicted with the cave?)');
+      if (Math.hypot(lant.pos.x - before.x, lant.pos.y - before.y, lant.pos.z - before.z) > 0.01) fails.push('the lantern MOVED during the round trip');
+      if (!lant.light || !(lant.light.intensity > 0)) fails.push('the lantern went dark during the round trip');
+
+      // (b) FAR RELOCATION — out of the cave, 400m across the desert, and back. This is the range
+      //     the resident cap and the chunk streamer operate at; 12m of corridor never was.
+      const surfAway = ctx.terrain.heightAt(room.x + 400, room.z + 400);
+      await placeAt(room.x + 400, surfAway, room.z + 400);
+      await frames(60);
+      const survivedAway = ctx.lanterns.list.indexOf(lant) >= 0 && !!lant.light;
+      await placeAt(room.x, room.y, room.z);
+      await frames(30);
+      notes.farField = {
+        survivedAway, backPresent: ctx.lanterns.list.indexOf(lant) >= 0,
+        stillLit: !!(lant.light && lant.light.intensity > 0),
+        poolInUse: poolInUse(),
+        moved: +Math.hypot(lant.pos.x - before.x, lant.pos.y - before.y, lant.pos.z - before.z).toFixed(4),
+      };
+      if (!survivedAway) fails.push('the lantern was destroyed while the player was 400m away — placed light is player property and must outlive the trip');
+      if (ctx.lanterns.list.indexOf(lant) < 0) fails.push('the lantern is gone after returning from 400m away');
+      if (!lant.light || !(lant.light.intensity > 0)) fails.push('the lantern lost its pool light over the 400m round trip');
+      if (notes.farField.moved > 0.01) fails.push(`the lantern moved ${notes.farField.moved}m over the far-field trip`);
+
+      // ── 5. SAVE / RELOAD (done before the retrieve so a live lantern is in the save). ──
+      await placeAt(room.x, room.y, room.z);
+      S('saveload');
+      const savedPos = { x: lant.pos.x, y: lant.pos.y, z: lant.pos.z };
+      g.saveGame();
+      let saveVersion = null, savedLanterns = null;
+      try {
+        const raw = JSON.parse(localStorage.getItem('dustfall.save.v1'));
+        saveVersion = raw.version;
+        savedLanterns = (raw.lanterns || []).length;
+        notes.savedY = raw.lanterns && raw.lanterns[0] ? +raw.lanterns[0].pos.y.toFixed(3) : null;
+      } catch (e) { fails.push(`could not read the save back: ${String(e)}`); }
+      g.loadGame();
+      await frames(10);
+      notes.save = { version: saveVersion, lanterns: savedLanterns, afterLoad: ctx.lanterns.list.length };
+      if (saveVersion !== 18) fails.push(`SAVE_VERSION in the written save is ${saveVersion}, expected 18 — cycle 11 must not bump the schema`);
+      if (savedLanterns !== 1) fails.push(`the save carries ${savedLanterns} lanterns (expected 1)`);
+      const re = ctx.lanterns.list[0];
+      if (!re) fails.push('no lantern after reload');
+      else {
+        const d = Math.hypot(re.pos.x - savedPos.x, re.pos.y - savedPos.y, re.pos.z - savedPos.z);
+        notes.reloadDelta = +d.toFixed(5);
+        if (d > 0.01) fails.push(`reloaded lantern is ${d.toFixed(3)}m from where it was saved — the underground Y did not round-trip`);
+        if (!re.light || !(re.light.intensity > 0)) fails.push('the reloaded lantern has no live pool light');
+        const h2 = g.castDown(re.pos.x, re.pos.z, re.pos.y + 0.6, true);
+        if (!h2 || !caveHandles.has(h2.colliderHandle)) fails.push('the reloaded lantern is no longer resting on the cave body');
+      }
+
+      // ── 6. THE CAP + a real refusal. ──
+      toasts.length = 0;
+      S('cap');
+      let placedTotal = ctx.lanterns.list.length;
+      const CAPN = 6;
+      // Stand still and TURN. Teleporting into a ring risks parking the capsule inside solid rock,
+      // and the placements only need to be further apart than LANTERN_NEAR_DISTANCE (1m): at
+      // PLACEMENT_DISTANCE_M = 2.2m, adjacent bearings 30 deg apart land 1.14m apart.
+      await placeAt(room.x, room.y, room.z);
+      const capToasts = [];
+      for (let i = 0; i < 16 && capToasts.length < 3; i++) {
+        giveKit();
+        const a = (i / 12) * Math.PI * 2;
+        look(room.x + Math.cos(a) * 8, room.y - 0.5, room.z + Math.sin(a) * 8);
+        await raf();
+        const n0 = ctx.lanterns.list.length;
+        await clickPlace();
+        placedTotal = ctx.lanterns.list.length;
+        if (placedTotal === n0 && placedTotal >= CAPN) capToasts.push(toasts[toasts.length - 1]);
+      }
+      notes.cap = { placed: placedTotal, refusals: capToasts.length, toasts: toasts.slice(-3) };
+      if (placedTotal > CAPN) fails.push(`${placedTotal} lanterns placed — the cap of ${CAPN} did not hold`);
+      if (placedTotal !== CAPN) fails.push(`only ${placedTotal} lanterns placed, cap is ${CAPN} — the cap was never REACHED, so the refusal below is vacuous`);
+      const capToast = toasts.find((m) => /pack one up first/.test(m || ''));
+      if (!capToast) fails.push(`no cap-refusal message was shown to the player (saw ${JSON.stringify(toasts.slice(-3))})`);
+      if (!capToasts.length) fails.push('the cap was never actually hit — no placement was refused, so the refusal assertion is vacuous');
+      notes.capToast = capToast || null;
+
+      // ── 4. REAL RMB retrieve of every one, through hover → handleContextAction. ──
+      S('retrieve');
+      clearInv();
+      let retrieved = 0;
+      for (let guard = 0; guard < 12 && ctx.lanterns.list.length; guard++) {
+        const target = ctx.lanterns.list[0];
+        await placeAt(target.pos.x + 1.2, target.pos.y, target.pos.z);
+        const n0 = ctx.lanterns.list.length;
+        for (let i = 0; i < 40 && ctx.lanterns.list.length === n0; i++) {
+          look(target.pos.x, target.pos.y + 1.0, target.pos.z);
+          await raf();                              // let interaction.ts set hover + hovered
+          ctx.input.mousePressed.add(2);
+          await raf();
+        }
+        if (ctx.lanterns.list.length < n0) retrieved++; else break;
+      }
+      const kitCountAfter = kitsHeld();
+      notes.retrieve = { retrieved, remaining: ctx.lanterns.list.length, kitsBack: kitCountAfter };
+      if (retrieved === 0) fails.push('RMB retrieve never fired — the shipped pack-up path is unreachable underground');
+      if (ctx.lanterns.list.length !== 0) fails.push(`${ctx.lanterns.list.length} lanterns left after retrieving all of them`);
+      if (kitCountAfter !== retrieved) fails.push(`retrieved ${retrieved} lanterns but got ${kitCountAfter} kits back`);
+
+      // ── 7b. G4 canary, the OTHER direction: nothing held, nothing placed ⇒ EXACTLY zero. ──
+      await frames(4);
+      const rockDark = g.caveRockLight();
+      notes.bounceAfterRetrieve = rockDark.bounce;
+      if (rockDark.bounce !== 0) fails.push(`NO FREE LIGHT canary: with nothing held and no lantern placed the cave-rock bounce is ${rockDark.bounce}, must be exactly 0`);
+
+      // ── 8. LEAK CANARY. ──
+      S('teardown');
+      const end = { pool: poolInUse(), lanterns: ctx.lanterns.list.length, children: lanternChildren() };
+      notes.teardown = end;
+      if (end.pool !== base.pool) fails.push(`pool leak: inUse ${base.pool} → ${end.pool} after full teardown`);
+      if (end.lanterns !== base.lanterns) fails.push(`registry leak: ${base.lanterns} → ${end.lanterns}`);
+      if (end.children !== base.children) fails.push(`scene-graph leak: ${base.children} → ${end.children} lantern objects still parented to the scene`);
+
+      ctx.ui.showToast = realToast;
+      try { localStorage.removeItem('dustfall.save.v1'); } catch (e) { void e; }
+      S('done');
+      } catch (err) {
+        fails.push(`threw during stage "${notes.stage}": ${String((err && err.message) || err)}`);
+      }
+      return { fails, notes };
+    }).catch((e) => ({ fails: [`LANTERN-RT harness threw: ${String((e && e.message) || e)}`], notes: {} }));
+
+    for (const f of (lrt.fails || [])) { fails.push(`LANTERN-RT ${f}`); console.log(`[pool-fill] LANTERN-RT FAIL ${f}`); }
+    console.log(`[pool-fill] LANTERN-RT ${JSON.stringify(lrt.notes || {})}`);
+    console.log(`LANTERN-RT pass=${(lrt.fails || []).length === 0 ? 1 : 0} fails=${(lrt.fails || []).length}`);
+
+    // ══ DEEPER cycle 11, GATE B — CAVE-COLD ════════════════════════════════════════════════════
+    //    Zach: *"the temperature should be colder but not cold enough to damage the player."* The
+    //    shipped model was backwards — underground the branch chain still ran off the SURFACE clock,
+    //    so a cave WARMED you at noon and COLD_NIGHT_DRAIN killed you in it at midnight. INV-COLD
+    //    replaces the ambient term underground with an equilibrium whose TARGET is hard-clamped, and
+    //    this gate proves the clamp holds over the whole space rather than at the tuned point:
+    //
+    //      1. THE MATRIX, through the REAL updateStats tick (the capsule really is at that depth in
+    //         the real cave AABB, so containment / pureHeightAt / branch order are the shipped ones).
+    //      2. TOTALITY over kind × wet × depth on `caveColdTarget` itself — the one function the
+    //         clamp lives in, which the tick provably routes through (assertion 5 ties the two).
+    //      3. Corollary (b): a player who descends already freezing must come out WARMER.
+    //      4. Surface parity: at depth 0 the cave term must be exactly a no-op, checked against the
+    //         legacy constants themselves (midnight drains at exactly COLD_NIGHT_DRAIN) rather than
+    //         against a digest this cycle would have generated for itself.
+    //      5. Vacuous-pass guard — "green because the cold never fired" is the failure mode cycles 5
+    //         and 8 both hit.
+    const cold = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const fails = []; const notes = {};
+      // These are hardcoded ON PURPOSE — the gate must pin the expected values independently, so
+      // editing tuning.ts moves the game and reds the gate rather than moving both together.
+      const T = { FLOOR: -0.48, DAMAGE: -1, VIGNETTE: 0.3, REGEN: 0.5, NIGHT_DRAIN: 1 / 420 };
+
+      if (!g.caveColdFloorOk()) fails.push('the INV-COLD boot assert is RED: CAVE_COLD_FLOOR no longer clears the damage line by CAVE_COLD_SAFETY_MARGIN');
+
+      // ── 2. TOTALITY on the clamped target: depth × kind × wet, exhaustively. ──
+      const KINDS = ['canonical', 'warren', 'fungal', 'flooded', 'shaft'];
+      let worstTarget = 0, worstCell = null, anyBelowVignette = false;
+      for (const d of [0, 1, 5, 10, 20, 30, 40, 55, 200]) {
+        for (const k of KINDS) {
+          for (const wet of [false, true]) {
+            const t = g.caveColdTarget(d, k, wet);
+            if (t < worstTarget) { worstTarget = t; worstCell = `${k}@${d}m${wet ? ' wet' : ''}`; }
+            if (t > 0) fails.push(`caveColdTarget(${d},${k},${wet}) = ${t} — a cave must never warm you ABOVE neutral`);
+            if (t < T.FLOOR - 1e-9) fails.push(`caveColdTarget(${d},${k},${wet}) = ${t} — BELOW the clamp floor ${T.FLOOR}; a multiplier escaped the clamp`);
+            if (d === 0 && t !== 0) fails.push(`caveColdTarget(0,${k},${wet}) = ${t} — depth 0 must be exactly a no-op`);
+            if (t < -T.VIGNETTE) anyBelowVignette = true;
+          }
+        }
+      }
+      notes.worstTarget = { value: +worstTarget.toFixed(4), cell: worstCell };
+      if (!anyBelowVignette) fails.push(`no depth/kind combination ever reaches past the cold vignette threshold (${-T.VIGNETTE}) — the cave never reads as cold at all (VACUOUS)`);
+      if (worstTarget > -T.VIGNETTE) fails.push(`the coldest the cave ever gets is ${worstTarget.toFixed(3)} — the blue vignette (${-T.VIGNETTE}) never lights`);
+      if (worstTarget < -T.REGEN) fails.push(`the coldest target ${worstTarget.toFixed(3)} suppresses health regen (|t| >= ${T.REGEN}) — Q6 says the deep must not`);
+
+      // ── 1. THE MATRIX through the real tick. ──
+      const DEPTHS = [0, 5, 10, 20, 30, 40, 55];
+      const STARTS = [1, 0, -0.5, -0.99];
+      const SUNS = [1.0, -0.5];              // noon / midnight, on the SURFACE clock
+      const rows = [];
+      let minTempAll = 1, maxColdReach = 0, damageCells = 0, depthsSeen = new Set();
+      // The depth-0 cells assert SURFACE PARITY, so they have to be unambiguously on the surface.
+      // Asking for depth exactly 0 puts the capsule ON the sheet, and Rapier stores translations as
+      // f32: the round-trip can land a micron BELOW the f64 `pureHeightAt`, at which point the cave
+      // branch correctly fires and the parity cell reads as a leak. Seed 1337 rounded one way and
+      // seed 7 the other — a coin-flip gate. Stand the surface cells 30cm up instead, which is also
+      // where a real player's body centre is: never within a micron of the sheet.
+      for (const d of DEPTHS) {
+        for (const wet of [false, true]) {
+          for (const sun of SUNS) {
+            for (const st of STARTS) {
+              const r = g.caveColdRun({ depth: d === 0 ? -0.3 : d, sunHeight: sun, startTemp: st, wet, minutes: 12 });
+              rows.push(r);
+              if (r.observedDepth > 0.01) depthsSeen.add(d);
+              if (d > 0) {
+                if (!r.inCave) fails.push(`depth ${d}m: the probe was NOT registered as inside a cave (observedDepth ${r.observedDepth}) — the matrix is measuring the surface`);
+                minTempAll = Math.min(minTempAll, r.minTemp);
+                // Only cells that START at or above neutral can testify that the CAVE made them
+                // cold; a cell seeded at -0.99 would otherwise satisfy the guard on its own seed.
+                if (st >= 0) maxColdReach = Math.max(maxColdReach, -r.minTemp);
+                if (r.minTemp <= T.DAMAGE + 1e-9 || r.coldDamageTicks > 0 || r.healthLost > 1e-9 || r.died) {
+                  damageCells++;
+                  fails.push(`CAVE DAMAGE at depth ${d}m sun ${sun} start ${st}${wet ? ' wet' : ''}: minTemp ${r.minTemp}, ${r.coldDamageTicks} damage ticks, health lost ${r.healthLost}${r.died ? ', DIED' : ''}`);
+                }
+                // INV-COLD bounds what the CAVE does, not where the player arrived: someone who
+                // descends at -0.99 starts below the floor by definition. The bound is therefore
+                // "never colder than where you started, and never colder than the floor".
+                const bound = Math.min(st, T.FLOOR);
+                if (r.minTemp < bound - 1e-6) fails.push(`depth ${d}m sun ${sun} start ${st}${wet ? ' wet' : ''}: minTemp ${r.minTemp} is below ${bound} — the cave made the player colder than the floor allows`);
+                // ── 5. THE TICK ROUTES THROUGH THE CLAMPED TARGET. A cell that starts neutral or
+                //    warm settles exactly on caveColdTarget; if the branch used any other formula
+                //    this diverges, which is what stops assertion 2 from being a test of dead code.
+                if (st >= 0) {
+                  const want = g.caveColdTarget(r.observedDepth, r.kind, wet);
+                  if (Math.abs(r.endTemp - want) > 0.02) fails.push(`depth ${d}m start ${st}${wet ? ' wet' : ''}: settled at ${r.endTemp} but caveColdTarget says ${want.toFixed(4)} — the tick is not using the clamped target`);
+                }
+                // ── 3. Corollary (b) — descending frozen must WARM you. ──
+                if (st === -0.99 && !(r.endTemp > st + 1e-6)) fails.push(`depth ${d}m sun ${sun}${wet ? ' wet' : ''}: arrived at ${st} and ended at ${r.endTemp} — the cave did not warm a freezing descender`);
+              } else {
+                // ── 4. SURFACE PARITY — depth 0 must be the legacy model, unchanged. ──
+                if (r.inCave) fails.push(`depth 0: registered as inside a cave — depth <= 0 must be exactly a no-op`);
+                if (sun < 0 && st > -1) {
+                  const want = -T.NIGHT_DRAIN / 30;
+                  if (Math.abs(r.firstTempStep - want) > 1e-9) fails.push(`SURFACE PARITY: midnight step was ${r.firstTempStep} per tick, legacy COLD_NIGHT_DRAIN is ${want} — the cave branch is leaking onto the surface`);
+                }
+                if (sun > 0 && st < 1 && !(r.firstTempStep > 0)) fails.push(`SURFACE PARITY: midday on the surface did not warm (step ${r.firstTempStep})`);
+              }
+            }
+          }
+        }
+      }
+      notes.cells = rows.length;
+      notes.minTempUnderground = +minTempAll.toFixed(4);
+      notes.maxColdReach = +maxColdReach.toFixed(4);
+      notes.damageCells = damageCells;
+      notes.depthsSeen = depthsSeen.size;
+      notes.sample = rows.filter((r) => r.depth === 55 && r.startTemp === 0).map((r) => `${r.wet ? 'wet' : 'dry'}/sun${r.sunHeight}: ${r.endTemp} (min ${r.minTemp}, dmg ${r.coldDamageTicks})`);
+
+      // ── 5. VACUOUS-PASS GUARD. ──
+      if (maxColdReach < 0.05) fails.push(`VACUOUS: the coldest the matrix ever got was ${maxColdReach.toFixed(4)} — nothing ever got cold, so "no damage" proves nothing`);
+      if (depthsSeen.size < 5) fails.push(`VACUOUS: only ${depthsSeen.size} distinct depths were actually underground (need 5)`);
+      return { fails, notes };
+    }).catch((e) => ({ fails: [`CAVE-COLD threw: ${String((e && e.message) || e)}`], notes: {} }));
+
+    for (const f of (cold.fails || [])) { fails.push(`CAVE-COLD ${f}`); console.log(`[pool-fill] CAVE-COLD FAIL ${f}`); }
+    console.log(`[pool-fill] CAVE-COLD ${JSON.stringify(cold.notes || {})}`);
+    console.log(`CAVE-COLD pass=${(cold.fails || []).length === 0 ? 1 : 0} fails=${(cold.fails || []).length}`);
+
     // ── 7. THE PIXEL GATE (round-13 fix 2b) ──────────────────────────────────────────────────
     //    `pool-look` measures the water's on-screen appearance; nothing ran it in `verify:chunks`,
     //    so the whole visual contract (darker than lit rock · a LIVE ripple · no 8-bit banding · a
