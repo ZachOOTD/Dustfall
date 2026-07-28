@@ -6,6 +6,47 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 9 — CAVE KINDS + the gate runner + the headroom fix (2026-07-27/28) — SHIPPED
+## → CHECKPOINT: hazard-spec-review (the charter's checkpoint 2) — PAUSED FOR ZACH
+
+- **Planned:** four cave kinds as a parameter table over the one generator; grew (by finding) to
+  include the gate runner, a 1-in-9 enterability defect, and three adversarial fix rounds.
+- **Shipped, in order:** the kind table (warren/fungal/flooded/shaft, machine-asserted
+  invariants, distribution proven ×3 seeds) `c8fab5a` · the lattice snap `c8fab5a` · **the gate
+  runner** (suite 90→~32-55 min, `--legs=`, tee-to-file, dt-coupling discipline) `05bb7a1`+`b85ed24` ·
+  **the entrance headroom defect closed by construction** (~1 cave in 9 could not be entered;
+  hole 3→4 cells + placement rule 8 + red-proven tooth) `9b1c509` · the per-kind look pass
+  `ea55be6` · **two adversarial fix rounds** off a light critic's FAIL (floating history prop,
+  the snowman cluster, sconce orbs, cardboard rubble, dry flooded frames — all root-caused:
+  an Euler mirror bug, analytic-plane seating, 80-facet icosahedron fins, flat capScale)
+  `ec45ab1`+`8348402` · the **fungiContact machine assert** (mounting is a gate number;
+  red-proven; caught two real floats AND its own false positive) · **the hazard spec drafted in
+  parallel** (the pipelining lever, 38 min, `b1315c4`).
+- **Verify (the gate of record, this tree):** tsc + loot + placement + colliders green;
+  `verify:chunks` **ALL 24 LEGS GREEN** in 54m50s with the march legs in the quiet phase —
+  `cave-walk-7a` green on quiet, confirming its parallel-phase red was load, not geometry.
+  Origin digests `d8f15005`/`99e0015b` held through every fix round, proven repeatedly.
+- **Visual iteration:** ~5 rounds (look pass) + 2 critic-driven fix rounds across 26 framings;
+  final critic state: both sev-1s closed, remaining items are accepted/parked residuals.
+- **EFFICIENCY RETRO (the watch's first full cycle):** the gate runner cut the suite ~2×; and
+  agents iterated on `--legs` all day (the headroom fix's lever selection took one 20-second
+  pure-model sweep instead of build-per-variant). Costs found and fixed: the parallel phase
+  manufactured march false-reds twice (→ quiet phase, ~55 min suite — verdict integrity over
+  the 35-min target); two runner agents parked in watcher-waits (→ poll-to-completion pattern);
+  one critic mis-attribution cost two rounds before a 90-second pixel→mesh probe named the real
+  builder (→ probe the pixels FIRST when a critique names a suspect). The parallel spec draft
+  cost zero wall-clock.
+- **⚠ BUDGET:** ~3.0M this cycle (the biggest yet — it absorbed the gate runner + two critic
+  waves + the spec). **Campaign ~9.15M / 10M soft ceiling** — the remaining ladder (hazards
+  build, light budget, return reason, integration) does NOT fit without raising it. Zach's
+  call at this checkpoint.
+- **Commits:** `c8fab5a` → `8348402` + `b85ed24` (10 commits across the two stretches).
+- **PARKED FOR ZACH at this checkpoint:** [hazard-spec.md](hazard-spec.md) Q1-Q10 (the review
+  this pause exists for) · the budget ceiling · THE REPAIR DESCENT WALK-TEST (cycles 6-9
+  changed everything underground) · canonical speleothem geometry knife-tips (digest
+  re-baseline) · pocket-9 wedge trap + floorOk margin + the seed-7 marginal pocket (all
+  digest-moving) · the shaft collapse-skylight option (spec appendix Q9) · kind taste dials.
+
 ## PAUSED again (2026-07-27 evening) — Zach: "need to pause cleanly now" — cycle 9 nearly closed
 
 What shipped between the morning resume and this pause (all committed, tree clean at `ea55be6`):

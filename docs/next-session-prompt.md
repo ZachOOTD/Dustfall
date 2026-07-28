@@ -1,72 +1,38 @@
-# Next session — campaign DEEPER is PAUSED near the END of cycle 9 (Zach's call, 2026-07-27 evening)
+# Campaign DEEPER — CHECKPOINT: hazard-spec-review (paused for Zach, 2026-07-28)
 
-**READ THE PAUSED_NOTE IN campaign-state.json FIRST — it supersedes the body below.** Since the
-morning resume: the gate runner shipped (`05bb7a1`, suite 90→32 min, `--legs=`, march legs need
-`--serial`), the headroom defect closed by construction (`9b1c509`), the look pass shipped
-(`ea55be6`). Cycle 9 closes on resume with: (1) the critic-FAIL fix round (2 sev-1 floaters/
-identity + 5 sev-2 — full findings + cheapest-path in the campaign log's pause entry), same
-critic re-verifies; (2) the shaft-skylight DESIGN OPTION surfaced to Zach; (3) ONE full suite
-run; (4) close bookkeeping + efficiency retro. Then cycle 10 = the HAZARD SPEC doc, which
-PAUSES for Zach (charter checkpoint 2). The section below is the OLD mid-cycle brief — its
-items 1 (headroom) and 2 (look pass) are DONE; item 3 (shaft/1337 apron flake) is load-coupled
-and stays flagged.
+**Cycle 9 SHIPPED.** `verify:all` green end-to-end + all 24 chunk legs green (gate of record:
+`verification/gate-logs/20260728T083350Z-SUMMARY.txt`, 54m50s). Tree clean, push HELD.
+9/20 cycles, **~9.15M / 10M soft ceiling**.
 
-# (superseded) — the old mid-cycle-9 brief
+## What Zach reviews at this checkpoint
 
-**State:** `campaign/2026-07-24-deeper` at `c8fab5a`, tree clean, push HELD. 8 cycles + a cycle-9
-partial shipped (~6.9M/10M). `status: paused`, `awaiting_approval: true`. Boot from
-`docs/campaign/campaign-state.json` (the paused_note is the resume brief) + `steering.md`.
+1. **[hazard-spec.md](campaign/hazard-spec.md)** — Q1-Q10, each with a recommended default.
+   The headline recommendations: rockfall + deep-cold + non-lethal foul air build unattended
+   (conservative, telegraphed, survivable); foul-air lethality ships as a zero'd number you
+   flip; false floors DEFERRED (no fall-damage system exists; drops break the walk-gate tree
+   invariant); fungal cavern = the safe kind; canonical caves hazard-free.
+   `/campaign-approve` (or `--with-changes`) releases the hazards build.
+2. **The budget ceiling** — the remaining ladder (hazards → light budget → return reason →
+   integration) does not fit in ~0.85M. Raise it (`/campaign-start --resume --budget-total=N`)
+   or scope-cut the tail per the charter's order (11 → 10 → 8-drop-a-kind → 9-deferred).
+3. **THE REPAIR DESCENT WALK-TEST** — still owed; now judges everything cycles 6-9 built:
+   pools + jerrycan, the interior rendering overhaul, the crevice entrance (horn/roof/teeth),
+   caves-at-density, the four kinds. Motion-feel items stills can't judge: pool ripple/glint
+   movement, bounce flicker, dither crawl, the tor arrival hitch (~155-200ms), flooded-cave
+   audio. Feedback → `steering.md` same-day per the standing rule.
 
-## Resume: the gate-runner efficiency build FIRST (Zach-approved 2026-07-27), then cycle 9
+## Parked decisions (full list in the cycle-9 log entry)
 
-**0. THE GATE RUNNER (first act on resume — everything after it gets cheaper).** The full
-`verify:chunks` suite has grown to ~90 min serial and was the #1 wall-clock cost of cycles 6-9
-(agents ran it 2-3× per task; one 45-min run was lost to a grep filter and re-run purely for
-reporting). Build, in one agent-session:
-- `verify-chunks.mjs --legs=<a,b,c>` — run only named legs (agents use this for affected-leg
-  iteration; the FULL suite runs exactly once per cycle, by the orchestrator, at close).
-- A parallel runner: legs are independent rig runs on separate ports — run 3-4 concurrently;
-  frame-time-sensitive perf legs (chunk-perf, cave-build, cave-density) run SOLO in a quiet
-  phase. Target: full suite ≤~35 min.
-- Tee every gate run's output to `verification/gate-logs/<timestamp>-<leg>.txt`.
-- Prove: one full parallel run vs the last serial run — same legs, same verdicts, wall-clock
-  quoted. Flake-check the perf legs ×2 (parallelism must not corrupt their numbers).
-The EFFICIENCY WATCH standing directive in `steering.md` governs from here (gate-latency
-budget, once-per-cycle full suite, tee-to-file, measure-before-dispatch, right-sized critic
-waves, per-cycle efficiency retro).
-
-## Then finish cycle 9
-
-1. **The entrance headroom defect (the cave-kinds seed-1337 leg is deliberately RED for it).**
-   Some streamed caves pinch to 1.17-1.44m clear height vs the 1.70m capsule in the roofed
-   fissure stretch — they cannot be entered. Pre-existing, kind-independent, fully measured.
-   Instrument: `npm run rig -- --scenario=crevice-profile --siteOffset=N`. Failing sites: seed
-   1337 (675,1113) pinch s=8.39; seed 7 (-1100,-1146) pinch s=8.69. Falsified already: the SDF
-   grid origin (A/B'd), the guard sweep (no-op, 1.44→1.42m), width levers (height is the
-   deficit). Levers: carve the hole further / locally steeper roofed leg / floor depression at
-   pinched columns / profile-based site rejection (rule-6 pattern, the authorized fallback).
-   Acceptance: ≥1.9m clear along both failing descents (or both rejected + replacements clean),
-   marches pass, a permanent clearance tooth proven red-then-green, cave-kinds leg GREEN.
-2. **The per-kind rule-8 look pass** — 12 smoke shots at `verification/scen-kind-*.png`; rubble
-   heaps flagged low (≈0.5m); fungal is the perf-heaviest kind (135-153k tris).
-3. **The flaky shaft/1337 apron steering** (fails ~sometimes on approach, off-axis drift ~7m).
-Then close cycle 9 (log/state/bookkeeping) and continue the ladder: hazard SPEC (a doc that
-PAUSES for Zach — the charter's checkpoint 2) → light budget → return reason → integration.
-
-## Owed to Zach — the big one
-
-**The repair descent walk-test.** Cycles 6-9 changed pools, interior rendering (envelope/dither/
-strata/bounce), entrance geometry (sawtooth/roof/horn), density (caves everywhere + streamed
-gates), and kinds. One descent judges it all — including motion feel (bounce flicker, dither
-crawl, glint movement, the tor arrival hitch ~155-175ms).
-
-Parked decisions: `CAVE_SITE_CHANCE 0.60` (~3.3 caves/travel-hour) · `CAVE_KIND_WEIGHTS` ·
-warren `scrapPerCave 6` · jerrycan recipe/capacity · pocket-9 wedge trap + `floorOk` margin
-(digest-moving) · ~20 CAVE_*/CREVICE_* taste dials · swiftshader rock cost 15-22% · tor slicing.
+Canonical speleothem knife-tips (digest re-baseline) · pocket-9 wedge trap + floorOk margin +
+the seed-7 marginal pocket (digest-moving) · the shaft collapse-skylight (spec Q9) · kind
+taste dials (`CAVE_KIND_WEIGHTS`, warren `scrapPerCave 6`) · `CAVE_SITE_CHANCE 0.60`
+(~3.0-3.2 caves/travel-hour measured) · sun/moon discs through kind-cave roofs (queued
+cycle 10) · jerrycan/pool balance · ~20 CAVE_*/CREVICE_* dials · swiftshader rock cost.
 
 ## Standing rules (unchanged)
 
-Fable plans / Opus executes · one code-writing agent at a time · never `git stash` · push HELD ·
-SPEED RULES · rule 8 for visual work · trust the playtest over a green gate · NO creature
-underground · D290 · flaky-gate n≥5 discipline · `strands=N` nonzero = a real trap · origin cave
-digests are now `d8f15005` / `99e0015b` (re-baselined at the lattice snap, documented).
+Fable plans / Opus executes · one code-writing agent at a time · push HELD · SPEED RULES +
+EFFICIENCY WATCH (gate suite ~55 min with march legs quiet — verdict integrity over the 35-min
+target; `--legs=` for iteration; full suite once per cycle; poll-to-completion for gate
+runners; probe the pixels before trusting a critique's builder attribution) · NO creature
+underground · D290 · trust the playtest over a green gate.
