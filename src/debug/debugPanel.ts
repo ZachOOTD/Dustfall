@@ -260,6 +260,9 @@ interface DebugApi {
   gotoBoneField: () => { x: number; z: number } | null;
   gotoErg: () => { x: number; z: number } | null;
   gotoCave: () => { x: number; z: number } | null;
+  /** DEEPER cycle-9 walk-test — warp near the NEAREST streamed cave site of a given kind
+   *  (seed-pure list; the real streaming path builds it during the ~110m approach walk). */
+  gotoCaveKind: (kind: CaveKind) => { x: number; z: number; dist: number } | null;
   /** Deep-Desert cycle 5 (D257, sled-ride probe) — spawn a sled at (x,z) with
    *  optional yaw (radians), terrain-snapped. Returns the sled id. Behind no
    *  flag (spawning a sled is always harmless); the RIDE only engages when
@@ -797,6 +800,32 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       ctx.player.cameraSnapNextFrame = true;
       ctx.ui.showToast?.('warped to the cave mouth');
       return { x: +s.x.toFixed(0), z: +s.z.toFixed(0) };
+    },
+    gotoCaveKind: (kind) => {
+      // DEEPER cycle-9 walk-test — nearest site of the kind, from the same seed-pure list the
+      // streamer reads. Land ~110m out on the player→site bearing so the REAL streaming path
+      // (tor + interior + hole) builds during the approach walk instead of popping at the feet.
+      if (!FEATURES.caveTest) { ctx.ui.showToast?.('caves are OFF (VITE_CAVE=0)'); return null; }
+      const f = (window as unknown as {
+        __caveSites?: (x: number, z: number, r: number) => Array<{ key: string; x: number; z: number; seed: number; kind: CaveKind }>;
+      }).__caveSites;
+      if (!f) { ctx.ui.showToast?.('site list unavailable (boot incomplete?)'); return null; }
+      const p = ctx.player.body.body.translation();
+      for (const r of [2000, 4000, 8000, 12000]) {
+        const hits = f(p.x, p.z, r).filter((s) => s.kind === kind);
+        if (!hits.length) continue;
+        hits.sort((a, b) => ((a.x - p.x) ** 2 + (a.z - p.z) ** 2) - ((b.x - p.x) ** 2 + (b.z - p.z) ** 2));
+        const s = hits[0];
+        const d = Math.hypot(s.x - p.x, s.z - p.z) || 1;
+        const ax = s.x - ((s.x - p.x) / d) * 110, az = s.z - ((s.z - p.z) / d) * 110;
+        const y = ctx.terrain.heightAt(ax, az) + 2;
+        ctx.player.body.body.setTranslation({ x: ax, y, z: az }, true);
+        ctx.player.cameraSnapNextFrame = true;
+        ctx.ui.showToast?.(`warped near a ${kind} cave — the tor is ~110m ahead`);
+        return { x: +s.x.toFixed(0), z: +s.z.toFixed(0), dist: +d.toFixed(0) };
+      }
+      ctx.ui.showToast?.(`no ${kind} cave within 12km — reload for a fresh seed`);
+      return null;
     },
     gotoErg: () => {
       // erg regions are the rarest + farthest anchors (nearest ~5-10km by seed) — search widest.

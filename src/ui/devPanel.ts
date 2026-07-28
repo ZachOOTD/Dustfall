@@ -98,6 +98,16 @@ function makeActionsSection(): HTMLDivElement {
     // Underworld review (2026-07-20) — one-click reach for the test cave.
     ['cave', () => { g()?.gotoCave(); }],
   ]);
+  // DEEPER cycle-9 walk-test — one-click reach per cave kind (warps ~110m out;
+  // the real streaming path builds the cave during the approach walk).
+  group('caves', [
+    ['egg cave', () => { g()?.gotoCave(); }],
+    ['warren', () => { g()?.gotoCaveKind('warren'); }],
+    ['fungal', () => { g()?.gotoCaveKind('fungal'); }],
+    ['flooded', () => { g()?.gotoCaveKind('flooded'); }],
+    ['shaft', () => { g()?.gotoCaveKind('shaft'); }],
+    ['canonical', () => { g()?.gotoCaveKind('canonical'); }],
+  ]);
   group('stats', [
     ['full', () => { g()?.setStats({ thirst: 1, hunger: 1, stamina: 1, health: 1, temperature: 0 }); toast('stats restored'); }],
     ['hurt', () => { g()?.setStats({ health: 0.25 }); toast('health → 25%'); }],
