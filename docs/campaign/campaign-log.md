@@ -6,8 +6,58 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 10 — light & darkness integrity (2026-07-28) — SHIPPED
+
+- **Planned:** Zach's three walk-test asks (steering.md 2026-07-28) after he cancelled the hazards.
+
+- **The root cause was ONE fact, and it explained both bugs** (`827182b`): `caveAtmosphere` was
+  written when there was exactly one cave and only ever tested the ORIGIN cave's AABB — so in the
+  cycle-8/9 streamed world **every other cave scored darkness 0 and inherited surface daylight
+  wholesale**. That is why caves "got brighter during the day": they were never dark, they were
+  surface-lit. `caveDarknessAt` now asks `caveStream.occupied()` (a pure live-AABB test, no
+  cached state) with the origin AABB kept as a first test. Deep targets became ABSOLUTE levels
+  instead of multipliers of surface light; the mouth/threshold zone still blends from live
+  surface values, because that is a real opening.
+- **The sky bodies:** the sun's depthTest line was already correct — its *signal* was origin-only.
+  The moon's disc was already occluded; what Zach saw was the moon's DIRECTIONAL LIGHT flooding
+  streamed interiors. Both now plural-cave correct; surface framings byte-identical.
+- **Carried light up** (his ask, his dials to taste): torch 1.8/12m → 2.7/15m · flashlight
+  3.0/25m → 4.5/31m · lantern 1.6/14m → 2.4/17.5m.
+
+- **Two new permanent teeth in `cave-kinds`, both red-proven:** day-invariance (a deep framing at
+  noon vs midnight must match) and sky occlusion (A/B against bodies-hidden). Final: `pass=1
+  kinds=4 built=4 marched=4 voided=4 **lit=4** strands=0 escapes=0 fails=0` — every kind measured
+  Δmean 0.000 / Δp95 0.000 and changedPx=0 for BOTH bodies.
+
+- **A probe defect wedged the gate first, worth recording:** the new light-teeth helper froze the
+  game for stable frames (the `caveKindShots` "FREEZE FIRST" pattern) and never unfroze — so
+  CLAUDE.md rule 4's pause gate stopped physics, streaming, chunk loading and eviction for every
+  kind after the first. **One flag produced all seven failures.** Instrumented and proven
+  (`paused=true, elapsedΔ=0.00s` across 900 frames), not guessed; the rival hypothesis (stale
+  `occupied()`) was falsified in the same pass.
+
+- **Verify:** cave-kinds GREEN (above) · pool-fill ×2 + cave-preload ×2 · determinism ×2 + perf +
+  cave-density ×2 (the legs the lighting/sky/shader-warm changes could touch) · origin digests
+  d8f15005 / 99e0015b unmoved · tsc clean.
+
+- **PROCESS — THE STALL RULE landed this cycle** (`6ed743b`), after Zach caught the same idle
+  pattern twice: an agent's shell caps at 10 min, a gate leg runs 20-55, so agents detach the run
+  and end their turn; the harness then reports the AGENT done while the gate runs untracked and
+  the orchestrator waits on a notification that can never arrive. Now: agent briefs END at
+  "report and stop"; the orchestrator runs every long gate under its own tracked shell; and no
+  gate window is idle (cycle 11's recon ran in parallel with this cycle's gate, free).
+
+- **Spend:** ~0.75M (campaign ~9.9M / 14M; cycle 10/20).
+- **Commit:** `827182b` (+ `6ed743b` process).
+- **Next (cycle 11):** deployable lanterns underground + cave cold. The recon
+  ([cycle-11-plan.md](cycle-11-plan.md)) found the lantern is ALREADY a complete place/retrieve
+  system — and found **two live player-facing bugs**: every placeable (lantern/fire/bedroll/
+  tent/sled) samples the SURFACE height, so placing anything in a cave hurls it into solid rock;
+  and cave temperature runs off the surface clock, making caves warm by day and **lethally cold
+  at night today**. Cycle 11 fixes both.
+
 ## Cycle 9 — CAVE KINDS + the gate runner + the headroom fix (2026-07-27/28) — SHIPPED
-## → CHECKPOINT: hazard-spec-review (the charter's checkpoint 2) — PAUSED FOR ZACH
+## → CHECKPOINT: hazard-spec-review (the charter's checkpoint 2) — RESOLVED IN PERSON 2026-07-28
 
 - **Planned:** four cave kinds as a parameter table over the one generator; grew (by finding) to
   include the gate runner, a 1-in-9 enterability defect, and three adversarial fix rounds.

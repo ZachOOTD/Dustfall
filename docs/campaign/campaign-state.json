@@ -3,8 +3,8 @@
   "status": "active",
   "started": "2026-07-24",
   "branch": "campaign/2026-07-24-deeper",
-  "cycles_completed": 9,
-  "current_tier": "cycle-10: light & darkness integrity (day-decoupling, sun/moon occlusion, carried-light strength)",
+  "cycles_completed": 10,
+  "current_tier": "cycle-11: deployable lanterns underground + cave cold (non-damaging)",
   "awaiting_approval": false,
   "stop_reasons": [],
   "paused_note": "CHECKPOINT RESOLVED IN PERSON (2026-07-28): Zach walk-tested (the owed repair descent — satisfied, no D-1..D-4-class defects reported) and reviewed the hazard spec live. VERDICT: NO HAZARDS — caves are a place to EXPLORE. Ceiling raised 10M->14M on his authorization. The new remaining ladder (from his feedback, verbatim in steering.md 2026-07-28): cycle 10 = light & darkness integrity (deep-cave darkness decoupled from surface daylight; sun+moon never visible through rock in ANY cave; carried-light strength up for torch/flashlight/lantern) -> cycle 11 = deployable lanterns (the EXISTING lantern item, place+retrieve) + cave cold as non-damaging atmosphere -> cycle 12 = the skeleton+journal+loot story beat (loot numbers flagged for Zach) -> cycle 13 = integration/perf/docs + the final descent. More tuning feedback from Zach pending — capture same-day.",
@@ -25,7 +25,7 @@
     "raised": "2026-07-28 by Zach at the walk-test checkpoint (was 10M)"
   },
   "spend": {
-    "total": 9150000
+    "total": 9900000
   },
   "charter": "docs/campaign/campaign-deeper.md",
   "walktest_source": "docs/campaign/cave-walktest-2026-07-24.md",
@@ -96,6 +96,15 @@
         "e4b6429"
       ],
       "note": "NEW src/world/caveEntrance.ts; src/world/caveTest.ts DELETED entirely along with its tuning keys and the 228-line cave-mouth rig scenario. A rock tor ~19x13m, 5.2m proud, split by a fissure: mouth 2.50m clear pinching to 2.64m where rock closes overhead 6.5m in, widening to 5.0m only at the cave hand-off. Descent is a 3-leg polyline with two knees at 27.0 deg on every seed, mirrored by seed parity. The slot is unioned into buildCaveSdf as primitives -> entrance and cave are ONE continuous surface, no weld; cut against terrain.pureHeightAt instead of cycle 1's junction plane. D307 preserved and the carved hole SHRANK 29.2x8.34m -> 12.5x8.33m. Non-leak invariant by construction: the tor's fissure is always 0.62m narrower/lower than the enclosing SDF slot. 6/6 seeds cave-walk with ascent=OUT; cave-void 0.00% with excused=0 (the declaration is present but zero rays need it). THREE structural KCC bugs found ONLY by the ascent, each of which would have shipped under descent-only testing: corridorPrim held its ramp floor flat past segment ends (~1.5m step at every joint); the entrance hall's flat floor disk reached 2.4m back past the junction and swallowed the climb-out ramp (~50 deg, at the KCC limit); the tor carved its fissure floor 45cm BELOW the SDF floor, making a 45cm gutter down both walls that wedged the capsule on the way out. Round 5 disproved a shadow-acne hypothesis (frame byte-identical, recorded in code); round 6 found the real blotching cause — CAVE_ROCK_BUMP 1.15, tuned for torch-lit interior rock at 2m, applied to sunlit exterior under a directional sun. HONEST: reads as a crevice at near/threshold/descent; at 78m it is a small dark bump, marginal. Budget 2.5h stated vs ~5.5h actual — entirely the three ascent bugs; the visual loop and traversal loop were sequenced wrong (one cave-walk after round 1 would have caught them early)."
+    },
+    {
+      "n": 10,
+      "date": "2026-07-28",
+      "focus": "light & darkness integrity — Zach's three walk-test asks",
+      "outcome": "SHIPPED",
+      "spend": 750000,
+      "commits": ["827182b", "6ed743b"],
+      "note": "ONE root cause explained both of Zach's reported bugs: caveAtmosphere was written for the single origin cave and tested only its AABB, so in the streamed world EVERY OTHER CAVE scored darkness 0 and inherited surface daylight wholesale (they were never dark, they were surface-lit). caveDarknessAt now asks caveStream.occupied() (pure live-AABB, no cached state). Deep targets are ABSOLUTE levels, not multipliers of surface light; the mouth zone still blends live (a real opening). Sky: the sun's depthTest was right but its SIGNAL was origin-only; the moon's disc was already occluded — what he saw was the moon's DirectionalLight flooding streamed interiors. Carried light up per his ask: torch 1.8/12->2.7/15, flashlight 3.0/25->4.5/31, lantern 1.6/14->2.4/17.5. Two red-proven teeth added to cave-kinds (day-invariance, sky occlusion): final pass=1 kinds=4 built/marched/voided/LIT=4, all Dmean 0.000 and changedPx=0 for both bodies. A probe defect wedged the gate first — the light-teeth helper froze the game and never unfroze, so the pause gate stopped physics/streaming/eviction for every kind after the first (one flag, seven failures); instrumented and proven, rival hypothesis falsified. PROCESS: the STALL RULE landed (agents never run long gates; the orchestrator does under a tracked shell; never idle through a gate) after Zach caught the same idle pattern twice. Cycle-11 recon ran in parallel with this cycle's gate at zero wall-clock cost and found TWO LIVE PLAYER-FACING BUGS: every placeable samples the SURFACE height (place anything in a cave and it lands in solid rock) and cave temperature runs off the surface clock (caves are warm by day and LETHALLY COLD at night today)."
     },
     {
       "n": 9,
