@@ -6,6 +6,50 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## PAUSED again (2026-07-27 evening) — Zach: "need to pause cleanly now" — cycle 9 nearly closed
+
+What shipped between the morning resume and this pause (all committed, tree clean at `ea55be6`):
+- **The gate runner** (`05bb7a1`) — verify:chunks is a tiered parallel 24-leg suite: **~32 min**
+  (was ~90 recorded / ~60 honest serial), `--legs=` filtering with hard-error on typos,
+  tee-to-file (verification/gate-logs/), the silently-skipped void gate folded in as always-run
+  legs. Design finding baked in: **KCC marches are dt-coupled** — machine load can flip a verdict
+  on marginal geometry; solo-phase criterion is "verdict can move with load", and march legs
+  want `--serial` when a change touches cave geometry.
+- **The entrance headroom defect CLOSED BY CONSTRUCTION** (`9b1c509`) — a pure clear-height
+  model swept ~410 real sites in seconds: the defect was **~1 cave in 9**, pinching exactly at
+  the carved hole's far edge (where the roof clamp hands over to terrain). Hole 3→4 cells +
+  placement rule 8 (model ≥2.25m = 1.90 physical + measured 0.20m bias); both failing sites now
+  clear 2.2-2.3m by ray; density cost −2.6%; red-proven two-part tooth; origin digests untouched.
+- **The per-kind look pass** (`ea55be6`) — the shot instrument was broken 3 ways and fixed
+  first (warren had zero frames all cycle; signature cameras backed into rock and shot sky; the
+  shaft never framed its rubble). Flooded/shaft land structurally; fungal is a cathedral at eye
+  level; 8 new machine-asserted kind dials.
+
+**Remaining to close cycle 9 (the resume queue, in order):**
+1. **The critic FAIL fix round.** The right-sized single verification critic then failed the
+   final shots with real finds the builder's framing hid — sev-1: the warren's ONLY history
+   prop FLOATS ~1m over the sand (`scen-kind-warren-signature-r5.png` ~(500,300), new in r5,
+   reads as an orange chevron) · the shaft signature is dominated by a near-camera fungi
+   cluster reading as a CARTOON SNOWMAN (merged silhouettes + blown emissive + occluded stems).
+   Sev-2: wall/ceiling fungi float and read as sconces/orbs (fungal-pocket (1035,160)+(360,290),
+   fungal-vault (967,578)) · shaft rubble slabs are flat untextured facets with rule-7 knife
+   edges and one floating slab (shaft-room (940-1030,530-560)) · the flooded ROOM frame contains
+   zero water (kind identity absent from its primary frame — camera/coverage rule) · shaft
+   verticality is real geometry receiving zero light · (pre-existing, backlog: the egg dais
+   reads as a grey tarp/ash mound — shared `_caveSolid` asset, present since r1). Critic's
+   cheapest-path: ground the prop; de-cluster/move near-camera fungi at the shaft signature;
+   anchor wall/ceiling fungi to their host surface; slab material/thickness; the flooded room
+   framing. Then the SAME critic re-verifies (SendMessage resume).
+2. **Shaft-vault lighting — a DESIGN OPTION for Zach, not free light**: a diegetic collapse
+   SKYLIGHT down the shaft chimney via the existing hole-iff-resident machinery would light the
+   verticality and give the kind its signature; the critic noted the moon currently punches
+   through exactly where a real aperture would sit.
+3. **The full suite once** (the parallel run at this pause was killed mid-flight; fast gates —
+   tsc/loot/placement/colliders — were green at `ea55be6`).
+4. Cycle-9 close bookkeeping + the efficiency retro (the gate runner's first full cycle:
+   suite 90→32 min; the look pass's HMR lesson — never edit src/ while a rig runs; the
+   one-critic wave caught 2 sev-1s for ~116k tokens — right-sizing validated).
+
 ## RESUMED (2026-07-27) — Zach: /campaign-start --resume, after the pace review
 
 The pause gate is cleared. Per the approved efficiency plan: the tiered/parallel gate runner is

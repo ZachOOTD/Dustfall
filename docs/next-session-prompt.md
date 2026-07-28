@@ -1,4 +1,17 @@
-# Next session — campaign DEEPER is PAUSED mid-cycle-9 (Zach's call, 2026-07-27)
+# Next session — campaign DEEPER is PAUSED near the END of cycle 9 (Zach's call, 2026-07-27 evening)
+
+**READ THE PAUSED_NOTE IN campaign-state.json FIRST — it supersedes the body below.** Since the
+morning resume: the gate runner shipped (`05bb7a1`, suite 90→32 min, `--legs=`, march legs need
+`--serial`), the headroom defect closed by construction (`9b1c509`), the look pass shipped
+(`ea55be6`). Cycle 9 closes on resume with: (1) the critic-FAIL fix round (2 sev-1 floaters/
+identity + 5 sev-2 — full findings + cheapest-path in the campaign log's pause entry), same
+critic re-verifies; (2) the shaft-skylight DESIGN OPTION surfaced to Zach; (3) ONE full suite
+run; (4) close bookkeeping + efficiency retro. Then cycle 10 = the HAZARD SPEC doc, which
+PAUSES for Zach (charter checkpoint 2). The section below is the OLD mid-cycle brief — its
+items 1 (headroom) and 2 (look pass) are DONE; item 3 (shaft/1337 apron flake) is load-coupled
+and stays flagged.
+
+# (superseded) — the old mid-cycle-9 brief
 
 **State:** `campaign/2026-07-24-deeper` at `c8fab5a`, tree clean, push HELD. 8 cycles + a cycle-9
 partial shipped (~6.9M/10M). `status: paused`, `awaiting_approval: true`. Boot from
