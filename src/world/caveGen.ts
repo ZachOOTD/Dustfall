@@ -500,6 +500,12 @@ function buildDais(node: CaveNode, cnoise: Noise3, depthT: number): THREE.Buffer
  *  a speleothem exceed this cannot ship silently. */
 export const SPELEO_MAX_RADIUS_FACTOR = 1.22;
 const SPELEO_RADIUS_EPS = 0.02;               // the flat additive term that keeps a tip from degenerating
+/** CLOSE-OUT ROUND 2 — the tip-radius floor a kind buys with `speleoSolidity = 1` (× r0). 0.02m of
+ *  epsilon is not "thickness": on a 30cm-base nubbin it is a 4cm-wide blade, and at arm's length that
+ *  is a paper shaving. At 0.22 the same nubbin ends in a ~9cm knob and still tapers by 78%. Well under
+ *  SPELEO_MAX_RADIUS_FACTOR, so the clearance envelope (and therefore every placement margin) is
+ *  untouched — the widest point of a speleothem is still its base. */
+const SPELEO_TIP_FLOOR = 0.22;
 
 /** Fail-loud dev assert for the contract above, measured on the EMITTED vertices rather than on the
  *  formula — the point is to survive a future edit that adds a term the clamp does not cover (a
@@ -527,6 +533,12 @@ function assertSpeleothemEnvelope(maxRR: number, r0: number): void {
 function buildSpeleothem(
   x: number, z: number, baseY: number, topY: number, r0: number,
   cnoise: Noise3, depthT: number, hangDown: boolean, bendScale: number,
+  /** DEEPER cycle-9 CLOSE-OUT ROUND 2 — `CaveKindParams.speleoSolidity`. Read that doc first: it is
+   *  0 for canonical BY CONTRACT (this function bakes WORLD-space vertices, so it is the one piece
+   *  of dressing whose position `caveDigest` hashes), and every use of it below is an exact identity
+   *  at 0. Here it raises a FLOOR under the tip radius so the profile ends in a blunt dripstone knob
+   *  instead of the 2cm-epsilon blade that read as a paper sliver at arm's length. */
+  solidity = 0,
 ): THREE.BufferGeometry {
   // DEEPER cycle 7 — DRIPSTONE, NOT TRAFFIC CONES. The shipped profile was a LINEAR taper
   // (r0·(1−t)) with a ±22% angular flute at 8 segments, which is geometrically a smooth cone: the
@@ -558,8 +570,10 @@ function buildSpeleothem(
   const stride = SEGS + 1;
   const H = topY - baseY;                  // signed (hang: topY<baseY)
   const pos = new Float32Array((RINGS + 1) * stride * 3 + 3);
-  const col = new Float32Array((RINGS + 1) * stride * 3 + 3);
   const bendA = cnoise(x * 0.3, 9.1, z * 0.3) * 0.5 * bendScale, bendB = cnoise(x * 0.3 + 4, 9.1, z * 0.3) * 0.5 * bendScale;
+  // The tip-radius floor. `Math.max(0, v) === v` exactly for the non-negative `v` this clamps (prof,
+  // wob and flute are each strictly positive by construction), so canonical is bit-identical.
+  const tipFloor = solidity * SPELEO_TIP_FLOOR;
   let vi = 0, maxRR = 0;
   for (let i = 0; i <= RINGS; i++) {
     const t = i / RINGS;                   // 0 base → 1 tip
@@ -573,21 +587,18 @@ function buildSpeleothem(
       const ph = (j / SEGS) * Math.PI * 2;
       // World-anchored so neighbouring speleothems flute DIFFERENTLY, and deep enough to read.
       const flute = 1 + cnoise(Math.cos(ph) * 3.4 + x * 0.13, i * 1.1, Math.sin(ph) * 3.4 + z * 0.13) * 0.24;
-      const rr = r0 * Math.min(SPELEO_MAX_RADIUS_FACTOR, prof * wob * flute) + SPELEO_RADIUS_EPS;
+      const shape = Math.max(tipFloor, Math.min(SPELEO_MAX_RADIUS_FACTOR, prof * wob * flute));
+      const rr = r0 * shape + SPELEO_RADIUS_EPS;
       if (rr > maxRR) maxRR = rr;
       const wx = bx + Math.cos(ph) * rr;
       const wz = bz + Math.sin(ph) * rr;
       pos[vi * 3] = wx; pos[vi * 3 + 1] = yy; pos[vi * 3 + 2] = wz;
-      caveVertexColor(hangDown ? 'ceiling' : 'floor', wx, yy, wz, depthT, cnoise, _tmpCol);
-      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
       vi++;
     }
   }
   // tip vertex
   const tipX = x + bendA * 1.6, tipZ = z + bendB * 1.6;
   pos[vi * 3] = tipX; pos[vi * 3 + 1] = topY; pos[vi * 3 + 2] = tipZ;
-  caveVertexColor(hangDown ? 'ceiling' : 'floor', tipX, topY, tipZ, depthT, cnoise, _tmpCol);
-  col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
   const tip = vi; vi++;
   const idx: number[] = [];
   for (let i = 0; i < RINGS; i++) {
@@ -600,9 +611,42 @@ function buildSpeleothem(
   assertSpeleothemEnvelope(maxRR, r0);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setIndex(idx);
   geo.computeVertexNormals();
+  // ── CLOSE-OUT ROUND 2 (finding N1, the COLOUR half) — DRIPSTONE IS ROCK, NOT SEDIMENT. ─────────
+  //    Every speleothem was coloured with a FIXED face role: 'floor' for anything rising, 'ceiling'
+  //    for anything hanging. `caveVertexColor`'s floor role is dominated by `caveFloorSediment`, a
+  //    3-10m-wavelength pooled-sand wash — over a 60cm nubbin that is ONE value, so the whole object
+  //    came out as a flat beige card with no strata, no stain and no grain, which is exactly why the
+  //    close-out frames read them as pale paper shavings (`scen-kind-flooded-pocket-c5.png`, three of
+  //    them alone on a lit floor). This is the SAME defect, with the same fix, that the rubble
+  //    boulders got in round 1: the wall palette (strata bands + mineral staining) with the floor/
+  //    ceiling roles ramped in SMOOTHLY by the vertex's own up-ness, plus a body-local mottle at 28cm
+  //    and 13cm — the cave-wide palette's finest term is 1.25m, i.e. invisible at this size.
+  //
+  //    `hangDown` still does real work: drip water runs DOWN a stalactite, so its flanks must never
+  //    pick up floor sediment even where the flute tips a facet upward — its up-ness is clamped at 0,
+  //    which leaves only the ceiling darkening ramp.
+  //
+  //    KIND-NEUTRAL ON PURPOSE, canonical included: `caveDigest` hashes vertex POSITIONS only, so a
+  //    colour change cannot move the origin digest (d8f15005). The GEOMETRY half of this fix is the
+  //    kind-gated `speleoSolidity`, for exactly the opposite reason.
+  const nrm = geo.attributes.normal as THREE.BufferAttribute;
+  const col = new Float32Array(pos.length);
+  for (let i = 0; i < nrm.count; i++) {
+    const wx = pos[i * 3], wy = pos[i * 3 + 1], wz = pos[i * 3 + 2];
+    const upn = hangDown ? Math.min(0, nrm.getY(i)) : nrm.getY(i);
+    caveVertexColor('wall', wx, wy, wz, depthT, cnoise, _tmpCol, upn);
+    // Sampled on the position RELATIVE to this speleothem's own base (+ a world offset), so two
+    // neighbouring cones mottle differently and a duplicated rim vertex can never split the shading.
+    const lx = wx - x, ly = wy - baseY, lz = wz - z;
+    const mot = cnoise(lx * 7.3 + x * 0.53, ly * 7.3 + 2.7, lz * 7.3 + z * 0.53) * 0.055
+              + cnoise(lx * 15.1 + z * 0.29, ly * 15.1 + 8.2, lz * 15.1 + x * 0.29) * 0.028;
+    col[i * 3] = Math.max(0.02, _tmpCol.r + mot);
+    col[i * 3 + 1] = Math.max(0.02, _tmpCol.g + mot * 0.94);
+    col[i * 3 + 2] = Math.max(0.02, _tmpCol.b + mot * 0.86);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return geo;
 }
 
@@ -623,8 +667,20 @@ function addSpeleothems(
    *  neither adds or removes a single `rand()` draw at 1, so canonical stays bit-identical. */
   columnScale = 1,
   dropScale = 1,
+  /** CLOSE-OUT ROUND 2 — `CaveKindParams.speleoSolidity`. 0 for canonical BY CONTRACT (origin
+   *  digest); see the field doc. Drives the tip-radius floor inside `buildSpeleothem`, a bend
+   *  reduction here, and real-rock seating for the small nubbins. */
+  solidity = 0,
+  /** The REAL rock height under a point (`makeRockFloorSampler`). Only consulted when `solidity > 0`
+   *  — seating a canonical speleothem on the measured surface instead of the analytic plane would
+   *  move its baked world vertices, i.e. the origin digest. */
+  rockFloor?: RockFloor,
 ): void {
   const T = Tuning;
+  // A leaning cone, not a wood shaving. At bendScale 0.9 the nubbin path throws a 1m cone up to 0.7m
+  // sideways, and a strongly-bent thin taper photographs as a curved sliver. `1 - 0.45·0 === 1`, and
+  // `bend * 1 === bend` exactly, so canonical bends are bit-identical.
+  const bendMul = 1 - 0.45 * solidity;
   const rx = node.rx, floorY = node.floorY, height = node.height;
   const ry = height * 0.6, cyc = floorY + height - ry;
   const ceilAt = (fr: number): number => cyc + ry * Math.sqrt(Math.max(0, 1 - fr * fr));
@@ -671,7 +727,7 @@ function addSpeleothems(
         const h = Math.min(1.0 + rand() * 2.0, Math.max(0.6, maxUp));
         topY = floorY + h; bend = 0.9;
       }
-      const geo = buildSpeleothem(x, z, floorY - 0.15, topY, baseR, cnoise, depthT, false, bend);
+      const geo = buildSpeleothem(x, z, floorY - 0.15, topY, baseR, cnoise, depthT, false, bend * bendMul, solidity);
       const m = new THREE.Mesh(geo, _caveSolid);
       m.castShadow = false; m.receiveShadow = true;
       group.add(m); meshes.push(m);                                // collider (baked into trimesh)
@@ -690,7 +746,13 @@ function addSpeleothems(
       const x = node.x + ux * rx * fr, z = node.z + uz * rx * fr;
       const baseR = 0.15 + rand() * 0.22;
       if (!clearOfMouth(ux, uz) || !floorOk(x, z, baseR)) continue;
-      const geo = buildSpeleothem(x, z, floorY - 0.1, floorY + 0.35 + rand() * 0.7, baseR, cnoise, depthT, false, 0.9);
+      // SEAT ON THE MEASURED ROCK, not the analytic plane. The nubbins are the dressing standing
+      // closest to the lens in a small room, and `floorY` disagrees with the SDF surface by up to
+      // the displacement amplitude — which is a nubbin hovering, or half-swallowed, at torch range.
+      // (Nubbins are DECOR: no collider, so this cannot move a walk-gate margin. The collider-bearing
+      // stalagmites/columns above deliberately keep the analytic seat — see the residuals note.)
+      const fy = solidity > 0 && rockFloor ? rockFloor(x, z, floorY) : floorY;
+      const geo = buildSpeleothem(x, z, fy - 0.1, fy + 0.35 + rand() * 0.7, baseR, cnoise, depthT, false, 0.9 * bendMul, solidity);
       const m = new THREE.Mesh(geo, _caveSolid); m.receiveShadow = true;
       group.add(m); decor.push(m); placed.push({ x, z, r: baseR });
       break;
@@ -711,7 +773,7 @@ function addSpeleothems(
     // ≥ CAVE_SPELEO_STALACTITE_CLEAR above the floor, so no kind can hang one into head height.
     const len = Math.min((big ? 1.0 + rand() * 2.2 : 0.35 + rand() * 0.9) * dropScale, maxLen * 0.92);
     const baseR = big ? 0.28 + rand() * 0.32 : 0.12 + rand() * 0.18;
-    const geo = buildSpeleothem(x, z, apexY, apexY - len, baseR, cnoise, depthT, true, 1.0);
+    const geo = buildSpeleothem(x, z, apexY, apexY - len, baseR, cnoise, depthT, true, 1.0 * bendMul, solidity);
     const m = new THREE.Mesh(geo, _caveSolid); m.receiveShadow = true;
     group.add(m); decor.push(m);
   }
@@ -893,9 +955,26 @@ function buildBoulder(
     // Two octaves of angular relief so a boulder reads as fractured rock, not as a die. Sampled on
     // the UNDISPLACED local position (+ a world offset per boulder), so duplicated seam vertices
     // land on the same value and the solid cannot split.
-    const n = 1
+    //
+    // ── CLOSE-OUT ROUND 2 (finding N1, the ACTUAL culprit) — A RADIUS FLOOR, i.e. NO FINS. ────────
+    //    The N1 frames (`scen-kind-warren-pocket-c5.png`, 750-1100 × 460-720) were read as "paper-thin
+    //    knife-edged slivers", and an identity raycast through those exact pixels named these meshes:
+    //    `userData.rubbleHeap`, IcosahedronGeometry, 240 verts. So it IS this path, not the dripstone
+    //    beside it — round 1 fixed this builder's COLOUR (wall role + mottle) and its SEATING, and
+    //    left the silhouette alone. At detail 1 an icosahedron has 80 huge facets, and a ±37% radial
+    //    displacement on facets that big does not make bumps, it makes FINS and deep concave dimples:
+    //    two large flat faces meeting at a sharp edge, which under flat shading with one point light
+    //    is a bright plate against black — a shaving. The honest fix is a floor under how far a vertex
+    //    may be pulled IN (and a ceiling on how far out), so the body stays a convex-ish block that
+    //    cannot present an edge without a face beside it. It costs ZERO triangles, which matters:
+    //    detail 2 was measured at +33% on the collapsed shaft's whole cave, against a streaming budget
+    //    that is this campaign's flagged risk.
+    //    ORIGIN-SAFE BY CONSTRUCTION: `rubblePerChamber` is 0 for canonical, so the origin cave
+    //    contains no boulder and cannot notice any of this.
+    const nRaw = 1
       + cnoise(px * 2.1 + x * 0.31, py * 2.1 + 5.1, pz * 2.1 + z * 0.31) * 0.26
       + cnoise(px * 5.7 + z * 0.17, py * 5.7 + 9.4, pz * 5.7 + x * 0.17) * 0.11;
+    const n = Math.min(1.20, Math.max(0.84, nRaw));
     const wx = x + px * n, wy = y + py * n * squash, wz = z + pz * n;
     pos.setXYZ(i, wx, wy, wz);
     // CLOSE-OUT FIX (finding 4). r4 coloured every boulder with the 'floor' role, whose dominant
@@ -919,6 +998,36 @@ function buildBoulder(
   pos.needsUpdate = true;
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
+  // ── CLOSE-OUT ROUND 2 (finding N1, the last of it) — SMOOTH NORMALS, ZERO EXTRA TRIANGLES. ─────
+  //    `IcosahedronGeometry` is NON-INDEXED: every triangle owns its three vertices, so
+  //    `computeVertexNormals` produces FACE normals, and at detail 1 that is 80 enormous facets each
+  //    rendering as one uniform value under a single point light. Adjacent facets then differ by a
+  //    lot, and a lit facet against a black neighbour is read as a PLATE with a knife rim — which is
+  //    finding N1 in one sentence. The two ways out are more geometry (detail 2 = 4× the triangles,
+  //    measured at +34% on the collapsed shaft's whole cave, against the campaign's flagged streaming
+  //    budget) or smoother shading of the SAME geometry. This is the second: face normals averaged
+  //    over coincident positions. The displacement is a pure function of the undisplaced vertex, so
+  //    the duplicated corner vertices move identically and still share a position exactly — the
+  //    bucket key is safe, and the same property is why the solid stays watertight.
+  //    It needs `_caveRubble` (flatShading OFF) to have any effect at all; `_caveSolid` discards the
+  //    normal attribute and re-derives a face normal in the fragment shader.
+  {
+    const nn = geo.attributes.normal as THREE.BufferAttribute;
+    const acc = new Map<string, number[]>();
+    const key = (i: number): string =>
+      `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+    for (let i = 0; i < pos.count; i++) {
+      const k = key(i), a = acc.get(k);
+      if (a) { a[0] += nn.getX(i); a[1] += nn.getY(i); a[2] += nn.getZ(i); }
+      else acc.set(k, [nn.getX(i), nn.getY(i), nn.getZ(i)]);
+    }
+    for (let i = 0; i < pos.count; i++) {
+      const a = acc.get(key(i))!;
+      const l = Math.hypot(a[0], a[1], a[2]) || 1;
+      nn.setXYZ(i, a[0] / l, a[1] / l, a[2] / l);
+    }
+    nn.needsUpdate = true;
+  }
   return geo;
 }
 
@@ -1066,11 +1175,18 @@ function addRubble(
         // human marker, which is the exact opposite of "the ceiling fell in". Every boulder keeps at
         // least ~28% of the footprint off-axis, on its own bearing, so the pile interlocks sideways.
         const br = (0.28 + 0.72 * t) * heapR * 0.86;
-        const r0 = (0.24 + rand() * 0.30) * scale * (1.30 - 0.50 * t);
+        // CLOSE-OUT ROUND 2 (N1) — AN ABSOLUTE SIZE FLOOR. `scale` is a kind dial (the warren runs
+        // 0.8) and it multiplies a radius that already tapers to 0.80× at the rim, so the warren's
+        // outermost blocks came out at 15cm — pebble-sized, i.e. exactly the size at which 80 facets
+        // read as a few flakes rather than as a rock. 22cm is the floor: still small beside the
+        // shaft's blocks, big enough to carry its own facets at arm's length.
+        const r0 = Math.max(0.22, (0.24 + rand() * 0.30) * scale * (1.30 - 0.50 * t));
         // CLOSE-OUT (finding 4): 0.62 squash flattened a boulder to under two-thirds of its own
         // width, and the icosahedron's angular relief turned that into knife-edged SLABS — cardboard
         // with a sharp rim, the exact rule-7 read. A collapsed ceiling drops blocks, not shingles.
-        const squash = 0.74 + rand() * 0.22;
+        // ROUND 2 lifts the floor again (0.74 → 0.80): at the near end of the old range a block was
+        // still a quarter flatter than it was wide, and flatter reads thinner from every angle.
+        const squash = 0.80 + rand() * 0.18;
         const bx = cx + Math.cos(ba) * br, bz = cz + Math.sin(ba) * br;
         // The cone's surface height at this radius, then seat the boulder into it. `Math.max(0, …)`
         // is the no-float guarantee: a boulder can never end up above the floor on its own — and
@@ -1080,7 +1196,7 @@ function addRubble(
         const surf = peak * (1 - t) * (1 - t);
         const bodyH = r0 * squash;
         const by = bfy + Math.max(0, surf - bodyH * 0.55) + bodyH * (0.10 + rand() * 0.30) - bodyH * 0.40;
-        const m = new THREE.Mesh(buildBoulder(bx, by, bz, r0, cnoise, depthT, squash), _caveSolid);
+        const m = new THREE.Mesh(buildBoulder(bx, by, bz, r0, cnoise, depthT, squash), _caveRubble);
         m.castShadow = false; m.receiveShadow = true;
         // Tag the heap so a diagnostic can FIND one. The cycle-9 shot helper guessed at "a small
         // solid near a chamber floor" and kept framing STALAGMITES, i.e. the one framing meant to
@@ -1139,7 +1255,15 @@ function addRubble(
 // cap. The cap's LOW emissive renders even in pitch black (a navigation breadcrumb + eerie accent),
 // but toneMapped keeps it from blowing out so DARKNESS still dominates — these are NOT lamps. Shared
 // materials → one program for every fungus. Solid primitives (rule 7 — cylinders/spheres are thick).
-const _fungiStalk = new THREE.MeshStandardMaterial({ color: Tuning.CAVE_FUNGI_STALK_HEX, roughness: 0.9, metalness: 0.0, flatShading: true });
+// CLOSE-OUT ROUND 2, two changes, BOTH digest-free (`caveDigest` hashes vertex positions only):
+//   · `vertexColors` — carries the CONTACT SHADOW baked into each stalk (finding N6). Every stalk
+//     geometry built here writes the attribute, so the shared material can never meet one without it.
+//   · `flatShading: false` — finding "stem prism". A 6-sided prism under flat shading shows three
+//     hard vertical corner seams, which at cathedral cap scale reads as a milled dowel rather than a
+//     stem. Smooth normals cost nothing, need no extra segments, and cannot move a single vertex —
+//     the alternative (more segments) would have moved the origin cave's mushroom geometry, since
+//     every canonical stalk radius sits below the existing LOD threshold.
+const _fungiStalk = new THREE.MeshStandardMaterial({ color: Tuning.CAVE_FUNGI_STALK_HEX, roughness: 0.9, metalness: 0.0, flatShading: false, vertexColors: true });
 const _fungiCap = new THREE.MeshStandardMaterial({
   color: 0x243c3a, roughness: 0.6, metalness: 0.0,
   emissive: Tuning.CAVE_FUNGI_EMISSIVE_HEX, emissiveIntensity: Tuning.CAVE_FUNGI_EMISSIVE_INT,
@@ -1156,8 +1280,25 @@ function buildMushroom(h: number, capR: number, rand: () => number): THREE.Group
   // it is an LOD rule and not a kind branch — and every CANONICAL stalk is under the threshold by
   // construction (canonical capR ≤ CAVE_FUNGI_CAP_MAX_R 0.16 ⇒ stalkR ≤ 0.064), which is why the
   // origin cave's mushroom geometry — and therefore the origin digest — cannot move.
-  const segs = stalkR > 0.07 ? 10 : 6;
-  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(stalkR * 0.8, stalkR, h, segs), _fungiStalk);
+  const segs = stalkR > 0.065 ? 10 : 6;    // 0.07 → 0.065: canonical stalkR is < 0.064 by construction
+  const sgeo = new THREE.CylinderGeometry(stalkR * 0.8, stalkR, h, segs);
+  // ── CLOSE-OUT ROUND 2 (finding N6) — A CONTACT CUE AT THE BASE. Every rock in the frame gets one
+  //    for free (it is lit by a torch and self-shadows into the floor); a flat-cut cylinder standing
+  //    on sand does not, so the stalks read as PUSHED INTO the ground rather than GROWING out of it.
+  //    A baked darkening over the bottom ~18% of the stalk is the cheapest honest version: no extra
+  //    mesh (which would change the mesh set and therefore the digest), no light, no RNG — a pure
+  //    function of local height, so it is deterministic and identical on every reload.
+  {
+    const sp = sgeo.attributes.position as THREE.BufferAttribute;
+    const sc = new Float32Array(sp.count * 3);
+    for (let i = 0; i < sp.count; i++) {
+      const t = Math.min(1, Math.max(0, (sp.getY(i) + h * 0.5) / Math.max(1e-6, h)));  // 0 base → 1 top
+      const k = 0.32 + 0.68 * Math.min(1, t / 0.18);
+      sc[i * 3] = k; sc[i * 3 + 1] = k; sc[i * 3 + 2] = k;
+    }
+    sgeo.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+  }
+  const stalk = new THREE.Mesh(sgeo, _fungiStalk);
   stalk.position.y = h * 0.5;
   stalk.rotation.z = bend * 0.6;
   grp.add(stalk);
@@ -1269,6 +1410,10 @@ let _fungiId = 1;
  *  whose "glow ladder" is quietly 70% hidden is a defect the frames alone would never name. */
 let _fungiWallTotal = 0;
 let _fungiWallHidden = 0;
+/** …of which THIS many were hidden because every bearing at that height found only CEILING (close-out
+ *  round 2). Reported separately so "the band is aimed too high" is distinguishable in one number from
+ *  "the SDF closed the dome there", which are different table edits. */
+let _fungiWallCeiling = 0;
 
 function tagFungi(root: THREE.Object3D, id: number): void {
   root.traverse((o) => { o.userData.interactType = 'harvest'; o.userData.interactId = id; o.userData.interactRegistry = 'caveFungi'; });
@@ -1285,6 +1430,10 @@ function addFungi(
   /** CLOSE-OUT — casts against the REAL SDF wall (`makeWallCaster`). Optional so the pure-placement
    *  call paths still work; without it the shelves fall back to the analytic ellipsoid. */
   wallCast?: WallCast,
+  /** CLOSE-OUT ROUND 2 — the REAL rock height under a floor cluster (`makeRockFloorSampler`). A
+   *  cluster is a GROUP TRANSFORM, not baked vertices, so seating it on the measured surface moves no
+   *  hashed position and the origin digest cannot follow it. Kind-neutral for that reason. */
+  rockFloor?: RockFloor,
 ): void {
   const rx = node.rx, floorY = node.floorY;
   const nClusters = p.fungiClusterMin
@@ -1318,10 +1467,40 @@ function addFungi(
       // …but never pushed out of the room it was seeded in.
       const dl = Math.hypot(x - node.x, z - node.z), lim = rx * 0.90;
       if (dl > lim) { const k = lim / dl; x = node.x + (x - node.x) * k; z = node.z + (z - node.z) * k; }
+      // …and never left standing where the rock sampler HAS NO DATA. `fr` reaches 0.87·rx, which for
+      // a clipped dome or a corridor-mouth corner is past the last floor-facing vertex the
+      // polygonizer emitted — the sampler then returns its `fallback`, i.e. the ANALYTIC plane, and
+      // that is precisely the silent path that left one cluster 0.45m in the air in the fungal cave
+      // and another 0.54m up in the shaft when `fungiContact` was first pointed at them. So walk the
+      // cluster INWARD in fixed steps until the sampler answers with a plausible height. RNG-free
+      // (the fungi stream is untouched) and a no-op wherever the sampler already had data — which is
+      // most spots in most rooms.
+      if (rockFloor) {
+        for (let k = 0; k <= 5; k++) {
+          const t = 1 - k * 0.15;
+          const sx = node.x + (x - node.x) * t, sz = node.z + (z - node.z) * t;
+          const r = rockFloor(sx, sz, Number.NaN);       // NaN fallback = "say so when you don't know"
+          // 0.6m, not 1.2: the SDF floor cannot honestly differ from the analytic plane by more
+          // than the displacement amplitude (CAVE_GEN_DISP_IN 0.30 + CAVE_SDF_MICRO_AMP 0.075, plus
+          // the bump), and a wider band lets the sampler hand back a NEIGHBOURING room's floor where
+          // two grids overlap — which is how the first cut of this fix bedded two clusters half a
+          // metre INTO the rock (the signed `fungiContact` gaps named it: -0.45m and -0.54m).
+          if (Number.isFinite(r) && Math.abs(r - floorY) <= 0.6) { x = sx; z = sz; break; }
+        }
+      }
       clusterSpots.push({ x, z, r: myR });
     }
-    // Sit on the actual bumpy floor (matches the mesh floor micro-bump).
-    const fy = floorY + Math.max(0, cnoise(x * 0.5, 7.3, z * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
+    // Sit on the actual bumpy floor (matches the mesh floor micro-bump)… and then, CLOSE-OUT ROUND 2,
+    // on the floor that is actually THERE. The analytic plane + micro-bump is a MODEL of the floor;
+    // the rock the player walks on is the SDF surface, and the two differ by up to the displacement
+    // amplitude, which is a whole cluster hovering or half-buried. `fungiContact` in the cave-kinds
+    // leg is the machine tooth on this, so it can never quietly regress into a still-photo argument
+    // again. The 4cm bias sinks the stalk bases into the rock: `makeRockFloorSampler` max-splats
+    // up-facing vertices over a 0.45m cell, so its answer can sit a couple of cm PROUD of the true
+    // surface between vertices, and a gap at the base is the whole "floating mushroom" read.
+    const fy0 = floorY + Math.max(0, cnoise(x * 0.5, 7.3, z * 0.5)) * Tuning.CAVE_GEN_FLOOR_BUMP;
+    const rf = rockFloor ? rockFloor(x, z, Number.NaN) : Number.NaN;
+    const fy = Number.isFinite(rf) && Math.abs(rf - floorY) <= 0.6 ? rf - 0.04 : fy0;
     // Spread scales with cap size — otherwise a cathedral-scale cluster is a bouquet of caps all
     // intersecting each other inside a 35cm disc.
     const cl = buildFungiCluster(rand, 0.35 * p.fungiCapScale, p.fungiPerCluster, p.fungiCapScale);
@@ -1366,12 +1545,40 @@ function addFungi(
       // MOUTH and struck the far side of the tube — mounting a shelf there would put it in a
       // doorway metres from the room it belongs to. Cap the reach, and require a wall-ish face.
       const maxD = analyticR * 1.30 + 0.9;
-      let hit: WallHit | null = null, hx = Math.cos(ang), hz = Math.sin(ang);
-      for (let k = 0; k < 8 && !hit; k++) {
+      // ── CLOSE-OUT ROUND 2 (finding 3, the residual) — NO CEILING FUNGI. ──────────────────────
+      //    Round 1 anchored the shelves on measured rock and that fixed the WALL band. What it did
+      //    not fix is the top of the band, because `|ny| < 0.88` accepts a face that is 62° from
+      //    vertical — a CEILING. A cap mounted up there hangs with most of its silhouette in open
+      //    black (fungal/pocket-c5 at 665,212 is tangent to a stalactite with ~55% of the cap in
+      //    void; fungal/signature-c5 at 447,15 is a bare glowing disc), because there is no rock
+      //    BEHIND it from any angle a player stands at, and no stem in the silhouette either — the
+      //    up-bias that puts a wall shelf's stem in view points a ceiling shelf's stem straight at
+      //    the viewer. There is no fix that keeps them: a ceiling shelf photographed from the floor
+      //    is an orb by geometry, not by shading. So the acceptance test is now a TRUE WALL — 60°
+      //    from vertical or steeper — and a bearing that only finds ceiling is treated exactly like
+      //    a bearing that finds nothing: the mushroom is still BUILT, still counted, still pushed to
+      //    `decor` (so the mesh set and `caveDigest` are unchanged, the same mechanism round 1 used),
+      //    and simply not drawn. The glow ladder loses nothing a wall could have carried.
+      const WALL_MAX_NY = 0.5;
+      // ── …AND THE BAND TEST, WHICH IS THE ONE THAT ACTUALLY BITES. Testing only the MEASURED face
+      //    normal hid 1 shelf out of 38 in the fungal cave and left the orbs in the frames
+      //    (`scen-kind-fungal-room-r4.png` at 538,297 and 602,268), for a reason worth writing down:
+      //    the SDF surface carries the rock displacement, so a dome high above the shoulder is still
+      //    covered in locally-VERTICAL facets, and a per-triangle normal test happily calls one of
+      //    them a wall. Whether a height is WALL or CEILING is a property of the room, not of the
+      //    bump you happened to hit — so it is asked of the ANALYTIC ellipsoid, which is smooth. Its
+      //    normal at this height is (√(1−yn²)/rx, yn/ry): past 0.5 the room is closing overhead and
+      //    nothing mounted there can show rock BEHIND it from a floor-level eye.
+      const anx = Math.sqrt(Math.max(0, 1 - yn0 * yn0)) / rx, any = yn0 / ry;
+      const bandNy = Math.abs(any) / (Math.hypot(anx, any) || 1);
+      const inWallBand = bandNy < WALL_MAX_NY;
+      let hit: WallHit | null = null, hx = Math.cos(ang), hz = Math.sin(ang), sawCeiling = !inWallBand;
+      for (let k = 0; k < 8 && !hit && inWallBand; k++) {
         const a2 = ang + k * 2.39996;
         const cx2 = Math.cos(a2), cz2 = Math.sin(a2);
         const h2 = wallCast ? wallCast(node, wy, cx2, cz2, maxD) : null;
-        if (h2 && h2.d > 0.6 && Math.abs(h2.ny) < 0.88) { hit = h2; hx = cx2; hz = cz2; }
+        if (!h2 || h2.d <= 0.6) continue;
+        if (Math.abs(h2.ny) < WALL_MAX_NY) { hit = h2; hx = cx2; hz = cz2; } else sawCeiling = true;
       }
       // ── THE SCONCE (finding 3, second half). `fungiWallCapScale` is aimed at a shelf 8m up, which
       //    has to be big to subtend any angle at all — but it was applied FLAT across the band, so
@@ -1415,14 +1622,20 @@ function addFungi(
         // framing that happened to contain one. A diagnostic must be able to FIND one on purpose —
         // same lesson as `userData.rubbleHeap` in r4, where the shot helper guessed and kept framing
         // stalagmites instead of the feature it existed to prove.
-        m.userData.wallShelf = { x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z };
+        // …and the cap's own radius, so the `shelf` evidence framing can solve a macro lens for it
+        // instead of photographing a 12-pixel dot (close-out round 2, finding N3).
+        m.userData.wallShelf = {
+          x: px, y: py, z: pz, nx: n.x, ny: n.y, nz: n.z,
+          capR: (m.userData.capR as number) ?? Tuning.CAVE_FUNGI_CAP_MAX_R,
+        };
       } else {
-        // No rock found on any bearing — do not invent one. (Kept in the scene graph and in `decor`
-        // so the mesh set is unchanged; simply not drawn.)
+        // No WALL found on any bearing — do not invent one, and do not settle for a ceiling. (Kept in
+        // the scene graph and in `decor` so the mesh set is unchanged; simply not drawn.)
         const wallR = analyticR * 0.96 - 0.05;
         m.position.set(node.x + hx * wallR, wy, node.z + hz * wallR);
         m.visible = false;
         _fungiWallHidden++;
+        if (sawCeiling) _fungiWallCeiling++;
       }
       _fungiWallTotal++;
       group.add(m); m.traverse((o) => { if ((o as THREE.Mesh).isMesh) decor.push(o as THREE.Mesh); });
@@ -1444,6 +1657,13 @@ const _caveSolid = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors
 // read as a soft brown wash — the flat-shaded dais out-read the whole cavern. R1 tests the direct
 // analogue: full flat shading at 0.45m voxels.
 const _caveSurface = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, side: THREE.FrontSide });
+/** CLOSE-OUT ROUND 2 — RUBBLE BLOCKS ONLY, and the ONLY difference from `_caveSolid` is
+ *  `flatShading: false`. See the smooth-normal block in `buildBoulder`: a talus block is 80 facets of
+ *  displaced icosahedron, and flat-shading facets that big is what read as knife-edged plates in the
+ *  N1 frames. It is a second program in the cave — deliberately, and cheaply: it is compiled only
+ *  when a kind actually emits rubble, so the canonical cave (rubblePerChamber 0) never sees it, and
+ *  the alternative (detail 2) was measured at +34% triangles on the collapsed shaft. */
+const _caveRubble = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: false, side: THREE.FrontSide });
 /** DEEPER cycle 4 — the crevice TOR uses the SAME material (one program, one rock read; the tor's
  *  sun-bleached exterior tone is carried in its vertex colours, not a second shader). */
 export const caveSurfaceMaterial = _caveSurface;
@@ -1813,6 +2033,8 @@ export interface CaveGenProbe {
    *  floating). A high hidden fraction means the kind's glow ladder is not being built. */
   fungiWallShelves: number;
   fungiWallHidden: number;
+  /** …of the hidden ones, how many found only CEILING at their height (close-out round 2). */
+  fungiWallCeiling: number;
   digest: string;
   nodes: Array<{ id: number; x: number; y: number; z: number; rx: number; height: number; kind: CaveNodeKind; parent: number }>;
   edges: Array<{ a: number; b: number; halfW: number; height: number; squeeze: boolean }>;
@@ -1942,7 +2164,7 @@ export function startSpawnCave(
 
     group = new THREE.Group();
     group.name = 'caveGen';
-    _fungiWallTotal = 0; _fungiWallHidden = 0;   // CLOSE-OUT — wall-shelf anchor accounting
+    _fungiWallTotal = 0; _fungiWallHidden = 0; _fungiWallCeiling = 0;   // CLOSE-OUT — wall-shelf anchor accounting
     meshes = []; decor = []; fungi = []; pools = [];
     rubbleHeaps = 0; scrapAnchors = [];
 
@@ -2016,7 +2238,7 @@ export function startSpawnCave(
         group.add(dm); meshes.push(dm);
       }
       addSpeleothems(node, dirsByNode.get(node.id) ?? [], cnoise, dT, srand, group, meshes, decor,
-        kp.speleoDensity, kp.speleoColumnScale, kp.speleoDropScale);
+        kp.speleoDensity, kp.speleoColumnScale, kp.speleoDropScale, kp.speleoSolidity, rockFloor);
       // DEEPER cycle 9 — rubble heaps. Density 0 for every kind but the collapsed shaft, and the
       // call is unconditional so the ONE code path is what runs (an `if (kind === …)` here is
       // exactly the branch this cycle exists to avoid). Never in the entrance hall: that room is the
@@ -2024,7 +2246,7 @@ export function startSpawnCave(
       if (node.kind !== 'entrance') {
         rubbleHeaps += addRubble(node, kp.rubblePerChamber, dirsByNode.get(node.id) ?? [], cnoise, dT, rrand, group, meshes, kp.rubbleScale, kp.rubbleHeight, heapSpots, kp.salvagePlates, rockFloor);
       }
-      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi, kp, wallCast);
+      if (fungiSet.has(node.id)) addFungi(node, cnoise, frand, group, decor, fungi, kp, wallCast, rockFloor);
     }
 
     // DEEPER cycle 9 — SCRAP ANCHORS (the warren's salvage). Positions only; the pickups themselves
@@ -2163,7 +2385,7 @@ export function startSpawnCave(
         depthMin: kp.gateDepthMin, depthMax: kp.gateDepthMax,
       },
       fungiClusters: fungi.length, rubbleHeaps, scrapAnchors: scrapAnchors.length,
-      fungiWallShelves: _fungiWallTotal, fungiWallHidden: _fungiWallHidden,
+      fungiWallShelves: _fungiWallTotal, fungiWallHidden: _fungiWallHidden, fungiWallCeiling: _fungiWallCeiling,
       kindDripScale: kp.dripIntervalScale,
       eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
       colliderTris, msCollider, msMesh, msPoolSampler: lastFloorSamplerMs, msRockSamplers,

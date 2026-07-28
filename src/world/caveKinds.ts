@@ -103,6 +103,30 @@ export interface CaveKindParams {
    *  ceiling puts a lit tip at head-plus-two and implies everything above it. Tips are still hard
    *  clamped by `CAVE_SPELEO_STALACTITE_CLEAR`, so this can never eat headroom. */
   speleoDropScale: number;
+  /** DEEPER cycle-9 CLOSE-OUT ROUND 2 (finding N1) — SPELEOTHEM SOLIDITY, 0..1.
+   *
+   *  THE DEFECT. The near-camera dripstone reads as paper-thin knife-edged slivers — pale curved
+   *  wood shavings with no edge thickness, right beside correctly-thickened oxide plates
+   *  (`scen-kind-warren-pocket-c5.png` 750-1100 × 460-720, and unmistakably in
+   *  `scen-kind-flooded-pocket-c5.png` where three of them stand alone on a lit floor). Three causes,
+   *  all in the small floor-nubbin/stalagmite path: the power taper runs the radius down to the flat
+   *  2cm epsilon so the tip is a blade; `bendScale` 0.9 throws a 1m nubbin up to 0.7m sideways, which
+   *  is a shaving rather than a cone; and the base is seated on the ANALYTIC floor plane, so it can
+   *  hover over the real displaced rock. This dial closes all three:
+   *      tip radius floor = 0.22 · solidity  (× r0) — a blunt dripstone knob instead of a blade
+   *      bend            × (1 − 0.45 · solidity)    — a leaning cone, not a wood shaving
+   *      nubbin seating   = the REAL SDF rock when > 0
+   *
+   *  ⚠ CANONICAL IS 0 AND MUST STAY 0 — this is not timidity, it is the origin-parity gate.
+   *    `buildSpeleothem` bakes WORLD-SPACE vertices, so the dripstone kit is the one piece of
+   *    dressing whose POSITION is hashed by `caveDigest`; moving a canonical speleothem by a
+   *    millimetre moves the origin cave's digest (d8f15005), which is a hard campaign gate. At 0
+   *    every expression above is an exact IEEE identity (`Math.max(0, x) === x`, `x * 1 === x`,
+   *    the seating branch is not taken), so the canonical cave is bit-identical.
+   *    The COLOUR half of the same fix — wall-role rock with a fine mottle, replacing the flat
+   *    pooled-sediment wash that made these read as beige cardboard — is applied KIND-NEUTRALLY,
+   *    because `caveDigest` hashes positions and never colours. */
+  speleoSolidity: number;
   fungiChambersMin: number;
   fungiChambersMax: number;
   fungiClusterMin: number;
@@ -203,6 +227,7 @@ export function canonicalCaveParams(): CaveKindParams {
     speleoDensity: 1,
     speleoColumnScale: 1,
     speleoDropScale: 1,
+    speleoSolidity: 0,                    // ⚠ see the field doc: 0 is origin parity, not a default
     fungiChambersMin: T.CAVE_FUNGI_CHAMBERS_MIN,
     fungiChambersMax: T.CAVE_FUNGI_CHAMBERS_MAX,
     fungiClusterMin: T.CAVE_FUNGI_CLUSTER_MIN,
@@ -282,6 +307,9 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
                                          //   means every big drop reaches that clamp — a ceiling
                                          //   bristling down to just over your head, which is the
                                          //   actual claustrophobia lever in a 4m room
+    speleoSolidity: 1.0,                 // CLOSE-OUT R2 (N1) — the frame the finding was raised on.
+                                         //   A warren's dripstone is arm's length from the lens in
+                                         //   half its rooms, so it gets the full treatment
     fungiChambersMin: 1, fungiChambersMax: 2,
     fungiClusterMin: 1, fungiClusterMax: 2,
     fungiWallChance: 0.15,
@@ -325,6 +353,9 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     //    was absent. Both dials below buy parallax instead of light.
     speleoColumnScale: 3.2,              // egg 2→7 columns, hall 1→4: a colonnade whose feet are lit
     speleoDropScale: 1.9,                // 1-3.2m drops → 1.9-6.1m: tips land in torch range
+    speleoSolidity: 0.85,                // CLOSE-OUT R2 (N1) — same builder, same sliver defect. A
+                                         //   hair under the warren's 1.0 because a 6m drop wants to
+                                         //   keep some taper to read as long
     fungiChambersMin: 6, fungiChambersMax: 8,   // clamped to the chamber count → effectively ALL of them
     fungiClusterMin: 5, fungiClusterMax: 8,
     fungiWallChance: 1.0,                // EVERY fungal chamber climbs (0.9 left one room bare)
@@ -337,7 +368,16 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
                                          //   to retune, so the size comes back to meet it), and the
                                          //   cave hit 803 meshes / 169k tris in a streaming budget
     fungiWallShelves: 5, fungiWallShelvesSpan: 6,   // 5-10 shelves per chamber…
-    fungiWallLoFrac: 0.18, fungiWallSpanFrac: 0.54, // …climbing 18%→72% of the dome: the glow LADDER.
+    fungiWallLoFrac: 0.18, fungiWallSpanFrac: 0.40, // …climbing 18%→58% of the dome: the glow LADDER.
+                                         //   CLOSE-OUT R2: was 0.54 (→72%). The top of that band is
+                                         //   above the dome's SHOULDER, where `addFungi`'s new band
+                                         //   test now correctly refuses to mount anything — so those
+                                         //   draws were not producing a taller ladder, they were
+                                         //   producing HIDDEN shelves (and, before the test existed,
+                                         //   ceiling orbs). Aiming the band at the wall the room
+                                         //   actually has keeps the ladder's shelf COUNT instead of
+                                         //   spending a quarter of it on rock that curves away.
+                                         //   Still 2.1m→6.7m of climb in an 11.5m dome.
                                          //   r2's band ran to 90%, where the analytic wall has
                                          //   diverged far enough from the SDF that the shelves were
                                          //   inside the rock — 1 of ~10 was visible
@@ -373,6 +413,9 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     poolRFrac: 0.70, poolRMin: 2.2, poolRMax: 9.5,
     poolCenterFracMin: 0.02,
     poolCenterFracMax: 0.14,
+    speleoSolidity: 0.85,                       // CLOSE-OUT R2 (N1) — `scen-kind-flooded-pocket-c5`
+                                                //   is where the sliver read is clearest: three bent
+                                                //   beige blades alone on a lit floor
     fungiChambersMin: 3, fungiChambersMax: 4,   // wet rock grows things
     fungiWallChance: 0.55,
     dripIntervalScale: 0.5,                     // the wet-audio bias: twice the drips, and cycle 6's
@@ -405,6 +448,9 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     speleoDensity: 0.75,                        // the ceiling collapsed; the dripstone went with it
     speleoColumnScale: 2.2,                     // …but what is left SPANS: a column in a 14m room is
     speleoDropScale: 1.6,                       //   a vertical line that leaves the top of the frame
+    speleoSolidity: 0.9,                        // CLOSE-OUT R2 (N1) — a collapsed shaft's rock is
+                                                //   BROKEN, i.e. blunt: the blade read is doubly
+                                                //   wrong here, beside boulders that are already solid
     rubblePerChamber: 3, rubbleScale: 1.5, rubbleHeight: 2.2, // heaps you walk AROUND, not gravel.
                                                 //   The height dial is doing the work: the footprint
                                                 //   is capped by the room, the crown is not
@@ -504,6 +550,10 @@ export function assertCaveKindTable(): void {
       ['fungiCapScale', p.fungiCapScale], ['fungiWallCapScale', p.fungiWallCapScale],
       ['rubbleScale', p.rubbleScale],
     ] as Array<[string, number]>) if (!(v > 0)) at(`${n} = ${v} — must be a positive multiplier`);
+    if (!(p.speleoSolidity >= 0 && p.speleoSolidity <= 1))
+      at(`speleoSolidity ${p.speleoSolidity} is outside 0..1 — it multiplies a tip-radius floor and a bend reduction, and >1 would breach the speleothem clearance envelope the placement margins are sized against`);
+    if (kind === 'canonical' && p.speleoSolidity !== 0)
+      at('speleoSolidity must be EXACTLY 0 for canonical — `buildSpeleothem` bakes world-space vertices, so any non-zero value moves the origin cave digest (d8f15005), which is a hard campaign gate');
     if (p.fungiPerCluster < 2) at(`fungiPerCluster ${p.fungiPerCluster} < 2 — a cluster of one is a mushroom`);
     if (p.scrapClusterSize < 1) at('scrapClusterSize < 1');
     if (p.salvagePlates < 0) at('negative salvagePlates');

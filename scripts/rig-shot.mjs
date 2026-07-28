@@ -5994,6 +5994,79 @@ const SCENARIOS = {
         if (arrive.rubbleHeaps < 3) fails.push(`shaft: ${arrive.rubbleHeaps} rubble heaps — the collapse dressing did not take`);
       }
 
+      // ── THE FUNGI CONTACT ASSERT (DEEPER cycle-9 close-out round 2, finding N3 half ii) ───────
+      //
+      //   WHY IT EXISTS. "Are the mushrooms attached to anything?" has been argued from STILLS for
+      //   three rounds — a critic spots a cap hanging in the dark, a fix lands, a later frame shows
+      //   another one, and nobody can say whether the rest of the cave is sound because a frame only
+      //   ever contains the handful of anchors that happen to be lit. That is exactly the class of
+      //   defect this project's own lesson says must become a NUMBER: every failure that got a
+      //   machine gate stopped recurring; every failure that got only prose recurred.
+      //
+      //   WHAT IT MEASURES. Every fungi anchor in the built cave — floor clusters AND wall shelves —
+      //   raycast against the SHIPPED COLLIDERS (rule 9: the trimesh IS the visible geometry) and the
+      //   distance to rock asserted ≤ eps. Floors cast straight down; wall shelves cast back along
+      //   the anchor normal they declared. `--fungiEps=` exists so the tooth can be RED-PROVED
+      //   without editing this file (tighten it absurdly, watch the leg go red, restore).
+      const FUNGI_EPS = argv.fungiEps === undefined ? 0.25 : Number(argv.fungiEps);
+      const contact = await page.evaluate(async (S) => {
+        const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER;
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        // ⚠ Rapier's QueryPipeline only rebuilds inside `world.step()` — a ray cast on the tick the
+        //   cave's colliders were inserted queries a pipeline that has never seen them (this project
+        //   has already shipped a gate that invented a defect exactly this way).
+        for (let f = 0; f < 3; f++) await raf();
+        const res = ctx.caveStream.residents().find((r) => r.key === S.key);
+        if (!res) return { fatal: 'the resident vanished before the contact sweep' };
+        const pbody = ctx.player.body.body;
+        const bad = []; let ok = 0;
+        for (const c of res.cave.fungi) {
+          // SIGNED: +gap = the cluster hovers over the rock (the defect this exists for); -gap = it is
+          // bedded INTO the rock, which is only a defect once it swallows the stalks, so it gets its
+          // own (looser) allowance instead of being reported as "floating".
+          // START THE RAY JUST ABOVE THE ANCHOR, not a metre up. A 1m column through a cave floor
+          // catches whatever DRESSING happens to stand at the same (x, z) — a stalagmite flank, a
+          // heap boulder — and reports the mushroom as buried under it. That is a gate inventing a
+          // defect, the same class of error as one hiding a defect, and it did exactly that on two
+          // anchors (fungal -0.45m, shaft -0.57m: both stable across three rebuilds, both bogus).
+          // `eps` above the anchor is the honest origin: it can still see a float of any size, and it
+          // cannot see a rock whose surface is already higher than the anchor's own tolerance.
+          const h = g.castDown(c.pos.x, c.pos.z, c.pos.y + S.eps, true);
+          const d = h ? c.pos.y - h.hitY : null;
+          // …and the second measurement is kept for the DIAGNOSTIC only, so a real burial is still
+          // nameable rather than silently excused by the shorter ray.
+          const hi = g.castDown(c.pos.x, c.pos.z, c.pos.y + 1.0, true);
+          const dHi = hi ? +(c.pos.y - hi.hitY).toFixed(2) : null;
+          if (d !== null && d <= S.eps && d >= -S.sink) ok++;
+          else bad.push({ t: 'floor', at: [+c.pos.x.toFixed(1), +c.pos.y.toFixed(1), +c.pos.z.toFixed(1)], gap: d === null ? null : +d.toFixed(2), fromAbove: dHi });
+        }
+        const shelves = [];
+        res.cave.group.traverse((o) => { const w = o.userData && o.userData.wallShelf; if (w && o.visible) shelves.push(w); });
+        for (const w of shelves) {
+          const B = 1.5;
+          const hit = ctx.physics.world.castRay(
+            new RAPIER.Ray({ x: w.x + w.nx * B, y: w.y + w.ny * B, z: w.z + w.nz * B },
+              { x: -w.nx, y: -w.ny, z: -w.nz }),
+            B + 1.2, true, undefined, undefined, undefined, pbody,
+          );
+          const d = hit ? hit.timeOfImpact - B : null;   // + = the mount stands off the rock
+          if (d !== null && d <= S.eps && d >= -S.sink) ok++;
+          else bad.push({ t: 'wall', at: [+w.x.toFixed(1), +w.y.toFixed(1), +w.z.toFixed(1)], gap: d === null ? null : +d.toFixed(2) });
+        }
+        return { ok, bad: bad.length, worst: bad.slice(0, 6), floors: res.cave.fungi.length, walls: shelves.length };
+      }, { key, eps: FUNGI_EPS, sink: Math.max(FUNGI_EPS, 0.45) });
+      if (contact.fatal) fails.push(`${kind} fungiContact: ${contact.fatal}`);
+      else {
+        const total = contact.ok + contact.bad;
+        console.log(`[cave-kinds] ${kind} fungiContact ok=${contact.ok} bad=${contact.bad} `
+          + `(${contact.floors} floor clusters + ${contact.walls} visible wall shelves, eps ${FUNGI_EPS}m)`);
+        if (total === 0) fails.push(`${kind} fungiContact: ZERO anchors measured — every kind seeds fungi, so this check passed by measuring nothing`);
+        if (contact.bad > 0) {
+          fails.push(`${kind} fungiContact: ${contact.bad}/${total} fungi anchors are not touching rock (stand-off > ${FUNGI_EPS}m, or bedded deeper than ${Math.max(FUNGI_EPS, 0.45)}m) — the mount is not a mount`);
+          for (const b of contact.worst) console.log(`[cave-kinds] ${kind} fungiContact FLOAT ${b.t} at ${JSON.stringify(b.at)} gap=${b.gap === null ? 'NO ROCK FOUND' : b.gap + 'm'}${b.fromAbove === undefined ? '' : ` (1m-column read ${b.fromAbove}m)`}`);
+        }
+      }
+
       // ── THE MARCH + THE VOID SWEEP — the identical shared gates, pointed at this resident ──
       let w = null;
       if (DO_MARCH) {
@@ -17151,7 +17224,7 @@ main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit
 async function caveKindShots(page, kind, residentKey) {
   const EYE = 1.68;
   const TAG = argv.tag ? `-${String(argv.tag)}` : '';
-  const specs = await page.evaluate(({ KEY, EYE }) => {
+  const plan = await page.evaluate(({ KEY, EYE }) => {
     const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
     const res = ctx.caveStream.residents().find((r) => r.key === KEY);
     if (!res) return null;
@@ -17170,6 +17243,19 @@ async function caveKindShots(page, kind, residentKey) {
       if (!h) return guess;
       if (Math.abs(h.hitY - guess) > 3.5) return guess;
       return h.hitY;
+    };
+    // A HORIZONTAL ray against the SHIPPED colliders (the cave trimesh IS the visible geometry, rule
+    // 9) — used to measure real stand-off before a camera is parked, and to prove a framed feature
+    // is not occluded. Returns the distance to the first rock, or `max` if the ray never hits.
+    const RAPIER = g.RAPIER;
+    const pbody = ctx.player.body.body;
+    let shelfCount = 0;
+    const hRay = (ox, oy, oz, dx, dz, max) => {
+      const h = ctx.physics.world.castRay(
+        new RAPIER.Ray({ x: ox, y: oy, z: oz }, { x: dx, y: 0, z: dz }), max, true,
+        undefined, undefined, undefined, pbody,
+      );
+      return h ? h.timeOfImpact : max;
     };
     const out = [];
     // 1 — the deepest room, from its rim looking across the middle at HEAD height (not at 45% of the
@@ -17190,7 +17276,32 @@ async function caveKindShots(page, kind, residentKey) {
         if (n) { R = n; lookF = 0.12; }
       }
       const a = 0.62, ux = Math.cos(a), uz = Math.sin(a);
-      const sx = R.x + ux * R.rx * 0.80, sz = R.z + uz * R.rx * 0.80;
+      // ── CLOSE-OUT ROUND 2 (finding N4) — DON'T STAND IN THE ROCK. `rx · 0.80` is a stand-off
+      //    against the ANALYTIC room; the room the camera is actually in is the SDF surface, which
+      //    comes in up to ~0.4m tighter, and where a neighbouring chamber clips the dome it comes in
+      //    metres tighter. `scen-kind-fungal-room-c5.png` spent its right-hand 15% on an out-of-focus
+      //    rock face 30cm from the lens — a framing defect being graded as an asset defect. So the
+      //    stand-off is MEASURED with a ray along the same bearing and pulled back to leave ≥1.8m of
+      //    air in front of the eye. Purely a camera change; the asset is untouched.
+      //    ROUND 2, TAKE 2: a single ray along the STAND bearing is not enough, and the r4 frame
+      //    proved it — the offending mass in `scen-kind-fungal-room-r4.png` was a COLUMN beside the
+      //    lens (this kind runs speleoColumnScale 3.2), not the wall the camera was backing toward.
+      //    So the stand point is tested with a full RING of rays at eye height and pulled toward the
+      //    room centre until nothing is inside 0.95m of the eye in any direction.
+      const R0 = floorAt(R.x, R.z, R.y);
+      let stand = R.rx * 0.80;
+      for (let att = 0; att < 6; att++) {
+        const cx = R.x + ux * stand, cz = R.z + uz * stand;
+        const cy = floorAt(cx, cz, R.y) + EYE;
+        let minC = Infinity;
+        for (let b2 = 0; b2 < 12; b2++) {
+          const t2 = (b2 / 12) * Math.PI * 2;
+          minC = Math.min(minC, hRay(cx, cy, cz, Math.cos(t2), Math.sin(t2), 3.0));
+        }
+        if (minC >= 0.95 || stand <= 1.2) break;
+        stand = Math.max(1.2, stand - R.rx * 0.12);
+      }
+      const sx = R.x + ux * stand, sz = R.z + uz * stand;
       const fy = floorAt(sx, sz, R.y);
       out.push({ name: 'room', cam: [sx, fy + EYE, sz], look: [R.x - ux * R.rx * 0.5, R.y + R.height * lookF, R.z - uz * R.rx * 0.5] });
     }
@@ -17229,13 +17340,25 @@ async function caveKindShots(page, kind, residentKey) {
     // 2c — THE SMALLEST SIDE POCKET, from its rim. The warren's claustrophobia claim lives here (the
     //      egg chamber is by construction the biggest room in EVERY kind, so it can never show it).
     {
-      const pockets = nodes.filter((n) => n.kind !== 'egg' && n.id !== nodes[0].id).sort((a, b) => a.rx - b.rx);
+      let pockets = nodes.filter((n) => n.kind !== 'egg' && n.id !== nodes[0].id).sort((a, b) => a.rx - b.rx);
+      // ── CLOSE-OUT ROUND 2 (finding N5) — A FLOODED POCKET MUST CONTAIN WATER. The smallest side
+      //    pocket is the right choice for "how tight is this kind", and for the flooded cave it kept
+      //    landing on the one small room the pool placer skipped: `scen-kind-flooded-pocket-c5.png`
+      //    is a DRY floor, i.e. the kind's own claim is absent from the frame that is supposed to
+      //    show a small room of it. Restrict the candidate set to POOLED pockets when the kind has
+      //    any, and drop the look target so the waterline is in shot rather than above it.
+      let lookF = 0.34;
+      if (p.kind === 'flooded' && p.pools && p.pools.length) {
+        const pooled = new Set(p.pools.map((q) => q.node));
+        const wet = pockets.filter((n) => pooled.has(n.id));
+        if (wet.length) { pockets = wet; lookF = 0.14; }
+      }
       const q = pockets[0];
       if (q) {
         const a = 1.4, ux = Math.cos(a), uz = Math.sin(a);
         const sx = q.x + ux * q.rx * 0.72, sz = q.z + uz * q.rx * 0.72;
         const fy = floorAt(sx, sz, q.y);
-        out.push({ name: 'pocket', cam: [sx, fy + EYE, sz], look: [q.x - ux * q.rx * 0.8, q.y + q.height * 0.34, q.z - uz * q.rx * 0.8] });
+        out.push({ name: 'pocket', cam: [sx, fy + EYE, sz], look: [q.x - ux * q.rx * 0.8, q.y + q.height * lookF, q.z - uz * q.rx * 0.8] });
       }
     }
     // 2d — A WALL SHELF, CLOSE UP (close-out). The r3 "sconce / floating orb" finding was caught by
@@ -17249,6 +17372,7 @@ async function caveKindShots(page, kind, residentKey) {
       res.cave.group.traverse((o) => {
         const w = o.userData && o.userData.wallShelf;
         if (!w || !o.visible) return;
+        shelfCount++;
         const d = Math.hypot(w.x - egg.x, w.z - egg.z);
         if (d < bd) { bd = d; best = w; }
       });
@@ -17256,12 +17380,39 @@ async function caveKindShots(page, kind, residentKey) {
         // A GRAZING 3/4, never dead-on down the normal: a cap photographed along its own axis is a
         // flat disc no matter how it is mounted, which answers nothing. Off to one side and below,
         // so the mount, the stalk and the rock behind are all in the frame.
+        //
+        // ── CLOSE-OUT ROUND 2 (finding N3, the evidence half). Round 1's version was a WIDE lens at
+        //    ~1.6m, and the shipped frames prove that answers nothing either: the flooded shelf came
+        //    out as a 12-pixel teal dot on black (`scen-kind-flooded-shelf-c5.png`) and the fungal one
+        //    filled its frame with cap and no rock. The eye distance stays in the honest 1.5-2m
+        //    evidence window — a diagnostic that teleports to 20cm is testing a view the game never
+        //    shows — and the LENS does the work instead: the FOV is solved so the cap subtends a
+        //    fixed ~38% of frame height whatever the kind's cap scale is, i.e. a macro lens on the
+        //    junction. It also declares the JUNCTION POINT, so the render pass can machine-check that
+        //    the mount is not hidden behind another rock (a photograph of an occluded mount is a
+        //    photograph of nothing, and it would have graded green).
+        const D = 1.7;
         const tl = Math.hypot(best.nz, -best.nx) || 1;
         const tx = best.nz / tl, tz = -best.nx / tl;
-        const sx = best.x + best.nx * 1.05 + tx * 1.05;
-        const sy = best.y + best.ny * 1.05 - 0.55;
-        const sz = best.z + best.nz * 1.05 + tz * 1.05;
-        out.push({ name: 'shelf', cam: [sx, sy, sz], look: [best.x, best.y, best.z] });
+        // WELL below and well to the SIDE. The r5 frame was still three-quarters front-on, and a
+        // bracket fungus's own cap overhangs its stem — so the cap covered the junction it was
+        // supposed to prove. From under-and-beside, the cap swings up out of the way and the stem
+        // meets the stone in clear air.
+        // …and LOWER still for a small cap. A shelf mushroom's own cap overhangs its stem by roughly
+        // its radius, and the stem that has to be visible is only ~10cm long at canonical cap scale
+        // (the flooded/canonical kinds), so the angle that works for a 30cm cathedral cap still
+        // photographs a small one as a bare disc. The rise is scaled to the cap: the smaller the cap,
+        // the further under it the lens has to get to see the mount.
+        const under = 0.70 + 0.55 * Math.max(0, 1 - (best.capR || 0.16) / 0.24);
+        let ox = best.nx * 0.45 + tx * 0.85, oy = best.ny * 0.45 - under, oz = best.nz * 0.45 + tz * 0.85;
+        const ol = Math.hypot(ox, oy, oz) || 1;
+        ox = (ox / ol) * D; oy = (oy / ol) * D; oz = (oz / ol) * D;
+        const capR = best.capR || 0.16;
+        const fov = Math.min(60, Math.max(20, (2 * Math.atan((capR * 4.2) / D) * 180) / Math.PI));
+        out.push({
+          name: 'shelf', cam: [best.x + ox, best.y + oy, best.z + oz], look: [best.x, best.y, best.z],
+          fov: +fov.toFixed(1), junction: [best.x, best.y, best.z],
+        });
       }
     }
     // 3 — the kind's signature feature, framed from ~2.6m away at eye height. Every target now
@@ -17328,9 +17479,20 @@ async function caveKindShots(page, kind, residentKey) {
         out.push({ name: 'signature', cam: [sx, fy + EYE, sz], look: [tgt.x, Math.max(tgt.y, fy) + 0.35, tgt.z] });
       }
     }
-    return out;
+    return { specs: out, shelfCount };
   }, { KEY: residentKey, EYE });
-  if (!specs) { console.log(`[cave-kinds] ${kind}: no resident to shoot`); return; }
+  if (!plan) { console.log(`[cave-kinds] ${kind}: no resident to shoot`); return; }
+  const specs = plan.specs;
+  // ── THE MISSING-FILE TOOTH (finding N3). A kind that builds ZERO visible wall shelves silently
+  //    produced NO `-shelf` frame at all, and "the file isn't there" is indistinguishable from "the
+  //    helper crashed" when a critic is reading a directory. Name it, loudly, every run.
+  if (!plan.shelfCount) {
+    console.log(`[cave-kinds] ⚠ SHELF EVIDENCE ABSENT — kind '${kind}' built 0 VISIBLE wall-shelf fungi, `
+      + `so scen-kind-${kind}-shelf${TAG}.png does not exist and cannot be graded. That is the kind table's `
+      + `fungiWallChance talking (warren 0.15 / shaft 0.2 over 1-2 fungi chambers), not a broken helper.`);
+  } else {
+    console.log(`[cave-kinds] ${kind}: ${plan.shelfCount} visible wall shelves; framing the nearest one.`);
+  }
 
   for (const spec of specs) {
     const st = await page.evaluate((s) => {
@@ -17341,7 +17503,15 @@ async function caveKindShots(page, kind, residentKey) {
       // player is standing on — which is exactly what the first run of this helper produced.
       ctx.flags.paused = true;
       ctx.three.renderer.setSize(1100, 720, false);
-      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+      const prevFov = cam.fov;
+      if (cam.isPerspectiveCamera) {
+        cam.aspect = 1100 / 720;
+        // A per-framing LENS (close-out round 2). Only the `shelf` evidence shot asks for one: it is
+        // a macro of a 10-30cm junction, and at the shipping FOV that is a dozen pixels. Restored
+        // with the rest of the scene afterward so no other framing inherits it.
+        if (s.fov) cam.fov = s.fov;
+        cam.updateProjectionMatrix();
+      }
       ctx.three.renderer.toneMappingExposure = 1.05;      // the SHIPPING exposure, never hotter
       cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
       cam.lookAt(s.look[0], s.look[1], s.look[2]);
@@ -17364,14 +17534,60 @@ async function caveKindShots(page, kind, residentKey) {
       tl.position.copy(lp); ctx.three.scene.add(tl);
       g.setCaveRockLight(lp.x, lp.y, lp.z, T.TORCH_LIGHT_INTENSITY);
       ctx.three.renderer.render(ctx.three.scene, cam);
-      window.__kindShotRestore = { hidden, dom, torchI, light: tl };
+      window.__kindShotRestore = { hidden, dom, torchI, light: tl, prevFov };
       // THE BROKEN-INSTRUMENT TOOTH. An interior shot whose eye is ABOVE the desert surface is a
       // picture of the outside of the tor; grading one of those is how a look pass ships a lie.
       const surf = ctx.terrain.heightAt(cam.position.x, cam.position.z);
-      return { ok: true, above: cam.position.y > surf - 0.5, eye: +cam.position.y.toFixed(1), surf: +surf.toFixed(1) };
+      // ── THE OCCLUSION TOOTH (finding N3). A framing that declares a JUNCTION must prove the
+      //    junction is the first rock the lens meets. `wallShelf` anchors are embedded a few cm INTO
+      //    the wall, so a clean shot hits rock just SHORT of the declared point; anything markedly
+      //    shorter is a different rock standing in the way, and the resulting photograph of a
+      //    stalagmite would have been graded as evidence of a mount.
+      // TEMP IDENTITY PROBE — what is actually AT these screen points? (removed after the round)
+      let ident = null;
+      if (s.probe) {
+        const rc = new THREE.Raycaster();
+        ident = [];
+        for (const q of s.probe) {
+          rc.setFromCamera(new THREE.Vector2(q[0], q[1]), cam);
+          const hits = rc.intersectObjects(ctx.three.scene.children, true);
+          const h0 = hits.find((h) => h.object.isMesh && h.object.visible);
+          ident.push(h0 ? {
+            px: q, d: +h0.distance.toFixed(2),
+            verts: h0.object.geometry.attributes.position.count,
+            idx: h0.object.geometry.index ? h0.object.geometry.index.count : 0,
+            ud: Object.keys(h0.object.userData || {}).join('|') || '-',
+            gt: h0.object.geometry.type,
+          } : { px: q, miss: true });
+        }
+      }
+      let occl = null;
+      if (s.junction) {
+        const RAPIER = g.RAPIER;
+        const jx = s.junction[0] - cam.position.x, jy = s.junction[1] - cam.position.y, jz = s.junction[2] - cam.position.z;
+        const want = Math.hypot(jx, jy, jz) || 1;
+        const hit = ctx.physics.world.castRay(
+          new RAPIER.Ray({ x: cam.position.x, y: cam.position.y, z: cam.position.z },
+            { x: jx / want, y: jy / want, z: jz / want }),
+          want + 1.0, true, undefined, undefined, undefined, ctx.player.body.body,
+        );
+        occl = { want: +want.toFixed(2), got: hit ? +hit.timeOfImpact.toFixed(2) : null };
+      }
+      return { ok: true, above: cam.position.y > surf - 0.5, eye: +cam.position.y.toFixed(1), surf: +surf.toFixed(1), occl, ident };
     }, spec);
     if (!st) continue;
+    if (st.ident) for (const q of st.ident) console.log(`[cave-kinds] IDENT ${kind}/${spec.name} ${JSON.stringify(q)}`);
     if (st.above) console.log(`[cave-kinds] ⚠ ${kind}/${spec.name} EYE IS ABOVE GROUND (${st.eye}m vs surface ${st.surf}m) — framing is broken, not the asset`);
+    if (st.occl) {
+      const { want, got } = st.occl;
+      if (got === null || got < want - 0.45) {
+        console.log(`[cave-kinds] ⚠ ${kind}/${spec.name} JUNCTION OCCLUDED — the declared mount is ${want}m from the eye `
+          + `but the first rock on that line is at ${got === null ? 'NOTHING (the ray left the cave)' : got + 'm'}. `
+          + `This frame does NOT show the cap-stem-rock junction; do not grade the mount from it.`);
+      } else {
+        console.log(`[cave-kinds] ${kind}/${spec.name} junction clear: rock at ${got}m vs the declared mount at ${want}m.`);
+      }
+    }
     await page.waitForTimeout(120);
     try {
       await page.screenshot({ path: join(OUT, `scen-kind-${kind}-${spec.name}${TAG}.png`), fullPage: false, timeout: 60000 });
@@ -17385,6 +17601,10 @@ async function caveKindShots(page, kind, residentKey) {
       if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
       ctx.three.scene.remove(st.light);
       g.setCaveRockLight(0, 0, 0, 0);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera && st.prevFov !== undefined && cam.fov !== st.prevFov) {
+        cam.fov = st.prevFov; cam.updateProjectionMatrix();   // the macro lens is per-framing only
+      }
       ctx.flags.paused = false;
       window.__kindShotRestore = null;
     });
