@@ -15,7 +15,7 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
-import { caveEntranceSite, spawnCaveEntrance } from './world/caveEntrance.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
+import { caveEntranceHoleFitsTile, caveEntranceSite, creviceClearProfile, spawnCaveEntrance } from './world/caveEntrance.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
 import { caveGenSeed, spawnCave, type CaveFungiCluster, type SpawnedCave } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
 import { getPlayerPos } from './util/playerPos.ts';   // canonical player position (speeder/sled-aware)
 import { createCaveStream, type CaveStream } from './world/caveStream.ts';   // DEEPER cycle 5 (D-4) — cave build budget + resident cap
@@ -827,6 +827,13 @@ if (caveStream) {
     caveSitesNear(worldSeed, x, z, radius, terrain, biomes, contentClearNear));
   (window as unknown as { __caveSites: unknown }).__caveSites =
     (x: number, z: number, r: number) => caveSitesNear(worldSeed, x, z, r, terrain, biomes, contentClearNear);
+  // DEEPER cycle 9 — the entrance-headroom model, exposed so the gates can sweep it over hundreds of
+  // real sites without building one. Pure; same function the placement rule consults.
+  (window as unknown as { __caveClear: unknown }).__caveClear =
+    (site: { x: number; z: number }, seed: number, opts?: Parameters<typeof creviceClearProfile>[3]) =>
+      creviceClearProfile(site, terrain, seed, opts);
+  (window as unknown as { __caveHoleFits: unknown }).__caveHoleFits =
+    (site: { x: number; z: number }, cellsX?: number) => caveEntranceHoleFitsTile(site, cellsX);
 }
 createTutorial(ctx);
 wireOverlays(ctx);

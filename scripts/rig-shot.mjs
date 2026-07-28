@@ -87,7 +87,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed' || SCENARIO === 'cave-kinds' || SCENARIO === 'crevice-profile') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed' || SCENARIO === 'cave-kinds' || SCENARIO === 'crevice-profile' || SCENARIO === 'crevice-sweep') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -5757,6 +5757,39 @@ const SCENARIOS = {
       for (let i = 0; i < Math.min(A.length, B.length); i++) if (A[i].kind !== B[i].kind) kindDrift++;
       if (kindDrift) out.fails.push(`${kindDrift} sites changed KIND between two derivations — the kind roll is not pure (D290)`);
       if (A.length < 120) out.fails.push(`only ${A.length} sites in an 18km box — too few to audit the mix (vacuous-pass guard)`);
+      // ── A3 — THE ENTRANCE-HEADROOM INVARIANT, over the WHOLE listed population (DEEPER cycle 9).
+      //   The defect this closes was not visible to any march: 11% of seed-1337's sites and 10.5% of
+      //   seed-7's pinched the roofed descent under the 1.70m capsule, and `cave-kinds` only found it
+      //   because ONE of its four picked sites happened to be one of them. A per-site march can never
+      //   be the net for a population-wide placement defect — the population is.
+      //
+      //   THE BOUND IS THE PHYSICAL REQUIREMENT, NOT THE POLICY DIAL. `CREVICE_MIN_CLEAR_M` (2.25) is
+      //   what placement rejects on; this gate asserts 2.10 — the 1.90m the capsule actually needs
+      //   (1.70 + KCC/step margin) plus the 0.20m by which the noise-free model was MEASURED to read
+      //   high against the ray instrument. Hard-coding the requirement here rather than reading the
+      //   dial is the whole point: lower the dial and this goes RED, which is exactly the red/green
+      //   proof this tooth was signed off on.
+      const MODEL_BOUND = 2.10;
+      const clearOf = window.__caveClear;
+      if (!clearOf) out.fails.push('__caveClear is not exposed — the entrance-headroom invariant could not be swept (vacuous-pass guard)');
+      else {
+        let worst = Infinity, worstAt = null, under = 0;
+        for (const s of A) {
+          const h = clearOf({ x: s.x, z: s.z }, s.seed).minH;
+          if (h < worst) { worst = h; worstAt = s; }
+          if (h < MODEL_BOUND) under++;
+        }
+        out.clearWorst = +worst.toFixed(2);
+        out.clearWorstAt = worstAt ? { x: +worstAt.x.toFixed(0), z: +worstAt.z.toFixed(0), kind: worstAt.kind } : null;
+        out.clearUnder = under;
+        out.clearBound = MODEL_BOUND;
+        if (under > 0) {
+          out.fails.push(`${under}/${A.length} listed sites model a descent clearance under ${MODEL_BOUND}m `
+            + `(worst ${worst.toFixed(2)}m at ${worstAt ? `(${worstAt.x.toFixed(0)},${worstAt.z.toFixed(0)})` : '?'}) — those caves cannot be walked into. `
+            + 'Placement rule 8 (CREVICE_MIN_CLEAR_M) is not holding.');
+        }
+      }
+
       const count = {}; for (const k of table.kinds) count[k] = 0;
       let unknown = 0;
       for (const s of A) { if (count[s.kind] === undefined) unknown++; else count[s.kind]++; }
@@ -5776,6 +5809,11 @@ const SCENARIOS = {
     if (dist.fatal) { console.log(`CAVE-KINDS pass=0 FATAL ${dist.fatal}`); throw new Error('cave-kinds FAILED'); }
     for (const f of dist.fails) fails.push(`mix: ${f}`);
     console.log(`[cave-kinds] mix over ${dist.sites} sites: ` + dist.kinds.map((k) => `${k}=${dist.count[k]}(${(dist.share[k] * 100).toFixed(1)}%/want ${(dist.pickerWant[k] * 100).toFixed(1)}%)`).join(' '));
+    if (dist.clearWorst !== undefined) {
+      console.log(`[cave-kinds] entrance headroom over ${dist.sites} sites: worst modelled clear ${dist.clearWorst}m`
+        + `${dist.clearWorstAt ? ` at (${dist.clearWorstAt.x},${dist.clearWorstAt.z}) [${dist.clearWorstAt.kind}]` : ''}`
+        + ` · under ${dist.clearBound}m: ${dist.clearUnder}`);
+    }
 
     // ── B. PICK THE SITES. Nearest-first, one per kind under test. ─────────────────────────
     const picked = await page.evaluate((N) => {
@@ -5831,12 +5869,57 @@ const SCENARIOS = {
         if (!arrived) return { ok: false, buildFrames, why: `the streamer never built ${S.key} in ${buildFrames} frames (queued=${p.queued}, pending=${p.pending ? p.pending.stage : 'none'})` };
         const res = ctx.caveStream.residents().find((r) => r.key === S.key);
         const pr = res.cave.probe;
+        // ── THE ENTRANCE-HEADROOM MEASUREMENT (DEEPER cycle 9), with physics rays against the
+        //    SHIPPED colliders. The population sweep in section A is the broad net and it runs on a
+        //    MODEL; this is the calibration that stops the model laundering a defect. Same sampling
+        //    as the `crevice-profile` instrument (0.3m of arc along the real station polyline, start
+        //    the down-ray INSIDE the slot so the intact terrain sheet overhead is never mistaken for
+        //    the floor), minus the width rays this gate does not need.
+        //
+        //    ⚠ THE FRAMES BELOW ARE LOAD-BEARING and their absence is the exact failure this project
+        //    has already shipped once: Rapier's QueryPipeline only rebuilds inside `world.step()`, so
+        //    a ray cast on the same tick the cave's colliders were inserted queries a pipeline that
+        //    has never seen them. The first cut of this sweep did that and reported "27 descent
+        //    samples found NO FLOOR" at a site the ray instrument measures as perfectly sound — a
+        //    gate that invents a defect, which is the same class of error as one that hides a defect.
+        const RAPIER = g.RAPIER;
+        for (let f = 0; f < 3; f++) await raf();
+        const pbody = ctx.player.body.body;
+        const upTo = (x, y, z) => {
+          const h = ctx.physics.world.castRay(new RAPIER.Ray({ x, y, z }, { x: 0, y: 1, z: 0 }), 14, true, undefined, undefined, undefined, pbody);
+          return h ? h.timeOfImpact : Infinity;
+        };
+        let minClear = null, minClearAt = null, clearGaps = 0, clearSamples = 0;
+        const eline = res.entrance ? res.entrance.line : null;
+        if (eline) {
+          const stn = eline.stations;
+          let acc = 0;
+          for (let i = 1; i < stn.length; i++) {
+            const a = stn[i - 1], b = stn[i];
+            const dx = b.x - a.x, dz = b.z - a.z, D = Math.hypot(dx, dz) || 1;
+            const ux = dx / D, uz = dz / D;
+            for (let t = 0; t < D - 1e-6; t += 0.3) {
+              const x = a.x + ux * t, z = a.z + uz * t;
+              const guess = a.floorY + (b.floorY - a.floorY) * (t / D);
+              let hit = g.castDown(x, z, guess + 1.2, true);
+              if (!hit) hit = g.castDown(x, z, guess + 0.4, true);
+              if (!hit) { clearGaps++; continue; }
+              clearSamples++;
+              const h = Math.min(14, upTo(x, hit.hitY + 0.12, z) + 0.12);
+              if (minClear === null || h < minClear) { minClear = +h.toFixed(2); minClearAt = { s: +(acc + t).toFixed(2), x: +x.toFixed(1), z: +z.toFixed(1) }; }
+            }
+            acc += D;
+          }
+        }
         // Measured horizontal extent of THIS cave body — the number the site grid's guaranteed
         // spacing has to clear (see leg 4 in the header).
         const b = res.box;
         let meshes = 0; res.cave.group.traverse((o) => { if (o.isMesh) meshes++; });
         return {
           ok: true, buildFrames, tileFrames, worstFrameMs: +worstFrameMs.toFixed(1),
+          minClear, minClearAt, clearGaps, clearSamples,
+          capH: +((ctx.player.body.halfHeight + ctx.player.body.radius) * 2).toFixed(2),
+          modelClear: window.__caveClear ? +window.__caveClear({ x: S.x, z: S.z }, S.seed).minH.toFixed(2) : null,
           kind: pr.kind, envelope: pr.envelope, digest: pr.digest,
           chambers: pr.nodes.length, edges: pr.edges.length,
           eggRx: +pr.nodes[pr.eggId].rx.toFixed(1), eggDepth: +pr.depthBelowSurface.toFixed(1),
@@ -5874,6 +5957,20 @@ const SCENARIOS = {
       // ── THE KIND ACTUALLY TOOK (leg 3) ──────────────────────────────────────────────────
       if (arrive.kind !== kind) fails.push(`${kind}: the resident reports kind '${arrive.kind}' — the override did not reach the generator`);
       if (!arrive.holeOpen) fails.push(`${kind}: no carved terrain hole — the sheet never opened over the cave`);
+      // ── THE ENTRANCE-HEADROOM TOOTH (DEEPER cycle 9). 1.90m = the 1.70m capsule plus the margin a
+      //    KCC needs to walk rather than scrape. Measured with rays, so it cannot be laundered by the
+      //    model the placement rule uses — and it names the metre it failed at, which is the whole
+      //    difference between this and "could not walk leg slot2".
+      if (arrive.minClear === null) {
+        fails.push(`${kind}: the resident carries no crevice entrance — the headroom measurement could not run (vacuous-pass guard)`);
+      } else {
+        if (arrive.clearSamples < 20) fails.push(`${kind}: only ${arrive.clearSamples} headroom samples along the descent — the sweep did not actually run`);
+        if (arrive.minClear < 1.90) {
+          fails.push(`${kind}: descent clear height falls to ${arrive.minClear}m at s=${arrive.minClearAt.s} (${arrive.minClearAt.x},${arrive.minClearAt.z}) `
+            + `— the capsule is ${arrive.capH}m tall, so this cave cannot be entered (model said ${arrive.modelClear}m)`);
+        }
+        if (arrive.clearGaps > 0) fails.push(`${kind}: ${arrive.clearGaps} descent samples found NO FLOOR under the slot`);
+      }
       if (!(arrive.tris > 0) || !(arrive.colliderTris > 0)) fails.push(`${kind}: ${arrive.tris} visual / ${arrive.colliderTris} collider triangles`);
       if (arrive.extent >= arrive.minSpacing) fails.push(`${kind}: measured cave extent ${arrive.extent}m ≥ the site grid's guaranteed min spacing ${arrive.minSpacing}m — two cave bodies of this kind can interpenetrate`);
       if (kind === 'warren') {
@@ -5978,6 +6075,7 @@ const SCENARIOS = {
         `chambers=${arrive.chambers} depth=${arrive.eggDepth}m eggRx=${arrive.eggRx} squeeze=${arrive.squeezes}/${arrive.edges} corrH=${arrive.corridorH}m ` +
         `fungi=${arrive.fungiClusters} pools=${arrive.pools} rubble=${arrive.rubbleHeaps} scrap=${arrive.scrapAnchors}/${arrive.scrapPickups} ` +
         `extent=${arrive.extent}m/${arrive.minSpacing}m tris=${arrive.tris}/${arrive.colliderTris} meshes=${arrive.meshes} ` +
+        `clear=${arrive.minClear}m@s${arrive.minClearAt ? arrive.minClearAt.s : '?'}(model ${arrive.modelClear}) ` +
         `tor=${arrive.torMs}ms fin=${arrive.finMs}ms slice=${arrive.sliceMs}ms atomic=${arrive.atomicMs}ms(${arrive.atomicStage}) frame=${arrive.worstFrameMs}ms | ` +
         (w ? `MARCH reached=${w.reached}/${w.chambers} ascent=${w.exited ? 'OUT' : 'FAIL'} strands=${(w.strands || []).length} slope=${w.maxSlope}° head=${w.minHeadroom} chamHead=${w.chamMinHead} cover=${w.minCover} fails=${w.fails.length} | ` : 'MARCH skipped | ') +
         (v.fatal ? `VOID FATAL ${v.fatal}` : `VOID points=${v.points} rays=${v.totalRays} escapes=${v.escapes} excused=${v.excused}`) +
@@ -6032,13 +6130,21 @@ const SCENARIOS = {
   //         site that failed there can be profiled here by the same index.)
   'crevice-profile': async (page) => {
     const OFF = Number(argv.siteOffset || argv.siteoffset || 0);
-    const r = await page.evaluate(async (O) => {
+    // `--siteX=675 --siteZ=1113` targets the site NEAREST those coordinates instead of the Nth
+    // nearest to origin. A site index moves the moment a placement rule changes; a coordinate does
+    // not, so a defect measured once can be re-measured after the fix on the SAME ground.
+    const AT = argv.siteX !== undefined || argv.sitex !== undefined
+      ? { x: Number(argv.siteX ?? argv.sitex), z: Number(argv.siteZ ?? argv.sitez) } : null;
+    const r = await page.evaluate(async ([O, AT]) => {
       const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER;
       const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
       ctx.sandWorms.list.length = 0; ctx.vultures.list.length = 0; ctx.weather.intensity = 0;
-      const all = g.caveSites(0, 0, 6000).map((s) => ({ ...s, d: Math.hypot(s.x, s.z) })).sort((a, b) => a.d - b.d);
-      const S = all[O];
+      const all = g.caveSites(0, 0, 9000).map((s) => ({ ...s, d: Math.hypot(s.x, s.z) })).sort((a, b) => a.d - b.d);
+      const S = AT
+        ? all.reduce((m, s) => (Math.hypot(s.x - AT.x, s.z - AT.z) < Math.hypot(m.x - AT.x, m.z - AT.z) ? s : m), all[0])
+        : all[O];
       if (!S) return { fatal: `no cave site at offset ${O}` };
+      if (AT && Math.hypot(S.x - AT.x, S.z - AT.z) > 60) return { fatal: `nearest site to (${AT.x},${AT.z}) is (${S.x.toFixed(0)},${S.z.toFixed(0)}), ${Math.hypot(S.x - AT.x, S.z - AT.z).toFixed(0)}m away — that ground carries no cave (a placement rule rejected it)` };
       ctx.caveStream.setSiteSource(null);
       const px = S.x - 120, pz = S.z;
       const body = ctx.player.body.body;
@@ -6099,9 +6205,21 @@ const SCENARIOS = {
         }
         acc += D;
       }
+      // THE MODEL, ON THE SAME GROUND. `creviceClearProfile` is what the placement rule consults, and
+      // a placement rule built on a model nobody checks is a gate that measures the wrong thing. Its
+      // prediction is printed next to every ray sample, and its worst value next to the ray's worst.
+      const model = window.__caveClear ? window.__caveClear({ x: S.x, z: S.z }, S.seed, { rows: true, step: 0.25 }) : null;
+      const modelAt = (s) => {
+        if (!model) return null;
+        let best = null;
+        for (const q of model.rows) if (!best || Math.abs(q.s - s) < Math.abs(best.s - s)) best = q;
+        return best;
+      };
+      for (const q of rows) if (!q.gap) { const m = modelAt(q.s); if (m) q.mh = m.h; }
       const solid = rows.filter((q) => !q.gap);
       const minBy = (f) => solid.reduce((m, q) => (f(q) < f(m) ? q : m), solid[0]);
       return {
+        model: model ? { minH: +model.minH.toFixed(2), atS: +model.atS.toFixed(2), atX: +model.atX.toFixed(1), atZ: +model.atZ.toFixed(1) } : null,
         site: { x: +S.x.toFixed(0), z: +S.z.toFixed(0), seed: S.seed, kind: S.kind, d: +S.d.toFixed(0) },
         gy: +ep.gy.toFixed(2), slope: ep.descentAngleDeg, mouthW: ep.mouthClearW, pinchW: ep.pinchClearW,
         capW: +(RAD * 2).toFixed(2), capH: +((HH + RAD) * 2).toFixed(2),
@@ -6110,16 +6228,79 @@ const SCENARIOS = {
         minH: minBy((q) => q.h), minWFoot: minBy((q) => q.wFoot), minWHead: minBy((q) => q.wHead),
         rows,
       };
-    }, OFF);
+    }, [OFF, AT]);
     if (r.fatal) { console.log(`CREVICE-PROFILE FATAL ${r.fatal}`); throw new Error('crevice-profile FAILED'); }
     console.log(`CREVICE-PROFILE site=(${r.site.x},${r.site.z}) d=${r.site.d}m seed=${r.site.seed} gy=${r.gy} slope=${r.slope}° mouthW=${r.mouthW} pinchW=${r.pinchW} capsule=${r.capW}m wide × ${r.capH}m tall gaps=${r.gaps}`);
     console.log(`[crevice-profile] MIN clearHeight ${r.minH.h}m @s=${r.minH.s} (${r.minH.x},${r.minH.z}) | MIN width@foot ${r.minWFoot.wFoot}m @s=${r.minWFoot.s} | MIN width@head ${r.minWHead.wHead}m @s=${r.minWHead.s} (${r.minWHead.x},${r.minWHead.z})`);
+    if (r.model) console.log(`[crevice-profile] MODEL minH ${r.model.minH}m @s=${r.model.atS} (${r.model.atX},${r.model.atZ}) — vs RAY ${r.minH.h}m @s=${r.minH.s}; model−ray = ${(r.model.minH - r.minH.h).toFixed(2)}m`);
     console.log(`[crevice-profile] stations=${JSON.stringify(r.stations)}`);
     for (const q of r.rows) {
       if (q.gap) { console.log(`[crevice-profile] s=${String(q.s).padStart(6)} (${q.x},${q.z}) *** NO FLOOR ***`); continue; }
       const flag = (q.h < r.capH + 0.2 ? ' ⚠LOW-ROOF' : '') + (q.wHead < r.capW + 0.2 ? ' ⚠NARROW-HEAD' : '') + (q.wFoot < r.capW + 0.2 ? ' ⚠NARROW-FOOT' : '');
-      console.log(`[crevice-profile] s=${String(q.s).padStart(6)} (${String(q.x).padStart(7)},${String(q.z).padStart(7)}) floor=${String(q.fy).padStart(7)} Δ=${String(q.dFloor).padStart(6)} clearH=${String(q.h).padStart(6)} wFoot=${String(q.wFoot).padStart(6)} wHead=${String(q.wHead).padStart(6)} from+${q.from}${flag}`);
+      console.log(`[crevice-profile] s=${String(q.s).padStart(6)} (${String(q.x).padStart(7)},${String(q.z).padStart(7)}) floor=${String(q.fy).padStart(7)} Δ=${String(q.dFloor).padStart(6)} clearH=${String(q.h).padStart(6)} model=${String(q.mh ?? '-').padStart(6)} wFoot=${String(q.wFoot).padStart(6)} wHead=${String(q.wHead).padStart(6)} from+${q.from}${flag}`);
     }
+  },
+
+  // ── crevice-sweep (DEEPER cycle 9) — THE HEADROOM MODEL OVER HUNDREDS OF REAL SITES ──────────
+  //
+  //   `crevice-profile` measures ONE site with physics rays and takes ~3 minutes (it streams a whole
+  //   cave in). That is the right instrument for ground truth and the wrong one for choosing between
+  //   levers: "does extending the carved hole fix this, and what does it cost in density?" is a
+  //   question about the WHOLE SITE POPULATION. This sweep answers it from the pure model
+  //   (`creviceClearProfile`) with no builds at all — hundreds of sites in seconds — and prints the
+  //   rejection rate each candidate lever would cost.
+  //
+  //   Run: npm run rig -- --scenario=crevice-sweep --seed=1337 --n=250 --port=52xx
+  'crevice-sweep': async (page) => {
+    const N = Number(argv.n || 250);
+    const r = await page.evaluate(async (n) => {
+      const g = window.__game;
+      const clear = window.__caveClear, fits = window.__caveHoleFits;
+      if (!clear) return { fatal: '__caveClear is not exposed — the cave feature is off' };
+      const all = g.caveSites(0, 0, 9000).map((s) => ({ ...s, d: Math.hypot(s.x, s.z) })).sort((a, b) => a.d - b.d).slice(0, n);
+      if (!all.length) return { fatal: 'no cave sites' };
+      const VARIANTS = [
+        { name: 'shipped        ', o: {} },
+        { name: 'holeX=4        ', o: { cellsX: 4 } },
+        { name: 'holeX=5        ', o: { cellsX: 5 } },
+        { name: 'roofUnder=0.6  ', o: { roofUnder: 0.6 } },
+        { name: 'roofUnder=0.45 ', o: { roofUnder: 0.45 } },
+        { name: 'holeX=4+rU=0.6 ', o: { cellsX: 4, roofUnder: 0.6 } },
+        { name: 'holeX=5+rU=0.6 ', o: { cellsX: 5, roofUnder: 0.6 } },
+      ];
+      const BOUNDS = [1.9, 2.0, 2.1, 2.2, 2.3];
+      const out = { count: all.length, variants: [], worst: [] };
+      const perSite = [];
+      for (const v of VARIANTS) {
+        const hs = [];
+        for (const s of all) hs.push(clear({ x: s.x, z: s.z }, s.seed, v.o).minH);
+        if (v.name.startsWith('shipped')) for (let i = 0; i < all.length; i++) perSite.push({ s: all[i], h: hs[i] });
+        const sorted = [...hs].sort((a, b) => a - b);
+        const below = {};
+        for (const b of BOUNDS) below[b] = hs.filter((h) => h < b).length;
+        out.variants.push({
+          name: v.name, below,
+          min: +sorted[0].toFixed(2),
+          p05: +sorted[Math.floor(sorted.length * 0.05)].toFixed(2),
+          p50: +sorted[Math.floor(sorted.length * 0.50)].toFixed(2),
+        });
+      }
+      // Tile-fit cost of a longer hole, measured over THIS list (every site here already passes the
+      // 3-cell rule, so a survivor that fails the 4-cell rule is exactly the density the lever costs).
+      out.fitLoss = {};
+      if (fits) for (const cx of [4, 5]) out.fitLoss[cx] = all.filter((s) => !fits({ x: s.x, z: s.z }, cx)).length;
+      perSite.sort((a, b) => a.h - b.h);
+      out.worst = perSite.slice(0, 12).map((q) => ({ x: +q.s.x.toFixed(0), z: +q.s.z.toFixed(0), d: +q.s.d.toFixed(0), kind: q.s.kind, seed: q.s.seed, h: +q.h.toFixed(2) }));
+      return out;
+    }, N);
+    if (r.fatal) { console.log(`CREVICE-SWEEP FATAL ${r.fatal}`); throw new Error('crevice-sweep FAILED'); }
+    console.log(`CREVICE-SWEEP sites=${r.count}`);
+    for (const v of r.variants) {
+      const bel = Object.entries(v.below).map(([b, n]) => `<${b}:${n}(${((n / r.count) * 100).toFixed(1)}%)`).join(' ');
+      console.log(`[crevice-sweep] ${v.name} min=${v.min} p05=${v.p05} p50=${v.p50} | ${bel}`);
+    }
+    for (const [cx, n] of Object.entries(r.fitLoss || {})) console.log(`[crevice-sweep] tile-fit loss at holeX=${cx}: ${n}/${r.count} (${((n / r.count) * 100).toFixed(1)}%) of currently-valid sites`);
+    for (const w of r.worst) console.log(`[crevice-sweep] WORST (${String(w.x).padStart(6)},${String(w.z).padStart(6)}) d=${w.d}m kind=${w.kind} seed=${w.seed} modelled minH=${w.h}`);
   },
 
   'chunk-perf': async (page) => {

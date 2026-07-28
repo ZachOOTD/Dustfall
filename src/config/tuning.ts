@@ -892,8 +892,39 @@ export const Tuning = {
   CAVE_SITE_BOX_X0: 120,               // m — hashed site X range [X0, X0+SPAN] (the crevice runs +X, stays < tile edge 400)
   CAVE_SITE_SPAN_X: 140,
   CAVE_SITE_BOX_Z: 120,                // m — hashed site Z range [-Z, +Z]
-  CREVICE_HOLE_CELLS_X: 3,             // terrain cells carved along X (mouth-1 cell … sky-open run) — 12.5m
+  CREVICE_HOLE_CELLS_X: 4,             // terrain cells carved along X (mouth-1 cell … past the sky-open run) — 16.7m.
+                                       //     DEEPER cycle 9: was 3 (12.5m), and THAT is where the entrance-headroom
+                                       //     defect lived. The carved hole is also the region where the roof clamp
+                                       //     (`terrH − CREVICE_ROOF_UNDER`) is LIFTED, so the hole's far edge is exactly
+                                       //     where the ceiling stops being the SDF slot's (tall, terrain-independent)
+                                       //     and starts following a terrain surface that has been falling away since
+                                       //     the mouth. At 3 cells that switch happened at s≈8.3, where the floor is
+                                       //     only 4.25m down — so a site whose ground drops more than ~1.3m over those
+                                       //     8m pinched the slot under the 1.70m capsule. MEASURED over 410 real sites
+                                       //     across 2 seeds: 11.0% / 10.5% of caves modelled under 1.9m of clear
+                                       //     height, i.e. roughly one cave in nine could not be entered. One more cell
+                                       //     moves the switch to s≈12.5 and 6.4m of floor drop: 0.0% / 0.5%. The cost
+                                       //     is 1.9% / 0.0% of sites lost to the tile-seam rule (a longer hole fits
+                                       //     inside one tile slightly less often) and ~17% on the tor's voxel grid.
+                                       //     The residual is closed BY CONSTRUCTION by CREVICE_MIN_CLEAR_M.
   CREVICE_HOLE_CELLS_Z: 2,             // terrain cells carved across Z — 8.33m
+  CREVICE_MIN_CLEAR_M: 2.25,           // m — DEEPER cycle 9, THE ENTRANCE-HEADROOM PLACEMENT INVARIANT. A candidate
+                                       //     site whose MODELLED descent clearance (`creviceClearProfile`) falls below
+                                       //     this anywhere is rejected outright (caveSites rule 8), so "every cave in
+                                       //     the world can be walked into" is true by construction rather than by luck
+                                       //     of the seed net. Same discipline as the cycle-8 tile-seam rule one line
+                                       //     above it, and taken for the same reason: an unenterable cave leaves every
+                                       //     other signal in the pipeline reading normal.
+                                       //     WHY 2.25 AND NOT 1.90 (the number the gate rays assert). The model is
+                                       //     noise-free — it drops CREVICE_ROOF_RELIEF (±0.30), CREVICE_FLOOR_RELIEF,
+                                       //     the roof wobble and the hole-edge noise, all zero-mean but not zero. So
+                                       //     it reads HIGH, and the gap is MEASURED, not assumed: against the ray
+                                       //     instrument the model came in at −0.01 / +0.10 / +0.10 / +0.20m over four
+                                       //     profiles, and a healthy site modelling 2.43 rays out at 2.23-2.46. 2.25
+                                       //     carries the worst observed 0.20m gap with 0.15m to spare over the 1.90m
+                                       //     the capsule needs. It costs ~1.0-1.5% of sites on top of the geometry fix
+                                       //     (measured over 410 sites ×2 seeds) — a tail, because 95% of sites never
+                                       //     leave the unclamped 2.43m at all.
   CREVICE_DEPTH: 12,                   // m — junction (cave hand-off) depth below the mouth
   CREVICE_SLOPE_DEG: 27,               // ° — nominal descent slope; each leg's run is sized from its drop
   CREVICE_BEND_DEG: 26,                // ° — heading bend at the first knee (mirrored by seed parity)

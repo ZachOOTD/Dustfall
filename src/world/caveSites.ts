@@ -28,7 +28,7 @@
 // rejection loop, no neighbour scan, no order dependence.
 
 import { Tuning } from '../config/tuning.ts';
-import { caveEntranceHoleFitsTile } from './caveEntrance.ts';   // cycle 8 — the tile-seam rejection
+import { caveEntranceHoleFitsTile, creviceClearProfile } from './caveEntrance.ts';   // cycle 8 — the tile-seam rejection; cycle 9 — the headroom invariant
 import { makeRng } from '../core/rng.ts';
 import { pickCaveKind, type CaveKind } from './caveKinds.ts';   // DEEPER cycle 9 — the kind mix
 import type { BiomeSampler } from './biomes.ts';
@@ -100,7 +100,9 @@ function relief(terrain: Terrain, x: number, z: number, r: number): number {
  *     heightfield that another system is also displacing is a seam bug waiting to happen,
  *  5. TILE SEAM — the carved hole must fit wholly inside one terrain tile (see the rule body),
  *  6. LOCAL RELIEF — the apron + carved hole need ground that doesn't fall away underneath it,
- *  7. CONTENT CONFLICT — a POI/landmark already owns this ground (injected, see CaveSiteConflictFn).
+ *  7. CONTENT CONFLICT — a POI/landmark already owns this ground (injected, see CaveSiteConflictFn),
+ *  8. ENTRANCE HEADROOM — the descent's modelled clear height must clear the capsule everywhere, or
+ *     the cave is visible and unenterable (cycle 9; see CREVICE_MIN_CLEAR_M).
  */
 export function caveSiteInCell(
   worldSeed: number,
@@ -162,6 +164,17 @@ export function caveSiteInCell(
 
   // 7 — content conflict (POI / hero landmark already here).
   if (conflict && conflict(x, z, T.CAVE_SITE_CONTENT_CLEAR_M)) return null;
+
+  // 8 — ENTRANCE HEADROOM (DEEPER cycle 9). Rule 6 asks whether the ground under the TOR is flat
+  //     enough; this asks whether the ground over the DESCENT stays high enough. They are different
+  //     questions and rule 6 cannot answer this one: its ring is 9m and the pinch lands at 12-14m,
+  //     past the carved hole's far edge, where the fissure ceiling stops being the slot's own and
+  //     starts following the terrain. See CREVICE_HOLE_CELLS_X / CREVICE_MIN_CLEAR_M and the header
+  //     of `creviceClearProfile` for the mechanism and for why no local geometry lever can guarantee
+  //     this. Last in the ladder because it is by far the most expensive rule (it builds the station
+  //     polyline and samples ~100 columns of pure height) and because everything above it rejects
+  //     more cheaply.
+  if (creviceClearProfile({ x, z }, terrain, genSeed).minH < T.CREVICE_MIN_CLEAR_M) return null;
 
   return { key: `cave:${gx},${gz}`, gx, gz, x, z, seed: genSeed, kind };
 }

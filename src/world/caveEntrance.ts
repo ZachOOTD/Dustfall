@@ -50,9 +50,17 @@
 //     as a NOTCH in the silhouette. 1.93° → 4.12° of arc on seed 1337, 2.71° → 5.02° on seed 7.
 //
 // D307 IS UNCHANGED. The entrance chunk still swaps its heightfield collider for a trimesh with a
-// genuinely carved hole; the hole just got much smaller (3×2 cells = 12.5 × 8.33m, all of it under
-// the tor). No portals, no teleports. The site hash is SNAPPED to a terrain grid vertex so the hole
-// is the same size on every seed and the tor can be sized to cover it exactly.
+// genuinely carved hole; the hole just got much smaller (cycle 4: 3×2 cells; cycle 9: 4×2 cells =
+// 16.7 × 8.33m, all of it under the tor). No portals, no teleports. The site hash is SNAPPED to a
+// terrain grid vertex so the hole is the same size on every seed and the tor can be sized to cover
+// it exactly.
+//
+// CYCLE 9 (2026-07-27) — THE ENTRANCE-HEADROOM FIX. The carved hole is not only a hole: it is also
+// the region where the fissure roof is exempt from the `terrH − CREVICE_ROOF_UNDER` clamp, so its far
+// edge is where the ceiling stops being the slot's own and starts following a terrain surface that
+// has been dropping since the mouth. At 3 cells that handover happened 8.3m in, over a floor only
+// 4.25m down, and one cave in nine pinched under the 1.70m capsule. Four cells + a placement
+// invariant (CREVICE_MIN_CLEAR_M, `creviceClearProfile` below) closed it. See both tuning entries.
 //
 // RULE 9: the tor's collider is a Rapier trimesh baked from the EXACT triangles that are drawn.
 
@@ -91,8 +99,9 @@ export function caveEntranceSite(seed: number): { x: number; z: number } {
 
 /** The grid-aligned block of terrain cells the entrance chunk removes. The mouth sits on the
  *  vertex at `site`; the block reaches one cell BEHIND it (so you walk in over rock, not over a
- *  terrain lip) and CREVICE_HOLE_CELLS_X-1 cells ahead — long enough to contain the whole
- *  sky-open run, and no longer. Every cell of it is covered by the tor. */
+ *  terrain lip) and CREVICE_HOLE_CELLS_X-1 cells ahead — far enough past the sky-open run that the
+ *  roof-clamp handover lands over a floor that is already deep (cycle 9; it used to end at the
+ *  closure and that was the headroom defect). Every cell of it is covered by the tor. */
 export interface CaveHoleBlock {
   tileTx: number; tileTz: number;
   iMin: number; iMax: number;
@@ -105,7 +114,7 @@ export interface CaveHoleBlock {
  *  `caveEntranceHoleBlock` (DEEPER cycle 8) so the fit test and the block itself derive the SAME
  *  numbers from one piece of arithmetic — the alternative is two copies of an index convention that
  *  is already easy to get backwards. */
-function rawHoleCells(site: { x: number; z: number }): {
+function rawHoleCells(site: { x: number; z: number }, cellsX?: number): {
   tileTx: number; tileTz: number; centerX: number; centerZ: number;
   iMin: number; iMax: number; jMin: number; jMax: number;
 } {
@@ -120,10 +129,11 @@ function rawHoleCells(site: { x: number; z: number }): {
   const i0 = Math.round(iOf(site.x));            // site is snapped → this IS a vertex index
   const j0 = Math.round(jOf(site.z));
   const nz = Tuning.CREVICE_HOLE_CELLS_Z;
+  const nx = cellsX ?? Tuning.CREVICE_HOLE_CELLS_X;
   const jMin = j0 - Math.floor(nz / 2);
   return {
     tileTx, tileTz, centerX, centerZ,
-    iMin: i0 - 1, iMax: i0 - 1 + Tuning.CREVICE_HOLE_CELLS_X - 1,
+    iMin: i0 - 1, iMax: i0 - 1 + nx - 1,
     jMin, jMax: jMin + nz - 1,
   };
 }
@@ -150,16 +160,16 @@ function rawHoleCells(site: { x: number; z: number }): {
  * exists to forbid. Losing ~1.6% of candidate sites costs nothing (the grid has no shortage of
  * cells); breaking the invariant would cost the safety of the entire feature.
  */
-export function caveEntranceHoleFitsTile(site: { x: number; z: number }): boolean {
+export function caveEntranceHoleFitsTile(site: { x: number; z: number }, cellsX?: number): boolean {
   const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
-  const r = rawHoleCells(site);
+  const r = rawHoleCells(site, cellsX);
   return r.iMin >= 0 && r.iMax <= CELLS - 1 && r.jMin >= 0 && r.jMax <= CELLS - 1;
 }
 
-export function caveEntranceHoleBlock(site: { x: number; z: number }): CaveHoleBlock {
+export function caveEntranceHoleBlock(site: { x: number; z: number }, cellsX?: number): CaveHoleBlock {
   const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
   const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
-  const r = rawHoleCells(site);
+  const r = rawHoleCells(site, cellsX);
   // The clamp is kept — it is what makes a `CaveHoleBlock` always a legal cell range for its tile,
   // and the ORIGIN cave's block (D307, baked at createTerrain time) must stay byte-identical. What
   // changed in cycle 8 is that streamed sites which would ACTUALLY hit it are rejected upstream by
@@ -293,6 +303,114 @@ export function buildCreviceLine(site: { x: number; z: number }, terrain: Terrai
   }
   stations[0].halfW = halfWAt(0, totalS2);
   return { stations, cumS, totalS: totalS2, gy, maxSlopeDeg };
+}
+
+// ── THE HEADROOM PROFILE (DEEPER cycle 9) ───────────────────────────────────
+//
+// WHY THIS EXISTS. The descent's clear height is NOT a constant, and cycle 8's density work is what
+// exposed it: past the sky run the tor's fissure ceiling is clamped to `terrH − CREVICE_ROOF_UNDER`
+// per COLUMN (it follows the terrain), while the cover guard that protects floor depth samples only
+// at the six stations plus a 2.5m ring — stations up to 7.7m apart. So a terrain dip BETWEEN two
+// guarded stations pinches the slot, and at some streamed sites it pinched to 1.17-1.44m against a
+// 1.70m capsule: a cave you can see the tor of and cannot enter. Measured by `crevice-profile`
+// (physics rays against the shipped colliders) at seed 1337 (675,1113) and seed 7 (-1100,-1146).
+//
+// The pinch lands within a metre of the carved hole's far edge, because that is exactly where the
+// clamp switches on — inside the hole the ceiling comes from the SDF slot (tall, terrain-independent)
+// and outside it follows a terrain that has been falling away since the mouth.
+//
+// WHY IT IS A PLACEMENT RULE AND NOT A GEOMETRY TWEAK. Every local lever is BOUNDED and none of them
+// guarantees anything:
+//   · the tor's floor can only be pushed down 12cm — below that it passes through the SDF slot's own
+//     floor plane (`primDist`: `max(d, fy − y)`, no downward margin) and you get the cycle-4 gutter,
+//   · lifting the roof means shrinking CREVICE_ROOF_UNDER, which is the entire non-leak safety net
+//     for the roof-lamina bug and buys 0.9m at absolute most,
+//   · steepening the descent moves the junction, and the junction is the origin of the room graph —
+//     every chamber moves with it and every cave digest in the project re-baselines,
+//   · lengthening the carved hole helps (the clamp switches on further down the ramp, where the floor
+//     is deeper) but it is still only a shift: terrain can always fall away faster than 27°.
+// A rejection rule is the one answer that is true BY CONSTRUCTION, and it has direct precedent one
+// rule above it — cycle 8's tile-seam rejection, taken for the same reason (an invariant the rest of
+// the pipeline cannot see is worth more than the ~2% of candidate cells it costs).
+//
+// The arithmetic below is a NOISE-FREE MODEL of `colRoof`/`colFloor` sampled along the real station
+// polyline. It has to stay in this file, next to the loop it mirrors, or the two drift silently. It
+// is validated against the ray instrument, not trusted: `crevice-profile` prints predicted-vs-measured
+// at every station, and the `cave-kinds` min-clear sweep asserts the RAY number at real built sites.
+
+export interface CreviceClearRow { s: number; x: number; z: number; floorY: number; terrH: number; h: number; tor: number; }
+export interface CreviceClearProfile {
+  /** Worst modelled clear height anywhere on the descent, in metres. */
+  minH: number;
+  atS: number; atX: number; atZ: number;
+  rows: CreviceClearRow[];
+}
+
+/** Model the clear height along the whole descent. PURE in (site, terrain, seed) — same inputs and
+ *  same purity class as the placement rules that call it (D290, `terrain.pureHeightAt` only).
+ *
+ *  `opts.cellsX` / `opts.roofUnder` exist so a lever can be evaluated over hundreds of real sites
+ *  WITHOUT building one, which is how the lever for this cycle was chosen. Default = the shipped
+ *  tuning. `opts.rows` fills the per-sample table (the diagnostic path only). */
+export function creviceClearProfile(
+  site: { x: number; z: number },
+  terrain: Terrain,
+  seed: number,
+  opts?: { line?: CreviceLine; step?: number; rows?: boolean; cellsX?: number; roofUnder?: number },
+): CreviceClearProfile {
+  const T = Tuning;
+  const line = opts?.line ?? buildCreviceLine(site, terrain, seed);
+  const block = caveEntranceHoleBlock(site, opts?.cellsX);
+  const roofUnder = opts?.roofUnder ?? T.CREVICE_ROOF_UNDER;
+  const step = opts?.step ?? 0.25;
+  const SKY = T.CREVICE_SKY_RUN, TAPER = T.CREVICE_SKY_TAPER;
+  const sClose = SKY + TAPER * 0.5;                       // roof wobble is zero-mean — see the header
+  const smoothstep = (a: number, b: number, x: number): number => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  // The two hole distances the tor's column loop uses, noise-free and drift-free.
+  const AMARG = T.CREVICE_APRON_MARGIN;
+  const holeSigned = (x: number, z: number): number => {
+    const dx = Math.max(block.xMin - x, x - block.xMax);
+    const dz = Math.max(block.zMin - z, z - block.zMax);
+    const ox = Math.max(dx, 0), oz = Math.max(dz, 0);
+    return ox > 0 || oz > 0 ? Math.hypot(ox, oz) : Math.max(dx, dz);
+  };
+  const holeDist = (x: number, z: number): number => {
+    const dx = Math.max(block.xMin - AMARG - x, 0, x - (block.xMax + AMARG));
+    const dz = Math.max(block.zMin - AMARG - z, 0, z - (block.zMax + AMARG));
+    return Math.hypot(dx, dz);
+  };
+  // Where the tor's rock ENDS: `colBound = AFALL + 1.0 − max(0, d0 − 0.25)` must stay positive.
+  const torReach = T.CREVICE_APRON_FALL + 1.0 + 0.25;
+  // The SDF slot's own ceiling, which is what bounds the space once the tor is behind you.
+  const sdfCeilOver = T.CREVICE_HEIGHT + T.CREVICE_SDF_MARGIN * 0.6;
+  const torCeilOver = T.CREVICE_HEIGHT - T.CREVICE_ROOF_DROP;
+
+  const rows: CreviceClearRow[] = [];
+  let minH = Infinity, atS = 0, atX = site.x, atZ = site.z;
+  for (let s = 0; s <= line.totalS + 1e-6; s += step) {
+    const p = pointAt(line, s);
+    const terrH = terrain.pureHeightAt(p.x, p.z);
+    const tor = holeDist(p.x, p.z) < torReach ? 1 : 0;
+    // `openFree` lifts the roof clamp inside the carved hole and over the sky-open run — the same
+    // two terms, with the ±0.55m hole-edge noise at its zero.
+    const openFree = Math.max(1 - smoothstep(-0.9, 0.3, holeSigned(p.x, p.z)), 1 - smoothstep(SKY * 0.5, SKY, s));
+    const taperRoof = p.y + torCeilOver + Math.max(0, sClose - s) * T.CREVICE_SKY_SLOPE;
+    // Under the tor the ceiling is the tor's clamped fissure roof and the floor is 12cm above the
+    // slot's; past the tor's far face the SDF slot's ceiling takes over, capped by the terrain sheet
+    // (D307 — the heightfield is a two-sided collider, so an intact sheet IS a ceiling).
+    const ceil = tor
+      ? Math.min(taperRoof, terrH - roofUnder + openFree * 120)
+      : Math.min(p.y + sdfCeilOver, terrH + openFree * 120);
+    const h = ceil - p.y - (tor ? 0.12 : 0);
+    if (h < minH) { minH = h; atS = s; atX = p.x; atZ = p.z; }
+    if (opts?.rows) {
+      rows.push({ s: +s.toFixed(2), x: +p.x.toFixed(2), z: +p.z.toFixed(2), floorY: +p.y.toFixed(2), terrH: +terrH.toFixed(2), h: +h.toFixed(2), tor });
+    }
+  }
+  return { minH, atS, atX, atZ, rows };
 }
 
 // ── Smooth CSG (cycle 7) ────────────────────────────────────────────────────
