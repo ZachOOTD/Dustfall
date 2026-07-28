@@ -43,18 +43,49 @@ export interface CaveAtmosphere {
   inside: number;
   /** Live (un-smoothed) darkness factor this frame — for the probe. */
   darkness: number;
+  /** DEEPER cycle 10 — WHICH cave the darkness is coming from ('origin', a resident key, or null).
+   *  Diagnostic only; the probe prints it so "the interior is lit" can name the cave it is in. */
+  inCaveKey: string | null;
   _fogColor: THREE.Color;
+  _ambColor: THREE.Color;
 }
 
-/** Pure containment/darkness factor at a world point: 0 outside the cave AABB or at the surface,
- *  ramping to 1 a few metres below the terrain sheet inside the box. Shared by the light model and
- *  the audio bed so both agree. */
-export function caveDarknessAt(atmo: CaveAtmosphere, x: number, y: number, z: number, terrain: GameContext['terrain']): number {
+/** Pure containment/darkness factor at a world point: 0 outside every cave footprint or at the
+ *  surface, ramping to 1 a few metres below the terrain sheet inside one. Shared by the light model
+ *  and the audio bed so both agree.
+ *
+ *  DEEPER cycle 10 — PLURAL CAVES. This module was written for the ONE origin cave (Underworld) and
+ *  tested only its AABB, so in the cycle-8/9 streamed world every OTHER cave scored 0: no ambient
+ *  dimming, no cave fog (the sandy desert haze underground), no rock light-response, no audio duck,
+ *  and — because sky.ts reads this same factor — the sun disc drawn straight through the ceiling.
+ *  Measured in a streamed `warren`: amb 0.837 at noon vs 0.28 at midnight, deep-chamber meanL 17.2
+ *  vs 3.5, sun disc L=181 painted on solid rock. The fix is to ask the STREAMER which cave contains
+ *  the player — `caveStream.occupied()`, the same authoritative signal eviction protection uses —
+ *  and to keep the origin AABB as a first test so the origin cave's behaviour is bit-for-bit what
+ *  it always was (its box, unlike a streamed resident's, already includes the open bore trench).
+ *
+ *  The occupancy margin (45m) is wider than this module's own (14m) and that is harmless: `depth`
+ *  gates everything, and the terrain is a heightfield — the ONLY way to be below `pureHeightAt` is
+ *  to be inside a carved cave hole. The wide pad simply means the crevice descent (a ~24m run at
+ *  CREVICE_DEPTH/CREVICE_SLOPE_DEG) is covered end to end, which is exactly where the ramp belongs. */
+export function caveDarknessAt(
+  atmo: CaveAtmosphere, p: { x: number; y: number; z: number }, ctx: GameContext,
+): number {
   const m = Tuning.CAVE_DARK_AABB_MARGIN;
-  if (x < atmo.minX - m || x > atmo.maxX + m || z < atmo.minZ - m || z > atmo.maxZ + m) return 0;
-  const surf = terrain.pureHeightAt(x, z);
+  const { x, y, z } = p;
+  let key: string | null = null;
+  if (!(x < atmo.minX - m || x > atmo.maxX + m || z < atmo.minZ - m || z > atmo.maxZ + m)) {
+    key = 'origin';
+  } else if (ctx.caveStream) {
+    const r = ctx.caveStream.occupied(p);        // allocation-free; reads x/z only
+    if (r) key = r.key;
+  }
+  atmo.inCaveKey = null;
+  if (!key) return 0;
+  const surf = ctx.terrain.pureHeightAt(x, z);
   const depth = surf - y;                        // how far below the surface sheet the player is
   if (depth <= 0) return 0;                       // on/above the surface → not dark
+  atmo.inCaveKey = key;
   const t = Math.min(1, depth / Tuning.CAVE_DARK_DEPTH_FADE);
   return t * t * (3 - 2 * t);                     // smoothstep 0→1 over the fade depth
 }
@@ -90,7 +121,8 @@ export function createCaveAtmosphere(scene: THREE.Scene, bore: CaveEntranceProbe
   return {
     minX, maxX, minZ, maxZ, shaft,
     baseFogDensity: fog ? fog.density : Tuning.FOG_DENSITY_CLEAR,
-    inside: 0, darkness: 0, _fogColor: new THREE.Color(),
+    inside: 0, darkness: 0, inCaveKey: null,
+    _fogColor: new THREE.Color(), _ambColor: new THREE.Color(),
   };
 }
 
@@ -102,15 +134,29 @@ export function updateCaveAtmosphere(ctx: GameContext, atmo: CaveAtmosphere, dt:
   // DEEPER cycle 6 — the pool ripple clock. ONE uniform write for every pool in the world (the shared
   // water material), on the cave's own pause-gated tick, so the surface animates only where it exists.
   updateCavePoolWater(ctx.time.elapsed);
-  const d = caveDarknessAt(atmo, p.x, p.y, p.z, ctx.terrain);
+  const d = caveDarknessAt(atmo, p, ctx);
   atmo.darkness = d;
   // Smooth the audio-facing factor toward the live darkness (mouth crossfade — no pop).
   atmo.inside += (d - atmo.inside) * Math.min(1, Tuning.CAVE_BED_LERP_RATE * dt);
 
+  // ── DEEPER cycle 10 — THE DEEP INTERIOR IS A CONSTANT, NOT A FRACTION OF THE SKY ──────────────
+  //   Zach, walk-test: *"the caves are brighter during the day and darker at night so the light
+  //   looks like it is penetrating the terrain"*. He was reading a real coupling. Every deep target
+  //   here used to be a MULTIPLIER of the value updateLighting had just written, and that value
+  //   swings 0.73 → 0.28 across a day — so the deep chamber's ambient breathed 0.0223 → 0.0084
+  //   with the sun, through tens of metres of rock, plus a colour shift with the weather on top.
+  //
+  //   So the targets are now ABSOLUTE LEVELS and the blend is a lerp: at d=1 the interior is
+  //   exactly CAVE_DARK_AMBIENT_LEVEL / _HEX / _SUN_LEVEL whatever the clock and the weather say.
+  //   At d<1 — the mouth and the crevice, which are REAL openings — it is still a blend from the
+  //   live surface values, so the threshold keeps tracking the daylight it can actually see.
+  //   (Fog was already written this way: `+= (TARGET - fog) * d` reaches a constant at d=1.)
   if (d > 0) {
-    ctx.lights.ambient.intensity *= (1 - d) + d * Tuning.CAVE_DARK_AMBIENT_FLOOR;
-    ctx.lights.sun.intensity *= (1 - d) + d * Tuning.CAVE_DARK_SUN_FLOOR;
-    ctx.lights.moon.intensity *= (1 - d) + d * Tuning.CAVE_DARK_SUN_FLOOR;
+    const L = ctx.lights;
+    L.ambient.intensity += (Tuning.CAVE_DARK_AMBIENT_LEVEL - L.ambient.intensity) * d;
+    L.ambient.color.lerp(atmo._ambColor.setHex(Tuning.CAVE_DARK_AMBIENT_HEX), d);
+    L.sun.intensity += (Tuning.CAVE_DARK_SUN_LEVEL - L.sun.intensity) * d;
+    L.moon.intensity += (Tuning.CAVE_DARK_SUN_LEVEL - L.moon.intensity) * d;
   }
 
   // Fog: shift colour toward near-black + raise density with darkness. Lerp FROM this frame's live

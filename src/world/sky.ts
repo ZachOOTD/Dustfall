@@ -765,7 +765,9 @@ export function createSky(scene: THREE.Scene): void {
   sun.scale.setScalar(Tuning.SUN_DISC_SIZE);
   sun.renderOrder = 0;
   sun.frustumCulled = false;
-  scene.add(sun);
+  sun.name = 'skySun';        // DEEPER cycle 10 — the `cave-light` gate hides the two sky BODIES by
+  scene.add(sun);             // name and re-shoots, so "is a disc showing through rock" is an A/B
+                              // against the sprite itself and not a raw max that a bright fungus trips.
 
   // Moon — same sprite pattern, opposite the sun. depthTest:true so
   // dunes/wrecks properly occlude it when the moon's direction passes
@@ -788,6 +790,7 @@ export function createSky(scene: THREE.Scene): void {
   moon.scale.setScalar(Tuning.MOON_DISC_SIZE);
   moon.renderOrder = 0;
   moon.frustumCulled = false;
+  moon.name = 'skyMoon';      // DEEPER cycle 10 — see `skySun`.
   scene.add(moon);
 
   // Star field — additive points via a custom ShaderMaterial so each star
@@ -1215,7 +1218,20 @@ export function updateSky(ctx: GameContext, dt: number): void {
   // `depthTest` is read per-draw by WebGLState, so flipping it costs nothing and never recompiles.
   // (depthTest TRUE == "respect occlusion" — so it is ON underground, OFF on the surface, which is
   // the shipped behaviour and therefore a byte-identical surface render.)
+  //
+  // DEEPER cycle 10 — THIS TEST WAS ORIGIN-SCOPED AND SO WAS THE FIX. `caveAtmosphere.darkness` was
+  // computed against the ORIGIN cave's AABB alone, so in the cycle-8/9 streamed world it read 0
+  // inside every OTHER cave and the disc went straight back through the ceiling (measured: a
+  // `warren` deep-chamber upward framing at noon, brightest pixel L=181 on solid rock). The line
+  // below is unchanged because the FIX is upstream: `caveDarknessAt` now asks the streamer which
+  // cave contains the player, so this signal is plural and every cave occludes.
   bundle.sunMat.depthTest = !!(ctx.caveAtmosphere && ctx.caveAtmosphere.darkness > 0);
+  // The moon has depth-tested since it first punched through a dune, so it is already correct in
+  // rock — re-asserted every frame so no future path can quietly turn it off and reopen the bug on
+  // the other body. (Zach also reported seeing the moon: what reached him was the moon's LIGHT,
+  // a 0.33-intensity DirectionalLight filling the streamed interior, not the disc. Killed by the
+  // same upstream fix, which now drives moon.intensity to the cave constant.)
+  bundle.moonMat.depthTest = true;
 
   // ── Moon: opposite the sun, faded by nightMix and the storm. ──
   _moonDir.copy(ctx.time.sunDir).multiplyScalar(-1);

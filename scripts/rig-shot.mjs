@@ -87,7 +87,7 @@ if (SCENARIO === 'sled-ride' || SCENARIO === 'sled-dune' || SCENARIO === 'sled-p
 // UNDERWORLD cycle 1 (D307) — the cave-mouth probe forces the entrance-chunk collider
 // swap ON via the flag for THIS probe only (VITE_ is read by Vite from process.env at
 // dev-server start; the spawned `npm run dev` inherits it). verify:all runs it OFF.
-if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed' || SCENARIO === 'cave-kinds' || SCENARIO === 'crevice-profile' || SCENARIO === 'crevice-sweep') process.env.VITE_CAVE_TEST = '1';
+if (SCENARIO === 'cave-walk' || SCENARIO === 'cave-digest' || SCENARIO === 'cave-void' || SCENARIO === 'cave-look' || SCENARIO === 'cave-audit' || SCENARIO === 'pool-fill' || SCENARIO === 'pool-look' || SCENARIO === 'cave-streamed' || SCENARIO === 'cave-kinds' || SCENARIO === 'cave-light' || SCENARIO === 'crevice-profile' || SCENARIO === 'crevice-sweep') process.env.VITE_CAVE_TEST = '1';
 // DEEPER cycle 2 — the watertight SDF surface is the cave's ONLY meshing path (the `--sdf` selector
 // is gone with the shell kit). `--sdfbench` re-polygonizes at the measurement resolutions and prints
 // the cost table; it changes nothing about what ships.
@@ -2908,6 +2908,76 @@ const SCENARIOS = {
     if (only !== 'shots') {
       await caveBumpPerf(page, { samples: Number(argv.perfsamples || 0) || undefined });
     }
+  },
+
+  // ── cave-light (DEEPER cycle 10) — DAY-INVARIANCE + NO SKY BODY THROUGH ROCK ────────────────
+  //
+  //   The ITERATION loop for the two teeth `cave-kinds` carries permanently (see the
+  //   `caveLightAsserts` header for the WHY and the tolerances). `cave-kinds` builds four caves
+  //   and marches them and takes ~25 min; this builds ONE and takes ~1, which is the difference
+  //   between iterating on a light model and waiting on one.
+  //
+  //   `--kind=origin`   the boot cave (the population the cycle-7 fix was written against)
+  //   `--kind=warren|fungal|flooded|shaft`  a STREAMED cave, arrived at through the shipped
+  //                     `requestSite` path — the population where an origin-scoped fix stops applying
+  //   `--shots=1`       also write the PNGs
+  //   `--refs=1`        additionally shoot the CARRIED-LIGHT reference set (torch/flashlight/lantern
+  //                     at the shipping dials) so a strength change has a documented before/after
+  //
+  //   Run: npm run rig -- --scenario=cave-light --kind=warren --port=52xx
+  'cave-light': async (page) => {
+    const KIND = String(argv.kind || 'origin');
+    const SHOTS = !!Number(argv.shots || 0);
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      try { ctx.sandWorms.list.length = 0; } catch {}
+      try { ctx.vultures.list.length = 0; } catch {}
+      ctx.weather.intensity = 0;
+      ctx.flags.thirdPerson = false;
+      ctx.three.renderer.setSize(960, 540, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 960 / 540; cam.updateProjectionMatrix(); }
+    });
+
+    let key = null;
+    if (KIND !== 'origin') {
+      const site = await page.evaluate((K) => {
+        const g = window.__game; const ctx = g.ctx;
+        if (!ctx.caveStream) return { fatal: 'ctx.caveStream is null' };
+        const all = g.caveSites(0, 0, 6000);
+        if (!all.length) return { fatal: 'no cave sites within 6km' };
+        const s = all.map((q) => ({ ...q, d: Math.hypot(q.x, q.z) })).sort((a, b) => a.d - b.d)[0];
+        return { key: `lightgate:${K}`, x: s.x, z: s.z, seed: s.seed, kind: K };
+      }, KIND);
+      if (site.fatal) { console.log(`CAVE-LIGHT pass=0 FATAL ${site.fatal}`); throw new Error('cave-light FAILED'); }
+      const arrive = await page.evaluate(async (S) => {
+        const g = window.__game; const ctx = g.ctx; const T = g.Tuning;
+        const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+        ctx.caveStream.setSiteSource(null);          // this leg measures ONE named cave
+        const APPROACH = Math.min(120, T.CAVE_STREAM_REQUEST_M * 0.4);
+        const px = S.x - APPROACH, pz = S.z;
+        ctx.player.body.body.setTranslation({ x: px, y: ctx.terrain.heightAt(px, pz) + 2, z: pz }, true);
+        ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        for (let f = 0; f < 2000; f++) { await raf(); if (f > 90 && ctx.terrain.isTileLoadedAt(S.x, S.z)) break; }
+        if (!ctx.terrain.isTileLoadedAt(S.x, S.z)) return { ok: false, why: 'terrain tile never loaded' };
+        if (!ctx.caveStream.requestSite({ key: S.key, x: S.x, z: S.z, seed: S.seed, kind: S.kind })) return { ok: false, why: 'requestSite refused' };
+        for (let f = 0; f < 9000; f++) { await raf(); if (ctx.caveStream.residents().some((r) => r.key === S.key)) return { ok: true, at: [S.x, S.z] }; }
+        return { ok: false, why: 'never built' };
+      }, site);
+      if (!arrive.ok) { console.log(`CAVE-LIGHT pass=0 FATAL ${arrive.why}`); throw new Error('cave-light FAILED'); }
+      key = site.key;
+      console.log(`[cave-light] streamed ${KIND} cave at (${arrive.at[0].toFixed(0)},${arrive.at[1].toFixed(0)})`);
+    }
+
+    const r = await caveLightAsserts(page, KIND, key, { shots: SHOTS });
+    console.log(`[cave-light] cave: kind=${r.plan ? r.plan.kind : '?'} depth=${r.plan ? r.plan.depth : '?'}m eggRx=${r.plan ? r.plan.eggRx : '?'}m`);
+    for (const row of r.rows) console.log(row);
+
+    if (Number(argv.refs || 0)) await caveLightRefs(page, KIND, key);
+
+    for (const f of r.fails) console.log(`[cave-light] FAIL ${f}`);
+    console.log(`CAVE-LIGHT pass=${r.fails.length ? 0 : 1} kind=${KIND} fails=${r.fails.length}`);
+    if (r.fails.length) throw new Error('cave-light GATE FAILED');
   },
 
   // ── pool-fill (DEEPER cycle 6) — THE UNDERGROUND-WATER GATE ────────────────────────────────
@@ -5831,6 +5901,7 @@ const SCENARIOS = {
 
     const per = {};
     let marched = 0, voided = 0, built = 0, strandTotal = 0, escTotal = 0;
+    let lightChecked = 0;   // DEEPER cycle 10 — kinds whose light teeth actually ran
 
     for (let i = 0; i < KINDS.length; i++) {
       const kind = KINDS[i];
@@ -6102,6 +6173,22 @@ const SCENARIOS = {
       // warren frames ("no resident to shoot") for the whole of cycle 9.
       if (DO_SHOTS) { try { await caveKindShots(page, kind, key); } catch (e) { console.log(`[cave-kinds] ${kind} shots failed: ${e.message}`); } }
 
+      // ── THE LIGHT GATE (DEEPER cycle 10). Two teeth, both from Zach's walk-test, both run against
+      //   the STREAMED population because that is where the origin-scoped cycle-7 fix stopped
+      //   applying: (A) the deep chamber's read must not change between noon and midnight, and (B)
+      //   hiding the sun/moon sprites must not change a single pixel of an upward deep framing.
+      //   See `caveLightAsserts` for the tolerances and why B is a per-pixel A/B and not a max.
+      //   Cost: ~10 renders per kind, ~8s total for the leg — it does not move the suite budget.
+      //   RUNS BEFORE THE TEARDOWN LEG, for the same reason the shots do.
+      {
+        const lg = await caveLightAsserts(page, kind, key);
+        for (const row of lg.rows) console.log(row);
+        for (const f of lg.fails) fails.push(`light: ${f}`);
+        if (!lg.rows.length) fails.push(`light: ${kind} produced NO light-gate rows — the light teeth did not run (VACUOUS)`);
+        else lightChecked++;
+        per[kind].light = lg.data || null;
+      }
+
       // ── THE SCRAP TEARDOWN LEG (warren only). ────────────────────────────────────────────
       //   A cave's scrap pickups live OUTSIDE the cave's scene graph — in `ctx.pickups` — so the
       //   resident sink has to despawn them when the cave is evicted. The dangerous case is not the
@@ -6127,15 +6214,21 @@ const SCENARIOS = {
           // 2 — walk out of range: teleport far and tick until the streamer releases the resident.
           ctx.player.body.body.setTranslation({ x: S.x + 5000, y: 400, z: S.z + 5000 }, true);
           let f = 0;
+          // The sim clock across the wait — `elapsedΔ` is what tells a "the streamer is slow" read
+          // apart from a "the world is frozen" one. (Cycle 10: this printed 0.00s over 900 frames
+          // and named the pause leak in one run; it stays because it costs nothing and the next
+          // freeze will be diagnosed from the log instead of from a code read.)
+          const el0 = ctx.time.elapsed;
           for (; f < 900; f++) {
             await raf();
             if (!ctx.caveStream.residents().some((r) => r.key === S.key)) break;
           }
+          const simDt = +(ctx.time.elapsed - el0).toFixed(2);
           const evicted = !ctx.caveStream.residents().some((r) => r.key === S.key);
           // 3 — the shared pool must still be in the scene, and some scrap must still exist.
           const anyScrap = ctx.pickups.list.find((q) => q.itemId === 'scrap' && q.inst);
           return {
-            took, evicted, frames: f,
+            took, evicted, frames: f, simDt,
             underAfter: under().length, totalScrapBefore,
             totalScrapAfter: ctx.pickups.list.filter((q) => q.itemId === 'scrap').length,
             poolInScene: anyScrap ? !!anyScrap.mesh.parent : null,
@@ -6144,10 +6237,12 @@ const SCENARIOS = {
         if (td.fatal) fails.push(`warren teardown: ${td.fatal}`);
         else {
           if (!td.took) fails.push('warren teardown: could not take a cave scrap pickup');
-          if (!td.evicted) fails.push(`warren teardown: the cave was never released after ${td.frames} frames 5km away`);
+          if (!td.evicted) fails.push(`warren teardown: the cave was never released after ${td.frames} frames 5km away`
+            + ` (sim clock advanced ${td.simDt}s over those frames — a 0.00s here means the WORLD IS FROZEN, i.e. an earlier`
+            + ` leg left ctx.flags.paused set, not that the streamer is slow)`);
           if (td.underAfter !== 0) fails.push(`warren teardown: ${td.underAfter} underground scrap pickups survived their cave's eviction — dangling interaction targets`);
           if (td.poolInScene === false) fails.push('warren teardown: the SHARED scrap InstancedMesh left the scene — a double despawn removed every scrap pickup in the world');
-          console.log(`[cave-kinds] warren teardown: took=${td.took ? 1 : 0} evicted=${td.evicted ? 1 : 0} in ${td.frames}f, underground scrap ${arrive.scrapPickups}\u2192${td.underAfter}, world scrap ${td.totalScrapBefore}\u2192${td.totalScrapAfter}, shared pool in scene=${td.poolInScene}`);
+          console.log(`[cave-kinds] warren teardown: took=${td.took ? 1 : 0} evicted=${td.evicted ? 1 : 0} in ${td.frames}f (sim ${td.simDt}s), underground scrap ${arrive.scrapPickups}\u2192${td.underAfter}, world scrap ${td.totalScrapBefore}\u2192${td.totalScrapAfter}, shared pool in scene=${td.poolInScene}`);
         }
       }
 
@@ -6186,10 +6281,11 @@ const SCENARIOS = {
     if (built < KINDS.length) fails.push(`only ${built}/${KINDS.length} kinds built`);
     if (DO_MARCH && marched === 0) fails.push('no kind was marched — the gate would have passed by measuring nothing');
     if (DO_VOID && voided === 0) fails.push('no kind was void-sampled — the gate would have passed by measuring nothing');
+    if (lightChecked < KINDS.length) fails.push(`only ${lightChecked}/${KINDS.length} kinds ran the light teeth (day-invariance + sky occlusion) — the rest passed by measuring nothing`);
     if (!DO_VOID) console.log('[cave-kinds] ⚠ --void=0: the watertightness sweep DID NOT RUN. This run is an iteration shot, not a gate result.');
 
     const pass = fails.length === 0;
-    console.log(`CAVE-KINDS pass=${pass ? 1 : 0} seed=${picked.seed} kinds=${KINDS.length} built=${built} marched=${marched} voided=${voided} sites=${dist.sites} strands=${strandTotal} escapes=${escTotal} fails=${fails.length}`);
+    console.log(`CAVE-KINDS pass=${pass ? 1 : 0} seed=${picked.seed} kinds=${KINDS.length} built=${built} marched=${marched} voided=${voided} lit=${lightChecked} sites=${dist.sites} strands=${strandTotal} escapes=${escTotal} fails=${fails.length}`);
     for (const d of details) console.log(`[cave-kinds] ${d}`);
     if (fails.length) for (const f of fails) console.log(`[cave-kinds] FAIL ${f}`);
     if (!pass) throw new Error('cave-kinds GATE FAILED');
@@ -17595,18 +17691,25 @@ async function caveKindShots(page, kind, residentKey) {
     } catch (e) { console.log(`[cave-kinds] ${kind}/${spec.name} shot flaked (${e.name})`); }
     await page.evaluate(() => {
       const g = window.__game; const ctx = g.ctx;
-      const st = window.__kindShotRestore; if (!st) return;
-      for (const o of st.hidden) o.visible = true;
-      for (const [el, d] of st.dom) el.style.display = d;
-      if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
-      ctx.three.scene.remove(st.light);
-      g.setCaveRockLight(0, 0, 0, 0);
-      const cam = ctx.three.camera;
-      if (cam.isPerspectiveCamera && st.prevFov !== undefined && cam.fov !== st.prevFov) {
-        cam.fov = st.prevFov; cam.updateProjectionMatrix();   // the macro lens is per-framing only
+      const st = window.__kindShotRestore;
+      if (st) {
+        for (const o of st.hidden) o.visible = true;
+        for (const [el, d] of st.dom) el.style.display = d;
+        if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.torchI;
+        ctx.three.scene.remove(st.light);
+        g.setCaveRockLight(0, 0, 0, 0);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera && st.prevFov !== undefined && cam.fov !== st.prevFov) {
+          cam.fov = st.prevFov; cam.updateProjectionMatrix();   // the macro lens is per-framing only
+        }
+        window.__kindShotRestore = null;
       }
+      // UNPAUSE UNCONDITIONALLY — never behind the `st` guard. This helper freezes the world (see
+      // the FREEZE FIRST note above) and `main.ts`'s pause gate stops physics, streaming and cave
+      // eviction, so an early `return` past this line hands every later leg a frozen world with
+      // nothing in its failure text pointing back here. (Cycle 10 paid for this exact shape in the
+      // sibling `caveLightShot`: seven cave-kinds failures from one missing unpause.)
       ctx.flags.paused = false;
-      window.__kindShotRestore = null;
     });
   }
 }
@@ -17734,7 +17837,13 @@ async function caveShotSet(page, prefix) {
         });
         ctx.three.scene.background = new THREE.Color(0x020304);
         // REAL cave darkness — the shipping floors (near-black), + the near-black cave fog.
-        L.ambient.intensity = T.AMBIENT_BASE * T.CAVE_DARK_AMBIENT_FLOOR;
+        // LEGACY RIG-LIT CONSTANT (DEEPER cycle 10). This was `AMBIENT_BASE * CAVE_DARK_AMBIENT_FLOOR`
+      // = 0.0054 back when the deep target was a multiplier. Cycle 10 replaced that with an ABSOLUTE
+      // CAVE_DARK_AMBIENT_LEVEL (0.021 — what the multiplier actually produced in game at the audit
+      // clock), so reading the new key here would move this instrument's baseline ~4x. The literal is
+      // kept so the pool gate's ratio + unlit-median teeth stay on the axis they were signed off on.
+      // (That the rig-lit approximation was 4x darker than shipping is a real, separate divergence.)
+      L.ambient.intensity = 0.0054;
         L.sun.intensity = 0; L.moon.intensity = 0;
         ctx.three.scene.fog = new THREE.FogExp2(new THREE.Color(T.CAVE_FOG_HEX), T.CAVE_FOG_DENSITY);
         // The player's REAL torch, at the given position (proves the held light works underground).
@@ -18053,7 +18162,13 @@ async function poolShotSet(page, prefix, opts = {}) {
       ctx.three.scene.background = new THREE.Color(0x000000);
       if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = 0;
       // THE REAL LIGHT MODEL — the shipping cave floors + the shipping near-black cave fog.
-      L.ambient.intensity = T.AMBIENT_BASE * T.CAVE_DARK_AMBIENT_FLOOR;
+      // LEGACY RIG-LIT CONSTANT (DEEPER cycle 10). This was `AMBIENT_BASE * CAVE_DARK_AMBIENT_FLOOR`
+      // = 0.0054 back when the deep target was a multiplier. Cycle 10 replaced that with an ABSOLUTE
+      // CAVE_DARK_AMBIENT_LEVEL (0.021 — what the multiplier actually produced in game at the audit
+      // clock), so reading the new key here would move this instrument's baseline ~4x. The literal is
+      // kept so the pool gate's ratio + unlit-median teeth stay on the axis they were signed off on.
+      // (That the rig-lit approximation was 4x darker than shipping is a real, separate divergence.)
+      L.ambient.intensity = 0.0054;
       L.sun.intensity = 0; L.moon.intensity = 0;
       ctx.three.scene.fog = new THREE.FogExp2(new THREE.Color(T.CAVE_FOG_HEX), T.CAVE_FOG_DENSITY);
       if (s.light !== 'none') {
@@ -18385,6 +18500,501 @@ async function poolShotSet(page, prefix, opts = {}) {
       look: [Q.x, Q.y, Q.z] }, 'pool2-far');
   }
   return metrics;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   DEEPER cycle 10 — LIGHT & DARKNESS INTEGRITY. Two teeth, one instrument.
+
+   Zach's walk-test, verbatim: *"the caves are brighter during the day and darker at night so the
+   light looks like it is penetrating the terrain … also i can see the sun slightly through the
+   terrain and i think the moon as well"*. Both are measurable, so both get a number:
+
+     A. DAY-INVARIANCE. The same DEEP framing is shot at NOON and at MIDNIGHT with no carried
+        light. A deep chamber is sealed under tens of metres of rock; its read must not know what
+        the sun is doing. `meanL` and `p95` must agree within DITHER tolerance across the two.
+        (Not zero: the rock shader dithers, and the frame is re-rendered, so ±0.15 code of jitter
+        is expected. The pre-fix delta is ~2.6× the mean, i.e. hundreds of times the tolerance.)
+     B. NO SKY BODY THROUGH ROCK. The same deep chamber, framed 80° UP so the zenith is inside the
+        frustum, with no carried light, rendered TWICE in one turn — as shipped, and with the sun +
+        moon sprites hidden — and diffed per pixel. ZERO pixels may change. NOON puts the sun at
+        the zenith, MIDNIGHT puts the moon there (it sits opposite the sun), and a vacuity guard
+        fails the run if the body is not actually in-frustum and being drawn.
+
+   Runs against BOTH cave populations: the origin cave (`--kind=origin`) and a STREAMED kind cave
+   (`--kind=warren|fungal|flooded|shaft`), because the plural-cave world is exactly where the
+   origin-scoped cycle-7 fix stopped applying.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+const CAVE_LIGHT_EYE = 1.68;
+// The tolerance on A, CALIBRATED against the fixed build rather than guessed. Post-fix, across the
+// origin cave and all four streamed kinds, the noon↔midnight Δ on meanL/p95 measured 0.000-0.002 —
+// the residual is float noise in the tick, not light. 0.03 is 15× that headroom and still small
+// enough to have caught the ORIGIN cave's own (much milder, sub-code) pre-fix coupling of 0.035;
+// the streamed caves' coupling was Δ13.7, i.e. 450× this bound.
+const CAVE_LIGHT_DAY_TOL = 0.03;
+// Reporting-only: the fraction of the frame above this luminance is printed alongside the A/B so a
+// reader can see at a glance whether anything bright is in shot at all. NOT a threshold — B is a
+// per-pixel diff against the sprites themselves (see the header for why a max gate was rejected).
+const CAVE_LIGHT_HOT_L = 96;
+
+/** Resolve the deep-chamber framings for a cave (streamed resident by key, or the origin cave). */
+async function caveLightPlan(page, residentKey) {
+  return page.evaluate(({ KEY, EYE }) => {
+    const g = window.__game; const ctx = g.ctx;
+    let p = null;
+    if (KEY) {
+      const res = ctx.caveStream ? ctx.caveStream.residents().find((r) => r.key === KEY) : null;
+      if (!res) return null;
+      p = res.cave.probe;
+    } else {
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe; });
+    }
+    if (!p) return null;
+    const nodes = p.nodes;
+    const egg = nodes.find((n) => n.id === p.eggId) || nodes[0];
+    // The floor snap, with the same sanity clamp caveKindShots uses: a ray that escapes the cave
+    // and returns the DESERT SURFACE would park the eye outside the rock and measure the sky.
+    const floorAt = (x, z, guess) => {
+      const h = g.castDown(x, z, guess + 2.5, true);
+      if (!h) return guess;
+      if (Math.abs(h.hitY - guess) > 3.5) return guess;
+      return h.hitY;
+    };
+    const specs = [];
+    // 1 — DEEP-ACROSS. Off-centre in the deepest room, looking across it at head height. This is
+    //     the day-invariance framing: mostly rock, lit only by whatever the light model leaks in.
+    {
+      const a = 0.62, ux = Math.cos(a), uz = Math.sin(a);
+      const st = egg.rx * 0.70;
+      const sx = egg.x + ux * st, sz = egg.z + uz * st;
+      const fy = floorAt(sx, sz, egg.y);
+      specs.push({ name: 'deep-across', stand: [sx, fy, sz], cam: [sx, fy + EYE, sz],
+        look: [egg.x - ux * egg.rx * 0.6, egg.y + egg.height * 0.28, egg.z - uz * egg.rx * 0.6] });
+    }
+    // 2 — DEEP-UP. Centre of the deepest room, pitched ~80° up so the ZENITH is inside the
+    //     frustum (a dead-vertical lookAt is degenerate against the +Y up vector). This is where
+    //     a sun/moon sprite drawn without depth testing lands.
+    {
+      const cx = egg.x, cz = egg.z;
+      const fy = floorAt(cx, cz, egg.y);
+      specs.push({ name: 'deep-up', stand: [cx, fy, cz], cam: [cx, fy + EYE, cz],
+        look: [cx + 8, fy + 45, cz + 3] });
+    }
+    // 3 — A SECOND DEEP ROOM, also pitched up. One chamber can be lucky; the deepest OTHER
+    //     chamber is the cross-check that the occlusion holds tree-wide.
+    {
+      const other = nodes.filter((n) => n.id !== egg.id).sort((a, b) => a.y - b.y)[0] || egg;
+      const fy = floorAt(other.x, other.z, other.y);
+      specs.push({ name: 'deep2-up', stand: [other.x, fy, other.z], cam: [other.x, fy + EYE, other.z],
+        look: [other.x - 8, fy + 45, other.z + 3] });
+    }
+    return {
+      kind: p.kind || 'origin',
+      depth: +(p.depthBelowSurface ?? 0).toFixed(1),
+      eggRx: +egg.rx.toFixed(1),
+      specs: specs.map((s) => Object.assign({}, s, { cam: [s.cam[0], s.stand[1] + EYE, s.cam[2]] })),
+    };
+  }, { KEY: residentKey || null, EYE: CAVE_LIGHT_EYE });
+}
+
+/** Pin at `stand`, set the clock, let the REAL tick chain light it, pause, render, read pixels.
+ *
+ *  ⚠ THIS HELPER FREEZES THE GAME, AND THE UNFREEZE IS A `finally`. It sets `ctx.flags.paused`
+ *  for the same reason `caveKindShots` does — the game keeps rendering on its own rAF, so an
+ *  un-paused `updatePlayer` would put the camera back on the capsule between the pin and the
+ *  readPixels. But `main.ts`'s pause gate skips EVERY system (architecture rule 4): physics,
+ *  `caveStream.update`, `updateChunks`, eviction. A shot that returns while still paused does not
+ *  fail — it silently freezes the WORLD for every leg that runs after it.
+ *
+ *  That is exactly what the first cut of this helper did (cycle 10): it copied `caveKindShots`'s
+ *  freeze and dropped its unpause, so `cave-kinds` went from green to seven failures — the warren's
+ *  cave never evicted, its scrap never despawned, and the other three kinds' terrain tiles never
+ *  streamed in, all downstream of one line. Measured: `paused=true`, `elapsedΔ=0.00s` over 900 rAF
+ *  frames. So the restore now runs in a `finally`, restores paused/exposure unconditionally (no
+ *  `if (!st) return` in front of it), and `caveLightAsserts` re-asserts liveness afterwards. */
+async function caveLightShot(page, spec, dayTime, opts = {}) {
+  try {
+    return await caveLightShotInner(page, spec, dayTime, opts);
+  } finally {
+    // ── THE UNFREEZE. Runs on the success path AND on any throw above (a lost page, a WebGL
+    //    context loss, a screenshot timeout). Restores in dependency order and unpauses LAST.
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx; const st = window.__shotRestore;
+      if (st) {
+        for (const o of st.added) ctx.three.scene.remove(o);
+        for (const o of st.hidden) o.visible = true;
+        for (const [el, d] of st.dom) el.style.display = d;
+        if (ctx.player.viewModel) ctx.player.viewModel.heldPointLight.intensity = st.heldI || 0;
+        if (st.prevExposure !== undefined) ctx.three.renderer.toneMappingExposure = st.prevExposure;
+        window.__shotRestore = null;
+      }
+      ctx.flags.paused = false;    // ← unconditional: NOT behind the `st` guard, by construction
+    }).catch(() => { /* the page is gone; the run is failing for a louder reason */ });
+  }
+}
+
+async function caveLightShotInner(page, spec, dayTime, opts = {}) {
+  const live = await page.evaluate(async ({ s, t }) => {
+    const g = window.__game; const ctx = g.ctx;
+    const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+    ctx.flags.paused = false;
+    g.setTime(t);
+    const pin = () => {
+      ctx.player.body.body.setTranslation({ x: s.stand[0], y: s.stand[1] + 0.85, z: s.stand[2] }, true);
+      ctx.player.body.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    };
+    for (let i = 0; i < 6; i++) { pin(); g.setTime(t); await raf(); }
+    pin(); g.setTime(t);
+    ctx.flags.paused = true;
+    const fog = ctx.three.scene.fog;
+    const A = ctx.caveAtmosphere;
+    return {
+      t,
+      dark: A ? +A.darkness.toFixed(3) : null,
+      amb: +ctx.lights.ambient.intensity.toFixed(5),
+      ambC: '#' + ctx.lights.ambient.color.getHexString(),
+      sun: +ctx.lights.sun.intensity.toFixed(4),
+      moon: +ctx.lights.moon.intensity.toFixed(4),
+      sunY: +ctx.time.sunDir.y.toFixed(3),
+      shaft: A ? +A.shaft.intensity.toFixed(2) : null,
+      fogD: fog ? +fog.density.toFixed(5) : null,
+      fogC: fog ? '#' + fog.color.getHexString() : null,
+    };
+  }, { s: spec, t: dayTime });
+
+  const m = await page.evaluate(({ s, exp, light, hideBodies, HOT_L }) => {
+    const g = window.__game; const ctx = g.ctx; const THREE = g.THREE; const T = g.Tuning;
+    const cam = ctx.three.camera;
+    const prevExposure = ctx.three.renderer.toneMappingExposure;
+    ctx.three.renderer.toneMappingExposure = exp;
+    cam.position.set(s.cam[0], s.cam[1], s.cam[2]);
+    cam.lookAt(s.look[0], s.look[1], s.look[2]);
+    cam.updateMatrixWorld(true);
+    const st = { added: [], hidden: [], dom: [], prevExposure };
+    // Published IMMEDIATELY, before anything below can throw, so the `finally` restore always has
+    // the full list of what to put back (the first cut published it only after readPixels).
+    window.__shotRestore = st;
+    const hide = (o) => { if (o && o.visible) { st.hidden.push(o); o.visible = false; } };
+    hide(ctx.player.rig && ctx.player.rig.group);
+    hide(ctx.player.viewModel && ctx.player.viewModel.group);
+    // ── THE SKY-BODY A/B (DEEPER cycle 10). Report where each sky body sits in this frame, and —
+    //    when `abSky` is set — render the frame TWICE, once as shipped and once with the sun + moon
+    //    SPRITES hidden, and diff it PER PIXEL. Any pixel that changes is a sky body being drawn,
+    //    and underground that means through rock.
+    //
+    //    Two design points, both bought with a wrong first cut:
+    //      · NOT A RAW MAX. A bioluminescent cap renders at L≈124-167, so a max threshold would
+    //        either flag fungi as the sun or sit so high it stops catching the sun — the "gate that
+    //        measures the wrong thing" failure this project has already paid for twice.
+    //      · SAME FRAME, NO rAF BETWEEN. The first cut re-ran the whole pin-and-settle for the
+    //        hidden leg, so the two renders were at different `time.elapsed` and every animated
+    //        emitter (a fungus drifting in and out of the framing at L≈16) showed up as a Δ. It
+    //        reported a 15-code "sun leak" in the fungal cave that was a mushroom. Both renders now
+    //        happen inside one JS turn against a frozen scene, so the only thing that can differ is
+    //        the sprite itself.
+    //    Also reported: whether each body is INSIDE the frustum and actually being drawn, so a
+    //    framing that quietly stopped pointing at the sky fails as VACUOUS instead of passing free.
+    const bodies = {};
+    const bodyObjs = [];
+    for (const nm of ['skySun', 'skyMoon']) {
+      const o = ctx.three.scene.getObjectByName(nm);
+      if (!o) { bodies[nm] = null; continue; }
+      const v = new THREE.Vector3().copy(o.position).project(cam);
+      bodies[nm] = {
+        visible: !!o.visible,
+        opacity: +(o.material.opacity ?? 1).toFixed(3),
+        depthTest: !!o.material.depthTest,
+        inFrustum: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 && v.z > -1 && v.z < 1,
+        ndc: [+v.x.toFixed(2), +v.y.toFixed(2)],
+      };
+      bodyObjs.push(o);
+    }
+    for (const el of Array.from(document.body.children)) {
+      if (el === ctx.three.renderer.domElement || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+      if (el.style.display !== 'none') { st.dom.push([el, el.style.display]); el.style.display = 'none'; }
+    }
+    let heldI = 0;
+    if (ctx.player.viewModel) { heldI = ctx.player.viewModel.heldPointLight.intensity; ctx.player.viewModel.heldPointLight.intensity = 0; }
+    st.heldI = heldI;
+    // The carried light, if any, goes through the GAME's setter so the envelope/bounce response is
+    // the shipping one (D165: a rig that re-derives the light model grades a game nobody plays).
+    g.setCaveRockLight(0, 0, 0, 0);
+    if (light && light !== 'none') {
+      const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+      const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+      const lp = cam.position.clone().addScaledVector(fwd, 0.45).addScaledVector(right, 0.30);
+      lp.y -= 0.28;
+      if (light === 'flashlight') {
+        const sp = new THREE.SpotLight(T.FLASHLIGHT_LIGHT_COLOR_HEX, T.FLASHLIGHT_LIGHT_INTENSITY,
+          T.FLASHLIGHT_LIGHT_DISTANCE, T.FLASHLIGHT_LIGHT_ANGLE_RAD, T.FLASHLIGHT_LIGHT_PENUMBRA, 1.2);
+        sp.position.copy(lp); sp.target.position.set(s.look[0], s.look[1], s.look[2]);
+        ctx.three.scene.add(sp, sp.target); st.added.push(sp, sp.target);
+        g.setCaveRockLight(lp.x, lp.y, lp.z, T.FLASHLIGHT_LIGHT_INTENSITY * T.CAVE_BOUNCE_SPOT_FRAC);
+      } else if (light === 'lantern') {
+        const ln = new THREE.PointLight(T.LANTERN_LIGHT_COLOR_HEX, T.LANTERN_LIGHT_INTENSITY, T.LANTERN_LIGHT_DISTANCE, 2);
+        ln.position.copy(lp); ctx.three.scene.add(ln); st.added.push(ln);
+        g.setCaveRockLight(lp.x, lp.y, lp.z, T.LANTERN_LIGHT_INTENSITY);
+      } else {
+        const tl = new THREE.PointLight(T.TORCH_LIGHT_COLOR_HEX, T.TORCH_LIGHT_INTENSITY, T.TORCH_LIGHT_DISTANCE, 2);
+        tl.position.copy(lp); ctx.three.scene.add(tl); st.added.push(tl);
+        g.setCaveRockLight(lp.x, lp.y, lp.z, T.TORCH_LIGHT_INTENSITY);
+      }
+    }
+    const R = ctx.three.renderer, gl = R.getContext();
+    const W = R.domElement.width, H = R.domElement.height;
+    R.render(ctx.three.scene, cam);
+    const px = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    // The A/B leg — same turn, same clock, same scene, only the two sprites removed.
+    let ab = null;
+    if (hideBodies && bodyObjs.length) {
+      const wasVis = bodyObjs.map((o) => o.visible);
+      for (const o of bodyObjs) o.visible = false;
+      R.render(ctx.three.scene, cam);
+      const px2 = new Uint8Array(W * H * 4);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px2);
+      for (let i = 0; i < bodyObjs.length; i++) bodyObjs[i].visible = wasVis[i];
+      let changed = 0, dMax = 0, dMaxIdx = 0, hiddenMax = 0, sumA = 0, sumB = 0;
+      for (let k = 0, i = 0; k < W * H; k++, i += 4) {
+        const a = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+        const b = 0.2126 * px2[i] + 0.7152 * px2[i + 1] + 0.0722 * px2[i + 2];
+        sumA += a; sumB += b;
+        if (b > hiddenMax) hiddenMax = b;
+        const dd = Math.abs(a - b);
+        if (dd > 1) changed++;
+        if (dd > dMax) { dMax = dd; dMaxIdx = k; }
+      }
+      ab = {
+        changedPx: changed, dMax: +dMax.toFixed(2),
+        dMaxAt: [+((dMaxIdx % W) / W).toFixed(2), +(((dMaxIdx / W) | 0) / H).toFixed(2)],
+        dMean: +(Math.abs(sumA - sumB) / (W * H)).toFixed(4),
+        hiddenMax: +hiddenMax.toFixed(2),
+      };
+      // Re-render the shipped frame so the screenshot below (and the canvas the user would see)
+      // is the SHIPPING one, not the diagnostic leg.
+      R.render(ctx.three.scene, cam);
+    }
+    const N = W * H;
+    const L = new Float32Array(N);
+    let sum = 0, hot = 0, argmax = 0, best = -1;
+    for (let k = 0, i = 0; k < N; k++, i += 4) {
+      const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+      L[k] = l; sum += l;
+      if (l > HOT_L) hot++;
+      if (l > best) { best = l; argmax = k; }
+    }
+    const S = L.slice(); S.sort();
+    const q = (f) => +S[Math.min(N - 1, Math.floor(f * N))].toFixed(3);
+    return {
+      res: W + 'x' + H,
+      meanL: +(sum / N).toFixed(3), p50: q(0.50), p95: q(0.95), p99: q(0.99),
+      maxL: +best.toFixed(2), hotPct: +((100 * hot) / N).toFixed(3),
+      // Where the brightest pixel is, in frame fractions (0,0 = bottom-left) — a sun disc lands in
+      // a tight blob and naming its position makes "which emitter is that" answerable.
+      maxAt: [+((argmax % W) / W).toFixed(2), +(((argmax / W) | 0) / H).toFixed(2)],
+      bodies, ab,
+    };
+  }, { s: spec, exp: CAVE_AUDIT_EXPOSURE, light: opts.light || 'none', hideBodies: !!opts.hideBodies, HOT_L: CAVE_LIGHT_HOT_L });
+
+  if (opts.shotFile) {
+    await page.waitForTimeout(120);
+    try { await page.screenshot({ path: join(OUT, opts.shotFile), fullPage: false, timeout: 60000 }); }
+    catch (e) { console.log('[cave-light] shot flaked (' + e.name + ')'); }
+  }
+  // NOTE: the scene/DOM restore + the UNPAUSE live in `caveLightShot`'s `finally`, deliberately
+  // not here — a `return` (or a throw) must never be able to walk past them.
+  return { live, m };
+}
+
+/** THE GATE. Day-invariance (A) + no-sky-body-through-rock (B) for one cave. Returns fails/rows. */
+async function caveLightAsserts(page, label, residentKey, opts = {}) {
+  const fails = [], rows = [];
+  const plan = await caveLightPlan(page, residentKey);
+  if (!plan) {
+    return { fails: [`${label}: no cave probe resolved — the light gate could not run (VACUOUS)`], rows: [] };
+  }
+  const NOON = 0.5, MIDNIGHT = 0.0;
+  const shots = !!opts.shots;
+  const out = {};
+  // The clock this leg borrows. Every shot drives `dayTime` to noon or midnight, and the LAST one
+  // is midnight — so without this the gate would hand the rest of the run a world stuck at night.
+  const prevDayTime = await page.evaluate(() => window.__game.ctx.time.dayTime);
+  try {
+    for (const s of plan.specs) {
+      const ab = s.name.endsWith('-up');    // the upward framings also run the sky-body A/B
+      const noon = await caveLightShot(page, s, NOON, { hideBodies: ab, shotFile: shots ? `scen-cavelight-${label}-${s.name}-noon.png` : null });
+      const night = await caveLightShot(page, s, MIDNIGHT, { hideBodies: ab, shotFile: shots ? `scen-cavelight-${label}-${s.name}-night.png` : null });
+      out[s.name] = { noon, night };
+      const dMean = Math.abs(noon.m.meanL - night.m.meanL);
+      const dP95 = Math.abs(noon.m.p95 - night.m.p95);
+      rows.push(`[cave-light] ${label} ${s.name.padEnd(12)} noon meanL=${noon.m.meanL} p95=${noon.m.p95} max=${noon.m.maxL}@${noon.m.maxAt}`
+        + ` | night meanL=${night.m.meanL} p95=${night.m.p95} max=${night.m.maxL}@${night.m.maxAt}`
+        + ` | Δmean=${dMean.toFixed(3)} Δp95=${dP95.toFixed(3)}`
+        + ` | noon(dark=${noon.live.dark} amb=${noon.live.amb}${noon.live.ambC} sun=${noon.live.sun} fog=${noon.live.fogD}${noon.live.fogC})`
+        + ` night(dark=${night.live.dark} amb=${night.live.amb}${night.live.ambC} sun=${night.live.sun} moon=${night.live.moon} fog=${night.live.fogD}${night.live.fogC})`);
+      // ── A. DAY-INVARIANCE ────────────────────────────────────────────────────────────────────
+      if (dMean > CAVE_LIGHT_DAY_TOL) {
+        fails.push(`${label} ${s.name}: deep-cave meanL tracks the surface clock — noon ${noon.m.meanL} vs midnight ${night.m.meanL} (Δ${dMean.toFixed(3)} > ${CAVE_LIGHT_DAY_TOL} dither tolerance)`);
+      }
+      if (dP95 > CAVE_LIGHT_DAY_TOL) {
+        fails.push(`${label} ${s.name}: deep-cave p95 tracks the surface clock — noon ${noon.m.p95} vs midnight ${night.m.p95} (Δ${dP95.toFixed(3)} > ${CAVE_LIGHT_DAY_TOL})`);
+      }
+      // ── B. NO SKY BODY THROUGH ROCK (the upward framings only) ───────────────────────────────
+      //   Two teeth per body-hour: a VACUITY guard (the body must actually be in frame and drawn,
+      //   or this framing proves nothing) and the A/B (hiding the sprite must change nothing).
+      if (s.name.endsWith('-up')) {
+        for (const [when, r, body] of [['noon(sun)', noon, 'skySun'], ['midnight(moon)', night, 'skyMoon']]) {
+          const b = r.m.bodies[body];
+          if (!b) { fails.push(`${label} ${s.name} @${when}: no '${body}' object in the scene — the occlusion check is VACUOUS`); continue; }
+          if (!b.inFrustum || !b.visible || b.opacity <= 0.02) {
+            fails.push(`${label} ${s.name} @${when}: ${body} is not being drawn into this frame `
+              + `(inFrustum=${b.inFrustum} visible=${b.visible} opacity=${b.opacity} ndc=${b.ndc}) — VACUOUS, the framing no longer aims at it`);
+            continue;
+          }
+          const A = r.m.ab;
+          if (!A) { fails.push(`${label} ${s.name} @${when}: the sky A/B leg did not run — VACUOUS`); continue; }
+          rows.push(`[cave-light] ${label} ${s.name.padEnd(12)} @${when.padEnd(15)} sky-A/B: changedPx=${A.changedPx} Δmax=${A.dMax}@${A.dMaxAt} Δmean=${A.dMean}`
+            + ` | shipped max=${r.m.maxL} · bodies-hidden max=${A.hiddenMax}`
+            + ` | ${body} depthTest=${b.depthTest} ndc=${b.ndc} opacity=${b.opacity}`);
+          if (A.changedPx > 0 || A.dMax > 1.0) {
+            fails.push(`${label} ${s.name} @${when}: hiding the sky bodies changes ${A.changedPx} pixels (worst Δ${A.dMax} at frame ${A.dMaxAt}) `
+              + `— a disc is being drawn through solid rock (shipped max ${r.m.maxL}, hidden ${A.hiddenMax})`);
+          }
+        }
+      }
+    }
+  } finally {
+    await page.evaluate((t) => { window.__game.setTime(t); }, prevDayTime)
+      .catch(() => { /* page gone */ });
+  }
+  // ── THE LIVENESS TOOTH. This gate freezes the world to shoot it; the ONE thing that must be true
+  //   when it hands control back is that the world is running again. Not a code-review promise — a
+  //   measurement, because the cost of getting it wrong is not a red light here, it is SEVEN red
+  //   lights in unrelated legs downstream (streaming, eviction, pickup despawn) with nothing in
+  //   any of their messages pointing back at this function.
+  const alive = await caveWorldTicking(page);
+  if (!alive.ticking) {
+    fails.push(`${label}: the light gate handed back a FROZEN world — ${alive.why}. `
+      + `Everything after this point (streaming, cave eviction, pickup despawn) would starve silently.`);
+  }
+  return { fails, rows, data: out, plan };
+}
+
+/** Is the game actually ticking? Advance real rAF frames and watch `time.elapsed` move. A paused
+ *  game still renders (main.ts returns from the tick callback BEFORE the systems, but the loop
+ *  keeps drawing), so "frames go by" proves nothing — the sim clock is the honest witness. */
+async function caveWorldTicking(page) {
+  return page.evaluate(async () => {
+    const ctx = window.__game.ctx;
+    const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const e0 = ctx.time.elapsed;
+    for (let i = 0; i < 8; i++) await raf();
+    const dE = ctx.time.elapsed - e0;
+    return {
+      ticking: dE > 0,
+      why: `paused=${ctx.flags.paused} titleActive=${ctx.flags.titleActive} time.elapsed advanced ${dE.toFixed(3)}s over 8 rendered frames`,
+      paused: !!ctx.flags.paused, dElapsed: +dE.toFixed(3),
+    };
+  });
+}
+
+/** THE CARRIED-LIGHT REFERENCE SET (DEEPER cycle 10, Zach's item 3). Four framings the strength
+ *  dials actually change — a wall at torch range, a room across, a ceiling, and a pool — each shot
+ *  with each of the three carried lights at their SHIPPING tuning. Numbers + PNGs, so "torch +50%"
+ *  is a documented before/after rather than a claim, and so his next walk-test has a reference. */
+async function caveLightRefs(page, label, residentKey) {
+  const plan = await page.evaluate(({ KEY, EYE }) => {
+    const g = window.__game; const ctx = g.ctx; const RAPIER = g.RAPIER;
+    let p = null;
+    if (KEY) {
+      const res = ctx.caveStream ? ctx.caveStream.residents().find((r) => r.key === KEY) : null;
+      if (!res) return null;
+      p = res.cave.probe;
+    } else {
+      ctx.three.scene.traverse((o) => { if (o.userData && o.userData.caveGenProbe) p = o.userData.caveGenProbe; });
+    }
+    if (!p) return null;
+    const nodes = p.nodes;
+    const egg = nodes.find((n) => n.id === p.eggId) || nodes[0];
+    const gallery = nodes.filter((n) => n.id !== egg.id).sort((a, b) => (b.rx * b.height) - (a.rx * a.height))[0] || egg;
+    const pbody = ctx.player.body.body;
+    const floorAt = (x, z, guess) => {
+      const h = g.castDown(x, z, guess + 2.5, true);
+      if (!h || Math.abs(h.hitY - guess) > 3.5) return guess;
+      return h.hitY;
+    };
+    const hRay = (ox, oy, oz, dx, dz, max) => {
+      const h = ctx.physics.world.castRay(new RAPIER.Ray({ x: ox, y: oy, z: oz }, { x: dx, y: 0, z: dz }), max, true,
+        undefined, undefined, undefined, pbody);
+      return h ? h.timeOfImpact : max;
+    };
+    const specs = [];
+    // 1 — WALL-2M. The single most diagnostic frame for a carried-light dial: a rock face at
+    //     exactly 2m, which is where a torch either reads as stone or reads as a smudge. The
+    //     stand-off is MEASURED against the shipped colliders, not assumed from the analytic room.
+    {
+      const a = 0.35, ux = Math.cos(a), uz = Math.sin(a);
+      const cy0 = floorAt(egg.x, egg.z, egg.y) + EYE;
+      const d = hRay(egg.x, cy0, egg.z, ux, uz, egg.rx + 6);
+      const wx = egg.x + ux * d, wz = egg.z + uz * d;
+      const back = Math.max(0.6, d - 2.0);
+      const sx = egg.x + ux * back, sz = egg.z + uz * back;
+      const fy = floorAt(sx, sz, egg.y);
+      specs.push({ name: 'wall2m', stand: [sx, fy, sz], cam: [sx, fy + EYE, sz], look: [wx, fy + EYE - 0.15, wz], note: `wallDist=${(d - back).toFixed(2)}m` });
+    }
+    // 2 — GALLERY. The biggest ordinary chamber, across at head height: "can I read the space I am
+    //     mostly walking through".
+    {
+      const a = 1.9, ux = Math.cos(a), uz = Math.sin(a);
+      const st = gallery.rx * 0.72;
+      const sx = gallery.x + ux * st, sz = gallery.z + uz * st;
+      const fy = floorAt(sx, sz, gallery.y);
+      specs.push({ name: 'gallery', stand: [sx, fy, sz], cam: [sx, fy + EYE, sz],
+        look: [gallery.x - ux * gallery.rx * 0.7, gallery.y + gallery.height * 0.25, gallery.z - uz * gallery.rx * 0.7], note: `rx=${gallery.rx.toFixed(1)}m h=${gallery.height.toFixed(1)}m` });
+    }
+    // 3 — CEILING. The vault read: carried light is the ONLY thing that can reach a ceiling, so
+    //     this is the framing the bounce term and the range dial move most.
+    {
+      const fy = floorAt(egg.x, egg.z, egg.y);
+      specs.push({ name: 'ceiling', stand: [egg.x, fy, egg.z], cam: [egg.x, fy + EYE, egg.z],
+        look: [egg.x + 8, fy + 45, egg.z + 3], note: `eggH=${egg.height.toFixed(1)}m` });
+    }
+    // 4 — POOL, when the cave has one. The pool pixel gates are RATIO gates (water darker than lit
+    //     rock); a strength change that broke the ratio would show here first.
+    if (p.pools && p.pools.length) {
+      const q = p.pools.slice().sort((a, b) => b.r - a.r)[0];
+      const a = 2.4, ux = Math.cos(a), uz = Math.sin(a);
+      const sx = q.x + ux * (q.r + 1.2), sz = q.z + uz * (q.r + 1.2);
+      const fy = floorAt(sx, sz, q.y - 0.3);
+      specs.push({ name: 'pool', stand: [sx, fy, sz], cam: [sx, fy + EYE, sz], look: [q.x, q.y - 0.05, q.z], note: `poolR=${q.r.toFixed(1)}m` });
+    }
+    return {
+      specs,
+      dials: {
+        torch: [g.Tuning.TORCH_LIGHT_INTENSITY, g.Tuning.TORCH_LIGHT_DISTANCE],
+        flashlight: [g.Tuning.FLASHLIGHT_LIGHT_INTENSITY, g.Tuning.FLASHLIGHT_LIGHT_DISTANCE],
+        lantern: [g.Tuning.LANTERN_LIGHT_INTENSITY, g.Tuning.LANTERN_LIGHT_DISTANCE],
+      },
+    };
+  }, { KEY: residentKey || null, EYE: CAVE_LIGHT_EYE });
+  if (!plan) { console.log('[cave-light] refs: no cave probe — skipped'); return null; }
+  console.log(`[cave-light] refs dials: torch=${plan.dials.torch[0]}/${plan.dials.torch[1]}m `
+    + `flashlight=${plan.dials.flashlight[0]}/${plan.dials.flashlight[1]}m lantern=${plan.dials.lantern[0]}/${plan.dials.lantern[1]}m`);
+  const TAG = argv.tag ? `-${String(argv.tag)}` : '';
+  const out = {};
+  for (const s of plan.specs) {
+    for (const light of ['torch', 'flashlight', 'lantern', 'none']) {
+      // Mid-morning, the clock every prior cave audit used — these are LOOK references, and after
+      // the day-decoupling fix the deep interior reads the same at any hour anyway.
+      const r = await caveLightShot(page, s, 0.42, { light, shotFile: `scen-caveref-${label}-${s.name}-${light}${TAG}.png` });
+      out[`${s.name}/${light}`] = r.m;
+      console.log(`[cave-ref] ${label} ${s.name.padEnd(9)} ${light.padEnd(10)} ${String(s.note || '').padEnd(18)}`
+        + ` meanL=${r.m.meanL} p50=${r.m.p50} p95=${r.m.p95} p99=${r.m.p99} max=${r.m.maxL}`
+        + ` | dark=${r.live.dark} amb=${r.live.amb} fog=${r.live.fogD}${r.live.fogC}`
+        + ` -> scen-caveref-${label}-${s.name}-${light}${TAG}.png`);
+    }
+  }
+  return out;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════

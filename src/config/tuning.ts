@@ -622,8 +622,8 @@ export const Tuning = {
   // Lantern — standing post + glass globe + PointLight. Never burns out.
   // Flicker amp small enough to feel organic without being distracting.
   LANTERN_HEIGHT_M: 1.1,                 // total height (post + globe)
-  LANTERN_LIGHT_INTENSITY: 1.6,
-  LANTERN_LIGHT_DISTANCE: 14,            // attenuation radius
+  LANTERN_LIGHT_INTENSITY: 2.4,          // DEEPER cycle 10 — was 1.6 (+50%); the deployable cave light Zach asked to keep using
+  LANTERN_LIGHT_DISTANCE: 17.5,          // attenuation radius — DEEPER cycle 10, was 14 (+25%)
   LANTERN_LIGHT_COLOR_HEX: 0xffc080,     // warm yellow-orange
   LANTERN_FLICKER_AMP: 0.10,             // intensity multiplier amplitude
   LANTERN_NEAR_DISTANCE_SQ: 1.0 * 1.0,
@@ -1175,8 +1175,8 @@ export const Tuning = {
   //
   // ⚠ ZACH'S TASTE DIALS. LIT_GAIN / LIT_WHITE / BOUNCE_FRAC are the "how legible is torch-lit rock"
   // knobs and BOUNCE_* is "how much of the ceiling do you get back". They are deliberately NOT a
-  // brightness raise on the cave: CAVE_DARK_AMBIENT_FLOOR (0.03) and CAVE_DARK_SUN_FLOOR (0) are
-  // untouched, so with no carried light the cave is exactly as black as it has always been.
+  // brightness raise on the cave: CAVE_DARK_AMBIENT_LEVEL and CAVE_DARK_SUN_LEVEL are untouched,
+  // so with no carried light the cave is exactly as black as it has always been.
   CAVE_LIT_GAIN: 4.2,                  // × the DIRECT (torch/flashlight/lantern) diffuse term on cave rock. 1 = shipped behaviour. The whole envelope fix: 4.2× on linear light moves a torch-lit wall at 2m from output code ~23 to ~50, i.e. from "a shape you infer" to "stone you read", while leaving the AMBIENT/indirect term — the thing that decides how black unlit rock is — completely alone
   CAVE_LIT_WHITE: 0.42,                // linear soft-shoulder white point for the gain (`x·G/(1+x·G/W)`). Without it the gain also multiplies the near-field hotspot and a wall at 0.5m clips to white; with it the extra codes go to the MID range where the rock actually is
   CAVE_LIT_GAIN_DEPTH0: 0.72,          // cave-darkness factor at which the gain starts ramping in (0 = mouth, 1 = deep tree). The daylit trench + the shaft-lit ramp keep their shipped response, so the DESCENT still reads as light running out
@@ -1222,8 +1222,14 @@ export const Tuning = {
   //    at the mouth spills down the ramp (time-of-day driven), fading with depth. Only active while
   //    the player is CONTAINED in the cave AABB + below the surface → the surface world is untouched.
   CAVE_DARK_DEPTH_FADE: 7.0,           // m — depth below the surface sheet over which darkness ramps 0→1 (a few metres past the throat = full dark)
-  CAVE_DARK_AMBIENT_FLOOR: 0.03,       // ambient intensity multiplier at full dark (near-black; not 0 so torch-lit rock still has a faint base)
-  CAVE_DARK_SUN_FLOOR: 0.0,            // sun/moon intensity multiplier at full dark (the sky can't reach deep rock)
+  // ── DEEPER cycle 10 — the deep interior's targets are ABSOLUTE LEVELS, not multipliers of the
+  //    surface light. A multiplier makes a sealed chamber breathe with the sun (the shipped 0.03
+  //    gave amb 0.0223 at noon and 0.0084 at midnight — a 2.7× swing through solid rock, which is
+  //    exactly what Zach saw). The `cave-light` day-invariance assert holds this to the dither
+  //    floor; a multiplier here would take it red on the next run.
+  CAVE_DARK_AMBIENT_LEVEL: 0.021,      // ABSOLUTE ambient intensity at full dark (near-black; not 0 so torch-lit rock still has a faint base). 0.021 is what the shipped multiplier produced at the mid-morning clock every prior cave audit and taste pass was tuned against — the deep read is preserved, only its coupling to the sky is cut
+  CAVE_DARK_AMBIENT_HEX: 0x4a3a2a,     // ABSOLUTE ambient colour at full dark = the desert's clear-weather ambient base, so the deep cave's hue is what it always was in clear weather and no longer shifts with dust/overcast
+  CAVE_DARK_SUN_LEVEL: 0.0,            // ABSOLUTE sun/moon intensity at full dark (the sky cannot reach deep rock — and a body whose light gets in is a body whose disc gets in)
   CAVE_DARK_AABB_MARGIN: 14,           // m — the cave XZ bounding box is expanded by this before the depth test gates darkness (so standing in a surface valley never darkens)
   CAVE_FOG_DENSITY: 0.055,             // FogExp2 density at full dark — near walls read, the far end of a hall fades to black (depth cue; base density restored at the mouth)
   CAVE_FOG_HEX: 0x05060a,              // near-black cool cave fog colour (a sandy desert-fog haze underground reads wrong)
@@ -2016,15 +2022,22 @@ export const Tuning = {
   // Torch is consumable (single burn cycle), flashlight is rechargeable
   // (passive recharge while held + off).
   TORCH_BURN_DURATION_S: 180,           // 3 real-minute burn before consumed
-  TORCH_LIGHT_DISTANCE: 12,             // PointLight `distance` falloff
-  TORCH_LIGHT_INTENSITY: 1.8,           // mean — flickers ±0.4 each frame
-  TORCH_LIGHT_FLICKER_AMP: 0.4,
+  // ── DEEPER cycle 10 — CARRIED-LIGHT STRENGTH, Zach's walk-test ask: *"think we need to increase
+  //    the light strength of the flashlight, lantern, and torch"*. First pass across all three is
+  //    +50% intensity and +25% range; these are HIS dials and he fine-tunes them by feel next test.
+  //    Before → after: torch 1.8/12m → 2.7/15m · flashlight 3.0/25m → 4.5/31m · lantern 1.6/14m →
+  //    2.4/17.5m. Nothing about the UNLIT cave moves: the no-free-light model means an unequipped
+  //    player still gets exactly vec3(0) of carried light, and the darkness constants above are
+  //    untouched — so the survival pressure is unchanged and only what you brought reaches further.
+  TORCH_LIGHT_DISTANCE: 15,             // PointLight `distance` falloff (was 12)
+  TORCH_LIGHT_INTENSITY: 2.7,           // mean (was 1.8) — flickers ±FLICKER_AMP each frame
+  TORCH_LIGHT_FLICKER_AMP: 0.6,         // was 0.4 — scaled with the mean so the flame's flicker stays ±22% of output rather than quietly flattening to ±15%
   TORCH_LIGHT_COLOR_HEX: 0xffb060,      // warm orange flame
 
   FLASHLIGHT_DRAIN_DURATION_S: 120,     // 2 real-min from full to empty when lit
   FLASHLIGHT_RECHARGE_DURATION_S: 180,  // 3 real-min from empty to full when off
-  FLASHLIGHT_LIGHT_DISTANCE: 25,
-  FLASHLIGHT_LIGHT_INTENSITY: 3.0,
+  FLASHLIGHT_LIGHT_DISTANCE: 31,        // DEEPER cycle 10 — was 25 (+25%)
+  FLASHLIGHT_LIGHT_INTENSITY: 4.5,      // DEEPER cycle 10 — was 3.0 (+50%)
   FLASHLIGHT_LIGHT_ANGLE_RAD: 0.45,     // SpotLight `angle` — narrow beam
   FLASHLIGHT_LIGHT_PENUMBRA: 0.62,   // DEEPER cycle 7: 0.3 -> 0.62. The shipped 0.3 DOES produce a real penumbra band in three (smoothstep between cos(angle) and cos(angle*(1-penumbra))), but at 0.45 rad that band is only ~0.135 rad wide and, on rock rendering into ~25 output codes, the whole gradient spanned 1-2 codes and read as a STEP. Wider band + the cycle-7 dither/envelope work is what actually makes it a soft edge
   FLASHLIGHT_LIGHT_COLOR_HEX: 0xe4f0ff, // cool white
