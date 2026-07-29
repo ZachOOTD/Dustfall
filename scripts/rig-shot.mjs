@@ -5693,6 +5693,50 @@ const SCENARIOS = {
       const digestOf = (l) => fnv(l.flatMap((s) => [s.gx, s.gz, Math.round(s.x * 100), Math.round(s.z * 100), s.seed]));
       const siteDigest = digestOf(listA);
       if (siteDigest !== digestOf(listB)) fails.push('site list is NOT stable across two derivations — placement is not pure');
+
+      // ══ DEEPER cycle 12, GATE A — BEAT-SITES ═════════════════════════════════════════════════
+      //    Which caves carry the dead explorer, proven over HUNDREDS of sites without building one:
+      //    the predicate is a pure read of the site descriptor's kind, so this costs milliseconds and
+      //    rides the leg that already sweeps sites purely at both seeds.
+      //
+      //    THE PREDICATE IS READ FROM THE GAME'S OWN KIND TABLE, never re-implemented here. A gate
+      //    that hardcodes `kind === 'warren'` is asserting its own opinion of where the beat is, and
+      //    would stay green through the exact change it exists to catch (someone flipping the flag on
+      //    another kind, or onto canonical).
+      const beatSites = (() => {
+        const tbl = g.caveKindTable();
+        const carries = (k) => !!(tbl.params[k] && tbl.params[k].deadExplorer);
+        const notes = {};
+        // 1 — SEED PURITY. Re-derived twice above; the beat flag must agree with itself and with the
+        //     kind on both derivations.
+        const flagsA = listA.map((s) => carries(s.kind)), flagsB = listB.map((s) => carries(s.kind));
+        if (flagsA.length !== flagsB.length || flagsA.some((v, i) => v !== flagsB[i]))
+          fails.push('BEAT-SITES the beat flag is not stable across two derivations — the predicate is not seed-pure');
+        // 2 — VACUOUS-PASS GUARDS, before any assertion that could pass by measuring nothing.
+        const beats = listA.filter((s) => carries(s.kind));
+        const kindsSeen = new Set(listA.map((s) => s.kind));
+        notes.sites = listA.length; notes.beats = beats.length; notes.kinds = kindsSeen.size;
+        if (listA.length < 40) fails.push(`BEAT-SITES only ${listA.length} sites swept — too few to conclude anything`);
+        if (!kindsSeen.has('warren')) fails.push('BEAT-SITES no warren appeared in a 12km box — the sweep proves nothing about the beat');
+        if (beats.length === 0) fails.push('BEAT-SITES not one site carries the beat — it would never appear in a real world');
+        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "d8f15005 / 99e0015b
+        //     cannot move" a machine fact instead of a claim in a comment.
+        if (carries('canonical')) fails.push('BEAT-SITES canonical carries the beat — the ORIGIN CAVE would carry an authored corpse and its parity digest would be at risk');
+        const originClear = T.CAVE_SITE_ORIGIN_CLEAR_M;   // `clr` is not declared until below this block
+        const inClear = beats.filter((s) => Math.hypot(s.x, s.z) < originClear);
+        if (inClear.length) fails.push(`BEAT-SITES ${inClear.length} beat site(s) inside the ${originClear}m origin exclusion`);
+        // 4 — FINDABILITY, asserted against the MEASUREMENT and not against the plan's arithmetic.
+        //     The plan estimated ~0.19 beat caves/km² and a ~1.3km nearest; the envelope is generous
+        //     on purpose — this tooth exists to catch "none in the world" and "one every 200m", not
+        //     to freeze a density Zach may want to tune.
+        let nearest = Infinity;
+        for (const s of beats) nearest = Math.min(nearest, Math.hypot(s.x, s.z));
+        const perKm2Beat = beats.length / ((BOX * 2 / 1000) ** 2);
+        notes.nearestKm = +(nearest / 1000).toFixed(2); notes.perKm2 = +perKm2Beat.toFixed(3);
+        if (!(nearest < 6000)) fails.push(`BEAT-SITES nearest beat cave is ${(nearest / 1000).toFixed(1)}km — unfindable in practice`);
+        if (!(perKm2Beat > 0.01 && perKm2Beat < 2)) fails.push(`BEAT-SITES beat density ${perKm2Beat.toFixed(3)}/km² is outside the sane envelope 0.01-2`);
+        return notes;
+      })();
       if (listA.length < 40) fails.push(`only ${listA.length} sites in a 12km box — too few to audit (vacuous-pass guard)`);
 
       const clr = T.CAVE_SITE_ORIGIN_CLEAR_M;
@@ -6015,7 +6059,7 @@ const SCENARIOS = {
         fails.push(`min site spacing ${minSpacing.toFixed(0)}m < the MEASURED cave extent ${extent.toFixed(0)}m — two cave bodies can interpenetrate`);
       }
       return {
-        fails, skipped: false, siteDigest, sites: listA.length,
+        fails, skipped: false, siteDigest, sites: listA.length, beatSites,
         minSpacing: +minSpacing.toFixed(1), nominalMin, extent: +extent.toFixed(1),
         rockyFrac: +rockyFrac.toFixed(3), perKm2: +perKm2.toFixed(3), perKm2Rocky: +perKm2Rocky.toFixed(2),
         encPerHour: +encPerHour.toFixed(2),
@@ -6036,6 +6080,13 @@ const SCENARIOS = {
       };
     });
     if (r.skipped) { console.log(`CAVE-DENSITY pass=0 SKIPPED ${JSON.stringify(r.fails)}`); throw new Error('cave-density GATE FAILED'); }
+    // DEEPER cycle 12 — GATE A rides this leg as a sub-row (no 25th leg, no port churn).
+    {
+      const bf = (r.fails || []).filter((f) => String(f).startsWith('BEAT-SITES'));
+      for (const f of bf) console.log(`[cave-density] BEAT-SITES FAIL ${f.replace(/^BEAT-SITES /, '')}`);
+      console.log(`[cave-density] BEAT-SITES ${JSON.stringify(r.beatSites || {})}`);
+      console.log(`BEAT-SITES pass=${bf.length === 0 ? 1 : 0} fails=${bf.length}`);
+    }
     const pass = r.fails.length === 0;
     console.log(`CAVE-DENSITY pass=${pass ? 1 : 0} digest=${r.siteDigest} sites=${r.sites} spacing=${r.minSpacing}m/${r.nominalMin}m extent=${r.extent}m rocky=${r.rockyFrac} perKm2=${r.perKm2} perKm2Rocky=${r.perKm2Rocky} encPerHour=${r.encPerHour} restoreMax=${r.restoreMax}m reentry=${r.firstDigest === r.secondDigest ? 1 : 0} bodies=${r.baseBodies}->${r.bodiesWith}->${r.endBodies} tor=${r.torMs}ms fin=${r.finMs}ms teardown=${r.teardownMs}ms holeRebuild=${r.holeRebuildMs}ms slice=${r.maxSliceMs}ms atomic=${r.maxAtomicMs}ms(${r.worstAtomicStage}) warm=${r.warmMs}ms/${r.warmFrames}f×${r.warms} progs=${r.progBefore}->${r.progAfter}(visibleFrame ${r.progsOnVisibleFrame}) frame=${r.worstFrameMs}ms(${r.worstFrameStage}) fails=${r.fails.length}`);
     console.log(`[cave-density] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
@@ -6700,6 +6751,207 @@ const SCENARIOS = {
         if (!lg.rows.length) fails.push(`light: ${kind} produced NO light-gate rows — the light teeth did not run (VACUOUS)`);
         else lightChecked++;
         per[kind].light = lg.data || null;
+      }
+
+      // ══ DEEPER cycle 12, GATE B — BEAT-BUILD ═══════════════════════════════════════════════
+      //    The dead explorer, proven on the built cave through the REAL paths. Rides `cave-kinds`
+      //    because it is the only leg that builds a warren by construction (`pool-fill` boots the
+      //    preloaded ORIGIN cave, which is canonical and by design never carries the beat).
+      //
+      //      1. It exists at its seed-pure anchor — skeleton, journal and cache all present.
+      //      2. It is seated on the REAL cave floor, proven by COLLIDER IDENTITY rather than by a
+      //         plausible number: the hit collider must belong to the cave's own rigid body. This is
+      //         the rule-9 idiom `skyfall-walk` and cycle 11's LANTERN-RT both use, and it is the
+      //         only thing separating "on the cave floor" from "on the terrain sheet 30m overhead".
+      //      3. It is READABLE through the shipped interaction path — real WASD under gravity, never
+      //         a teleport (the leviathan-walk lesson: that leg was once green on an unclimbable ramp
+      //         because its waypoints teleported). `placeJournal` does NOT register itself, so this
+      //         tooth is the one that catches a beat that is visible, correct and completely inert.
+      //      4. It GRANTS ONCE — empty it, save, read SAVE_VERSION out of the written JSON (a stray
+      //         bump reds this), reload, and the cache must not refill.
+      if (kind === 'warren') {
+        const bb = await page.evaluate(async () => {
+          const g = window.__game; const ctx = g.ctx;
+          const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+          const frames = async (n) => { for (let i = 0; i < n; i++) await raf(); };
+          const fails = []; const notes = {};
+          notes.stage = 'init';
+          const S = (n) => { notes.stage = n; };
+          try {
+            ctx.flags.paused = false; ctx.flags.thirdPerson = false;
+            S('resident');
+            const res = (ctx.caveStream ? ctx.caveStream.residents() : []).find((q) => q.cave && q.cave.beatAnchor);
+            if (!res) return { fails: ['no resident cave published a beatAnchor'], notes };
+            const ba = res.cave.beatAnchor;
+            const A = { x: ba.pos.x, y: ba.pos.y, z: ba.pos.z };
+            notes.key = res.key;
+
+            // ── 1. EXISTS (with vacuous guards — "green because nothing was tested" is the failure
+            //       mode cycles 5 and 8 both hit).
+            S('exists');
+            const near2 = (p, r) => Math.hypot(p.x - A.x, p.z - A.z) < r;
+            const journal = ctx.journals.list.find((j) => near2(j.pos, 2.0));
+            if (!journal) fails.push('no journal registered within 2m of the beat anchor — placeJournal does not self-register');
+            else if (journal.kind !== 'cave_explorer') fails.push(`journal kind is '${journal.kind}', expected 'cave_explorer'`);
+            const crate = ctx.lootContainers.list.find((c) => near2(c.pos, 2.5));
+            if (!crate) fails.push('no loot container within 2.5m of the beat anchor');
+            notes.cacheItems = crate ? crate.contents.length : 0;
+            if (crate && crate.contents.length === 0) fails.push('the cache spawned EMPTY — every grant assertion below would be vacuous');
+            let tableaus = 0;
+            ctx.three.scene.traverse((o) => { if (o.name === 'deadExplorer') tableaus++; });
+            notes.tableaus = tableaus;
+            if (tableaus !== 1) fails.push(`${tableaus} deadExplorer tableaus in the scene, expected exactly 1`);
+
+            // ── 2. SEATED ON REAL CAVE ROCK, BY COLLIDER IDENTITY.
+            S('floor-identity');
+            if (!res.cave.body) fails.push('the resident has no rigid body — collider identity cannot be asserted');
+            else {
+              const handles = new Set();
+              for (let i = 0; i < res.cave.body.numColliders(); i++) handles.add(res.cave.body.collider(i).handle);
+              const hit = g.castDown(A.x, A.z, A.y + 1.6, true);
+              if (!hit) fails.push('a downcast from above the beat anchor hit NOTHING');
+              else {
+                notes.anchorGap = +(A.y - hit.hitY).toFixed(3);
+                if (Math.abs(A.y - hit.hitY) > 0.05) fails.push(`the beat anchor is ${(A.y - hit.hitY).toFixed(3)}m off the real floor (>5cm)`);
+                if (!handles.has(hit.colliderHandle)) fails.push('the floor under the beat is NOT the cave body — it is the terrain sheet or another collider');
+              }
+            }
+
+            // ── 2b. NOTHING IN THE TABLEAU FLOATS. The permanent form of the defect this cycle
+            //    actually fixed: the anchor is exact only AT THE SEAT, and a rigid 2.4m arrangement
+            //    over displaced rock left the journal 8.8cm and the lantern 10.0cm in the air.
+            //    Measured per prop as LOWEST VERTEX vs the rock under its own footprint — an object's
+            //    origin is not its contact point (a tipped lantern rests on its cage), and the anchor
+            //    plane is not the prop.
+            //
+            //    ⚠ THIS TOOTH EXISTS BECAUSE THE ANCHOR TOOTH ABOVE HAS NO TEETH HERE. Seating the
+            //    anchor on the ANALYTIC plane instead of the real rock — the historical bug — was
+            //    red-proof-attempted and came back at 4.2cm on this seed, INSIDE the 5cm bar. So the
+            //    5cm anchor check passes on a build with the old bug in it; this per-prop check is
+            //    what actually holds the line, and it IS red-provable (10.0cm before the fix).
+            S('bedding');
+            {
+              const beat = ctx.three.scene.getObjectByName('deadExplorer');
+              const props = [];
+              if (beat) {
+                beat.updateMatrixWorld(true);
+                beat.traverse((o) => { if (o.userData && o.userData.beatProp) props.push([o.userData.beatProp, o]); });
+              }
+              if (journal) props.push(['journal', journal.mesh]);
+              if (crate) props.push(['crate', crate.mesh]);
+              if (!props.length) fails.push('BEDDING measured no props — the check would pass by testing nothing');
+              const gaps = {};
+              for (const [nm, o] of props) {
+                const bb = new g.THREE.Box3().setFromObject(o);
+                if (!isFinite(bb.min.y)) continue;
+                const cx2 = (bb.min.x + bb.max.x) / 2, cz2 = (bb.min.z + bb.max.z) / 2;
+                const h = g.castDown(cx2, cz2, bb.max.y + 1.6, true);
+                if (!h) { fails.push(`BEDDING no rock found under '${nm}'`); continue; }
+                const gap = bb.min.y - h.hitY;
+                gaps[nm] = +gap.toFixed(3);
+                if (gap > 0.05) fails.push(`BEDDING '${nm}' hangs ${gap.toFixed(3)}m above the rock (>5cm of daylight)`);
+              }
+              notes.bedding = gaps;
+            }
+
+            // ── 3. READABLE THROUGH THE REAL PATH. Walk with WASD under gravity to the journal.
+            //    Skipped (not thrown) when tooth 1 already found no journal: the absence is ALREADY
+            //    reported above, and a NPE here would bury it.
+            if (journal) {
+            S('walk');
+            const body = ctx.player.body.body;
+            const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;
+            const at = () => { const t = body.translation(); return { x: t.x, y: t.y, z: t.z }; };
+            const face = (dx, dz) => {
+              const cam = ctx.three.camera; const t = body.translation();
+              const L = Math.hypot(dx, dz) || 1;
+              cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+              cam.lookAt(t.x + dx / L, t.y + ctx.player.eyeOffset, t.z + dz / L);
+              cam.updateMatrixWorld(true);
+            };
+            // Start 3.5m off along the room-centre bearing (never inside the wall the body leans on).
+            const node = res.cave.probe.nodes.reduce((b, n) =>
+              (Math.hypot(n.x - A.x, n.z - A.z) < Math.hypot(b.x - A.x, b.z - A.z) ? n : b), res.cave.probe.nodes[0]);
+            let bx = node.x - A.x, bz = node.z - A.z;
+            const bl = Math.hypot(bx, bz) || 1; bx /= bl; bz /= bl;
+            const sx = A.x + bx * 3.5, sz = A.z + bz * 3.5;
+            const sh = g.castDown(sx, sz, A.y + 3, true);
+            body.setTranslation({ x: sx, y: (sh ? sh.hitY : A.y) + CAP + 0.2, z: sz }, true);
+            body.setLinvel({ x: 0, y: 0, z: 0 }, true); ctx.player.velocityY = 0;
+            await frames(30);
+            const startD = Math.hypot(at().x - journal.pos.x, at().z - journal.pos.z);
+            ctx.input.keys['KeyW'] = true;
+            let best = Infinity, stall = 0;
+            for (let i = 0; i < 420; i++) {
+              const p = at();
+              const dx = journal.pos.x - p.x, dz = journal.pos.z - p.z;
+              const d = Math.hypot(dx, dz);
+              face(dx, dz);
+              await raf();
+              if (d < 1.6) break;
+              if (d < best - 0.03) { best = d; stall = 0; } else if (++stall > 150) break;
+            }
+            ctx.input.keys['KeyW'] = false;
+            await frames(6);
+            const endP = at();
+            notes.walk = { startD: +startD.toFixed(2), endD: +Math.hypot(endP.x - journal.pos.x, endP.z - journal.pos.z).toFixed(2) };
+            if (!(startD > 2.0)) fails.push(`the walk started ${startD.toFixed(2)}m from the journal — too close to prove anything`);
+
+            // Aim at the book and read the SHIPPED hover state.
+            S('hover');
+            const cam = ctx.three.camera; const t = body.translation();
+            cam.position.set(t.x, t.y + ctx.player.eyeOffset, t.z);
+            cam.lookAt(journal.pos.x, journal.pos.y + 0.05, journal.pos.z);
+            cam.updateMatrixWorld(true);
+            await frames(4);
+            const hov = ctx.inventory.hover;
+            notes.hover = hov ? { type: hov.type, d: +hov.distance.toFixed(2) } : null;
+            if (!hov || hov.type !== 'read') fails.push(`no 'read' hover on the journal after walking to it (got ${hov ? hov.type : 'null'}) — the prop is inert`);
+
+            S('read');
+            const before = ctx.inventory.journalReadKinds.has('cave_explorer');
+            // `ctx.input.pressed` (the EDGE set), never `ctx.input.keys` — `updateInteraction` reads
+            // the edge, and `endInputFrame` clears it every frame, so a held key is not a press.
+            ctx.input.pressed.add('KeyE'); await frames(2); await frames(6);
+            const open = g.isJournalPanelOpen ? g.isJournalPanelOpen() : null;
+            notes.panelOpen = open; notes.readBefore = before;
+            if (open === false) fails.push('pressing E on the journal did not open the journal panel');
+            if (!ctx.inventory.journalReadKinds.has('cave_explorer')) fails.push("reading the journal did not add 'cave_explorer' to journalReadKinds");
+            if (g.closeJournalPanel) g.closeJournalPanel();
+            await frames(4);
+            }
+
+            // ── 4. GRANTS ONCE. Empty it, save, reload, and it must not refill.
+            S('grant');
+            if (crate) {
+              crate.contents.length = 0; crate.opened = true;
+              const saved = g.saveGame ? g.saveGame() : null;
+              const raw = window.localStorage.getItem('dustfall.save.v1');
+              let ver = null;
+              try { ver = JSON.parse(raw).version; } catch (e) { ver = `unparseable (${String(e && e.message)})`; }
+              notes.saveVersion = ver;
+              notes.saved = !!saved;
+              if (ver !== 18) fails.push(`SAVE_VERSION in the written save is ${ver}, expected 18 — cycle 12 must not bump it`);
+              const rec = (JSON.parse(raw).caveBeats || []).find((b) => b.key === res.key);
+              notes.beatRecord = rec ? { looted: rec.looted, left: (rec.contents || []).length } : null;
+              if (!rec) fails.push('the emptied cache was NOT recorded in save.caveBeats — it would refill on re-entry');
+              else if (!rec.looted) fails.push('the emptied cache was recorded as not looted');
+              const inArr = (JSON.parse(raw).lootContainers || []).some((c) => c.id === crate.id);
+              if (inArr) fails.push('the beat container rode the id-keyed lootContainers array — its runtime id is load-order dependent (D292)');
+            }
+            return { fails, notes };
+          } catch (e) {
+            // APPEND, never replace. The first red-proof of this gate threw at the walk stage and the
+            // old `return { fails: [msg] }` discarded the two findings already collected — including
+            // the one that explained the throw. A gate that loses what it already knew when it trips
+            // is a gate that makes the next session bisect.
+            fails.push(`threw at stage '${notes.stage}': ${String((e && e.message) || e)}`);
+            return { fails, notes };
+          }
+        }).catch((e) => ({ fails: [`BEAT-BUILD harness threw: ${String((e && e.message) || e)}`], notes: {} }));
+        for (const f of (bb.fails || [])) { fails.push(`BEAT-BUILD ${f}`); console.log(`[cave-kinds] BEAT-BUILD FAIL ${f}`); }
+        console.log(`[cave-kinds] BEAT-BUILD ${JSON.stringify(bb.notes || {})}`);
+        console.log(`BEAT-BUILD pass=${(bb.fails || []).length === 0 ? 1 : 0} fails=${(bb.fails || []).length}`);
       }
 
       // ── THE SCRAP TEARDOWN LEG (warren only). ────────────────────────────────────────────

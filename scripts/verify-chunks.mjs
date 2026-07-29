@@ -333,14 +333,24 @@ for (const seed of DET_SEEDS) {
   leg({
     name: `cave-density-${seed}`, group: 'cave-density', scenario: 'cave-density', seed, timeout: 600000, solo: true, est: 5,
     re: /CAVE-DENSITY pass=(\d) digest=(\S+) sites=(\d+) spacing=([\d.]+)m\/(\d+)m extent=([\d.]+)m rocky=([\d.]+) perKm2=([\d.]+) perKm2Rocky=([\d.]+) encPerHour=([\d.]+) restoreMax=([\d.]+)m reentry=(\d) bodies=(\d+)->(\d+)->(\d+) tor=([\d.]+)ms fin=([\d.]+)ms teardown=([\d.]+)ms holeRebuild=([\d.]+)ms slice=([\d.]+)ms atomic=([\d.]+)ms\(([\w:-]+)\) warm=([\d.]+)ms\/(\d+)f×(\d+) progs=(\d+)->(\d+)\(visibleFrame (\d+)\) frame=([\d.]+)ms\(([\w:-]+)\) fails=(\d+)/,
-    row(m) {
+    row(m, out) {
       const ok = m[1] === '1';
-      return {
-        ok, data: { digest: m[2] },
-        rows: [`cave-density seed ${seed}: ${m[3]} sites, spacing ${m[4]}m (grid ${m[5]}m, cave extent ${m[6]}m), rocky ${m[7]}, ${m[8]}/km² world = ${m[9]}/km² rocky ≈ ${m[10]} per travel-hour, restore Δ${m[11]}m, re-entry ${m[12] === '1' ? 'bit-identical' : 'DRIFTED'}, bodies ${m[13]}→${m[14]}→${m[15]}, tor ${m[16]}ms / slice ${m[20]}ms / atomic ${m[21]}ms (${m[22]}) / finalize ${m[17]}ms / teardown ${m[18]}ms / hole ${m[19]}ms, shader warm ${m[23]}ms + ${m[24]}f wait ×${m[25]} (programs ${m[26]}→${m[27]}, ${m[28]} on the visible frame), worst frame ${m[29]}ms (${m[30]}), ${m[31]} fails  ${ok ? 'OK' : '*** FAIL ***'}`],
-      };
+      const rows = [`cave-density seed ${seed}: ${m[3]} sites, spacing ${m[4]}m (grid ${m[5]}m, cave extent ${m[6]}m), rocky ${m[7]}, ${m[8]}/km² world = ${m[9]}/km² rocky ≈ ${m[10]} per travel-hour, restore Δ${m[11]}m, re-entry ${m[12] === '1' ? 'bit-identical' : 'DRIFTED'}, bodies ${m[13]}→${m[14]}→${m[15]}, tor ${m[16]}ms / slice ${m[20]}ms / atomic ${m[21]}ms (${m[22]}) / finalize ${m[17]}ms / teardown ${m[18]}ms / hole ${m[19]}ms, shader warm ${m[23]}ms + ${m[24]}f wait ×${m[25]} (programs ${m[26]}→${m[27]}, ${m[28]} on the visible frame), worst frame ${m[29]}ms (${m[30]}), ${m[31]} fails  ${ok ? 'OK' : '*** FAIL ***'}`];
+      // ── DEEPER cycle 12 — GATE A rides this leg (no 25th leg, no port churn). Pure descriptor
+      //    math over hundreds of sites: which caves carry the dead explorer, that the predicate is
+      //    seed-pure, that canonical NEVER carries it (the machine form of "the origin-parity
+      //    digests cannot move"), and the MEASURED nearest-beat distance.
+      const bs = out.match(/BEAT-SITES pass=(\d) fails=(\d+)/);
+      const okB = !!bs && bs[1] === '1';
+      rows.push(bs
+        ? `beat-sites seed ${seed}: ${bs[2]} fails  ${okB ? 'OK' : '*** FAIL ***'}`
+        : `beat-sites seed ${seed}: NO PROBE LINE (the beat-site sweep never reported)  *** FAIL ***`);
+      return { ok: ok && okB, data: { digest: m[2] }, rows };
     },
-    noLineRow: `cave-density seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
+    noLineRow: [
+      `cave-density seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
+      `beat-sites seed ${seed}: NO PROBE LINE (cave-density never reported)  *** FAIL ***`,
+    ],
   });
 }
 
@@ -404,7 +414,7 @@ leg({
   //   row. Cycles 10 and 11 both did exactly that. Whenever the probe line grows a field, this
   //   pattern and the group indices below move with it.
   re: /CAVE-KINDS pass=(\d) seed=(\S+) kinds=(\d+) built=(\d+) marched=(\d+) voided=(\d+) lit=(\d+) sites=(\d+) strands=(\d+) escapes=(\d+) fails=(\d+)/,
-  row(m) {
+  row(m, out) {
     // Vacuous-pass guard, harness side: a green row off zero built / zero marched kinds would
     // launder "the kind table never produced a cave" as "every kind is fine". `lit` joins it for the
     // same reason cycle 10 added the teeth — a kind that skipped them proved nothing about light.
@@ -414,9 +424,23 @@ leg({
       return { ok: false, rows: [`cave-kinds: VACUOUS — kinds=${m[3]} built=${m[4]} marched=${m[5]} voided=${m[6]} lit=${m[7]} sites=${m[8]} (expected ≥4 / all built / all marched / all voided / all lit / ≥120 sites)  *** FAIL ***`] };
     }
     const ok = m[1] === '1';
-    return { ok, rows: [`cave-kinds seed 1337: ${m[3]} kinds built + marched + void-swept + light-tested, mix audited over ${m[8]} sites, strands ${m[9]}${m[9] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void escapes ${m[10]}, ${m[11]} fails  ${ok ? 'OK' : '*** FAIL ***'}`] };
+    const rows = [`cave-kinds seed 1337: ${m[3]} kinds built + marched + void-swept + light-tested, mix audited over ${m[8]} sites, strands ${m[9]}${m[9] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void escapes ${m[10]}, ${m[11]} fails  ${ok ? 'OK' : '*** FAIL ***'}`];
+    // ── DEEPER cycle 12 — GATE B rides this leg: it is the ONLY one that builds a warren by
+    //    construction (`pool-fill` boots the preloaded origin cave, which is canonical and by design
+    //    never carries the beat). Proves the beat exists at its seed-pure anchor, sits on the cave
+    //    body by COLLIDER IDENTITY, that nothing in the tableau floats, that it is readable through
+    //    the real WASD + [E] path, and that the cache grants ONCE at SAVE_VERSION 18.
+    const bb = out.match(/BEAT-BUILD pass=(\d) fails=(\d+)/);
+    const okB = !!bb && bb[1] === '1';
+    rows.push(bb
+      ? `beat-build: ${bb[2]} fails  ${okB ? 'OK' : '*** FAIL ***'}`
+      : 'beat-build: NO PROBE LINE (the dead-explorer probe never reported)  *** FAIL ***');
+    return { ok: ok && okB, rows };
   },
-  noLineRow: 'cave-kinds: NO PROBE LINE (boot failed after retry)  *** FAIL ***',
+  noLineRow: [
+    'cave-kinds: NO PROBE LINE (boot failed after retry)  *** FAIL ***',
+    'beat-build: NO PROBE LINE (cave-kinds never reported)  *** FAIL ***',
+  ],
 });
 
 // ── 14. THE SEE-THROUGH GATE (DEEPER cycle 1) — folded in from verify-cave-void.mjs, which used

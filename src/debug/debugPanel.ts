@@ -15,6 +15,7 @@ import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31)
 import { diurnalActivity01 } from '../enemies/diurnal.ts';   // M5 — __game.diurnalInfo
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
+import { isJournalPanelOpen, closeJournalPanel } from '../ui/journalPanel.ts';   // DEEPER cycle 12 — the BEAT-BUILD gate's read tooth
 import { updateStats, die, caveColdTarget, CAVE_COLD_FLOOR_OK } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe; C38 — triggerDeath
 import { spawnWormCrossing, updateWormHorizonCrossing, resetWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
@@ -135,6 +136,9 @@ interface DebugApi {
    *  UI). Companion to saveGame; used to verify save-schema migrations (e.g. the crafting-rework
    *  pre-v16 collectedItemTypes seed) headlessly. */
   loadGame: () => { ok: boolean; error?: string };
+  /** DEEPER cycle 12 — journal-panel state for the BEAT-BUILD gate (and a way to close it again). */
+  isJournalPanelOpen: () => boolean;
+  closeJournalPanel: () => void;
   /** Escape-pod SAVE/LOAD — smoke the enterable-pod persistence round-trip headlessly:
    *  run the intro to step-out (unify the ONE walk-in pod), mutate its salvage/chute state, SAVE,
    *  simulate a fresh-boot teardown (disposePodScene → the pod is gone, PROVING the bug), then run
@@ -585,6 +589,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     tickChute: (dt, wind, elapsed, dirX, dirZ) => advanceChuteDbg(dt, wind, elapsed, dirX, dirZ),
     saveGame: () => saveGameState(ctx),
     loadGame: () => loadGameState(ctx),
+    // DEEPER cycle 12 — the BEAT-BUILD gate reads the journal panel's REAL state after driving E
+    // through the shipped interaction path, and must be able to close it again: an open modal
+    // leaves the world paused, and the very next leg asserts a cave gets evicted over real frames.
+    isJournalPanelOpen: () => isJournalPanelOpen(),
+    closeJournalPanel: () => closeJournalPanel(),
     smokePodTutorial: () => smokePodTutorial(ctx),
     smokeExposureConstant: () => smokeExposureConstant(ctx),
     probeEyeInCabin: (eye) => probeEyeInCabin(eye),
