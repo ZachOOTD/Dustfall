@@ -107,6 +107,11 @@ function makeActionsSection(): HTMLDivElement {
     ['flooded', () => { g()?.gotoCaveKind('flooded'); }],
     ['shaft', () => { g()?.gotoCaveKind('shaft'); }],
     ['canonical', () => { g()?.gotoCaveKind('canonical'); }],
+    // DEEPER cycle-12 walk-test — the dead explorer. Deliberately an ALIAS of the warren button
+    // rather than new machinery: every warren carries the beat, so "nearest warren" already IS
+    // "nearest dead explorer". It exists under its own name so reviewing the beat does not require
+    // knowing which kind hosts it — or walking the ~1.3km to the nearest one.
+    ['dead explorer', () => { g()?.gotoCaveKind('warren'); }],
     // DEEPER cycle-11 walk-test — drop a breadcrumb trail through the REAL deploy path, so the
     // "can I find my way back?" read can be felt in one click instead of six crafts.
     ['lantern trail', () => {

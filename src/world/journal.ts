@@ -26,7 +26,8 @@ export type JournalKind =
   | 'satellite_dish'
   | 'crashed_hull'
   | 'engine_block'
-  | 'crash_log';   // ACBE (D1) — a crashed ship's recovered black-box; PROCEDURAL per-instance text
+  | 'crash_log'    // ACBE (D1) — a crashed ship's recovered black-box; PROCEDURAL per-instance text
+  | 'cave_explorer';   // DEEPER cycle 12 — the dead explorer's survey notebook, underground (warren caves)
 
 /** A rendered lore document (journalPanel.ts). Flagship `kind`s map to a fixed one, but a
  *  per-instance `content` on the Journal (e.g. a procedural crash black-box) overrides it. */

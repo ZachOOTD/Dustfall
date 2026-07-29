@@ -133,8 +133,12 @@ export interface CaveStreamPerf {
  *  only be installed once `ctx` exists — a single slot would have meant one closure spanning both
  *  moments, i.e. a boot-order landmine the day a canonical cave gets its first scrap. */
 export interface CaveResidentSink {
-  attach(cave: SpawnedCave): void;
-  detach(cave: SpawnedCave): void;
+  /** DEEPER cycle 12 added the `resident` argument. Content that PERSISTS needs the descriptor key
+   *  (`resident.key`), because a `SpawnedCave` is a runtime object whose identity dies with its
+   *  eviction — keying persistence off it is the D292 trap. Existing sinks that only take `cave`
+   *  still satisfy this signature unchanged. */
+  attach(cave: SpawnedCave, resident: CaveResident): void;
+  detach(cave: SpawnedCave, resident: CaveResident): void;
 }
 
 export interface CaveStream {
@@ -272,14 +276,14 @@ export function createCaveStream(
       entrance, holeKey, site,
     };
     list.push(r);
-    for (const s of sinks) s.attach(cave);   // publish this cave's pools (c6) + scrap (c9)
+    for (const s of sinks) s.attach(cave, r);   // publish this cave's pools (c6) + scrap (c9) + the beat (c12)
     return r;
   };
 
   /** Release a resident: detach its pool sources, then tear down hole → entrance → interior. */
   const release = (r: CaveResident): void => {
     const t0 = performance.now();
-    for (const s of sinks) s.detach(r.cave);
+    for (const s of sinks) s.detach(r.cave, r);
     disposeResident(scene, world, terrain, r);
     const i = list.indexOf(r);
     if (i >= 0) list.splice(i, 1);
@@ -535,7 +539,7 @@ export function createCaveStream(
     adopt: (key, _junction, seed, cave, pinned) => addResident(key, seed, cave, pinned),
     addResidentSink: (sink) => {
       sinks.push(sink);
-      for (const r of list) sink.attach(r.cave);   // catch up the caves that were resident already
+      for (const r of list) sink.attach(r.cave, r);   // catch up the caves that were resident already
     },
     update,
     residents: () => list.slice(),

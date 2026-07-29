@@ -2019,6 +2019,10 @@ export interface CaveGenProbe {
   fungiClusters: number;
   rubbleHeaps: number;
   scrapAnchors: number;
+  /** DEEPER cycle 12 — 1 if this cave published a dead-explorer anchor, else 0. The BEAT-BUILD gate's
+   *  vacuous-pass guard reads it: a warren that built with no beat is the "green because nothing was
+   *  tested" failure mode cycles 5 and 8 both hit, and it must be a FAIL, not a quiet zero. */
+  beatAnchors: number;
   /** The kind's drip-interval multiplier, published here so the soundscape can read the wet bias off
    *  the cave the player is standing in without importing the kind table into the audio layer. */
   kindDripScale: number;
@@ -2074,6 +2078,12 @@ export interface SpawnedCave {
    *  module has no `GameContext`, and the pickup lifecycle has to be owned by whoever can also
    *  despawn them when the cave is evicted — see the resident sink in caveStream/main. */
   scrapAnchors: THREE.Vector3[];
+  /** DEEPER cycle 12 — where THE DEAD EXPLORER sits, or null for every kind that does not carry the
+   *  beat (which is every kind but `warren`, and always `canonical`). World-space floor point on the
+   *  MEASURED rock plus the yaw that faces the figure back into the room. Same deliberate choice as
+   *  `scrapAnchors`: an anchor and not a mesh, because the props it implies need a `GameContext` to
+   *  register and — more importantly — need somebody who can DEspawn them when the cave is evicted. */
+  beatAnchor: { pos: THREE.Vector3; yaw: number } | null;
 }
 
 /** DEEPER cycle 5 — a RESUMABLE cave spawn. `step(budgetMs)` advances the build and returns true
@@ -2146,8 +2156,10 @@ export function startSpawnCave(
   // kind's cave, and canonical (density 0) draws from neither at all.
   let rrand!: () => number;                 // rubble placement RNG
   let scrand!: () => number;                // scrap-anchor RNG
+  let brand!: () => number;                 // DEEPER cycle 12 — dead-explorer bearing RNG (own stream)
   let rubbleHeaps = 0;
   let scrapAnchors: THREE.Vector3[] = [];
+  let beatAnchor: { pos: THREE.Vector3; yaw: number } | null = null;   // cycle 12 — the dead explorer
   let msMesh = 0;
   let msRockSamplers = 0;                   // CLOSE-OUT — the two real-rock sampler passes
   let out: SpawnedCave | null = null;
@@ -2169,12 +2181,13 @@ export function startSpawnCave(
     prand = makeRng((seed ^ 0x9007e4) >>> 0);                   // DEEPER cycle 6 — pool placement RNG (own stream)
     rrand = makeRng((seed ^ 0xb01de5) >>> 0);                   // DEEPER cycle 9 — rubble (own stream)
     scrand = makeRng((seed ^ 0x5c2a91) >>> 0);                  // DEEPER cycle 9 — scrap anchors (own stream)
+    brand = makeRng((seed ^ 0xbea712) >>> 0);                   // DEEPER cycle 12 — dead-explorer bearing (own stream)
 
     group = new THREE.Group();
     group.name = 'caveGen';
     _fungiWallTotal = 0; _fungiWallHidden = 0; _fungiWallCeiling = 0;   // CLOSE-OUT — wall-shelf anchor accounting
     meshes = []; decor = []; fungi = []; pools = [];
-    rubbleHeaps = 0; scrapAnchors = [];
+    rubbleHeaps = 0; scrapAnchors = []; beatAnchor = null;
 
     // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems and,
     // since cycle 6, of water pools — shared so both agree on where a mouth is).
@@ -2306,6 +2319,66 @@ export function startSpawnCave(
       }
     }
 
+    // DEEPER cycle 12 — THE DEAD EXPLORER'S ANCHOR. Positions only: the skeleton, the journal and
+    // the loot cache are all spawned by a RESIDENT SINK (see `SpawnedCave.beatAnchor` and the sink in
+    // main.ts), never here. Two reasons, and the first is the load-bearing one:
+    //
+    //   1. THE DIGEST. `caveDigest` hashes every vertex of `meshes.concat(decor)`, so ANY mesh added
+    //      here moves it — even at local origin. Anchors are `Vector3`s published AFTER the hash and
+    //      spawned outside this module, so the origin-parity digests cannot move no matter which cave
+    //      carries the beat. (Belt and braces: `canonical.deadExplorer` is false and the kind-table
+    //      assert holds it there, so the origin cave never carries it in the first place.)
+    //   2. `caveGen` has no `GameContext`, and the journal needs `ctx.journals.list` while the cache
+    //      needs `ctx.lootContainers.list` — and whoever registers those has to be able to DEspawn
+    //      them on eviction, which is the sink's whole job.
+    //
+    // WHERE: the deepest chamber that is neither the egg room (which already carries the objective
+    // and the deep cache — a second story beat there would compete with the one that is already
+    // there) nor the entrance hall (the composed hand-off frame, lit by real sky, and the one room
+    // every player crosses). Sorted by floorY and tie-broken by id, so it is a TOTAL ORDER with no
+    // RNG in it at all. The fiction is then literal: they went as deep as they could.
+    if (kp.deadExplorer) {
+      const cands = graph.nodes
+        .filter((n) => n.kind !== 'egg' && n.kind !== 'entrance')
+        .sort((a, b) => (a.floorY - b.floorY) || (a.id - b.id));
+      const node = cands[0];
+      if (node) {
+        const mouthCos = Math.cos((Tuning.CAVE_SPELEO_MOUTH_CLEAR_DEG * Math.PI) / 180);
+        const mouthDirs = dirsByNode.get(node.id) ?? [];
+        // A bearing out of the room's centre that does not point down a corridor — the body must
+        // lean on real wall, not sit in a doorway. Same rejection idiom as the rubble/speleothem
+        // placers, same 24-attempt budget, its own RNG stream so adding this cycle moved not one
+        // mushroom of any other kind's cave (D208/D290).
+        let ux = 1, uz = 0, ok = false;
+        for (let a = 0; a < 24; a++) {
+          const ang = brand() * Math.PI * 2;
+          const cx = Math.cos(ang), cz = Math.sin(ang);
+          let blocked = false;
+          for (const md of mouthDirs) if (cx * md.x + cz * md.z > mouthCos) { blocked = true; break; }
+          if (blocked) continue;
+          ux = cx; uz = cz; ok = true; break;
+        }
+        if (ok) {
+          // MEASURE THE ROCK, do not assume the ellipsoid. Cast out along the bearing at seated
+          // height and back off far enough that a ~0.9m-deep slumped figure leans on the wall
+          // instead of intersecting it. If the cast finds nothing (a clipped dome, a height where
+          // the room has already closed) fall back to a fraction of rx — which is the same guess the
+          // analytic placement used to make, but now it is the exception rather than the rule.
+          const castY = node.floorY + 0.6;
+          const hit = wallCast(node, castY, ux, uz, node.rx * 1.6 + 2.0);
+          const dist = hit
+            ? Math.max(0.35, hit.d - Tuning.CAVE_BEAT_WALL_BACKOFF)
+            : node.rx * Tuning.CAVE_BEAT_WALL_FRAC;
+          const bx = node.x + ux * dist, bz = node.z + uz * dist;
+          const by = rockFloor(bx, bz, node.floorY);
+          // The figure faces back INTO the room (the skeleton's own convention is +Z forward, away
+          // from the wall it leans on), so the player walking in meets it head-on rather than
+          // finding the back of a skull.
+          beatAnchor = { pos: new THREE.Vector3(bx, by, bz), yaw: Math.atan2(-ux, -uz) };
+        }
+      }
+    }
+
     // DEEPER cycle 7 — THE ARRIVAL CUE. `addFungi` deliberately skips the entrance chamber, so the
     // hand-off frame (step out of the crevice slot into the first room) had nothing lit in it at all
     // — the room is authored, but 2-3 stops under visibility, and the player's first look into the
@@ -2393,6 +2466,7 @@ export function startSpawnCave(
         depthMin: kp.gateDepthMin, depthMax: kp.gateDepthMax,
       },
       fungiClusters: fungi.length, rubbleHeaps, scrapAnchors: scrapAnchors.length,
+      beatAnchors: beatAnchor ? 1 : 0,
       fungiWallShelves: _fungiWallTotal, fungiWallHidden: _fungiWallHidden, fungiWallCeiling: _fungiWallCeiling,
       kindDripScale: kp.dripIntervalScale,
       eggId: graph.eggId, depthBelowSurface: graph.depthBelowSurface, triCount,
@@ -2428,7 +2502,7 @@ export function startSpawnCave(
     const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
     if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
 
-    out = { group, body, graph, probe, fungi, pools, eggDaisTop, lootAnchors, scrapAnchors };
+    out = { group, body, graph, probe, fungi, pools, eggDaisTop, lootAnchors, scrapAnchors, beatAnchor };
   };
 
   const step = (budgetMs: number): boolean => {

@@ -111,6 +111,25 @@ const CRASH_LOG_FALLBACK: JournalContent = {
   entries: [['—', 'the recorder is scorched through. nothing legible remains.']],
 };
 
+// DEEPER cycle 12 — the dead explorer underground. A salvager who went down a warren
+// and did not come back up. Written so each entry quietly teaches ONE true thing about
+// caves without ever instructing the player or addressing them: the cold that never
+// kills (cycle 11's clamped cave cold), the water that never runs out (cycle 6's pools),
+// and the light budget as the real clock (cycle 11's lanterns). No cause of death is
+// stated, nobody is named, nothing is addressed to the reader — the arrangement of the
+// body tells the story and this is the reward for having read it.
+const CAVE_EXPLORER_CONTENT: JournalContent = {
+  title: 'SURVEY NOTEBOOK',
+  subtitle: 'left where they sat down',
+  entries: [
+    ['DAY ONE',  'rope fast at the mouth, forty feet down to the first floor. it is cold in here. not the kind that kills you — the kind that just never lets up. four days of oil. three days of work.'],
+    ['DAY TWO',  'standing water in the third room. black and flat and it does not move at all. drank it, filled both flasks, waited. fine. that is the only thing down here that is not running out.'],
+    ['DAY FOUR', 'lost a day. there is always another room past the one you are in, and the next one is always bigger. I keep saying I will turn back at the next one.'],
+    ['DAY SIX',  'last of the oil. been walking it dark with a hand on the wall, counting. forty steps from the water to the fallen roof. ninety from there to the slope. I know the way out. I just need the light for the last of it.'],
+    ['—',        'sat down to rest a while. the dark down here is not like night. night has a shape to it.'],
+  ],
+};
+
 const CONTENT_BY_KIND: Record<JournalKind, JournalContent> = {
   opening: OPENING_CONTENT,
   mega_ship: MEGA_SHIP_CONTENT,
@@ -119,6 +138,7 @@ const CONTENT_BY_KIND: Record<JournalKind, JournalContent> = {
   crashed_hull: CRASHED_HULL_CONTENT,
   engine_block: ENGINE_BLOCK_CONTENT,
   crash_log: CRASH_LOG_FALLBACK,
+  cave_explorer: CAVE_EXPLORER_CONTENT,
 };
 
 let _ctx: GameContext | null = null;

@@ -77,7 +77,10 @@ import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/san
 import { spawnSarlaccPit, updateSarlaccPit } from './enemies/sarlaccPit.ts';
 import { spawnDeepCave, updateDeepCave, buildCompanionEgg, type CaveEgg } from './world/deepCave.ts';
 import { rollCaveCache } from './config/lootRegistry.ts';                 // UNDERWORLD cycle 3 — deep cave caches
-import { spawnLootContainerAt, type LootContainer } from './world/lootContainers.ts';
+import { spawnLootContainerAt, type LootContainer, type LootEntry } from './world/lootContainers.ts';
+import { buildDeadExplorer } from './world/deadExplorer.ts';   // DEEPER cycle 12 — the dead-explorer tableau
+import { placeJournal } from './world/journal.ts';
+import type { ItemId } from './inventory/types.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
@@ -612,6 +615,7 @@ const ctx: GameContext = {
   sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
   deepCave,                          // M8 ⑨ — legacy funnel deep cave (null when the generated cave is on)
   caveFungi: { list: caveFungiList },  // UNDERWORLD cycle 3 — harvestable fungi (empty with the flag off)
+  caveBeats: new Map<string, LootEntry[]>(),  // DEEPER cycle 12 — what is left in each opened story cache
   caveStream,                        // DEEPER cycle 5 (D-4) — cave build budget + resident cap (null with the cave flag off)
   caveAtmosphere,                    // UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor (null with FEATURES.caveTest off)
   egg: caveSite ? caveEgg : (deepCave ? deepCave.egg : null),   // M8 ⑩ — egg from the generated cave dais (flag on) or the legacy funnel (flag off); reconciled in handoffToGame
@@ -821,6 +825,95 @@ if (caveStream) {
       // taking one flake and walking away. Membership is the guard.
       for (const p of spawned) if (ctx.pickups.list.indexOf(p) >= 0) despawnPickup(ctx, p);
       caveScrap.delete(cave);
+    },
+  });
+  // ── DEEPER cycle 12 — THE DEAD EXPLORER. Zach: "there should be a journal and a skeleton in one
+  //    of the caves with some loot." Every warren cave carries it (`caveKinds.deadExplorer`), which
+  //    is why it is a SINK and not a caveGen mesh: the journal needs `ctx.journals.list`, the cache
+  //    needs `ctx.lootContainers.list`, and — the reason that actually decides it — whoever registers
+  //    those has to be able to DEspawn them when the cave is evicted. A journal mesh left in the
+  //    raycast union after its cave's geometry is disposed means reading a book inside solid rock in
+  //    a cave that no longer exists (R2).
+  //
+  //    Nothing here can move a cave digest: `caveDigest` hashes `meshes.concat(decor)` inside
+  //    `doFinalize`, which has already run by the time any sink attaches, and canonical never carries
+  //    the beat anyway.
+  const caveBeatProps = new Map<SpawnedCave, {
+    group: THREE.Group; journal: Journal; container: LootContainer | null;
+  }>();
+  /** Teardown for one beat prop tree. GEOMETRY ONLY — every material in the beat is module-shared
+   *  on purpose (see deadExplorer.ts), which is the same contract `caveStream.disposeResident` runs
+   *  under. `sharedAsset` marks the cloned spent-lantern subtree, whose geometry belongs to a module
+   *  prototype: disposing it would blank the lantern in every warren streamed after this one. */
+  const disposeBeatSubtree = (root: THREE.Object3D): void => {
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.geometry && !o.userData.sharedAsset) m.geometry.dispose();
+    });
+  };
+  caveStream.addResidentSink({
+    attach: (cave, resident) => {
+      const anchor = cave.beatAnchor;
+      if (!anchor) return;
+      // Its own stream, seeded from the cave's own generation seed, so a re-streamed cave's tableau
+      // is identical on re-entry (D290) and nothing draws from a shared scatter stream (D208).
+      const rand = makeRng((cave.probe.seed ^ 0xbea713) >>> 0);
+      const de = buildDeadExplorer(rand);
+      de.group.position.copy(anchor.pos);
+      de.group.rotation.y = anchor.yaw;
+      three.scene.add(de.group);
+      // World-space anchors derived from the group's own transform, so the props and the tableau can
+      // never disagree about where the hand is.
+      de.group.updateMatrixWorld(true);
+      const journalPos = de.group.localToWorld(de.journalLocal.clone());
+      const cratePos = de.group.localToWorld(de.crateLocal.clone());
+
+      // ⚠ `placeJournal` TAGS and `scene.add`s but does NOT register itself. Forget the push and the
+      // prop is visible, correct and completely inert — a silent failure with no error. The
+      // BEAT-BUILD gate's readability tooth exists for exactly this line.
+      const journal = placeJournal(three.scene, journalPos, anchor.yaw + de.journalYaw, 'cave_explorer');
+      journalsList.push(journal);
+
+      // The cache. If the player has opened this one before, it comes back with exactly what they
+      // left in it (descriptor-keyed, so it survives eviction + re-streaming); if they emptied it,
+      // no crate spawns at all. Without this, re-entering refills a battery cache.
+      let container: LootContainer | null = null;
+      const remembered = ctx.caveBeats.get(resident.key);
+      const contents = remembered
+        ? remembered.map((e) => ({ ...e }))
+        : Tuning.CAVE_BEAT_CACHE.map((e) => ({ itemId: e.itemId as ItemId, count: e.count }));
+      if (contents.length > 0) {
+        container = spawnLootContainerAt(three.scene, cratePos, contents, rand);
+        if (remembered) container.opened = true;   // it stays visibly rifled once you have been in it
+        // The descriptor key travels WITH the container so `saveGame` can record an emptied cache
+        // even when the cave is still resident — the player can loot it and hit save without ever
+        // triggering the eviction path below.
+        container.mesh.userData.caveBeatKey = resident.key;
+        ctx.lootContainers.list.push(container);
+      }
+      caveBeatProps.set(cave, { group: de.group, journal, container });
+    },
+    detach: (cave, resident) => {
+      const p = caveBeatProps.get(cave);
+      if (!p) return;
+      // Record what is left BEFORE the container goes. Only if it was actually opened: a warren the
+      // player walked through without touching the crate must leave no trace in the save at all.
+      if (p.container?.opened) ctx.caveBeats.set(resident.key, p.container.contents.map((e) => ({ ...e })));
+      // Splice BOTH registries before the geometry goes (R2). Membership is the guard, exactly as it
+      // is for cave scrap below: the player may already have removed the container by emptying it.
+      const ji = journalsList.indexOf(p.journal);
+      if (ji >= 0) journalsList.splice(ji, 1);
+      three.scene.remove(p.journal.mesh);
+      disposeBeatSubtree(p.journal.mesh);
+      if (p.container) {
+        const ci = ctx.lootContainers.list.indexOf(p.container);
+        if (ci >= 0) ctx.lootContainers.list.splice(ci, 1);
+        three.scene.remove(p.container.mesh);
+        disposeBeatSubtree(p.container.mesh);
+      }
+      three.scene.remove(p.group);
+      disposeBeatSubtree(p.group);
+      caveBeatProps.delete(cave);
     },
   });
   caveStream.setSiteSource((x, z, radius) =>

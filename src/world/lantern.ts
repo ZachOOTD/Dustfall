@@ -252,6 +252,28 @@ function makeLanternVisual(): {
   return { group: g, globeMat };
 }
 
+/** DEEPER cycle 12 — a SPENT lantern as a pure decoration: the same salvaged-tech lantern the
+ *  player deploys, but dead. Built from the very same `makeLanternVisual()` so the dead explorer's
+ *  light is unmistakably the object the player carries — which is the whole reason the beat reads
+ *  without a word of text. The only difference is the core: the deployed lantern's globe is an
+ *  unlit-by-tone-mapping `MeshBasicMaterial` at the light colour, and here it is swapped for a cold
+ *  dead Lambert. No light is claimed from `ctx.lightPool` (this is scenery, not a light source —
+ *  "no free light underground" is the rule cycle 10 shipped), nothing is tagged interactable, and
+ *  no `Lantern` record is created, so it can never enter the pack-up or save paths. */
+export function makeSpentLanternProp(): THREE.Group {
+  const { group, globeMat } = makeLanternVisual();
+  // The core has burned out: a dull dark glass, tone-mapped like ordinary matter so it takes the
+  // player's torch instead of emitting. Disposing the basic material keeps the prop from carrying a
+  // live GPU program it never uses.
+  const dead = new THREE.MeshLambertMaterial({ color: 0x1c1a17, flatShading: true });
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.material === globeMat) m.material = dead;
+  });
+  globeMat.dispose();
+  return group;
+}
+
 /** DEEPER cycle 11 (G2) — the deploy result. `deployLantern` used to return `Lantern | null` and
  *  items.ts printed one generic sentence for every failure, which is why the two worst failures were
  *  invisible: a lantern placed underground silently teleported into rock, and a lantern placed with

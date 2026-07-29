@@ -1292,6 +1292,46 @@ export const Tuning = {
     shaft: 1.10,                       // a collapsed shaft breathes
   } as Record<string, number>,
 
+  // ── DEEPER cycle 12 — THE DEAD EXPLORER (deadExplorer.ts, caveGen anchor, the main.ts sink).
+  //    Zach: *"there should be a journal and a skeleton in one of the caves with some loot."*
+  //    Carried by every `warren` cave and no other kind — the warren already ships the dressing of
+  //    somebody having worked down there (scrap caches, salvage plates, rubble), so this gives that
+  //    dressing its subject. Canonical NEVER carries it, which is what keeps the origin-parity
+  //    digests (d8f15005 / 99e0015b) untouched BY CONSTRUCTION rather than by re-baselining.
+  //    The whole beat is spawned from a resident sink, so none of its meshes can enter caveGen's
+  //    hashed mesh set either (the digest is taken inside doFinalize, before any sink attaches).
+  // The body is seated against the MEASURED wall (`makeWallCaster`), not at a fraction of the
+  // analytic ellipsoid — the close-out lesson that "a salvage plate seated on the plane hung a metre
+  // over the sand." The fraction below is only the fallback for a bearing whose cast finds no rock.
+  // It is 0.80 and NOT 0.72 on purpose: 0.72·rx is exactly the ring of the march gate's own floor
+  // grid (`addRubble`/`addSpeleothems` both keep clear of it), so 0.72 would have parked the tableau
+  // on the walk line — harmless for collision (the beat has no collider at all) but wrong for the
+  // staging, which is "out by the wall, off the path."
+  CAVE_BEAT_WALL_FRAC: 0.80,           // × chamber rx — FALLBACK seat when the wall cast misses
+  CAVE_BEAT_WALL_BACKOFF: 0.55,        // m — pulled back off the measured wall so the slumped figure leans against rock instead of intersecting it (the tableau is ~0.9m deep)
+  CAVE_BEAT_JOURNAL_FWD: 0.62,         // m — journal along the skeleton's +Z (its authored right-hand reach is ~0.65; this lands it at the fingertips)
+  CAVE_BEAT_JOURNAL_SIDE: 0.10,        // m — journal offset to the reaching (right) side, so the hand is beside the book and not on top of it
+  CAVE_BEAT_CRATE_SIDE: 0.85,          // m — the loot crate beside the body, on the +X side
+  CAVE_BEAT_CRATE_FWD: 0.18,           // m — …and slightly forward, so it reads as spilled beside them rather than stacked behind
+  CAVE_BEAT_LANTERN_FWD: 0.78,         // m — the spent lantern on its side just past the reaching hand: the light that ran out
+  CAVE_BEAT_LANTERN_SIDE: -0.26,       // m — on the far side of the journal, so the two props do not overlap at torch range
+  CAVE_BEAT_CANTEEN_SIDE: -0.42,       // m — the fallen canteen at the hip
+  CAVE_BEAT_CANTEEN_FWD: 0.05,
+  // ⚑ FLAGGED FOR ZACH (cycle-12 plan Q4) — the cache contents. HAND-AUTHORED and passed straight
+  //   to `spawnLootContainerAt`: this touches NO lootRegistry entry, NO drop rate and NO recipe, so
+  //   `verify:loot`'s 1000-roll digest provably cannot move. The `lantern_kit` is the story-critical
+  //   one (it hands the player cycle 11's cave tool at the exact moment they learn why it matters);
+  //   the `battery` is the one to cut if the economy should be leaner. Edit this array and nothing
+  //   else moves — no gate, no digest, no save version.
+  CAVE_BEAT_CACHE: [
+    { itemId: 'lantern_kit', count: 1 },
+    { itemId: 'metal_pipe', count: 2 },
+    { itemId: 'wiring', count: 2 },
+    { itemId: 'battery', count: 1 },
+    { itemId: 'scrap', count: 4 },
+    { itemId: 'cloth', count: 2 },
+  ] as Array<{ itemId: string; count: number }>,
+
   // ── DEEPER cycle 5 — CAVE BUILD BUDGET + the RESIDENT CAP (caveStream.ts; walk-test D-4:
   //    "preload the caves on the starting loading screen so it doesn't slow down the game as much
   //    when it loads in"). The origin cave is built SYNCHRONOUSLY at boot behind the loading screen

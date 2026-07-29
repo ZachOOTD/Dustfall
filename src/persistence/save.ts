@@ -314,6 +314,20 @@ export interface SaveV1 {
     rotationY: number;
   }>;
 
+  /** DEEPER cycle 12 — which cave STORY BEATS have been looted. Keyed on the cave's DESCRIPTOR key
+   *  (`cave:<gx>,<gz>`), never on a runtime id: streamed caves are built and torn down constantly, so
+   *  a runtime id means "the same cave" only until it is evicted (the D292 trap).
+   *
+   *  Why this exists at all: streamed-cave pickups are `transient: true` by D299 — taken-state does
+   *  not persist for a cave that streams out. For six ambient scrap flakes that is an accepted deal.
+   *  For a ONE-TIME authored cache holding a battery it is an infinite farm: walk out, walk back in,
+   *  it is full again. This array is the smallest correct fix, and deliberately NOT a general cave-diff
+   *  system.
+   *
+   *  Additive + optional ⇒ SAVE_VERSION stays 18 and there is no migration: an older save simply
+   *  arrives with the field absent, which reads as "nothing looted yet" — the correct default. */
+  caveBeats?: Array<{ key: string; looted: boolean; contents: LootEntry[] }>;
+
   /** Session AAC — placed lockers + their contents. Pre-v8 saves
    *  arrive empty. Contents persisted by-value so a chest's stored
    *  items survive save/load. */
@@ -648,6 +662,23 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         rotationY: l.rotationY,
         contents: l.contents.map((e) => ({ ...e })),
       })),
+      // DEEPER cycle 12 — the dead explorer's cache, once emptied, stays empty. Descriptor-keyed
+      // (see the field doc): only LOOTED beats are written, so the array is empty in almost every
+      // save and never grows with the size of the world.
+      //
+      // The sweep is not redundant with the sink's eviction-time record, it is the COMMON case: the
+      // ordinary way to loot this cache is to walk in, empty it, and save while still standing in
+      // the cave — no eviction has happened yet, so at that moment the set does not know. Recording
+      // it at BOTH boundaries is what makes "grants once" true whichever way the player leaves.
+      caveBeats: (() => {
+        for (const c of ctx.lootContainers.list) {
+          const key = c.mesh.userData.caveBeatKey as string | undefined;
+          if (key && c.opened) ctx.caveBeats.set(key, c.contents.map((e) => ({ ...e })));
+        }
+        return Array.from(ctx.caveBeats, ([key, contents]) => ({
+          key, looted: contents.length === 0, contents,
+        }));
+      })(),
       companion: ctx.companion ? {
         pos: { x: ctx.companion.pos.x, y: ctx.companion.pos.y, z: ctx.companion.pos.z },
         state: ctx.companion.state,
@@ -1180,6 +1211,18 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       if (saved.id > maxId) maxId = saved.id;
     }
     if (maxId > 0) setNextBedrollId(maxId);
+  }
+
+  // DEEPER cycle 12 — restore which story-beat caches have been emptied. Absent on every pre-cycle-12
+  // save (the field is optional and SAVE_VERSION did not move), which reads correctly as "none
+  // looted." Restored BEFORE the cave sinks re-attach so a re-streamed beat cave consults the truth
+  // rather than briefly re-spawning a cache the player already took.
+  ctx.caveBeats.clear();
+  if (save.caveBeats) {
+    // `contents` is authoritative; `looted` is the human-readable summary of it. Tolerate an absent
+    // array (a hand-edited or future-shape save) as "emptied", which is the conservative reading —
+    // it can never hand the player a cache back.
+    for (const b of save.caveBeats) ctx.caveBeats.set(b.key, (b.contents ?? []).map((e) => ({ ...e })));
   }
 
   for (const l of ctx.lanterns.list) {

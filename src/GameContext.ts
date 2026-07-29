@@ -27,7 +27,7 @@ import type { Lizard } from './enemies/lizard.ts';
 import type { Shrew } from './enemies/shrew.ts';
 import type { Vulture } from './enemies/vulture.ts';
 import type { SandWorm } from './enemies/sandWorm.ts';
-import type { LootContainer } from './world/lootContainers.ts';
+import type { LootContainer, LootEntry } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
 import type { Sled } from './world/sled.ts';
@@ -188,6 +188,18 @@ export interface GameContext {
   deepCave: DeepCave | null;
   /** UNDERWORLD cycle 3 — harvestable cave fungi clusters (E → alien_fruit). Empty with the flag off. */
   caveFungi: { list: CaveFungiCluster[] };
+  /** DEEPER cycle 12 — what is LEFT in each cave story-beat cache the player has opened, keyed by the
+   *  cave's DESCRIPTOR key (`cave:<gx>,<gz>`) and not by a runtime id, because a streamed cave's
+   *  runtime identity dies with its eviction (D292). Absent key = never opened = spawns with its
+   *  authored contents. Without this the dead explorer's one-time cache refills every time the player
+   *  re-enters the cave, since streamed-cave pickups are transient by D299.
+   *
+   *  Remaining CONTENTS rather than a `looted` boolean, which is a deliberate strengthening of the
+   *  cycle-12 plan's Q6: a boolean only closes the exploit for a player who empties the crate in one
+   *  visit. Take just the battery and walk out, and a boolean keyed on "emptied" would refill the
+   *  whole cache — the exact farm the persistence exists to prevent. Only OPENED caches are recorded,
+   *  so the map stays empty for every warren the player merely walks past. */
+  caveBeats: Map<string, LootEntry[]>;
   /** UNDERWORLD cycle 2 — the generated cave's darkness/light model + audio-inside factor.
    *  Null unless FEATURES.caveTest is on (the generated cave was spawned). */
   caveAtmosphere: CaveAtmosphere | null;

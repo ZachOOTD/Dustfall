@@ -16,7 +16,7 @@
 // ── THE CANONICAL CAVE IS NOT A KIND ────────────────────────────────────────────────────────────
 // `canonical` is the parameter set that IS `tuning.ts` — every field reads straight off `Tuning`,
 // with an EMPTY override object. That is not decoration: the origin/egg cave builds with it, and the
-// origin-parity digests (108af91c / ff8309a8) are a hard campaign gate. If a canonical field ever
+// origin-parity digests (d8f15005 / 99e0015b) are a hard campaign gate. If a canonical field ever
 // stops being a literal Tuning read, the origin cave moves and the gate goes red — which is exactly
 // the alarm we want. `canonical` also stays in the weighted MIX, so the cave a player already knows
 // keeps appearing in the world beside the four new reads.
@@ -171,6 +171,14 @@ export interface CaveKindParams {
    *  object per room is the visual signature of scatter, not of people. The same six as three
    *  two-flake caches dumped against a wall read as somebody having worked here. */
   scrapClusterSize: number;
+  /** DEEPER cycle 12 — does this kind carry THE DEAD EXPLORER (skeleton + journal + loot cache)?
+   *  A per-kind flag rather than a `kind === 'warren'` test scattered across the codebase, because
+   *  the gate has to read the same predicate the game does or it is asserting its own opinion.
+   *  `canonical` is false and `assertCaveKindTable` holds it there: THAT is what makes "the origin
+   *  cave never carries the beat, so the origin-parity digests cannot move" a machine fact instead
+   *  of a promise. The beat itself is spawned from a resident sink and never enters `meshes`/`decor`,
+   *  so it could not move a digest even if a kind flipped this on. */
+  deadExplorer: boolean;
 
   // ── water (cycle 6) ──
   poolChambersMin: number;
@@ -246,6 +254,7 @@ export function canonicalCaveParams(): CaveKindParams {
     salvagePlates: 0,
     scrapPerCave: 0,
     scrapClusterSize: 1,
+    deadExplorer: false,                 // cycle 12 — and machine-held there (origin parity)
     poolChambersMin: T.CAVE_POOL_CHAMBERS_MIN,
     poolChambersMax: T.CAVE_POOL_CHAMBERS_MAX,
     poolRFrac: T.CAVE_POOL_R_FRAC,
@@ -314,6 +323,12 @@ export const CAVE_KIND_OVERRIDES: Record<CaveKind, Partial<CaveKindParams>> = {
     fungiClusterMin: 1, fungiClusterMax: 2,
     fungiWallChance: 0.15,
     scrapPerCave: 6,                     // ⚑ FLAGGED FOR ZACH — the only loot number this cycle sets
+    // DEEPER cycle 12 — THE WARREN IS THE KIND THAT CARRIES THE DEAD EXPLORER. It is already
+    // dressed as this story: its own design note below calls it "a tight salvage warren… there is
+    // man-made SCRAP on the floor", and the dressing's stated intent is "the grammar of somebody
+    // having stopped and worked there." Cycle 12 gives that somebody a body. Zach's brief:
+    // "there should be a journal and a skeleton in one of the caves with some loot."
+    deadExplorer: true,
     scrapClusterSize: 2,                 // …arranged as THREE CACHES OF TWO against the walls, not
                                          //   six lone flakes in six rooms (see `scrapClusterSize`)
     rubblePerChamber: 1, rubbleScale: 0.8, rubbleHeight: 1.0, salvagePlates: 2, // one small spill per
@@ -470,6 +485,15 @@ export function caveKindParams(kind: CaveKind): CaveKindParams {
   return { ...canonicalCaveParams(), ...CAVE_KIND_OVERRIDES[kind] };
 }
 
+/** DEEPER cycle 12 — does a cave of this kind carry THE DEAD EXPLORER? Pure, total, and cheap: a
+ *  descriptor sweep can ask it over hundreds of sites without building a single cave, which is what
+ *  lets the BEAT-SITES gate prove seed-purity and origin parity for ~nothing. THE GAME AND THE GATE
+ *  MUST BOTH CALL THIS — a gate that re-implements the predicate is asserting its own opinion, and
+ *  this campaign has already paid for that class of mistake. */
+export function caveKindCarriesBeat(kind: CaveKind): boolean {
+  return caveKindParams(kind).deadExplorer;
+}
+
 /** The weight table, normalized. Weights live in `tuning.ts` because they are the dial Zach turns. */
 export function caveKindWeights(): Record<CaveKind, number> {
   const w = Tuning.CAVE_KIND_WEIGHTS as Record<CaveKind, number>;
@@ -542,6 +566,12 @@ export function assertCaveKindTable(): void {
     if (p.poolChambersMin < 1) at('poolChambersMin < 1 — every cave has water somewhere (cycle 6)');
     if (p.poolCenterFracMin >= p.poolCenterFracMax) at('poolCenterFracMin must be < poolCenterFracMax');
     if (p.scrapPerCave < 0 || p.rubblePerChamber < 0) at('negative dressing density');
+    // — DEEPER cycle 12: the origin cave never carries the dead explorer. This is the ONE assertion
+    //   behind the claim that the beat cannot move the origin-parity digests, so it is held in the
+    //   table rather than argued in a comment. (The beat is sink-spawned and therefore outside the
+    //   hashed mesh set anyway — this is the belt to that braces.) —
+    if (kind === 'canonical' && p.deadExplorer)
+      at('deadExplorer must be false — the origin/egg cave builds with these params and must never carry the beat (origin parity d8f15005/99e0015b)');
     // — the look-pass dressing dials. All are multipliers with a canonical value of 1 (or a literal
     //   Tuning read), so a zero/negative here is a typo that would silently delete a kind's defining
     //   feature and still march green.
@@ -567,7 +597,7 @@ export function assertCaveKindTable(): void {
   }
   // — canonical must be EXACTLY tuning, or the origin cave has silently moved —
   if (Object.keys(CAVE_KIND_OVERRIDES.canonical).length !== 0)
-    bad.push('canonical: the override object must stay EMPTY — the origin/egg cave builds with it and origin parity (108af91c/ff8309a8) is a hard campaign gate');
+    bad.push('canonical: the override object must stay EMPTY — the origin/egg cave builds with it and origin parity (d8f15005/99e0015b) is a hard campaign gate');
   // — the mix: no kind may be unreachable, and none may dominate —
   const w = caveKindWeights();
   let tot = 0;
