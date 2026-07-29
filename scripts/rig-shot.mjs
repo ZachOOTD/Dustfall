@@ -6974,6 +6974,22 @@ const SCENARIOS = {
               }
             }
 
+            // DIAGNOSTIC (W-4 close-out): anchor↔pool geometry + a floor transect. Two fixes shipped
+            // on the "basin skirt under the seat" hypothesis and neither moved the gap a millimetre —
+            // so print what is actually true before a third.
+            {
+              const pools = (res.cave.probe.pools || []).map((p) => ({
+                d: +Math.hypot(p.x - A.x, p.z - A.z).toFixed(2), r: +p.r.toFixed(2),
+                skirt: +(p.r * g.Tuning.CAVE_POOL_BASIN_R_MUL).toFixed(2),
+              }));
+              const tx = [];
+              for (let t = -1.0; t <= 1.01; t += 0.25) {
+                const px = A.x + t * 1.0, pz = A.z;   // a 2m X-transect through the anchor
+                const h = g.castDown(px, pz, A.y + 1.6, true);
+                tx.push(h ? +(A.y - h.hitY).toFixed(3) : null);
+              }
+              notes.diag = { anchor: { x: +A.x.toFixed(1), y: +A.y.toFixed(2), z: +A.z.toFixed(1) }, pools, transectX: tx };
+            }
             // ── 2b. NOTHING IN THE TABLEAU FLOATS. The permanent form of the defect this cycle
             //    actually fixed: the anchor is exact only AT THE SEAT, and a rigid 2.4m arrangement
             //    over displaced rock left the journal 8.8cm and the lantern 10.0cm in the air.

@@ -2446,35 +2446,61 @@ export function startSpawnCave(
       const cands = graph.nodes
         .filter((n) => n.kind !== 'egg' && n.kind !== 'entrance')
         .sort((a, b) => (a.floorY - b.floorY) || (a.id - b.id));
-      const node = cands[0];
-      if (node) {
+      // Deepest chamber WITH a viable seat (W-4 close-out): a small pocket can be entirely claimed
+      // by a pool basin, and 24 failed bearings there must move the beat UP one chamber — not delete
+      // it from the cave. "They went as deep as they could" survives; a warren without its defining
+      // beat does not (and BEAT-BUILD's vacuous guard would red the gate, correctly, on a content
+      // regression a player would never report).
+      for (const node of cands) {
+        if (beatAnchor) break;
         const mouthCos = Math.cos((Tuning.CAVE_SPELEO_MOUTH_CLEAR_DEG * Math.PI) / 180);
         const mouthDirs = dirsByNode.get(node.id) ?? [];
         // A bearing out of the room's centre that does not point down a corridor — the body must
         // lean on real wall, not sit in a doorway. Same rejection idiom as the rubble/speleothem
         // placers, same 24-attempt budget, its own RNG stream so adding this cycle moved not one
         // mushroom of any other kind's cave (D208/D290).
-        let ux = 1, uz = 0, ok = false;
-        for (let a = 0; a < 24; a++) {
+        // …and never on a POOL BASIN (W-4 close-out, 2026-07-29). Pools place BEFORE the beat (their
+        // specs are computed pre-SDF so the basins can be carved), so the beat yields. Two reasons,
+        // one physical, one that a gate actually caught: a tableau on a basin skirt is standing in
+        // the water's catchment (the crate would sit in a puddle); and the skirt SLOPES (~0.37 m/m),
+        // where `rockFloor`'s 0.45m max-splat quantization is worth ±0.17m — BEAT-BUILD went red with
+        // the anchor 0.171m off the real floor and the canteen hanging 0.136m the first time a
+        // warren rolled a pool in the beat chamber after the basins landed. The clearance is checked
+        // at the SEAT the bearing would produce, not at the room centre.
+        const beatClearOfPools = (sx: number, sz: number): boolean => {
+          for (const ps of poolSpecs) {
+            const rr = ps.radius * Tuning.CAVE_POOL_BASIN_R_MUL + 1.2;   // basin + the tableau's own reach
+            if ((sx - ps.x) * (sx - ps.x) + (sz - ps.z) * (sz - ps.z) < rr * rr) return false;
+          }
+          return true;
+        };
+        // Per bearing: reject corridor mouths, then compute the REAL seat (wall cast + backoff) and
+        // test THAT against the pools. The first version of this fix probed the 0.80·rx fallback
+        // point instead and passed a bearing whose true seat — up to a metre further out on a
+        // bulging wall — sat squarely on the skirt: the gate re-ran red with the numbers unchanged
+        // to the millimetre, which is what "you probed a guess, so nothing moved" looks like.
+        let ux = 1, uz = 0, bx = 0, bz = 0, ok = false;
+        for (let a = 0; a < 24 && !ok; a++) {
           const ang = brand() * Math.PI * 2;
           const cx = Math.cos(ang), cz = Math.sin(ang);
           let blocked = false;
           for (const md of mouthDirs) if (cx * md.x + cz * md.z > mouthCos) { blocked = true; break; }
           if (blocked) continue;
-          ux = cx; uz = cz; ok = true; break;
-        }
-        if (ok) {
           // MEASURE THE ROCK, do not assume the ellipsoid. Cast out along the bearing at seated
           // height and back off far enough that a ~0.9m-deep slumped figure leans on the wall
           // instead of intersecting it. If the cast finds nothing (a clipped dome, a height where
           // the room has already closed) fall back to a fraction of rx — which is the same guess the
           // analytic placement used to make, but now it is the exception rather than the rule.
           const castY = node.floorY + 0.6;
-          const hit = wallCast(node, castY, ux, uz, node.rx * 1.6 + 2.0);
+          const hit = wallCast(node, castY, cx, cz, node.rx * 1.6 + 2.0);
           const dist = hit
             ? Math.max(0.35, hit.d - Tuning.CAVE_BEAT_WALL_BACKOFF)
             : node.rx * Tuning.CAVE_BEAT_WALL_FRAC;
-          const bx = node.x + ux * dist, bz = node.z + uz * dist;
+          const sx = node.x + cx * dist, sz = node.z + cz * dist;
+          if (!beatClearOfPools(sx, sz)) continue;
+          ux = cx; uz = cz; bx = sx; bz = sz; ok = true;
+        }
+        if (ok) {
           const by = rockFloor(bx, bz, node.floorY);
           // The figure faces back INTO the room (the skeleton's own convention is +Z forward, away
           // from the wall it leans on), so the player walking in meets it head-on rather than

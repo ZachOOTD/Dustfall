@@ -1067,12 +1067,12 @@ export const Tuning = {
   CREVICE_CREASE_FILL: 1.4,            // × voxel — smooth-max radius on the CONCAVE floor/wall crease. Fills the corner
                                        //     with a talus-like fillet whose curvature is ~1.5 voxels, so the crease no
                                        //     longer crosses the grid as a sharp line that can quantize into teeth.
-  CREVICE_HORN_RISE: 4.5,              // m — the horn's tip above CREVICE_TOR_FIN_H. Cycle-7 sev1 (78m findability):
+  CREVICE_HORN_RISE: 0.8,              // m — the horn's tip above CREVICE_TOR_FIN_H. W-4: 4.5 → 0.8 — the horn WAS the 78m findability device (cycle-7 sev1), and 78m findability is exactly what Zach reversed. A snag for near-range identity now, not a skyline splinter. Original note:
                                        //     contrast was already 30-36%, but the tor is 3.5:1 wide-and-low and broke
                                        //     the horizon by ~1.4° of arc, so it read as a pebble. ONE narrow splinter
                                        //     of the SAME rock — not an arch, not a monument, not a glow.
-  CREVICE_HORN_LEN: 2.85,              // m — splinter half-extent along its own long axis (base ~5.7m)
-  CREVICE_HORN_WID: 1.72,               // m — …and across it (base ~3.0m). A blade, not a cone.
+  CREVICE_HORN_LEN: 2.0,               // m — splinter half-extent along its own long axis (base ~5.7m)
+  CREVICE_HORN_WID: 1.35,               // m — …and across it (base ~3.0m). A blade, not a cone.
   CREVICE_HORN_OFF_MIN: 2.9,           // m — perpendicular offset from the slot axis (seed-picked in [MIN,MAX], side
   CREVICE_HORN_OFF_MAX: 4.4,           //     by the same seed parity that mirrors the descent's first knee)
   CREVICE_HORN_S_MIN: 1.3,             // m — arc length along the slot at which the horn stands (seed-picked)
@@ -1083,25 +1083,31 @@ export const Tuning = {
                                        //     scratch across a smooth dome. Shoulders beside a slot, which is what a
                                        //     split tor actually looks like.
   CREVICE_TOR_FIN_SHOULDER: 2.6,       // m — half-width over which that notch recovers to full fin height
-  CREVICE_APRON_EDGE: 3.0,            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
+  CREVICE_APRON_EDGE: 1.6,        // W-4 r2: 3.0 → 1.6 — the outline lobes were throwing the rock plate metres past the fall            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
                                        //     single 16m-wavelength octave, which cannot break a 13m straight edge — the
                                        //     apron kept the carve rect's straight polygonal boundary (cycle-7 sev2).
   CREVICE_TOR_SWELL: 1.9,              // m — broad dome over the carved hole, so the covering rock is a whaleback
                                        //     rather than a table. See the R7 note in caveEntrance.ts.
-  CREVICE_APRON_RAMP: 1.0,             // m — the WALKABLE part of the apron's outer ramp (0.85m of drop → ~40°, under
+  CREVICE_APRON_RAMP: 1.7,        // W-4 r3: 1.0 → 1.7 — a longer, gentler meeting with the sand             // m — the WALKABLE part of the apron's outer ramp (0.85m of drop → ~40°, under
                                        //     the KCC's 50° climb). Beyond it the apron dives under the sheet fast.
-  CREVICE_APRON_DRIFT: 1.1,            // m — the apron's falloff is stretched this much further on its lee side, so the
+  CREVICE_APRON_DRIFT: 1.3,       // W-4 r4: a longer asymmetric tail — one side runs out under the sand like a half-buried reef            // m — the apron's falloff is stretched this much further on its lee side, so the
                                        //     sand meets rock as a wind drift rather than as a symmetric plate.
-  CREVICE_TOR_FIN_H: 5.2,              // m — the tor's rock fin, above local terrain (the landmark read)
-  CREVICE_TOR_FIN_PLATEAU: 3.6,        // m — the fin holds full height this far either side of the crack (a blocky
+  CREVICE_TOR_FIN_H: 2.1,              // m — the tor's rock fin, above local terrain. W-4 (walk-test 2026-07-29): 5.2 → 2.1 — Zach reversed cycle 7's landmark read ("smaller like a little crevice you find on a small rock … easy to miss if you weren't paying attention"). Head-height rock, not a skyline
+  CREVICE_TOR_FIN_PLATEAU: 2.4,   // W-4: 3.6 → 2.4 (smaller rock, tighter crown)        // m — the fin holds full height this far either side of the crack (a blocky
                                        //     bedrock plateau; round 1's squared falloff gave two Fuji-shaped cones)
-  CREVICE_TOR_FIN_SPREAD: 7.4,         // m — perpendicular distance over which the fin falls to the apron
+  CREVICE_TOR_FIN_SPREAD: 7.0,    // W-4 r4 (7.4; r1 tried 5.2): at low height the flanks must run OUT to the rim — pulling them in left a flat brim between mound and edge, the pancake read         // m — perpendicular distance over which the fin falls to the apron
   CREVICE_TOR_BUMP: 0.05,              // shader normal-perturbation for the tor (cf. CAVE_ROCK_BUMP_INTERIOR 0.85 — that is
                                        //     tuned for torch-lit interior rock and reads as camouflage in sunlight)
-  CREVICE_TOR_NOISE: 1.15,             // m — multi-octave relief on the tor's top surface
-  CREVICE_APRON_RISE: 0.55,             // m — the rock apron sits this far proud of the terrain over the carved hole
+  CREVICE_TOR_NOISE: 0.85,        // W-4: 1.15 → 0.85 — relief scaled with the fin, else the noise IS the silhouette             // m — multi-octave relief on the tor's top surface
+  CREVICE_APRON_RISE: 0.55,             // m — the rock apron sits this far proud of the terrain over the carved hole.
+  // ⚠ W-4 DID NOT LOWER THIS, AND MUST NOT: it is not a cosmetic dial. caveEntrance.ts starts the
+  //   DESCENT LINE at gy + THIS, and that line ends at the cave junction — the whole cave's vertical
+  //   anchor. Lowering it 0.55→0.30 moved every chamber floor ~13cm, re-seated the dead-explorer
+  //   beat onto its wall fillet, and BEAT-BUILD went red 100m from the entrance (anchorGap
+  //   0.039→0.171, A/B-proven both directions; it also moved caveDigest via the mouth sill). If the
+  //   apron's VISUAL height ever needs to drop, split a separate render-side constant — never this one
   CREVICE_APRON_MARGIN: 0.9,           // m — apron holds full height this far outside the hole rect
-  CREVICE_APRON_FALL: 2.3,             // m — then ramps down into the sand over this distance (~30°, walkable)
+  CREVICE_APRON_FALL: 3.0,        // W-4 r4 (was 2.3; r2/r3 tried 1.6/1.4 and made it WORSE — the 3.1m dive over a shorter run is a STEEPER buried face, and that near-vertical toe is the shadowed 'saucer edge'. A LONG toe lets rock disappear under sand)             // m — then ramps down into the sand over this distance (~30°, walkable)
   CREVICE_TOR_VOXEL: 0.32,             // m — the tor's own surface-nets grid spacing (finer than the cave's 0.45)
 
   // UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE. A deterministic room-graph +

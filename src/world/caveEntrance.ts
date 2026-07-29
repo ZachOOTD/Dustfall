@@ -676,7 +676,9 @@ export function spawnCaveEntrance(
       // poured concrete platform: 23m across and geometrically flat, because the only relief it got
       // was the 0.30-weighted tail of the fin's noise term.
       apron += (noise3(wx * 0.13 + 5, 9.1, wz * 0.13 + 44) * 0.34 + noise3(wx * 0.36 + 23, 4.4, wz * 0.36 + 2) * 0.16
-              + noise3(wx * 0.72 + 63, 1.7, wz * 0.72 + 88) * 0.07) * 1.25 * aFade;
+              // W-4 r2: 1.25 → 0.55. At FIN_H 5.2 the fin dwarfed these ledges; at 2.1 they WERE
+              // the silhouette — a terraced 25m plate (the R3 lily pad, back). Scaled with the tor.
+              + noise3(wx * 0.72 + 63, 1.7, wz * 0.72 + 88) * 0.07) * 0.55 * aFade;
       if (d0 <= 0.001) apron = APRON + swell;         // inside hole+margin: full cover, always
       // The fin. R1 used perpFade² and got a pair of sharp CONES ("Mount Fuji with a notch"). Real
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
