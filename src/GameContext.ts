@@ -94,6 +94,12 @@ export interface GameContext {
     onGround: boolean;
     crouching: boolean;    // set each frame from LeftControl
     inShelter: boolean;    // set each frame by shelter system
+    /** DEEPER (walk-test 2026-07-29) — inside a cave. SEPARATE from `inShelter` on purpose, and the
+     *  separation is load-bearing: `updateStats` takes the `inShelter` branch BEFORE the cave-cold
+     *  branch, so setting `inShelter` underground would pre-empt cycle 11's INV-COLD and silently
+     *  make every cave temperature-neutral — the exact opposite of the model Zach signed off. A cave
+     *  shelters you from the STORM; it does not warm you. */
+    inCave: boolean;
     sunExposure01: number; // M5a (C31) — 1 = full direct sun, 0 = fully shaded (terrain-occluded); set each frame by updateSunExposure
     viewModel: ViewModel | null;
     /** ABO A3 — third-person rigged body. Null until rig is built at boot.

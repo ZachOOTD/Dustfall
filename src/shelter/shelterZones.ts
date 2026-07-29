@@ -6,6 +6,7 @@
 import type { GameContext } from '../GameContext.ts';
 import type * as THREE from 'three';
 import { Tuning } from '../config/tuning.ts';
+import { caveContainmentAt } from '../world/caveAtmosphere.ts';   // DEEPER walk-test — a cave shelters you from the storm
 
 export interface ShelterZone {
   cx: number;        // world-space center X
@@ -80,10 +81,34 @@ export function updateShelter(ctx: GameContext, _dt: number): void {
   const tr = ctx.player.body.body.translation();
   const status = classifyShelter(ctx.shelter, tr.x, tr.y, tr.z);
   ctx.player.inShelter = status.inShelter;
+
+  // ── DEEPER walk-test 2026-07-29 — A CAVE SHELTERS YOU FROM THE STORM. ──────────────────────────
+  // Zach: *"the cave should be shelter so the storm doesn't effect you in it."* It did not: shelter
+  // is classified against REGISTERED ZONES (tents, fires, vehicles) and a cave is not one, so the
+  // haboob's movement penalty, its audio and its perceived intensity all applied through thirty
+  // metres of rock.
+  //
+  // ⚠ WHY THIS IS NOT `inShelter = true`, which is the obvious one-line version and is WRONG:
+  // `updateStats` evaluates `if (inShelter …) … else if (caveDepth > 0)`. Setting `inShelter`
+  // underground pre-empts the cave branch, so every cave would stop running cycle 11's INV-COLD
+  // model and instead be pulled toward temperature-neutral — i.e. "caves are cosy", the exact
+  // inverse of the behaviour he reviewed and approved last cycle. A cave stops the WIND. It does
+  // not warm you. So this is its own flag, and `inShelter` is deliberately left alone.
+  //
+  // The containment signal is cycle 11's (`caveContainmentAt`) — pure, and the same one the cold
+  // model reads, so shelter and temperature can never disagree about whether you are underground.
+  // Computed ONCE here and published, rather than re-derived by each consumer: cycle 11's own report
+  // flagged a duplicated `caveContainmentAt` as real per-frame cost.
+  ctx.player.inCave = ctx.caveAtmosphere
+    ? caveContainmentAt(ctx.caveAtmosphere, { x: tr.x, y: tr.y, z: tr.z }, ctx).depth > 0
+    : false;
+
   // YY — perceivedIntensity. Outside any shelter = world truth.
   // Inside large tent (open front) = dampened. Inside any other
   // shelter (small tent / fire — fully enclosed) = 0.
-  if (status.inLargeTent) {
+  if (ctx.player.inCave) {
+    ctx.weather.perceivedIntensity = 0;   // no wind, no dust, no storm audio under rock
+  } else if (status.inLargeTent) {
     ctx.weather.perceivedIntensity = ctx.weather.intensity * Tuning.LARGE_TENT_STORM_DAMPEN;
   } else if (status.inShelter) {
     ctx.weather.perceivedIntensity = 0;

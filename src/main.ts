@@ -580,6 +580,7 @@ const ctx: GameContext = {
     onGround: false,
     crouching: false,
     inShelter: false,
+    inCave: false,           // DEEPER walk-test — set each frame by updateShelter (storm only, never temperature)
     sunExposure01: 1,                // M5a (C31) — full sun until the first raymarch
     viewModel: null,
     rig: null,                       // ABO A3 — built post-context construction

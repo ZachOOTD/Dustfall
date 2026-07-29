@@ -150,3 +150,39 @@ rushed cycle.
 **Budget realism** (cycles 2 and 3 both ran 2-3× over their briefs): size briefs to what the work
 actually takes. A 4-8 round visual loop is ~2 hours. Stating 50 minutes and blowing it is worse
 than stating 2 hours, because it hides where the time went.
+
+---
+
+## WALK-TEST FEEDBACK — 2026-07-29 (Zach, verbatim, after the DEEPER merge to master)
+
+The `deeper-shipped` milestone, delivered. Recorded same-day per the rule this campaign was created
+by breaking (the Underworld ship lost its feedback for four days).
+
+> "the cave should be shelter so the storm doesn't effect you in it."
+>
+> "the wter pools look a bit weird, they should have like some kind of rock rim around the pools to
+> like enclose them or be recessed in teh terrain or something like that to make them realistic,
+> right now its just a 3d water sitting on top of the terrain and looks a bit weird, it should
+> actually sit in some kind of pool."
+>
+> "the place where the egg sits at the end of the cave needs some work, i can see through the model
+> on the inside of it, this needs to be fixed and be higher quality."
+>
+> "as for the entrance to the caves, i want them to be more lower profile and blend in more with the
+> terrain around it, right now they are quite large at stick out, i want it to be smaller like a
+> little crevice you find on a small rock in the desert, visually distinct but easy to miss if you
+> weren't paying attention."
+
+### What each one is, in code terms
+
+| # | Item | Read |
+|---|---|---|
+| **W-1** | **Caves are SHELTER.** | A real gap, not a tuning call: `updateShelter` classifies against registered shelter ZONES only, and a cave is not one — so the storm's movement penalty and `perceivedIntensity` both apply 30m underground. The signal already exists (`caveContainmentAt`, cycle 11); shelter just never asked it. |
+| **W-2** | **Pools need a basin.** | Cycle 6 shipped the water surface as a colliderless plane over the visible SDF floor — deliberately, and it is why it reads as "3D water sitting on top". The fix is geometry the water sits IN: a rock rim / recessed basin, which means the pool has to influence the SDF (or a rim ring must be dressed around it). |
+| **W-3** | **The egg dais is see-through and low quality.** | ⚠ **This was a KNOWN residual and it was backlogged rather than fixed** — cycle 9's critic logged the "egg-dais grey-tarp read" as a pre-existing shared asset and cycle 3 logged the dais reading as tarp not rock. "I can see through the model on the inside" is a **rule-7 backface defect**, the same class D-2 fixed for the cave shell — the dais was never swept for it. |
+| **W-4** | **Entrances too big; want low-profile and missable.** | ⚠ **This REVERSES a deliberate prior decision, and the reversal is the point.** Cycle 4 shipped the tor and called it "at 78m a small dark bump, marginal"; **cycle 7 then deliberately made it MORE prominent** for findability (horn + shoulders silhouette, arc 1.9°→4.1° / 2.7°→5.5°). Zach has now seen that result and wants the opposite: *"easy to miss if you weren't paying attention."* So findability is not a constraint being violated here — a lower hit-rate is the REQUESTED outcome, and any gate asserting the cycle-7 silhouette arc must be re-baselined to the new intent rather than treated as a regression. |
+
+**The tension to hold while doing W-4:** cycle 7's arc numbers exist because cycle 4's entrance was
+hard to find. Shrinking it re-opens that, by design. The thing that must NOT regress is the
+*entrance being enterable* (the cycle-9 headroom defect: ~1 cave in 9 could not be entered) — that
+is a traversal invariant with a gate, and it is independent of how proud the tor stands.

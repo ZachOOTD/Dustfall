@@ -4107,6 +4107,97 @@ const SCENARIOS = {
     console.log(`[pool-fill] CAVE-COLD ${JSON.stringify(cold.notes || {})}`);
     console.log(`CAVE-COLD pass=${(cold.fails || []).length === 0 ? 1 : 0} fails=${(cold.fails || []).length}`);
 
+    // ══ DEEPER walk-test 2026-07-29 — STORM-CAVE ═══════════════════════════════════════════════
+    //    Zach: *"the cave should be shelter so the storm doesn't effect you in it."* Shelter is
+    //    classified against registered ZONES and a cave is not one, so the haboob reached the player
+    //    through thirty metres of rock.
+    //
+    //    THE TOOTH THAT MATTERS IS THE THIRD ONE. The obvious fix — `inShelter = true` underground —
+    //    is wrong, because `updateStats` runs `if (inShelter) … else if (caveDepth > 0)`: setting it
+    //    would PRE-EMPT cycle 11's cave-cold model and quietly make every cave temperature-neutral,
+    //    inverting behaviour Zach reviewed and signed off one cycle ago. So this asserts BOTH halves
+    //    at once — the storm is gone AND the cold still runs — because a fix for one that silently
+    //    breaks the other is exactly what this gate exists to catch.
+    const sc = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const raf = () => new Promise((res) => requestAnimationFrame(() => res()));
+      const fails = []; const notes = {};
+      try {
+        ctx.flags.paused = false;
+        const body = ctx.player.body.body;
+        const CAP = ctx.player.body.halfHeight + ctx.player.body.radius;
+        const wasI = ctx.weather.intensity;
+        // DRIVE THE REAL STORM, do not fake its number. A storm is a directional WALL and
+        // `updateWeather` DERIVES `intensity` from the player's signed distance to it, every frame,
+        // before `updateShelter` reads it — so assigning `intensity` from outside the tick is
+        // overwritten within the same frame and measures a clear day. The first two runs of this
+        // gate proved that by failing its own control tooth (surface perceivedIntensity 0.00 with no
+        // shelter in sight). So: arm the wall through the shipped path, then park its core on the
+        // player each frame and let the game compute the intensity itself.
+        g.triggerStorm();
+        const frames = async (n) => {
+          for (let i = 0; i < n; i++) {
+            const t = body.translation();
+            const w = ctx.weather.wall;
+            w.active = true; w.posX = t.x; w.posZ = t.z;
+            await raf();
+          }
+        };
+
+        const res = (ctx.caveStream ? ctx.caveStream.residents() : [])[0];
+        if (!res) return { fails: ['no cave resident to test'], notes };
+        const nodes = res.cave.probe.nodes.slice().sort((a, b) => a.y - b.y);
+        const deep = nodes[0];
+
+        // A — ON THE SURFACE, above the cave, in the storm. The control: without this the whole
+        //     check could pass on a build where perceivedIntensity is always 0.
+        const sy = ctx.terrain.heightAt(deep.x, deep.z);
+        body.setTranslation({ x: deep.x, y: sy + CAP + 0.3, z: deep.z }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true); ctx.player.velocityY = 0;
+        // WAIT ON THE CONDITION, not on a frame count: the wall's intensity RAMPS through the
+        // weather state machine (a fixed 25 frames caught it at 0.06, still climbing).
+        let waited = 0;
+        while (ctx.weather.intensity < 0.85 && waited < 900) { await frames(1); waited++; }
+        notes.rampFrames = waited;
+        notes.surface = { inCave: ctx.player.inCave, perceived: +ctx.weather.perceivedIntensity.toFixed(2) };
+        if (ctx.player.inCave) fails.push('the player reads as in-cave while standing on the surface');
+        if (!(ctx.weather.perceivedIntensity > 0.5)) fails.push(`surface perceivedIntensity ${ctx.weather.perceivedIntensity.toFixed(2)} — the storm is not reaching an EXPOSED player, so the cave result below proves nothing`);
+
+        // B — INSIDE, deepest chamber.
+        body.setTranslation({ x: deep.x, y: deep.y + CAP + 0.3, z: deep.z }, true);
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true); ctx.player.velocityY = 0;
+        await frames(40);
+        const depth = g.caveContainment().depth;
+        notes.cave = {
+          inCave: ctx.player.inCave, perceived: +ctx.weather.perceivedIntensity.toFixed(2),
+          inShelter: ctx.player.inShelter, depth: +depth.toFixed(1),
+        };
+        if (!(depth > 1)) fails.push(`the probe is not underground (depth ${depth.toFixed(2)}m) — every assertion here would be vacuous`);
+        if (!ctx.player.inCave) fails.push('inCave is false inside the cave');
+        if (ctx.weather.perceivedIntensity !== 0) fails.push(`perceivedIntensity ${ctx.weather.perceivedIntensity} underground — the storm still reaches the player`);
+        // THE REGRESSION GUARD (see the note above).
+        if (ctx.player.inShelter) fails.push('inShelter is TRUE inside a cave — that pre-empts the cave-cold branch in updateStats and makes caves temperature-neutral (cycle 11 INV-COLD would be silently dead)');
+
+        // C — and the cold model is genuinely still running down here: temperature must walk NEGATIVE
+        //     toward the cave target, not toward 0.
+        ctx.stats.temperature = 0;
+        const t0 = ctx.stats.temperature;
+        await frames(90);
+        const t1 = ctx.stats.temperature;
+        notes.temp = { from: +t0.toFixed(3), to: +t1.toFixed(3) };
+        if (!(t1 < t0 - 1e-4)) fails.push(`temperature went ${t0.toFixed(3)} → ${t1.toFixed(3)} underground — the cave-cold model is not running (a cave must chill you, not be neutral)`);
+
+        ctx.weather.intensity = wasI;
+        return { fails, notes };
+      } catch (e) {
+        fails.push(`STORM-CAVE threw: ${String((e && e.message) || e)}`);
+        return { fails, notes };
+      }
+    }).catch((e) => ({ fails: [`STORM-CAVE harness threw: ${String((e && e.message) || e)}`], notes: {} }));
+    for (const f of (sc.fails || [])) { fails.push(`STORM-CAVE ${f}`); console.log(`[pool-fill] STORM-CAVE FAIL ${f}`); }
+    console.log(`[pool-fill] STORM-CAVE ${JSON.stringify(sc.notes || {})}`);
+    console.log(`STORM-CAVE pass=${(sc.fails || []).length === 0 ? 1 : 0} fails=${(sc.fails || []).length}`);
+
     // ── 7. THE PIXEL GATE (round-13 fix 2b) ──────────────────────────────────────────────────
     //    `pool-look` measures the water's on-screen appearance; nothing ran it in `verify:chunks`,
     //    so the whole visual contract (darker than lit rock · a LIVE ripple · no 8-bit banding · a

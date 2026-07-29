@@ -310,12 +310,21 @@ for (const seed of DET_SEEDS) {
       rows.push(cc
         ? `cave-cold seed ${seed}: ${cc[2]} fails  ${okC ? 'OK' : '*** FAIL ***'}`
         : `cave-cold seed ${seed}: NO PROBE LINE (the cold matrix never reported)  *** FAIL ***`);
-      return { ok: ok && okL && okC, data: { digest: m[3] }, rows };
+      //      STORM-CAVE (walk-test 2026-07-29): a cave shelters you from the storm, AND the cave-cold
+      //      model still runs down there — one tooth for each half, because the natural fix for the
+      //      first silently kills the second.
+      const st = out.match(/STORM-CAVE pass=(\d) fails=(\d+)/);
+      const okS = !!st && st[1] === '1';
+      rows.push(st
+        ? `storm-cave seed ${seed}: ${st[2]} fails  ${okS ? 'OK' : '*** FAIL ***'}`
+        : `storm-cave seed ${seed}: NO PROBE LINE (the storm-shelter check never reported)  *** FAIL ***`);
+      return { ok: ok && okL && okC && okS, data: { digest: m[3] }, rows };
     },
     noLineRow: [
       `pool-fill seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
       `lantern-rt seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
       `cave-cold seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
+      `storm-cave seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
     ],
   });
 }

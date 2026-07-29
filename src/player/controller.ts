@@ -160,7 +160,11 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   // storm intensity it reaches 1.0. Avoids a hard snap by lerping across
   // the [threshold, 1.0] intensity band.
   let stormPenaltyT = 0;
-  if (!ctx.player.inShelter && ctx.weather.intensity > STORM_PENALTY_INTENSITY_THRESHOLD) {
+  // `inCave` joins `inShelter` here (DEEPER walk-test 2026-07-29): the storm's movement penalty was
+  // slowing the player thirty metres underground. Kept as a separate flag rather than folded into
+  // `inShelter` — see the note on GameContext.player.inCave; treating a cave as shelter wholesale
+  // would switch off the cave-cold model.
+  if (!ctx.player.inShelter && !ctx.player.inCave && ctx.weather.intensity > STORM_PENALTY_INTENSITY_THRESHOLD) {
     const span = 1 - STORM_PENALTY_INTENSITY_THRESHOLD;
     stormPenaltyT =
       span > 1e-6
