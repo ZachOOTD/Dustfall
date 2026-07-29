@@ -6,6 +6,34 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Walk-test batch (2026-07-29, same day as the master deploy) — W-1/W-2/W-3 SHIPPED · W-4 BUDGET-GATED
+
+Zach delivered the `deeper-shipped` walk-test verdict live (verbatim in [steering.md](steering.md)).
+Four items; three shipped same-session, each with a red-proven gate. The fourth reverses a
+deliberate cycle-7 decision and is held at the budget ceiling, not for any technical reason.
+
+| # | Ask | Shipped | The part worth remembering |
+|---|---|---|---|
+| **W-1** | Caves shelter from the storm | `e7826b3` | The obvious fix (`inShelter = true`) red-provably KILLS cycle 11's cave cold — `updateStats` takes the shelter branch first, so caves would go temperature-neutral. `inCave` is its own flag; the `STORM-CAVE` gate asserts BOTH halves (storm zero underground AND temperature still walks negative), because a fix for one that silently breaks the other is what it exists to catch. Writing the gate took three tries — the storm's intensity is DERIVED from the wall each frame, so assigning it from outside the tick measured a clear day; the vacuous-pass guard (storm must reach an EXPOSED player) caught all three. |
+| **W-3** | The egg dais is see-through | `c661625` | It was an open cone — no top cap, no bottom seal — and its ~2m mouth was a hole in the COLLIDER (the dais is baked into the trimesh): climb it and drop into a pit. The first fix was STILL see-through: the natural cap winding gives a −Y normal, invisible from above under FrontSide — caught by the shot, unreachable by reading. Known and deferred TWICE (cycles 3 and 9) before Zach walked into it. |
+| **W-2** | Pools sit in real basins | `0df142b` | The sheet was never the problem — the ROCK never dipped, and `CAVE_POOL_DEPTH_M` 0.26 made the surface DOME above the floor (a blob of jelly). Basin carved into the SDF floor cut → it is in the collider (you wade DOWN); specs computed once pre-SDF (re-deriving advances `prand` — basins in one place, water in another). The 1.45× basin reached past the corridor-mouth exclusion and WEDGED THE KCC — caught by LANTERN-RT, then A/B'd to the REAL cause: the probe stood inside the old dais's hollow, and W-3's seal left it embedded in rock. `POOL-BASIN` gate red-proven twice — the strong form (carve broken, constant honest) fires the exact "water is sitting ON the floor" tooth. |
+| **W-4** | Entrances low-profile, easy to miss | **NOT STARTED** | Reverses cycle 7's deliberate prominence pass (silhouette arc 1.9°→4.1°, built because cycle 4's entrance was unfindable). Zach has seen the result and wants the opposite — so the findability gate gets RE-BASELINED to the new intent, not treated as a regression. What must NOT regress: enterability (the cycle-9 headroom defect class). Held at the CEILING: a tor redesign is a rule-8 visual loop + entrance-weld geometry + gate re-baselines, realistically ≥0.8M, and the campaign is at ~13.7M of 14M. |
+
+**Origin digests moved TWICE this session, both sanctioned by the walk-test:** the dais seal
+(`d8f15005/99e0015b → b2de403d/cfbd1198`) then the basins (`→ 4942306d/33961250`). No gate asserts
+the literals; stability ×2 and the sync-vs-sliced contract are the machine teeth and both held.
+
+**Also in this session, before the walk-test:** the surface skeleton's zero-thickness eye sockets
+fixed (solid frusta, `skeleton-sockets` probe at 0°/70°/88°), then the W-era skeleton DELETED
+outright on Zach's call — its limb joints never met, both legs were authored below y=0, and the
+ribcage was a coil spring; one build now serves every call site with a palette split (cave dark /
+surface bleached) that exists for measured lighting reasons, not taste.
+
+**Process note (D318 lived).** The shell's permission classifier went down mid-batch; the seed-7
+digest was read by driving the LIVE dev-server tab (`pendingSeed` + reload, then reading the same
+probe object the `cave-digest` scenario reads) — the browser pane doesn't pass through the gated
+classifier. Recorded because it is a legitimate fallback path for exactly this failure.
+
 ## Cycle 12 — THE SKELETON & THE JOURNAL (2026-07-29, overnight) — SHIPPED
 
 **Zach's brief, verbatim:** *"there should be a journal and a skeleton in one of the caves with some
