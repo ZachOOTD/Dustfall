@@ -5810,7 +5810,7 @@ const SCENARIOS = {
         if (listA.length < 40) fails.push(`BEAT-SITES only ${listA.length} sites swept — too few to conclude anything`);
         if (!kindsSeen.has('warren')) fails.push('BEAT-SITES no warren appeared in a 12km box — the sweep proves nothing about the beat');
         if (beats.length === 0) fails.push('BEAT-SITES not one site carries the beat — it would never appear in a real world');
-        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "d8f15005 / 99e0015b
+        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "b2de403d / cfbd1198
         //     cannot move" a machine fact instead of a claim in a comment.
         if (carries('canonical')) fails.push('BEAT-SITES canonical carries the beat — the ORIGIN CAVE would carry an authored corpse and its parity digest would be at risk');
         const originClear = T.CAVE_SITE_ORIGIN_CLEAR_M;   // `clr` is not declared until below this block

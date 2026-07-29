@@ -16,7 +16,10 @@
 // ── THE CANONICAL CAVE IS NOT A KIND ────────────────────────────────────────────────────────────
 // `canonical` is the parameter set that IS `tuning.ts` — every field reads straight off `Tuning`,
 // with an EMPTY override object. That is not decoration: the origin/egg cave builds with it, and the
-// origin-parity digests (d8f15005 / 99e0015b) are a hard campaign gate. If a canonical field ever
+// origin-parity digests (b2de403d / cfbd1198 — RE-BASELINED 2026-07-29 from d8f15005 / 99e0015b
+// when the walk-test rebuilt the egg dais, which is hashed; no gate asserts the literal, the teeth
+// assert STABILITY and the sync-vs-sliced contract, and both still hold) are a hard campaign gate.
+// If a canonical field ever
 // stops being a literal Tuning read, the origin cave moves and the gate goes red — which is exactly
 // the alarm we want. `canonical` also stays in the weighted MIX, so the cave a player already knows
 // keeps appearing in the world beside the four new reads.
@@ -120,7 +123,7 @@ export interface CaveKindParams {
    *  ⚠ CANONICAL IS 0 AND MUST STAY 0 — this is not timidity, it is the origin-parity gate.
    *    `buildSpeleothem` bakes WORLD-SPACE vertices, so the dripstone kit is the one piece of
    *    dressing whose POSITION is hashed by `caveDigest`; moving a canonical speleothem by a
-   *    millimetre moves the origin cave's digest (d8f15005), which is a hard campaign gate. At 0
+   *    millimetre moves the origin cave's digest (b2de403d), which is a hard campaign gate. At 0
    *    every expression above is an exact IEEE identity (`Math.max(0, x) === x`, `x * 1 === x`,
    *    the seating branch is not taken), so the canonical cave is bit-identical.
    *    The COLOUR half of the same fix — wall-role rock with a fine mottle, replacing the flat
@@ -571,7 +574,7 @@ export function assertCaveKindTable(): void {
     //   table rather than argued in a comment. (The beat is sink-spawned and therefore outside the
     //   hashed mesh set anyway — this is the belt to that braces.) —
     if (kind === 'canonical' && p.deadExplorer)
-      at('deadExplorer must be false — the origin/egg cave builds with these params and must never carry the beat (origin parity d8f15005/99e0015b)');
+      at('deadExplorer must be false — the origin/egg cave builds with these params and must never carry the beat (origin parity b2de403d/cfbd1198)');
     // — the look-pass dressing dials. All are multipliers with a canonical value of 1 (or a literal
     //   Tuning read), so a zero/negative here is a typo that would silently delete a kind's defining
     //   feature and still march green.
@@ -583,7 +586,7 @@ export function assertCaveKindTable(): void {
     if (!(p.speleoSolidity >= 0 && p.speleoSolidity <= 1))
       at(`speleoSolidity ${p.speleoSolidity} is outside 0..1 — it multiplies a tip-radius floor and a bend reduction, and >1 would breach the speleothem clearance envelope the placement margins are sized against`);
     if (kind === 'canonical' && p.speleoSolidity !== 0)
-      at('speleoSolidity must be EXACTLY 0 for canonical — `buildSpeleothem` bakes world-space vertices, so any non-zero value moves the origin cave digest (d8f15005), which is a hard campaign gate');
+      at('speleoSolidity must be EXACTLY 0 for canonical — `buildSpeleothem` bakes world-space vertices, so any non-zero value moves the origin cave digest (b2de403d), which is a hard campaign gate');
     if (p.fungiPerCluster < 2) at(`fungiPerCluster ${p.fungiPerCluster} < 2 — a cluster of one is a mushroom`);
     if (p.scrapClusterSize < 1) at('scrapClusterSize < 1');
     if (p.salvagePlates < 0) at('negative salvagePlates');
@@ -597,7 +600,7 @@ export function assertCaveKindTable(): void {
   }
   // — canonical must be EXACTLY tuning, or the origin cave has silently moved —
   if (Object.keys(CAVE_KIND_OVERRIDES.canonical).length !== 0)
-    bad.push('canonical: the override object must stay EMPTY — the origin/egg cave builds with it and origin parity (d8f15005/99e0015b) is a hard campaign gate');
+    bad.push('canonical: the override object must stay EMPTY — the origin/egg cave builds with it and origin parity (b2de403d/cfbd1198) is a hard campaign gate');
   // — the mix: no kind may be unreachable, and none may dominate —
   const w = caveKindWeights();
   let tot = 0;

@@ -449,15 +449,52 @@ const _tmpCol = new THREE.Color();
 /** A raised natural rock PEDESTAL (dais) at the egg-chamber centre — a wide, gently-sloped mound
  *  (sides ≤ the walk grade so the KCC climbs it; top ≤ the floor-grid tolerance so it isn't read as
  *  a hole). Where the egg will sit next cycle. WORLD space; baked into the trimesh (collider=visual). */
-function buildDais(node: CaveNode, cnoise: Noise3, depthT: number): THREE.BufferGeometry {
+function buildDais(node: CaveNode, cnoise: Noise3, depthT: number, rockFloor?: RockFloor): THREE.BufferGeometry {
+  // ── WALK-TEST 2026-07-29 (Zach): *"the place where the egg sits at the end of the cave needs some
+  //    work, i can see through the model on the inside of it."* He is describing a real hole, and it
+  //    was TWO holes — this was a bare LATERAL CONE with nothing closing either end:
+  //
+  //      · NO TOP CAP. The index loop emitted quads between rings only, and the last ring has radius
+  //        `topR` (≈0.42·baseR, ~2m across on a 6m chamber) — so the pedestal was an open TUBE with
+  //        the companion egg balanced over the mouth. `_caveSolid` is FrontSide, so from anywhere
+  //        near it you looked straight through the back wall into the inside of the cone. And the
+  //        dais is COLLIDER-BEARING (baked into the cave trimesh, rule 9), so that opening was a
+  //        real hole in the collision too: climb the pedestal and you drop 0.9m into a pit you have
+  //        to be lifted out of. This was a trap, not only an eyesore.
+  //      · NO BOTTOM SEAL. The rim ring sat on `node.floorY`, the ANALYTIC plane, while the room's
+  //        actual floor is the displaced SDF surface — the same disagreement that hung a salvage
+  //        plate a metre over the sand. Wherever the real rock fell away, you could see under the
+  //        skirt into the hollow.
+  //
+  //    ⚠ THIS MOVES `caveDigest` (the dais is in `meshes`, and `caveDigest` hashes every vertex of
+  //    them), so the origin-parity digests move with it. That is sanctioned: Zach asked for the fix.
+  //    No gate asserts the literal — the digest teeth assert STABILITY (same seed twice) and the
+  //    sync-vs-sliced contract, both of which still hold — so the values in comments are updated to
+  //    the new ones rather than a gate being relaxed.
+  //
   // Shared with cavePools.ts so a water pool can never be placed on top of the pedestal.
   const baseR = eggDaisRadius(node.rx);
   const topR = baseR * 0.42;
   const H = 0.9;                           // slope = H/(baseR−topR) ≈ 0.48 → ~26° (KCC-walkable, gentle)
-  const RINGS = 5, SEGS = 20;
+  //    Quality: 5×20 read as a faceted lampshade at the one spot the player is guaranteed to stand
+  //    and look at. 9×40 costs a few hundred triangles once per cave and lets the displacement below
+  //    actually describe rock instead of being averaged away by the tessellation.
+  const RINGS = 9, SEGS = 40;
   const stride = SEGS + 1;
-  const pos = new Float32Array((RINGS + 1) * stride * 3);
-  const col = new Float32Array((RINGS + 1) * stride * 3);
+  // Vertex budget: (RINGS+1) lateral rings + 1 buried skirt ring + 1 top-cap centre.
+  const SKIRT = (RINGS + 1) * stride;      // index of the first skirt vertex
+  const APEX = SKIRT + stride;             // index of the top-cap centre
+  const COUNT = APEX + 1;
+  const pos = new Float32Array(COUNT * 3);
+  const col = new Float32Array(COUNT * 3);
+  const put = (k: number, x: number, y: number, z: number, role: 'floor' | 'wall'): void => {
+    pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z;
+    caveVertexColor(role, x, y, z, depthT, cnoise, _tmpCol);
+    col[k * 3] = _tmpCol.r; col[k * 3 + 1] = _tmpCol.g; col[k * 3 + 2] = _tmpCol.b;
+  };
+  // Rim positions are kept so the skirt can reuse their exact XZ — a skirt that re-derived them
+  // would open a hairline seam at every segment, which is the defect in miniature.
+  const rimX = new Float32Array(stride), rimZ = new Float32Array(stride);
   let vi = 0;
   for (let i = 0; i <= RINGS; i++) {
     const t = i / RINGS;                   // 0 rim → 1 top
@@ -465,22 +502,52 @@ function buildDais(node: CaveNode, cnoise: Noise3, depthT: number): THREE.Buffer
     const yy = node.floorY + H * t;
     for (let j = 0; j <= SEGS; j++) {
       const ph = (j / SEGS) * Math.PI * 2;
-      const wob = 1 + cnoise(Math.cos(ph) * 2 + i, 5.5, Math.sin(ph) * 2) * 0.10;
+      // Two octaves around the ring + one up the flank: a mound with lobes and a broken edge rather
+      // than a lathe-turned cone. Amplitude tapers to 0 at the top so the egg's seat stays flat.
+      const wob = 1
+        + cnoise(Math.cos(ph) * 2 + i * 0.35, 5.5, Math.sin(ph) * 2) * 0.10
+        + cnoise(Math.cos(ph) * 5.5, 9.1, Math.sin(ph) * 5.5) * 0.05 * (1 - t);
       const wx = node.x + Math.cos(ph) * rr * wob;
       const wz = node.z + Math.sin(ph) * rr * wob;
       const wy = yy + (i > 0 && i < RINGS ? cnoise(wx * 0.4, 2.2, wz * 0.4) * 0.06 : 0);
-      pos[vi * 3] = wx; pos[vi * 3 + 1] = wy; pos[vi * 3 + 2] = wz;
-      caveVertexColor(i === RINGS ? 'floor' : 'wall', wx, wy, wz, depthT, cnoise, _tmpCol);
-      col[vi * 3] = _tmpCol.r; col[vi * 3 + 1] = _tmpCol.g; col[vi * 3 + 2] = _tmpCol.b;
+      if (i === 0) { rimX[j] = wx; rimZ[j] = wz; }
+      put(vi, wx, wy, wz, i === RINGS ? 'floor' : 'wall');
       vi++;
     }
   }
+  // THE SKIRT: the rim dropped BELOW the real rock, so there is no angle from which you can see
+  // under the pedestal. Seated on the measured SDF floor when it is available (it is, at the dress
+  // stage) and on the analytic plane only as a fallback.
+  for (let j = 0; j <= SEGS; j++) {
+    const fy = rockFloor ? rockFloor(rimX[j], rimZ[j], node.floorY) : node.floorY;
+    put(SKIRT + j, rimX[j], Math.min(fy, node.floorY) - 0.45, rimZ[j], 'wall');
+  }
+  // THE TOP CAP centre. Sits at the mean height of the top ring so the cap is flat — this is the
+  // egg's seat, and `eggDaisTop` is still `floorY + H + 0.23`, unmoved.
+  let topY = 0;
+  for (let j = 0; j < SEGS; j++) topY += pos[(RINGS * stride + j) * 3 + 1];
+  topY /= SEGS;
+  put(APEX, node.x, topY, node.z, 'floor');
+
   const idx: number[] = [];
   for (let i = 0; i < RINGS; i++) {
     for (let j = 0; j < SEGS; j++) {
       const p0 = i * stride + j, p1 = p0 + 1, p2 = (i + 1) * stride + j, p3 = p2 + 1;
       idx.push(p0, p2, p1, p1, p2, p3);
     }
+  }
+  // Skirt quads (rim → buried ring). Wound so the OUTWARD face is front, matching the flank above.
+  for (let j = 0; j < SEGS; j++) {
+    const r0 = j, r1 = j + 1, s0 = SKIRT + j, s1 = SKIRT + j + 1;
+    idx.push(r0, r1, s0, s1, s0, r1);
+  }
+  // Top cap fan (top ring → apex), wound so its face points UP. The order is `t0, APEX, t1` and NOT
+  // the natural-looking `t0, t1, APEX`: the ring runs counter-clockwise in XZ, so that one produces
+  // a −Y normal and, under FrontSide, a cap that is invisible from above — i.e. the hole is still
+  // there, just harder to see. Caught by shooting it, not by reading it.
+  for (let j = 0; j < SEGS; j++) {
+    const t0 = RINGS * stride + j, t1 = t0 + 1;
+    idx.push(t0, APEX, t1);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -629,7 +696,7 @@ function buildSpeleothem(
   //    which leaves only the ceiling darkening ramp.
   //
   //    KIND-NEUTRAL ON PURPOSE, canonical included: `caveDigest` hashes vertex POSITIONS only, so a
-  //    colour change cannot move the origin digest (d8f15005). The GEOMETRY half of this fix is the
+  //    colour change cannot move the origin digest (b2de403d). The GEOMETRY half of this fix is the
   //    kind-gated `speleoSolidity`, for exactly the opposite reason.
   const nrm = geo.attributes.normal as THREE.BufferAttribute;
   const col = new Float32Array(pos.length);
@@ -1350,7 +1417,7 @@ function buildFungiCluster(
  *  bloom looks like, and never as one blob. Enforced by RELAXATION, not by re-placement, and that is
  *  the load-bearing choice: a pair that already satisfies the rule is not moved by one float, so
  *  every canonical cluster that was already legal is byte-identical, and no cluster anywhere changes
- *  a single mushroom's SIZE — which is why the cave-walk vertex digest (d8f15005 at the origin)
+ *  a single mushroom's SIZE — which is why the cave-walk vertex digest (b2de403d at the origin)
  *  cannot move, since it hashes each mesh's local geometry.
  *
  *  It consumes ZERO `rand()` draws (the tie-break for a perfectly-coincident pair is derived from
@@ -2276,7 +2343,7 @@ export function startSpawnCave(
       const dT = depthOf(node);
       // The egg's central natural pedestal (dais) — collider-bearing (baked into the trimesh).
       if (node.kind === 'egg') {
-        const dm = new THREE.Mesh(buildDais(node, cnoise, dT), _caveSolid);
+        const dm = new THREE.Mesh(buildDais(node, cnoise, dT, rockFloor), _caveSolid);
         dm.castShadow = false; dm.receiveShadow = true; dm.userData.eggDais = true;
         group.add(dm); meshes.push(dm);
       }

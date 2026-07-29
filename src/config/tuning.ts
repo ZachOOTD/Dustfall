@@ -1297,7 +1297,7 @@ export const Tuning = {
   //    Carried by every `warren` cave and no other kind — the warren already ships the dressing of
   //    somebody having worked down there (scrap caches, salvage plates, rubble), so this gives that
   //    dressing its subject. Canonical NEVER carries it, which is what keeps the origin-parity
-  //    digests (d8f15005 / 99e0015b) untouched BY CONSTRUCTION rather than by re-baselining.
+  //    digests (b2de403d / cfbd1198) untouched BY CONSTRUCTION rather than by re-baselining.
   //    The whole beat is spawned from a resident sink, so none of its meshes can enter caveGen's
   //    hashed mesh set either (the digest is taken inside doFinalize, before any sink attaches).
   // The body is seated against the MEASURED wall (`makeWallCaster`), not at a fraction of the
