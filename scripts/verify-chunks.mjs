@@ -393,16 +393,28 @@ for (const seed of DET_SEEDS) {
 //       too, so a future march over marginal geometry belongs HERE, not there.
 leg({
   name: 'cave-kinds', group: 'cave-kinds', scenario: 'cave-kinds', seed: 1337, timeout: 2100000, solo: true, est: 25,
-  re: /CAVE-KINDS pass=(\d) seed=(\S+) kinds=(\d+) built=(\d+) marched=(\d+) voided=(\d+) sites=(\d+) strands=(\d+) escapes=(\d+) fails=(\d+)/,
+  // ⚠ DEEPER cycle 12 — `lit=(\d+)` WAS MISSING HERE AND IT BROKE THE LEG. Cycle 9 wrote this
+  //   pattern; cycle 10 added `lit=${lightChecked}` to the CAVE-KINDS line (its new day-invariance +
+  //   sky-occlusion teeth) and did not update the matcher. The two have disagreed ever since, so
+  //   from cycle 10 until now this leg could not match its own probe line and reported
+  //   `NO PROBE LINE (boot failed after retry) *** FAIL ***` on every run — REGARDLESS of the
+  //   result. It was structurally incapable of reporting a pass, which is the campaign's own
+  //   central lesson wearing the opposite mask: not a gate that launders bugs as verified, but a
+  //   gate that cannot report a success and so trains everyone to read the raw log instead of the
+  //   row. Cycles 10 and 11 both did exactly that. Whenever the probe line grows a field, this
+  //   pattern and the group indices below move with it.
+  re: /CAVE-KINDS pass=(\d) seed=(\S+) kinds=(\d+) built=(\d+) marched=(\d+) voided=(\d+) lit=(\d+) sites=(\d+) strands=(\d+) escapes=(\d+) fails=(\d+)/,
   row(m) {
     // Vacuous-pass guard, harness side: a green row off zero built / zero marched kinds would
-    // launder "the kind table never produced a cave" as "every kind is fine".
-    const kinds = Number(m[3]), built = Number(m[4]), marched = Number(m[5]), voided = Number(m[6]), sites = Number(m[7]);
-    if (!(kinds >= 4) || built !== kinds || marched !== kinds || voided !== kinds || !(sites >= 120)) {
-      return { ok: false, rows: [`cave-kinds: VACUOUS — kinds=${m[3]} built=${m[4]} marched=${m[5]} voided=${m[6]} sites=${m[7]} (expected ≥4 / all built / all marched / all voided / ≥120 sites)  *** FAIL ***`] };
+    // launder "the kind table never produced a cave" as "every kind is fine". `lit` joins it for the
+    // same reason cycle 10 added the teeth — a kind that skipped them proved nothing about light.
+    const kinds = Number(m[3]), built = Number(m[4]), marched = Number(m[5]), voided = Number(m[6]);
+    const lit = Number(m[7]), sites = Number(m[8]);
+    if (!(kinds >= 4) || built !== kinds || marched !== kinds || voided !== kinds || lit !== kinds || !(sites >= 120)) {
+      return { ok: false, rows: [`cave-kinds: VACUOUS — kinds=${m[3]} built=${m[4]} marched=${m[5]} voided=${m[6]} lit=${m[7]} sites=${m[8]} (expected ≥4 / all built / all marched / all voided / all lit / ≥120 sites)  *** FAIL ***`] };
     }
     const ok = m[1] === '1';
-    return { ok, rows: [`cave-kinds seed 1337: ${m[3]} kinds built + marched + void-swept, mix audited over ${m[7]} sites, strands ${m[8]}${m[8] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void escapes ${m[9]}, ${m[10]} fails  ${ok ? 'OK' : '*** FAIL ***'}`] };
+    return { ok, rows: [`cave-kinds seed 1337: ${m[3]} kinds built + marched + void-swept + light-tested, mix audited over ${m[8]} sites, strands ${m[9]}${m[9] === '0' ? '' : ' ⚠ WEDGE TRAP'}, void escapes ${m[10]}, ${m[11]} fails  ${ok ? 'OK' : '*** FAIL ***'}`] };
   },
   noLineRow: 'cave-kinds: NO PROBE LINE (boot failed after retry)  *** FAIL ***',
 });
