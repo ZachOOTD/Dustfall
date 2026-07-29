@@ -16133,6 +16133,55 @@ const SCENARIOS = {
     console.log('[vista] ' + JSON.stringify(info));
   },
 
+  // ── skeleton-sockets — the LEGACY (surface) skeleton's skull, close, from three bearings.
+  //    Exists because the shipped eye sockets are `CircleGeometry` — one zero-thickness face each —
+  //    and that defect is INVISIBLE face-on by definition: a disc looks like a socket right up until
+  //    the moment you are not square to it. So a single framed portrait is exactly the shot that
+  //    cannot see this. Three bearings: square on, 70° off-axis (where a disc thins to a line), and a
+  //    hard 88° graze (where it disappears entirely). Run against the REAL opening-wreck skeleton in
+  //    the live world, not a bench copy.
+  //      npm run rig -- --scenario=skeleton-sockets --port=52xx --tag=before
+  'skeleton-sockets': async (page) => {
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      ctx.flags.paused = true; ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(900, 700, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
+      const skull = ctx.three.scene.getObjectByName('skullLegacy');
+      if (!skull) return { noSkull: true };
+      const V = cam.position.constructor;
+      const c = skull.getWorldPosition(new V());
+      // The skull's own +Z (the face direction) in world space, flattened. Read straight off
+      // matrixWorld — the skull is a leaf under two rotated groups, so a local guess is wrong.
+      const m = skull.matrixWorld.elements;
+      let fx = m[8], fz = m[10];                     // local +Z basis, world XZ
+      const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+      window.__socketFrame = (deg, dist) => {
+        const a = (deg * Math.PI) / 180;
+        const bx = fx * Math.cos(a) - fz * Math.sin(a);
+        const bz = fx * Math.sin(a) + fz * Math.cos(a);
+        cam.position.set(c.x + bx * dist, c.y + 0.012, c.z + bz * dist);
+        cam.lookAt(c.x, c.y, c.z);
+        cam.updateMatrixWorld(true);
+      };
+      return { skull: { x: +c.x.toFixed(2), y: +c.y.toFixed(2), z: +c.z.toFixed(2) }, face: [+fx.toFixed(2), +fz.toFixed(2)] };
+    });
+    if (info.noSkull) { console.log('[skeleton-sockets] NO skullLegacy IN THE SCENE — nothing was measured (vacuous)'); throw new Error('skeleton-sockets found no skull'); }
+    console.log('[skeleton-sockets] ' + JSON.stringify(info));
+    const tag = argv.tag ? `-${argv.tag}` : '';
+    for (const [name, deg, dist] of [['face', 0, 0.42], ['turn70', 70, 0.42], ['graze88', 88, 0.40]]) {
+      await page.evaluate(({ deg, dist }) => window.__socketFrame(deg, dist), { deg, dist });
+      await page.waitForTimeout(220);
+      await page.screenshot({ path: join(OUT, `scen-sockets-${name}${tag}.png`), fullPage: false, timeout: 60000 });
+      console.log(`[skeleton-sockets] saved scen-sockets-${name}${tag}.png`);
+    }
+  },
+
   // Spyglass zoom (C29): stand `dist` m from a flagship landmark, force the spyglass
   // FOV zoom + the scope vignette, and capture the world-through-the-glass. Pass
   // --raw to capture the UN-zoomed wide view for a before/after compare.

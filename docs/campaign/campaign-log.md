@@ -131,10 +131,35 @@ spent lantern was yawed off the view line because broadside it read as a rifle.
   going darker costs the 4m arrival read.
 - The journal reads as a small pale card at 1.5m rather than as a bound book.
 - The cranium's parietal is still smooth in profile at the 1m macro framing (not a gameplay distance).
-- `openingScene`'s skeleton still has the **zero-thickness `CircleGeometry` eye sockets** — a rule-7
-  violation in the game's first impression. Q7's default kept it untouched. The minimal global fix is
-  a 2cm dark frustum inset behind the existing brow (~4 lines), and it deserves its own change with
-  its own opening-scene shot rather than being smuggled into this one.
+- ~~`openingScene`'s skeleton still has the zero-thickness `CircleGeometry` eye sockets.~~
+  **CLOSED 2026-07-29 — Zach overruled Q7 and asked for it.** See below.
+
+### Follow-up (same day) — the surface skeleton's eye sockets, on Zach's call
+
+Q7's default had left the shipped skeleton alone. He overruled it, so the rule-7 violation in the
+game's **first impression** is fixed: each `CircleGeometry` disc is now a near-black solid **frustum**
+sunk into the cranium, wide mouth at the surface narrowing 3cm inward.
+
+**A new permanent probe, because this defect is invisible to the shot you would naturally take.** A
+disc reads as a perfect socket face-on — it only dies off-axis, so a framed portrait is exactly the
+picture that cannot see it. `skeleton-sockets` shoots the REAL opening-wreck skull from three
+bearings: square on, 70°, and an 88° graze.
+`scen-sockets-turn70-before.png` is the defect in one frame — **both sockets simply gone, the skull a
+smooth ball**. After: the orbit holds as a dark recess with a rim at 70° *and* at 88°.
+
+Two rounds, and round 1 failed on tone rather than on rule 7: at 0.030 radius, set high and wide and
+standing 6mm proud, they read as **alien goggles** — two dark ovals over a third of the face. That is
+the identical failure the close-read cave skull hit at *its* round 2, so it is now recorded in-source
+beside the numbers, so a third skull does not have to learn it. r2: smaller, lower, closer together,
+barely proud, and the taper does the work.
+
+Parented to the **skull** rather than to `spineBase` — the skull carries its own rotation and a
+non-uniform scale, and the old sockets were placed by hand-derived numbers in the parent's frame,
+which is why they sat ~2cm *inside* the surface and were nearly invisible even face-on. As children,
+direction × radius puts them on the sphere by construction.
+
+Gates: `verify:intro` PASS (12 beats) · `verify:chunks --legs=determinism` PASS at both seeds, so the
+vignette digests did not move · tsc clean.
 
 ## ⚠ CORRECTION (2026-07-28, on resume) — the "regression" below was MISCALLED. It is a FLAKE.
 

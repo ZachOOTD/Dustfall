@@ -125,14 +125,44 @@ export function makeSkeleton(opts: SkeletonOpts = {}): THREE.Group {
   skull.scale.set(0.92, 1.08, 1.0);
   skull.position.set(0, 0.64, 0.01);
   skull.rotation.x = 0.25;       // additional forward tilt on top of spine lean
+  skull.name = 'skullLegacy';    // the socket probe frames this by name
   spineBase.add(skull);
-  // Eye sockets — dark RECESSED discs (read as hollow eyes at a glance, not protruding
-  // balls). Brow ridge above + a nasal void below flip the read from "ball" to "skull".
-  for (const dx of [-0.043, 0.043]) {
-    const socket = new THREE.Mesh(new THREE.CircleGeometry(0.032, 10), _socketMat);
-    socket.position.set(dx, 0.655, 0.088);
-    socket.rotation.x = -0.12;
-    spineBase.add(socket);
+  // ── Eye sockets — SOLID TAPERING RECESSES, not discs (rule 7, fixed 2026-07-29 on Zach's call).
+  //
+  // WHAT WAS WRONG. These were `CircleGeometry(0.032, 10)` — ONE ZERO-THICKNESS FACE each. Face-on
+  // they read as sockets; at any turn they thin to a line and then vanish, and the skull becomes a
+  // smooth ball with no eyes at all. `scen-sockets-turn70-before.png` is that exact frame at 70°:
+  // both sockets gone. This is the game's FIRST IMPRESSION (`openingScene.ts`) and it is rule 7 on
+  // the one feature a player looks straight at.
+  //
+  // THE FIX. A near-black solid FRUSTUM sunk into the cranium per eye: wide mouth at the surface,
+  // narrowing 3cm inward. It is a closed body with real depth, so from any bearing what you see is a
+  // tapering hole with a rim rather than a face that happens to be edge-on. Same principle the
+  // close-read cave skull uses; this is the cheap version of it that does not need a displaced
+  // cranium, so the shipped silhouette is unchanged.
+  //
+  // Parented to the SKULL, not to `spineBase`, deliberately: the skull carries its own rotation and
+  // a non-uniform scale, and the old sockets were positioned by hand-derived numbers in the parent's
+  // frame — which is why they sat ~2cm INSIDE the surface. As children, direction × radius puts them
+  // on the sphere by construction and they inherit the squash, so they cannot drift if the skull is
+  // ever re-proportioned. `SOCK_PROUD` clears the facet inset: an 80-face icosahedron's facet
+  // centres sit a few mm inside its circumsphere, so a rim exactly at r would be buried by the flat.
+  // r1 → r2 (shot, not taste): at 0.030 radius, set high and wide and standing 6mm proud, these read
+  // as ALIEN GOGGLES face-on — two big dark ovals covering a third of the face. A real orbit is about
+  // a quarter of the face's width. Smaller, set lower and closer together, and barely proud so the
+  // TAPER does the work instead of the rim. (The close-read cave skull hit this same failure at its
+  // own round 2; recorded here so a third skull does not.)
+  const SOCK_R_OUT = 0.021, SOCK_R_IN = 0.007, SOCK_DEPTH = 0.026, SOCK_PROUD = 0.002;
+  const SKULL_R = 0.11;
+  for (const sx of [-1, 1]) {
+    const dir = new THREE.Vector3(sx * 0.34, 0.16, 0.92).normalize();
+    const socket = new THREE.Mesh(
+      new THREE.CylinderGeometry(SOCK_R_OUT, SOCK_R_IN, SOCK_DEPTH, 12),
+      _socketMat,
+    );
+    socket.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);   // +Y (the wide end) → outward
+    socket.position.copy(dir).multiplyScalar(SKULL_R + SOCK_PROUD - SOCK_DEPTH * 0.5);
+    skull.add(socket);
   }
   const nasal = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.045, 3), _socketMat);
   nasal.position.set(0, 0.608, 0.094);
