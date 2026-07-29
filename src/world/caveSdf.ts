@@ -109,16 +109,65 @@ function corridorPrim(
  *  floor the corridor floors are flat again and the slope is the graph's sized ramp, as intended. */
 let _localFloor = 0;
 
+// ── WALK-TEST 2026-07-29 (Zach) — POOL BASINS. ──────────────────────────────────────────────────
+// *"the water pools look a bit weird … right now its just a 3d water sitting on top of the terrain
+// … it should actually sit in some kind of pool."*
+//
+// He is right and the diagnosis is precise: the water sheet was never the problem. It already
+// feathers to a film and sinks under the stone at its shore. What was missing is that THE ROCK NEVER
+// DIPPED — a flat sheet lying on a flat floor reads as a decal no matter how good its edge is. Water
+// looks like water when it is sitting in a hollow.
+//
+// So the floor cut itself is lowered under each pool. That makes the basin part of the SDF, which
+// means it is part of the COLLIDER too (rule 9): you wade DOWN into a pool rather than stepping onto
+// a sheet. A dressed rock rim would have been the cheaper fix and it is what he offered as an
+// alternative, but a rim is a prop hiding a seam, and this removes the seam.
+//
+// Depth is deliberately modest. `CAVE_POOL_DEPTH_M` is 26cm because "you wade, you never swim"; the
+// basin adds to that, so the centre reaches ~60cm — knee-deep, still wadeable, still not swimmable.
+interface PoolBasin { x: number; z: number; r: number; depth: number; }
+let _basins: PoolBasin[] = [];
+/** Publish the basins for the NEXT SDF build. Must be called before `startCaveSdf`, and is cleared
+ *  by it, so a cave can never inherit the previous cave's pools. */
+export function setCaveSdfBasins(b: PoolBasin[]): void { _basins = b; }
+
+/** Extra depth carved into the floor at (x, z). 0 away from any pool.
+ *
+ *  HOT PATH: this runs per voxel inside `primDist`, so it early-outs on a squared-distance test
+ *  before doing anything transcendental, and returns immediately when the cave has no pools. */
+function basinDepthAt(x: number, z: number): number {
+  if (_basins.length === 0) return 0;
+  let deepest = 0;
+  for (let i = 0; i < _basins.length; i++) {
+    const b = _basins[i];
+    const dx = x - b.x, dz = z - b.z;
+    const d2 = dx * dx + dz * dz;
+    const R = b.r;
+    if (d2 >= R * R) continue;
+    // smootherstep from the rim (0) to the centre (1) — C2 continuous, so the basin blends into the
+    // floor without a crease the surface-nets pass would turn into a visible ring of facets.
+    const u = 1 - Math.sqrt(d2) / R;
+    const f = u * u * u * (u * (u * 6 - 15) + 10);
+    const dep = b.depth * f;
+    if (dep > deepest) deepest = dep;
+  }
+  return deepest;
+}
+
 /** Primitive SDF. Negative inside the cavity. Exact-ish for the floor plane, an ellipsoid
  *  approximation elsewhere (the classic (|q|−1)·min(r) bound — under-estimates near the poles by a
  *  few cm at these radii, which surface nets absorbs without a visible artefact). */
 function primDist(p: Prim, x: number, y: number, z: number): number {
   if (!p.corridor) {
-    _localFloor = p.fa;
+    // Pool basins lower the floor cut locally (see `basinDepthAt`). Only chambers: pools are placed
+    // in chambers by construction, and a corridor's floor is a sized ramp whose grade guarantee the
+    // march depends on — nothing may dent it.
+    const fa = p.fa - basinDepthAt(x, z);
+    _localFloor = fa;
     const qx = (x - p.cx) / p.rx, qy = (y - p.cy) / p.ry, qz = (z - p.cz) / p.rz;
     const k = Math.sqrt(qx * qx + qy * qy + qz * qz);
     const d = (k - 1) * Math.min(p.rx, p.ry, p.rz);
-    return Math.max(d, p.fa - y);                       // intersect with the halfspace above the floor
+    return Math.max(d, fa - y);                         // intersect with the halfspace above the floor
   }
   const tRaw = ((x - p.ax) * p.dx + (z - p.az) * p.dz) / p.len;
   const t = tRaw < 0 ? 0 : tRaw > 1 ? 1 : tRaw;

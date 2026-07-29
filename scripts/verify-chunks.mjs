@@ -318,13 +318,24 @@ for (const seed of DET_SEEDS) {
       rows.push(st
         ? `storm-cave seed ${seed}: ${st[2]} fails  ${okS ? 'OK' : '*** FAIL ***'}`
         : `storm-cave seed ${seed}: NO PROBE LINE (the storm-shelter check never reported)  *** FAIL ***`);
-      return { ok: ok && okL && okC && okS, data: { digest: m[3] }, rows };
+      //      POOL-BASIN (walk-test 2026-07-29): every pool sits in a REAL hollow — the centre of the
+      //      Rapier collider under each pool is measurably lower than the ring outside its basin, and
+      //      the total depth stays inside the wadeable band. Geometry answers for a geometry question:
+      //      at shipping exposure the water is a near-black mirror, so a screenshot cannot tell a
+      //      basin from a decal.
+      const pbm = out.match(/POOL-BASIN pass=(\d) fails=(\d+)/);
+      const okP = !!pbm && pbm[1] === '1';
+      rows.push(pbm
+        ? `pool-basin seed ${seed}: ${pbm[2]} fails  ${okP ? 'OK' : '*** FAIL ***'}`
+        : `pool-basin seed ${seed}: NO PROBE LINE (the basin probe never reported)  *** FAIL ***`);
+      return { ok: ok && okL && okC && okS && okP, data: { digest: m[3] }, rows };
     },
     noLineRow: [
       `pool-fill seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
       `lantern-rt seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
       `cave-cold seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
       `storm-cave seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
+      `pool-basin seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
     ],
   });
 }

@@ -3672,7 +3672,15 @@ const SCENARIOS = {
         body.setLinvel({ x: 0, y: 0, z: 0 }, true); ctx.player.velocityY = 0;
         await frames(30);
       };
-      await placeAt(room.x, room.y, room.z);
+      // WALK-TEST 2026-07-29 — STAND OFF THE CHAMBER CENTRE. The roomiest chamber is the EGG
+      // chamber, and its centre is occupied by the egg dais — a 0.9m rock pedestal. This probe
+      // used to teleport the capsule INTO it and only worked because the dais was a hollow shell
+      // with an open top; sealing that hole (the walk-test fix for "i can see through the model")
+      // left the capsule embedded in solid rock, and the round trip reported pathLen 0. The
+      // probe's INTENT was always "stand in a roomy deep chamber", never "stand inside the
+      // pedestal", so it now stands clear of it — a player could not stand there either.
+      const standR = Math.min(room.rx * 0.62, Math.min(room.rx * 0.34, 3.4) + 1.6);
+      await placeAt(room.x + standR, room.y, room.z);
       S('stand');
       const cont = g.caveContainment();
       notes.stand = { room: room.id, depth: +cont.depth.toFixed(2), key: cont.key, kind: cont.kind };
@@ -3870,7 +3878,7 @@ const SCENARIOS = {
       await placeAt(room.x + 400, surfAway, room.z + 400);
       await frames(60);
       const survivedAway = ctx.lanterns.list.indexOf(lant) >= 0 && !!lant.light;
-      await placeAt(room.x, room.y, room.z);
+      await placeAt(room.x + standR, room.y, room.z);
       await frames(30);
       notes.farField = {
         survivedAway, backPresent: ctx.lanterns.list.indexOf(lant) >= 0,
@@ -3884,7 +3892,7 @@ const SCENARIOS = {
       if (notes.farField.moved > 0.01) fails.push(`the lantern moved ${notes.farField.moved}m over the far-field trip`);
 
       // ── 5. SAVE / RELOAD (done before the retrieve so a live lantern is in the save). ──
-      await placeAt(room.x, room.y, room.z);
+      await placeAt(room.x + standR, room.y, room.z);
       S('saveload');
       const savedPos = { x: lant.pos.x, y: lant.pos.y, z: lant.pos.z };
       g.saveGame();
@@ -3919,7 +3927,7 @@ const SCENARIOS = {
       // Stand still and TURN. Teleporting into a ring risks parking the capsule inside solid rock,
       // and the placements only need to be further apart than LANTERN_NEAR_DISTANCE (1m): at
       // PLACEMENT_DISTANCE_M = 2.2m, adjacent bearings 30 deg apart land 1.14m apart.
-      await placeAt(room.x, room.y, room.z);
+      await placeAt(room.x + standR, room.y, room.z);
       const capToasts = [];
       for (let i = 0; i < 16 && capToasts.length < 3; i++) {
         giveKit();
@@ -4197,6 +4205,64 @@ const SCENARIOS = {
     for (const f of (sc.fails || [])) { fails.push(`STORM-CAVE ${f}`); console.log(`[pool-fill] STORM-CAVE FAIL ${f}`); }
     console.log(`[pool-fill] STORM-CAVE ${JSON.stringify(sc.notes || {})}`);
     console.log(`STORM-CAVE pass=${(sc.fails || []).length === 0 ? 1 : 0} fails=${(sc.fails || []).length}`);
+
+    // ══ WALK-TEST 2026-07-29 — POOL-BASIN ══════════════════════════════════════════════════════
+    //    Zach: the pools read as *"3d water sitting on top of the terrain … it should actually sit in
+    //    some kind of pool."* The floor cut is now lowered under each pool, so the hollow is in the
+    //    SDF and therefore in the COLLIDER.
+    //
+    //    MEASURED, NOT EYEBALLED, and deliberately so: `pool-look` renders at true shipping exposure,
+    //    where the water is a very dark mirror — a basin and no basin look nearly identical in those
+    //    frames. Geometry questions get geometry answers. This casts the REAL Rapier collider (the
+    //    thing the player wades in) at each pool centre and at a ring outside the basin, and asserts
+    //    the rock actually falls away between them.
+    const pb = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const fails = []; const notes = { pools: [] };
+      try {
+        const T = g.Tuning;
+        const res = (ctx.caveStream ? ctx.caveStream.residents() : [])[0];
+        if (!res) return { fails: ['no cave resident'], notes };
+        const specs = (res.cave.probe.pools || []);
+        if (!specs.length) return { fails: ['the cave reported NO pools — nothing to measure'], notes };
+        const handles = new Set();
+        if (res.cave.body) for (let i = 0; i < res.cave.body.numColliders(); i++) handles.add(res.cave.body.collider(i).handle);
+        for (const s of specs) {
+          // Centre of the basin…
+          const c = g.castDown(s.x, s.z, s.y + 3, true);
+          // …and OUTSIDE it, on a ring past `radius × BASIN_R_MUL`, averaged over 8 bearings so one
+          // unlucky lump of floor relief cannot pass or fail the whole check.
+          const R = s.r * T.CAVE_POOL_BASIN_R_MUL * 1.25;
+          let sum = 0, n = 0;
+          for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * Math.PI * 2;
+            const h = g.castDown(s.x + Math.cos(a) * R, s.z + Math.sin(a) * R, s.y + 3, true);
+            if (h && handles.has(h.colliderHandle)) { sum += h.hitY; n++; }
+          }
+          if (!c) { fails.push(`pool at (${s.x.toFixed(0)},${s.z.toFixed(0)}): no rock under the centre`); continue; }
+          if (!handles.has(c.colliderHandle)) { fails.push('the floor under a pool is not the cave body'); continue; }
+          if (n < 4) { fails.push(`pool at (${s.x.toFixed(0)},${s.z.toFixed(0)}): only ${n}/8 rim samples hit cave rock`); continue; }
+          const rim = sum / n;
+          const drop = rim - c.hitY;                       // +ve = the centre is LOWER than the surround
+          notes.pools.push({ x: +s.x.toFixed(0), z: +s.z.toFixed(0), drop: +drop.toFixed(3), waterAbove: +(s.y - c.hitY).toFixed(3) });
+          // The basin is smootherstep-shaped and the floor carries its own relief, so this asserts a
+          // GENEROUS fraction of the nominal depth rather than the number itself.
+          if (!(drop > T.CAVE_POOL_BASIN_DEPTH_M * 0.45))
+            fails.push(`pool at (${s.x.toFixed(0)},${s.z.toFixed(0)}) has no basin: the centre is only ${drop.toFixed(3)}m below its surround (want > ${(T.CAVE_POOL_BASIN_DEPTH_M * 0.45).toFixed(3)}m) — the water is sitting ON the floor`);
+          // …and the water still has to be WADEABLE, not swimmable: cycle 6's whole design contract.
+          const total = s.y - c.hitY;
+          if (!(total > 0.2 && total < 0.95))
+            fails.push(`pool depth ${total.toFixed(2)}m at the centre is outside the wadeable band 0.2-0.95m`);
+        }
+        return { fails, notes };
+      } catch (e) {
+        fails.push(`POOL-BASIN threw: ${String((e && e.message) || e)}`);
+        return { fails, notes };
+      }
+    }).catch((e) => ({ fails: [`POOL-BASIN harness threw: ${String((e && e.message) || e)}`], notes: {} }));
+    for (const f of (pb.fails || [])) { fails.push(`POOL-BASIN ${f}`); console.log(`[pool-fill] POOL-BASIN FAIL ${f}`); }
+    console.log(`[pool-fill] POOL-BASIN ${JSON.stringify(pb.notes || {})}`);
+    console.log(`POOL-BASIN pass=${(pb.fails || []).length === 0 ? 1 : 0} fails=${(pb.fails || []).length}`);
 
     // ── 7. THE PIXEL GATE (round-13 fix 2b) ──────────────────────────────────────────────────
     //    `pool-look` measures the water's on-screen appearance; nothing ran it in `verify:chunks`,
@@ -5810,7 +5876,7 @@ const SCENARIOS = {
         if (listA.length < 40) fails.push(`BEAT-SITES only ${listA.length} sites swept — too few to conclude anything`);
         if (!kindsSeen.has('warren')) fails.push('BEAT-SITES no warren appeared in a 12km box — the sweep proves nothing about the beat');
         if (beats.length === 0) fails.push('BEAT-SITES not one site carries the beat — it would never appear in a real world');
-        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "b2de403d / cfbd1198
+        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "4942306d / 33961250
         //     cannot move" a machine fact instead of a claim in a comment.
         if (carries('canonical')) fails.push('BEAT-SITES canonical carries the beat — the ORIGIN CAVE would carry an authored corpse and its parity digest would be at risk');
         const originClear = T.CAVE_SITE_ORIGIN_CLEAR_M;   // `clr` is not declared until below this block

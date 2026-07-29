@@ -1297,7 +1297,7 @@ export const Tuning = {
   //    Carried by every `warren` cave and no other kind — the warren already ships the dressing of
   //    somebody having worked down there (scrap caches, salvage plates, rubble), so this gives that
   //    dressing its subject. Canonical NEVER carries it, which is what keeps the origin-parity
-  //    digests (b2de403d / cfbd1198) untouched BY CONSTRUCTION rather than by re-baselining.
+  //    digests (4942306d / 33961250) untouched BY CONSTRUCTION rather than by re-baselining.
   //    The whole beat is spawned from a resident sink, so none of its meshes can enter caveGen's
   //    hashed mesh set either (the digest is taken inside doFinalize, before any sink attaches).
   // The body is seated against the MEASURED wall (`makeWallCaster`), not at a fraction of the
@@ -1474,7 +1474,25 @@ export const Tuning = {
   //    pools. Seed-pure per cave descriptor (D290): a private RNG stream + the cave's colour noise.
   CAVE_POOL_CHAMBERS_MIN: 1,           // pools per cave (min) — ALWAYS ≥1 so every cave has water somewhere
   CAVE_POOL_CHAMBERS_MAX: 3,           // (max) — water is a feature of the cave, not of every room
-  CAVE_POOL_DEPTH_M: 0.26,             // m — water surface above the local floor plane. Shallow: you wade, you never swim
+  // 0.26 → 0.10 (walk-test 2026-07-29). THIS NUMBER WAS THE "SITTING ON TOP" DEFECT. The sheet ramps
+  // from `waterY` at the centre down to a film at its rim, so at 0.26 the water DOMED 26cm above the
+  // surrounding floor — a blob of jelly on the stone, not a pool. Real water is flat and the ROCK
+  // decides its outline, so the surface now sits ~10cm proud of the floor plane and the depth lives
+  // in the basin BELOW it instead. Total centre depth is unchanged in spirit and still wadeable.
+  CAVE_POOL_DEPTH_M: 0.10,             // m — water surface above the local floor plane. Shallow: you wade, you never swim
+  // ── WALK-TEST 2026-07-29 — THE BASIN. Zach: the pools read as "3d water sitting on top of the
+  //    terrain … it should actually sit in some kind of pool." The sheet was never the problem (it
+  //    already feathers to a film and sinks under the stone); the ROCK never dipped. These carve the
+  //    floor cut itself, so the hollow is in the SDF and therefore in the COLLIDER — you wade DOWN
+  //    into a pool. Total centre depth = DEPTH_M + BASIN_DEPTH_M ≈ 0.60m: knee-deep, still wadeable,
+  //    still nowhere near swimmable, so "you wade, you never swim" holds.
+  CAVE_POOL_BASIN_DEPTH_M: 0.28,       // m — extra rock carved beneath the waterline at the pool centre. +DEPTH_M = 0.38 total, under the 0.40m walkable-only ceiling the pool gate enforces
+  // 1.45 → 1.12, and the march gate is what forced it. `placeCavePools` keeps pools clear of corridor
+  // MOUTHS, but a basin 45% wider than its pool reached straight past that exclusion, dented a mouth,
+  // and wedged the KCC: LANTERN-RT came back `outOk:false, pathLen:0` — the capsule could not walk
+  // from one chamber to the next at all. Sized to the pool itself, the basin inherits the placement's
+  // own clearance by construction instead of re-deriving (and re-getting-wrong) where a mouth is.
+  CAVE_POOL_BASIN_R_MUL: 1.12,         // × pool radius — slightly wider than the water so the rock keeps falling away past the waterline rather than ending exactly at it
   CAVE_POOL_R_MIN: 1.9,                // m — smallest pool radius
   CAVE_POOL_R_MAX: 5.2,                // m — largest pool radius (a hall pool you have to walk around, not across)
   CAVE_POOL_R_FRAC: 0.30,              // × chamber rx — target pool radius before the min/max clamp

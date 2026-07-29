@@ -44,6 +44,7 @@ import { makeStaticTrimesh } from '../physics/bodies.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { startCaveSdf, buildCaveSdf, caveVertexColor, type CaveSdfJob } from './caveSdf.ts';
+import { setCaveSdfBasins } from './caveSdf.ts';
 import { buildCavePools, placeCavePools, eggDaisRadius, setCavePoolEmitters, lastFloorSamplerMs, type CavePool, type CavePoolSpec } from './cavePools.ts';
 // DEEPER cycle 9 — CAVE KINDS. One table of parameter overrides over this ONE generator; see
 // caveKinds.ts for the table, the safety floors it machine-checks, and why `canonical` is empty.
@@ -696,7 +697,7 @@ function buildSpeleothem(
   //    which leaves only the ceiling darkening ramp.
   //
   //    KIND-NEUTRAL ON PURPOSE, canonical included: `caveDigest` hashes vertex POSITIONS only, so a
-  //    colour change cannot move the origin digest (b2de403d). The GEOMETRY half of this fix is the
+  //    colour change cannot move the origin digest (4942306d). The GEOMETRY half of this fix is the
   //    kind-gated `speleoSolidity`, for exactly the opposite reason.
   const nrm = geo.attributes.normal as THREE.BufferAttribute;
   const col = new Float32Array(pos.length);
@@ -1417,7 +1418,7 @@ function buildFungiCluster(
  *  bloom looks like, and never as one blob. Enforced by RELAXATION, not by re-placement, and that is
  *  the load-bearing choice: a pair that already satisfies the rule is not moved by one float, so
  *  every canonical cluster that was already legal is byte-identical, and no cluster anywhere changes
- *  a single mushroom's SIZE — which is why the cave-walk vertex digest (b2de403d at the origin)
+ *  a single mushroom's SIZE — which is why the cave-walk vertex digest (4942306d at the origin)
  *  cannot move, since it hashes each mesh's local geometry.
  *
  *  It consumes ZERO `rand()` draws (the tie-break for a perfectly-coincident pair is derived from
@@ -2249,6 +2250,7 @@ export function startSpawnCave(
   let rubbleHeaps = 0;
   let scrapAnchors: THREE.Vector3[] = [];
   let beatAnchor: BeatAnchor | null = null;   // cycle 12 — the dead explorer
+  let poolSpecs: CavePoolSpec[] = [];       // walk-test — computed pre-SDF so basins and water agree
   let msMesh = 0;
   let msRockSamplers = 0;                   // CLOSE-OUT — the two real-rock sampler passes
   let out: SpawnedCave | null = null;
@@ -2276,7 +2278,7 @@ export function startSpawnCave(
     group.name = 'caveGen';
     _fungiWallTotal = 0; _fungiWallHidden = 0; _fungiWallCeiling = 0;   // CLOSE-OUT — wall-shelf anchor accounting
     meshes = []; decor = []; fungi = []; pools = [];
-    rubbleHeaps = 0; scrapAnchors = []; beatAnchor = null;
+    rubbleHeaps = 0; scrapAnchors = []; beatAnchor = null; poolSpecs = [];
 
     // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems and,
     // since cycle 6, of water pools — shared so both agree on where a mouth is).
@@ -2299,6 +2301,20 @@ export function startSpawnCave(
     const depthOfY = (y: number): number =>
       Math.max(0, Math.min(1, (junction.gy - y) / Math.max(1, graph.depthBelowSurface)));
     const surfaceY = (x: number, z: number): number => terrain.pureHeightAt(x, z);
+    // WALK-TEST 2026-07-29 — the pools get a real BASIN in the rock, so the water sits IN something
+    // instead of on it. The specs are computed HERE, once, before the field is built, and handed to
+    // `buildCavePools` in the dress stage rather than being re-derived there.
+    //   ⚠ RE-DERIVING WOULD DESYNC THEM. `placeCavePools` draws from `prand`; calling it twice
+    //   advances the stream, so the second call returns DIFFERENT pools — basins carved in one place
+    //   and water poured in another, which is worse than the defect being fixed.
+    poolSpecs = placeCavePools(graph, cnoise, prand, dirsByNode, kp);
+    setCaveSdfBasins(poolSpecs.map((s) => ({
+      x: s.x, z: s.z,
+      // Wider than the pool so the rock keeps falling away past the waterline — a basin whose rim is
+      // exactly the waterline reads as a cylinder of water in a hole.
+      r: s.radius * Tuning.CAVE_POOL_BASIN_R_MUL,
+      depth: Tuning.CAVE_POOL_BASIN_DEPTH_M,
+    })));
     sdfJob = startCaveSdf(graph, junction, noise3, cnoise, Tuning.CAVE_SDF_VOXEL, depthOfY, surfaceY);
     benchNoise = noise3; benchDepthY = depthOfY; benchSurfaceY = surfaceY;
   };
@@ -2523,7 +2539,7 @@ export function startSpawnCave(
     // moved between two builds of the same seed fails the cave-walk gate like any other drift.
     // The SDF geometry goes in so the water can measure the REAL rock height under it and cut its
     // shoreline on the stone (cavePools.makeFloorSampler) — one linear pass over the positions.
-    const poolBuild = buildCavePools(graph, cnoise, prand, dirsByNode, sdf.geometry, kp);
+    const poolBuild = buildCavePools(graph, cnoise, prand, dirsByNode, sdf.geometry, kp, poolSpecs);
     pools = poolBuild.pools;
     for (const p of pools) { group.add(p.mesh); decor.push(p.mesh); }
 

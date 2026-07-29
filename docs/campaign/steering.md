@@ -186,3 +186,12 @@ by breaking (the Underworld ship lost its feedback for four days).
 hard to find. Shrinking it re-opens that, by design. The thing that must NOT regress is the
 *entrance being enterable* (the cycle-9 headroom defect: ~1 cave in 9 could not be entered) — that
 is a traversal invariant with a gate, and it is independent of how proud the tor stands.
+
+### Status (same session, 2026-07-29)
+
+| # | Status |
+|---|---|
+| **W-1** | **SHIPPED** (`e7826b3`) — `inCave` flag, storm zeroed underground, cave cold PRESERVED (the obvious `inShelter=true` fix red-provably kills it); `STORM-CAVE` gate rides pool-fill, red-proven both halves. |
+| **W-3** | **SHIPPED** (`c661625`) — the dais was an OPEN CONE (no top cap, no bottom seal) and its mouth was a hole in the COLLIDER; closed by construction + skirt to measured rock; first fix was still see-through (cap wound −Y — caught by shot, not read); origin digests re-baselined d8f15005→b2de403d / 99e0015b→cfbd1198. |
+| **W-2** | **IN FLIGHT** — basins carved into the SDF floor cut (collider-real: you wade DOWN); `CAVE_POOL_DEPTH_M` 0.26→0.10 (the dome WAS the "sitting on top" read), basin 0.28m @ 1.12×r (1.45× reached past the corridor-mouth exclusion and wedged the KCC — caught by LANTERN-RT, A/B-attributed to the DAIS seal exposing a probe standing inside the pedestal); `POOL-BASIN` gate red-proven twice (weak: constant zeroed; strong: carve path broken, constant honest). March green with basins (11/11, ascent=OUT). Digests move again → re-baselined to 4942306d / 33961250 (seed 7 read through the LIVE dev-server tab via `pendingSeed` + reload while the shell's permission classifier was down — same probe object the cave-digest scenario reads). |
+| **W-4** | **NOT STARTED** — budget-gated; see the ceiling note in the hand-off. |

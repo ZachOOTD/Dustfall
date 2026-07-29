@@ -1076,9 +1076,14 @@ export function buildCavePools(
   dirsByNode: Map<number, Array<{ x: number; z: number }>>,
   sdfGeometry?: THREE.BufferGeometry,
   kp: CaveKindParams = caveKindParams('canonical'),
+  /** WALK-TEST 2026-07-29 — specs computed by the CALLER before the SDF was built, because the pool
+   *  basins are carved into that field and the water has to land in them. Pass them through rather
+   *  than re-deriving: `placeCavePools` draws from `rand`, so a second call advances the stream and
+   *  returns different pools — basins in one place, water in another. Omitted = derive as before. */
+  preSpecs?: CavePoolSpec[],
 ): CavePoolBuild {
   const out: CavePool[] = [];
-  const specs = placeCavePools(graph, cnoise, rand, dirsByNode, kp);
+  const specs = preSpecs ?? placeCavePools(graph, cnoise, rand, dirsByNode, kp);
   if (!specs.length) return { pools: out, material: null };
   const floorH = sdfGeometry ? makeFloorSampler(sdfGeometry, specs) : undefined;
   // ONE instance for THIS cave, shared by its own pools (they mirror the same fungi) and by nothing
