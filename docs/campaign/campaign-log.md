@@ -6,7 +6,7 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
-## Walk-test batch (2026-07-29, same day as the master deploy) — W-1/W-2/W-3 SHIPPED · W-4 BUDGET-GATED
+## Walk-test batch (2026-07-29) — ALL FOUR SHIPPED (W-4 twice: Zach steered a second round live)
 
 Zach delivered the `deeper-shipped` walk-test verdict live (verbatim in [steering.md](steering.md)).
 Four items; three shipped same-session, each with a red-proven gate. The fourth reverses a
@@ -18,6 +18,34 @@ deliberate cycle-7 decision and is held at the budget ceiling, not for any techn
 | **W-3** | The egg dais is see-through | `c661625` | It was an open cone — no top cap, no bottom seal — and its ~2m mouth was a hole in the COLLIDER (the dais is baked into the trimesh): climb it and drop into a pit. The first fix was STILL see-through: the natural cap winding gives a −Y normal, invisible from above under FrontSide — caught by the shot, unreachable by reading. Known and deferred TWICE (cycles 3 and 9) before Zach walked into it. |
 | **W-2** | Pools sit in real basins | `0df142b` | The sheet was never the problem — the ROCK never dipped, and `CAVE_POOL_DEPTH_M` 0.26 made the surface DOME above the floor (a blob of jelly). Basin carved into the SDF floor cut → it is in the collider (you wade DOWN); specs computed once pre-SDF (re-deriving advances `prand` — basins in one place, water in another). The 1.45× basin reached past the corridor-mouth exclusion and WEDGED THE KCC — caught by LANTERN-RT, then A/B'd to the REAL cause: the probe stood inside the old dais's hollow, and W-3's seal left it embedded in rock. `POOL-BASIN` gate red-proven twice — the strong form (carve broken, constant honest) fires the exact "water is sitting ON the floor" tooth. |
 | **W-4** | Entrances low-profile, easy to miss | `db66f51` | Reverses cycle 7's prominence pass — and nothing machine-asserted the arc, so the "re-baseline" was prose. FIN 5.2→2.1m, the horn (the findability device itself) 4.5→0.8, footprint/relief scaled down; two dials went the WRONG way first (a shorter apron fall makes the buried toe STEEPER — the shadowed saucer edge) and are recorded in-dial. **The finding that matters: `CREVICE_APRON_RISE` is not cosmetic** — it starts the descent line, the line ends at the cave junction, and the junction anchors every chamber floor. Lowering it moved the deep floors ~13cm and BEAT-BUILD went red 100m from the entrance (anchorGap 0.039→0.171). Two fixes shipped on the wrong hypothesis first (a pool basin under the seat — the diagnostic showed the one pool 83m away); the A/B located it in two runs, one axis each. RISE stays 0.55 with a loud comment; the digest returned to the already-baselined `4942306d` — a third re-baseline avoided. Verdict at the player reads: 78m a low smudge, mid a half-buried rock with a dark notch, threshold an unmistakable dark maw. Streamed-entrance march+void PASS both seeds. Named residual: the skirt's toe still shows a shadowed lip at grazing angles where sand dips — the fix is a sand-lap/talus term, new geometry. |
+
+
+### W-4.2 — the second entrance round, steered live (`eaebd20`)
+
+Zach, on seeing W-4 in the world: *"still think the entrance is too wide … a small passage that the
+player barely fits through, right now it's quite open, especially from above. the rock model … much
+smaller and more compact, ending closer to the tunnel and blending seamlessly with the terrain."*
+
+- **The slot narrowed past its Underworld originals** (all three widths were cycle-7 WIDENINGS):
+  mouth 2.88→**1.24m**, pinch 3.00→**1.44m**, deep 5.0→3.8m; the open-sky run halved 6.0→**3.2m** —
+  "especially from above" was mostly those six open trench-metres. Capsule 0.7m wide: ~17cm a side.
+- **The ascent gate earned its existence a second time in one campaign.** First march: full tour
+  fine, `ascent=FAIL` — the capsule exited, wall-slid off a collar wall back into the trench, and
+  the unstick's back-up move walked it 5m DEEPER (backing away from an outward target is +s).
+  Fix: **the lip flare** — the last 1.5m splay 1.24→1.80m so the exit sheds OFF the lip; a weathered
+  crack edge anyway. `ascent=OUT`, 11/11, 0 strands.
+- **The proud table is now a collar**: `CREVICE_APRON_TAIL_SINK` lays the hole-cover to ~0.08 proud
+  past the roof closure along the slot AND past the fin's spread across it. `cave-void`: **0 escapes
+  / 8160 rays, excused=0** — cover is machine-checked, not argued.
+- **Round 4 was built, measured, and reverted in the same round**: per-bearing fall tongues broke
+  the overhead rectangle read by sprawling the GROUND silhouette wider — fixing a 26m straight-down
+  view no player has at the cost of the view they always have. The in-source revert note names the
+  structural residual: the overhead outline is broadly rectangular because `holeDist`'s basis IS the
+  hole rect.
+- **The footprint's hard floor is the carved hole** (the cycle-9 enterability fix). Smaller still =
+  shrinking the hole = re-opening that trade — ⚑ Zach's decision, not a dial.
+- Digest re-baseline #4 (sanctioned; the slot is hashed): `ec2ebf98` / `876749d6`, 1337 confirmed by
+  two independent probes, all literals swept.
 
 **Origin digests moved TWICE this session, both sanctioned by the walk-test:** the dais seal
 (`d8f15005/99e0015b → b2de403d/cfbd1198`) then the basins (`→ 4942306d/33961250`). No gate asserts

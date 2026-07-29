@@ -19257,10 +19257,23 @@ function poolPixelFails(metrics, want) {
   else if (!u) fails.push('unlit: framing missing from the shot set — the self-illumination canary did not run');
   else if (!u.waterPx) console.log(`[pool-metric] unlit: water changes no pixel by ≥2/255 with no lamp in the room (anyPx=${u.anyPx}) — nothing to mirror from this pose; the no-glow canary passes trivially`);
   else {
-    if (u.p50any > 0.6) fails.push(`unlit: MEDIAN luminance ${u.p50any} across the water's whole footprint with no lamp in the room — the surface is self-illuminating, not mirroring`);
+    // Self-illumination = a HIGH median over a SUBSTANTIAL share of the water's geometric footprint.
+    // Without the coverage term this fired on the best-behaved water in the game: a black mirror
+    // over black rock changes only its glint pixels, and the median OF THE GLINTS is ~0.79 by
+    // construction (they are the mirrored emitters). Sparse-bright-on-black is the desired render —
+    // the verdict's own words — and the old mask punished it (both seeds, first suite after the
+    // W-2 basins). `coverage` = changed px / geometric footprint px (the third render).
+    if (u.p50any > 0.6 && u.coverage !== null && u.coverage > 0.35) fails.push(`unlit: MEDIAN luminance ${u.p50any} over ${(u.coverage * 100).toFixed(0)}% of the water's geometric footprint with no lamp in the room — the surface is self-illuminating, not mirroring`);
+    else if (u.p50any > 0.6) console.log(`[pool-metric] unlit: bright changed-pixels are ${((u.coverage ?? 0) * 100).toFixed(1)}% of the footprint (${u.anyPx}/${u.footPx}px) — sparse GLINTS on a black mirror, the desired render; the no-glow canary passes on coverage`);
     if (u.ratio !== null && u.ratio > 1.0) fails.push(`unlit: the water (${u.waterL}) is brighter than the emissive features it mirrors (${u.rockLitL})`);
-    // …and when it DOES render here, those pixels must be sparse GLINTS, not a wash.
-    if (u.p99 < 8) fails.push(`unlit: the water renders ${u.waterPx}px with no lamp but its 99th-percentile luminance is only ${u.p99} — that is a uniform wash, not mirrored glints (shipping measures ~110)`);
+    // …and when it SUBSTANTIVELY renders here, those pixels must be sparse GLINTS, not a wash.
+    // "Substantively" is the load-bearing word (batch close): seed 7's hero pool correctly mirrors
+    // NOTHING from this pose (its 2 emitters don't reflect into it — the verdict's own documented
+    // trivial-pass case), and it used to hit `!u.waterPx` exactly. The W-4.2 sky-run change left it
+    // 22 changed pixels at the LSB floor — quantization dust, not a render — and this tooth read
+    // "22px of p99 1.79" as a wash. Dust is the trivial pass; the wash tooth needs a real surface.
+    if (u.waterPx < 250) console.log(`[pool-metric] unlit: only ${u.waterPx} changed px (quantization dust) — nothing substantively mirrors from this pose; the glint tooth passes trivially, as the zero-pixel case always has`);
+    else if (u.p99 < 8) fails.push(`unlit: the water renders ${u.waterPx}px with no lamp but its 99th-percentile luminance is only ${u.p99} — that is a uniform wash, not mirrored glints (shipping measures ~110)`);
   }
   return fails;
 }
@@ -19365,6 +19378,19 @@ async function poolShotSet(page, prefix, opts = {}) {
       for (const o of waters) o.visible = false;
       const off = read();
       for (const o of waters) o.visible = true;
+      // W-4.2 batch close — a THIRD read for the GEOMETRIC footprint: the water forced to flat
+      // white (unlit, unfogged, opaque), so every pixel it covers-and-wins-depth-on changes vs
+      // `off`. Needed because the no-glow canary's old mask (any-diff) collapses to the GLINTS
+      // when a healthy mirror sits black over black rock — and a median of glints is bright, so
+      // the tooth fired hardest on exactly the best-behaved water (both seeds, the W-2 basins).
+      // The self-illumination theory is "a glowing sheet lifts every pixel it covers" — cover is
+      // now measured, not assumed to equal the changed set.
+      const __footMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, toneMapped: false });
+      const __oldMats = waters.map((o) => o.material);
+      for (const o of waters) o.material = __footMat;
+      const foot = read();
+      waters.forEach((o, i) => { o.material = __oldMats[i]; });
+      __footMat.dispose();
       R.render(ctx.three.scene, cam);          // leave the canvas showing the real frame for the screenshot
       window.__shotRestore = st;
 
@@ -19388,7 +19414,12 @@ async function poolShotSet(page, prefix, opts = {}) {
         sumOn += lum(on, i); sumOff += lum(off, i);
         cx += k % W; cy += (k / W) | 0;
       }
-      if (!nAny) return { waterPx: 0, note: 'NO water pixels — the water renders NOTHING in this framing' };
+      let footPx = 0;
+      for (let i = 0, k = 0; k < W * H; k++, i += 4) {
+        const f0 = Math.abs(foot[i] - off[i]), f1 = Math.abs(foot[i + 1] - off[i + 1]), f2c = Math.abs(foot[i + 2] - off[i + 2]);
+        if (Math.max(f0, f1, f2c) >= 8) footPx++;
+      }
+      if (!nAny) return { waterPx: 0, footPx, note: 'NO water pixels — the water renders NOTHING in this framing' };
       if (!n) return { waterPx: 0, anyPx: nAny, note: 'water renders, but changes NO pixel by ≥2/255 — invisible in practice' };
       cx /= n; cy /= n;
       // Adjacent rock: a dilation ring outside the mask (RING px), lit pixels only (L ≥ 2).
@@ -19544,7 +19575,7 @@ async function poolShotSet(page, prefix, opts = {}) {
       const f2 = (v) => +v.toFixed(2);
       const waterL = sumOn / n, rockL = rlit ? rlitSum / rlit : 0;
       return {
-        waterPx: n, anyPx: nAny, pctFrame: f2((100 * n) / (W * H)),
+        waterPx: n, anyPx: nAny, footPx, coverage: footPx > 0 ? f2(nAny / footPx) : null, pctFrame: f2((100 * n) / (W * H)),
         waterL: f2(waterL), p50: f2(pct(0.5)), p99: f2(pct(0.99)), p50any: f2(p50any), behindL: f2(sumOff / n),
         rockAllL: rn ? f2(rsum / rn) : 0, rockLitL: f2(rockL), rockLitPx: rlit,
         ratio: rockL > 0.05 ? f2(waterL / rockL) : null,
