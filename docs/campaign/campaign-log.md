@@ -6,6 +6,46 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## PAUSED (2026-07-28 late) — Zach: "need to pause now" — ⚠ A REGRESSION IS OPEN
+
+**Read this before anything else on resume.** The owed cycle-11 gate legs ran to a verdict:
+
+- **`cave-streamed` 1337 + 7: PASS** — that leg is now fully green (marchOk 1/1, ascent OUT,
+  0 strands, 0 escapes on both seeds). It is no longer owed.
+- **`cave-kinds`: FAIL — warren only.** `could not reach node 7 (pocket) from 3 … ended
+  (1239.9,−268.5,y−7.9); fwdClear@[.3/1/1.7]=[1.0 1.1 0.8]`, reached **8/12**, cascading to
+  chambers 6/7/9/11 never reached. **fungal, flooded and shaft all pass with 0 fails and
+  ascent=OUT.**
+
+**It is a regression, not a flake — established before the pause, not assumed.** Warren marched
+**12/12 in twelve consecutive `cave-kinds` runs** across 07-27 and 07-28, *including cycle 10's
+own gate at 18:13*, and **8/12 on the first run against the cycle-11 tree**. It ran **solo in the
+quiet phase**, so the dt-coupling explanation (D311) does not apply.
+
+**Prime suspect, explicitly UNPROVEN:** cycle 11's placement-sampler change (`d645f88`). Warren is
+the only kind carrying `rubblePerChamber > 0` *and* `salvagePlates` *and* `scrapPerCave`; rubble
+and plates are **collider-bearing** (they enter `meshes` and are baked into the cave trimesh), and
+cycle 11 moved their seating from the analytic plane to the **real cave floor** — which can
+narrow a corridor. That is a hypothesis with a mechanism, not a diagnosis.
+
+**First action on resume, in order:** (1) reproduce cheaply — `npm run rig -- --scenario=cave-kinds
+--kinds=warren --void=0 --port=52xx`; (2) **A/B it** by zeroing warren's rubble/plate placement to
+confirm attribution; (3) only then build a fix, **by construction** (clearance-aware seating),
+never by relaxing the gate. Do **not** dispatch a multi-hour fix agent on the unproven hypothesis
+— that is exactly the 4242 lesson.
+
+**Everything else is green:** the other 22 legs passed in the earlier run
+(`20260728T231336Z-*`), `tsc`/`loot`/`placement`/`colliders` are green, and cycle 11's own
+**LANTERN-RT** and **CAVE-COLD** sub-gates pass on both seeds.
+
+**Also landed this session, all committed:** cycle-13's recon plan (`79905bf` — tor slicing is a
+GO but **digest-first**, because the tor is in no digest today and a slicing bug would ship green;
+plus the docs drift and framework-backflow audit) and **D308–D314** (`6b7f6d7`), the first
+D-entries this campaign has written in twelve cycles — including D313, which records a *negative*
+result: the lattice snap shipped believing it fixed the entrance marches and was later A/B-proven
+not to have. One-line source fix owed: `caveKinds.ts:19` still names the pre-lattice-snap origin
+digests as "a hard campaign gate."
+
 ## PAUSED (2026-07-28 evening) — Zach: "pause cleanly now and pick back up from here later"
 
 **Where things stand.** Cycles 10 and 11 shipped and are committed; cycle 12's plan is written and
