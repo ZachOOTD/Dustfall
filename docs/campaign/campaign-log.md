@@ -64,6 +64,20 @@ truth), a second tooth was added that IS red-provable: per-prop bedding, which f
 at 6.2-6.8cm when the pre-fix seating is restored. **The defect this cycle actually fixed now has a
 machine gate — the one thing this project has proven makes a failure stop recurring.**
 
+### The gate of record — GREEN END TO END
+
+`npm run verify:all`: **24/24 legs PASS, zero `*** FAIL ***` anywhere**, 55m35s wall
+(`verification/gate-logs/20260729T071501Z-*`). Both new sub-rows green at every seed
+(`beat-sites` ×2, `beat-build`). Origin parity held: `cave-density` re-entry bit-identical at both
+seeds, `cave-kinds` 4 kinds built + marched + void-swept + light-tested, 0 strands, 0 void escapes.
+
+**This is also the first full-suite run since cycle 10 in which `cave-kinds` was CAPABLE of reporting
+a pass** — see the regex fix below. Two cycles of "green" for that leg were read off raw logs while
+the row underneath said FAIL.
+
+And the warren marched **12/12, ascent=OUT, digest `9219905d`** inside it — a sixth sample on
+identical rock, making the flake tally **5 passes to 1 failure**.
+
 ### The gates
 
 | | rides | teeth | verdict |
