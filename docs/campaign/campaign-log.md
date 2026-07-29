@@ -6,6 +6,78 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
+## Cycle 12 — THE SKELETON & THE JOURNAL (2026-07-29, overnight) — IN PROGRESS
+
+### The warren flake: sampled, and a method defect found in my own sampling
+
+The correction below said "sampling to n≥5 before any fix is designed." Ran it first thing:
+`cave-kinds --kinds=warren --void=0`, five times, sequentially, on a quiet machine.
+
+| run | verdict | digest | reached | ascent |
+|---|---|---|---|---|
+| 1 | PASS | `9219905d` | 12/12 | OUT |
+| 2 | PASS | `9219905d` | 12/12 | OUT |
+| 3 | PASS | `9219905d` | 12/12 | OUT |
+| 4 | **VOID — my fault, see below** | — | — | — |
+| 5 | not run (aborted with 4) | — | — | — |
+
+Three clean passes, byte-identical geometry, ~3m37s each. With the resume repro that is **4 passes
+to 1 failure on the cycle-11 tree**, all on the same digest. The flake reading holds and hardens;
+the regression call stays dead.
+
+**⚠ THE METHOD DEFECT, recorded because it invalidates a whole class of measurement: THE RIG SERVES
+THE LIVE WORKING TREE.** I spent the sampling window writing cycle-12 source, on the theory that
+editing is zero-CPU and therefore cannot perturb a dt-coupled march. It is not about CPU. Vite serves
+the working tree, so run 4 booted a half-written `main.ts` — it used `buildDeadExplorer` two edits
+before I added its import — and died with `[page error] buildDeadExplorer is not defined`. That is
+not a flake, a regression, or a timing artefact; it is a probe measuring code that never existed as a
+commit. **Rule: never edit source with a probe in flight. Run → wait → edit → run.**
+
+**Does that mechanism explain the ORIGINAL 8/12 failure? No — checked, and the answer is honest.**
+The failing gate ran 19:52–20:32 local. Two commits landed inside that window (`79905bf`, `6b7f6d7`)
+and **both are docs-only**, so no source changed under the probe. What the timestamps *do* falsify is
+the pause note's claim that the run was **"SOLO on a quiet machine (so dt-coupling does not explain
+it)"** — the machine was concurrently running an agent that read files and wrote two commits. That
+was the load-free premise the regression call rested on, and it was not true. D311's dt-coupling
+remains the live hypothesis, now without the evidence that was supposed to exclude it.
+
+**Not designing a fix on this.** Four passes to one failure is a flake rate too low to characterise
+from five samples, the failure mode is a walker wedging while hunting a corridor mouth (a pathing
+outcome, not an obstruction), and the fix belongs in the march leg recipe rather than the game.
+Cycle 13 owns it; cycle 12's own gate run adds samples for free.
+
+### Shipped so far — the systems half (`c5c06d3`), tsc clean
+
+The beat is composition, placement and lifecycle over parts that all shipped months ago. Detail is
+in the commit; the load-bearing decisions:
+
+- **The predicate lives in the kind table** (`deadExplorer`, warren true) with `caveKindCarriesBeat()`
+  as the single reader, so the gate cannot assert its own opinion of where the beat is. A table
+  assert holds `canonical` false — which is what makes "the origin digests cannot move" a machine
+  fact rather than a promise.
+- **`caveGen` publishes an ANCHOR, never a mesh.** `caveDigest` hashes `meshes.concat(decor)`, so any
+  mesh added there moves it even at local origin; anchors are published after the hash and spawned
+  from a resident sink. **PROVEN, not argued: `cave-digest` seed 1337 = `d8f15005`, unchanged.**
+- Seated against the **measured** wall (`wallCast` + `rockFloor`), never the analytic plane — the
+  close-out lesson that "a salvage plate seated on the plane hung a metre over the sand."
+- **Two deliberate deviations from the plan, both strengthenings, both flagged for Zach:**
+  1. Plan Q6 specified a `looted` boolean. Shipped **remaining contents** instead. A boolean only
+     closes the exploit for a player who empties the crate in one visit: take just the `battery`,
+     walk out, and the whole cache refills — the exact farm the persistence exists to prevent.
+     Recorded at BOTH boundaries (save *and* eviction), because the ordinary way to loot it is to
+     empty it and save while still standing in the cave, which the eviction path never sees.
+  2. The plan's `0.72·rx` seat is **exactly the ring of the march gate's own floor grid** (both
+     `addRubble` and `addSpeleothems` explicitly keep clear of it). Harmless for collision — the beat
+     has none — but it is the walk line, not the wall. Fallback moved to `0.80`.
+- Closed the owed source fix: `caveKinds.ts` named the pre-lattice-snap origin digests in **two**
+  places, not the one the pause note recorded.
+
+**Zach's Q1-Q10 were unanswered at build time, so every recommended default was taken** — which by
+construction means no economy number moved, no save version moved, no origin digest moved, and no
+gate leg was added. The cache contents are a single flagged array in `tuning.ts`
+(`CAVE_BEAT_CACHE`): hand-authored, no `lootRegistry` entry or drop rate or recipe touched, so
+`verify:loot`'s 1000-roll digest provably cannot move. Edit that one array and nothing else moves.
+
 ## ⚠ CORRECTION (2026-07-28, on resume) — the "regression" below was MISCALLED. It is a FLAKE.
 
 **I got this wrong and the record must say so.** The pause entry below calls the warren march
