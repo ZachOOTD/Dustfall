@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "DEEPER" cycle 12 — 2026-07-29 — the dead explorer: a skeleton, a journal and a cache underground ✓ gates
+
+`verified` — tsc / loot / placement / colliders green; two NEW sub-gates (`BEAT-SITES`, `BEAT-BUILD`) each run green **and red-proven**; `cave-digest` seed 1337 = `d8f15005`, unchanged. Full `verify:all` launched at hand-off.
+
+- **THE BEAT.** Every `warren` cave now carries a dead salvager — slumped against a wall off the walk line, the **spent lantern** (the same one the player deploys) past the reaching hand, their rifled crate beside them. The journal's five entries each teach one true thing about caves without ever addressing the player: the cold that never kills, the water that never runs out, the light budget as the real clock. **It is the manual for the systems cycles 6 and 11 built, written as a dead man's diary.** Composition over new systems: `caveGen` publishes an ANCHOR, a resident sink spawns the props, `SAVE_VERSION` stays 18.
+- **The predicate lives in the kind table and the gate reads the GAME's copy** (D315) — canonical held false by a table assert, so "the origin digests cannot move" has two independent machine holders.
+- **The tableau levitated, and the instrument had to be fixed first** (D316): the bedding probe measured the anchor *plane*, not any prop, so after the fix it reported the same seven numbers to the millimetre. Rewritten to lowest-vertex-vs-rock; worst daylight now **0.8cm, was 10.0cm**.
+- **A mandated red-proof FAILED to go red and was recorded, not buried** — the 5cm anchor tooth measured 4.2cm with the historical bug restored, so it would pass a broken build. Answered with a second tooth that *is* red-provable, rather than a tightened threshold.
+- **Found in passing:** the `cave-kinds` leg had been **structurally unable to report a pass since cycle 10** — `lit=` was added to the probe line and the harness regex never updated, so the row read `NO PROBE LINE *** FAIL ***` regardless of result. Fixed, and every other leg regex swept against its own newest log.
+- ⚑ **The cache contents remain Zach's call** — one flagged array (`CAVE_BEAT_CACHE`), hand-authored, no `lootRegistry`/drop-rate/recipe touched, so `verify:loot` provably cannot move. D315-D318.
+
 ## Campaign "Sharpen & Deepen" cycle 24 — 2026-07-13 — M12: the ash-barren biome — **THE +4M OVERNIGHT QUEUE IS COMPLETE** ✓ all gates
 
 `verified` — verify:all (placement/colliders/chunks) green; a numeric probe found an ash_barren zone (biomeAt confirmed) + a shot showed the dark scorched ground reading distinct. **Campaign `completed` (until-met: ladder-complete), UNDER the 8.75M budget cap.**

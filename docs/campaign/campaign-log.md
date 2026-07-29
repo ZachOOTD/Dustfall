@@ -6,7 +6,123 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
-## Cycle 12 — THE SKELETON & THE JOURNAL (2026-07-29, overnight) — IN PROGRESS
+## Cycle 12 — THE SKELETON & THE JOURNAL (2026-07-29, overnight) — SHIPPED
+
+**Zach's brief, verbatim:** *"there should be a journal and a skeleton in one of the caves with some
+loot."* Built with **every one of the plan's Q1-Q10 defaults taken** (he was asleep), which by
+construction means no economy number moved, no save version moved, no origin digest moved and no
+gate leg was added. Commits `c5c06d3` (systems) · `9cd9efa` (visual) · `c4aa5d6` (gates), plus
+`10a36da` (a live gate defect found in passing) and `3722e31` (the flake).
+
+### What it is
+
+Every `warren` cave now carries a dead salvager: slumped against a chamber wall off the walk line,
+right arm out where the book slipped from it, a **spent lantern** (the same lantern the player
+deploys — cycle 11's cave tool, unmistakable) on its side past the hand, a fallen canteen at the hip,
+and their **rifled crate** beside them. The journal is the reward for having read the scene, not the
+delivery mechanism for it. Its five entries each teach one true thing about caves without ever
+addressing the player: the cold that never kills (cycle 11), the water that never runs out (cycle 6),
+and the light budget as the real clock (cycle 11). **The journal is the manual for the systems cycles
+6 and 11 built, written as a dead man's diary.**
+
+### The three things worth remembering
+
+**1 — THE PREDICATE LIVES IN ONE PLACE, AND THE GATE READS IT.** `deadExplorer` is a kind-table
+field; `caveKindCarriesBeat()` is the only reader; the gate asks the game's own table through
+`caveKindTable()`. A gate that hardcodes `kind === 'warren'` asserts its own opinion and stays green
+through the exact change it exists to catch. A table assert holds `canonical` false — that, not a
+comment, is what makes "the origin-parity digests cannot move" a machine fact. **Proven: `cave-digest`
+seed 1337 = `d8f15005`, unchanged.**
+
+**2 — THE TABLEAU LEVITATED, AND THE INSTRUMENT HAD TO BE FIXED BEFORE THE BUG COULD BE.** Measured:
+journal 8.8cm, lantern 10.0cm, crate 5.5cm in the air, seat 0.4cm. The anchor is exact only AT THE
+SEAT and a rigid 2.4m arrangement cannot follow displaced rock.
+
+> ⚠ **The bedding probe could not see the fix by construction.** It measured `anchor-plane y − rock`
+> — the floor's *gradient*, never a prop. After every prop was re-seated it reported **the same seven
+> numbers to the millimetre**. A gate that cannot move when the defect is fixed cannot report the
+> fix. Rewritten to measure each prop's real **lowest vertex** against the rock under its own
+> footprint (origin-vs-rock was also wrong: a tipped lantern rests on its cage, a flask on its rim —
+> both sit deliberately above their origins).
+
+Fix: `caveGen` publishes a rock-height patch with the anchor, sampled by `rockFloor` at dress time —
+a Rapier downcast at sink-attach is the wrong tool, because the QueryPipeline has not rebuilt on the
+frame a cave finalizes. The rigid figure drops to the **lowest** rock under its footprint (bed the
+high side in rather than float the low side); loose props rest by computed bounding box.
+**Two hypotheses died on measurement and are recorded in-source so they are not retried:** a finer
+sample grid changed *nothing to the millimetre* (`rockFloor` is itself a 0.45m grid — resampling it
+adds no information), and footprint-centre sampling fixed the lantern but not the canteen. The true
+residual is that `rockFloor` and a Rapier downcast disagree by ~5cm on displaced floor, so the solids
+get a bed deeper than the disagreement and the thin journal keeps a shallow one.
+**Result: nothing floats. Worst daylight 0.8cm, was 10.0cm.**
+
+**3 — A RED-PROOF FAILED TO GO RED, AND THAT IS THE MOST USEFUL RESULT OF THE CYCLE.** The plan
+specified: seat the anchor on the analytic plane (the historical bug) → the 5cm floor tooth blows.
+It **measured 4.2cm on this seed — inside the bar.** So that tooth would pass a build with the old
+bug in it. Rather than tighten it (3.9cm is the *correct* path's reading, so tightening reds the
+truth), a second tooth was added that IS red-provable: per-prop bedding, which fires on three props
+at 6.2-6.8cm when the pre-fix seating is restored. **The defect this cycle actually fixed now has a
+machine gate — the one thing this project has proven makes a failure stop recurring.**
+
+### The gates
+
+| | rides | teeth | verdict |
+|---|---|---|---|
+| **BEAT-SITES** | `cave-density` ×2 seeds, ~0 cost, no cave built | seed purity over two derivations · vacuous guards · **origin parity proven purely** · measured findability | GREEN — 113 sites, 18 beat, 5 kinds, **nearest 1.3km**, 0.125/km² |
+| **BEAT-BUILD** | `cave-kinds` (the only leg that builds a warren) | exists · **collider identity** · **nothing floats** · readable via real WASD+`[E]` · grants once at v18 | GREEN — anchorGap 0.039m, hover `read` @2.16m after a 3.15→1.35m walk, panel opened, `beatRecord {looted, 0 left}` |
+
+Red-proofs: dropping the `journals.list` push → RED (*"placeJournal does not self-register"*);
+skipping the `caveBeats` write → RED (*"would refill on re-entry"*); the analytic-plane seat → **did
+not go red** (above); pre-fix seating → RED on the bedding tooth. Clearing the beat flag fired three
+BEAT-SITES teeth **with the site digest unchanged at `4a988b6d`**, proving the flag moves no
+placement; flipping it onto `canonical` is caught even earlier by the kind-table assert, which halts
+boot by name.
+
+*The first red-proof also exposed a defect in the gate itself: a throw REPLACED the findings already
+collected instead of appending them, so the run that tripped lost the finding that explained it.*
+
+### Two deliberate departures from the plan — ⚑ both are Zach's to overrule
+
+1. **Q6 said a `looted` boolean; shipped remaining CONTENTS.** A boolean only closes the exploit for
+   a player who empties the crate in one visit — take just the `battery`, walk out, and the whole
+   cache refills. Recorded at BOTH boundaries (save *and* eviction), because the ordinary way to loot
+   it is to empty it and save while still standing in the cave, which the eviction path never sees.
+2. **The plan's `0.72·rx` seat is exactly the ring of the march gate's own floor grid** — that is the
+   walk line, not the wall. Moved to `0.80` (fallback only; the real seat is the measured wall).
+
+### The visual half — 5 rounds, and round 0 found more than it was sent for
+
+`makeSkeleton(opts)` gains a `closeRead` path for the 1-2m torch read. **The no-argument signature is
+the only deleted line in the file**, so the opening scene and the wordless surface scenes are provably
+untouched (Q7's default). The baseline shot found three defects nobody had named: limb joints **did
+not meet** (forearms placed by hand-tuned offsets ~0.22m off the computed elbow), **both legs were
+authored below y=0** (a −Y bone swung backwards by `rotation.x` — the shipped wreck skeleton has no
+visible legs), and the four rib half-tori lay in the **sagittal** plane, so the ribcage read as a coil
+spring. Rebuilt on real joint chains: capped `sweptTube` bones with a tip-radius floor (the
+`SPELEO_TIP_FLOOR` contract restated), a vertex-displaced cranium with **solid frustum orbits**, one
+fractured rib with a splintered cross-section. Merges to 2 draw calls. The socket fix is proven by
+the pair `skull` / `skullturn`: at ~70° off-axis the orbit is still a shaded recess with a rim, where
+a `CircleGeometry` disc would have vanished.
+
+Also fixed on inspection: the beat crate was a **saturated orange cube that out-shouted the body** —
+now a muted, lid-off variant, opt-in so every other crate in the world is byte-identical; and the
+spent lantern was yawed off the view line because broadside it read as a rifle.
+
+### ⚑ Residuals, honestly (Zach's call, none are blocking)
+
+- **The cache contents are one flagged array** (`CAVE_BEAT_CACHE` in `tuning.ts`) — hand-authored,
+  no `lootRegistry` entry, drop rate or recipe touched, so **`verify:loot`'s digest provably cannot
+  move** (and it was re-run: PASS). Edit that array and nothing else shifts. Q4 is still yours.
+- Bone renders warm-cream under a torch inside 1m — the lever is `TORCH_LIGHT_*`, not the albedo;
+  going darker costs the 4m arrival read.
+- The journal reads as a small pale card at 1.5m rather than as a bound book.
+- The cranium's parietal is still smooth in profile at the 1m macro framing (not a gameplay distance).
+- `openingScene`'s skeleton still has the **zero-thickness `CircleGeometry` eye sockets** — a rule-7
+  violation in the game's first impression. Q7's default kept it untouched. The minimal global fix is
+  a 2cm dark frustum inset behind the existing brow (~4 lines), and it deserves its own change with
+  its own opening-scene shot rather than being smuggled into this one.
+
+## ⚠ CORRECTION (2026-07-28, on resume) — the "regression" below was MISCALLED. It is a FLAKE.
 
 ### The warren flake: sampled, and a method defect found in my own sampling
 

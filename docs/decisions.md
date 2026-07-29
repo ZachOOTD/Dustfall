@@ -703,3 +703,89 @@ The alternative to `assertCaveKindTable` was a paragraph asking the next author 
 **Determinism (D290)**: the kind is a pure function of the site descriptor's own per-cell RNG stream, drawn inside `caveSiteInCell`'s FIXED DRAW BUDGET and AFTER the site's generation seed — so adding kinds moved no site by a millimetre and the cycle-8 placement digests are unchanged.
 **Verification**: the `cave-kinds` gate forces all four kinds onto real descriptor-accepted sites through the shipped `requestSite` path and gives each the same march + void sweep plus kind-defining and CROSS-KIND DISTINCTNESS assertions — because a table that collapsed to canonical would march perfectly, so "green" had to be made to mean more. It carries a harness-side vacuous-pass guard too: a green row off zero built / zero marched kinds would launder "the kind table never produced a cave" as "every kind is fine".
 **friction-score:** 1 (additive table over an unchanged generator, with its own machine check. Forward exposure: a fifth kind is a cheap table row, but a kind wanting a genuinely NEW capability must add it as a general capability with a zero canonical default — otherwise the canonical cave moves and the origin-parity gate reds, which is the intended outcome, not a surprise).
+
+## D315 — a gate reads the GAME'S predicate, never its own copy of it (DEEPER cycle 12, 2026-07-29)
+
+**friction-score: 1**
+
+Whether a cave carries the dead-explorer beat is a field on the kind table (`deadExplorer`), read
+through exactly one function (`caveKindCarriesBeat`). The BEAT-SITES gate asks the running game for
+that table (`__game.caveKindTable()`) rather than testing `kind === 'warren'` itself.
+
+**Why.** A gate holding its own copy of a predicate is not testing the game, it is testing its
+agreement with a duplicate — and it stays green through precisely the change it exists to catch
+(someone moving the beat to another kind, or onto `canonical`). The campaign has already paid for
+this class twice (`open-end` vs the leviathan's front door; the vacuous collision check).
+
+**The load-bearing consequence.** `assertCaveKindTable` holds `canonical.deadExplorer` false, so
+"the origin cave never carries an authored corpse, therefore the origin-parity digests
+(`d8f15005` / `99e0015b`) cannot move" is a **machine fact with two independent holders** — the table
+assert (which halts boot by name; proven) and the BEAT-SITES origin tooth (proven). The beat is also
+sink-spawned, so its meshes are outside `caveDigest`'s hashed set regardless. Belt, braces, and a
+gate that reads the belt.
+
+## D316 — an instrument that cannot move when the defect is fixed is not a gate (DEEPER cycle 12, 2026-07-29)
+
+**friction-score: 2**
+
+The dead-explorer tableau floated (journal 8.8cm, lantern 10.0cm, crate 5.5cm above the rock). The
+bedding probe written to catch it measured `anchor-plane y − rock under each prop's nominal offset`.
+That is a real quantity — the floor's gradient under the tableau — but it is **not a function of
+where any prop is**, so after every prop was re-seated the probe reported *the same seven numbers to
+the millimetre*.
+
+**The rule.** Before trusting a measurement, ask what would have to change for it to move. If the fix
+cannot move it, it is measuring something else. Both wrong versions here were plausible: the anchor
+plane (which is what the *bug* was about) and, at the second attempt, the prop's **origin** — but a
+tipped lantern rests on its cage and a flask on its rim, so both sit deliberately above their
+origins, and origin-vs-rock reads a design offset as a defect. The question is "is there daylight
+under this object", and the answer is its **bounding box floor** against the rock under its own
+footprint.
+
+**Corollary, from the same cycle.** The plan's mandated red-proof for the anchor tooth (seat on the
+analytic plane — the historical bug) came back at **4.2cm, inside the 5cm bar**: the tooth would pass
+a build with the old bug in it. That negative was recorded rather than papered over, and the response
+was a *second* tooth that is red-provable, not a tightened threshold on the first (3.9cm is the
+correct path's own reading — tightening would red the truth).
+
+## D317 — one-time authored caches persist by DESCRIPTOR KEY, and by remaining CONTENTS (DEEPER cycle 12, 2026-07-29)
+
+**friction-score: 2**
+
+Streamed-cave pickups are `transient` by D299 — taken-state does not survive eviction. Acceptable for
+six ambient scrap flakes; an infinite farm for an authored cache holding a `battery`. So cave story
+beats persist in an additive optional save array keyed on the cave's **descriptor** key
+(`cave:<gx>,<gz>`), never a runtime id (D292: a streamed cave's runtime identity dies with its
+eviction, and a saved id could patch a different object after reload). **`SAVE_VERSION` stays 18 — no
+migration.** The container is excluded from the id-keyed `lootContainers` array for the same reason
+the streamed `salvageables` already are.
+
+**Contents, not a `looted` boolean** (a deliberate strengthening of the cycle-12 plan's Q6): a boolean
+only closes the exploit for a player who empties the crate in one visit. Take just the battery, walk
+out, and a boolean keyed on "emptied" refills the whole cache. Recorded at **both** boundaries — save
+*and* eviction — because the ordinary way to loot it is to empty it and save while still standing in
+the cave, which the eviction path never sees; and a load taken while the cave is still resident
+re-syncs the live crate, since loading does not re-run the sink.
+
+## D318 — the rig serves the LIVE working tree: never edit source with a probe in flight (DEEPER cycle 12, 2026-07-29)
+
+**friction-score: 3**
+
+A probe run is not a snapshot. `npm run rig` starts Vite against the working tree, so a file saved
+mid-run changes what is being measured. This was learned by doing it: cycle-12 source was written
+during a flake-sampling window on the theory that editing is zero-CPU and therefore cannot perturb a
+dt-coupled march. It is not about CPU. The run booted a half-written `main.ts` — it used
+`buildDeadExplorer` two edits before the import existed — and died on a page error that looked like a
+result.
+
+**Rule: run → wait → edit → run.** It applies to `src/` (Vite serves it) and to concurrent agents:
+an agent running probes and an orchestrator editing source are the same hazard wearing two hats.
+`scripts/*.mjs` is read once at process start and is safe mid-run, but is unsafe to edit concurrently
+with an agent that also owns it, for ordinary conflict reasons.
+
+**The second-order lesson is the expensive one.** This mechanism was checked against the campaign's
+open warren "regression" and did **not** explain it (the commits inside that gate window were
+docs-only). But the timestamps falsified the premise the regression call rested on — the pause note
+claimed the failing run was *"SOLO on a quiet machine (so dt-coupling does not explain it)"*, and an
+agent was concurrently reading files and writing two commits. **"The machine was quiet" is a claim
+that needs evidence, not an assumption**, and D311's dt-coupling was excluded on the strength of it.
