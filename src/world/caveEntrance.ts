@@ -206,7 +206,7 @@ export interface CreviceLine {
   maxSlopeDeg: number;
 }
 
-/** Half-width at arc length `s` — mouth → pinch → widening into the cave. */
+/** Half-width at arc length `s` — lip flare → mouth → pinch → widening into the cave. */
 function halfWAt(s: number, totalS: number): number {
   const T = Tuning;
   const sm = (a: number, b: number, x: number): number => {
@@ -214,7 +214,16 @@ function halfWAt(s: number, totalS: number): number {
     return t * t * (3 - 2 * t);
   };
   const pinchAt = T.CREVICE_SKY_RUN + T.CREVICE_SKY_TAPER * 0.5;
-  if (s <= pinchAt) return T.CREVICE_HALF_W_MOUTH + (T.CREVICE_HALF_W_PINCH - T.CREVICE_HALF_W_MOUTH) * sm(0, pinchAt, s);
+  // W-4.2 — THE LIP FLARE, and it is mechanical before it is aesthetic. At 1.24m clear the ASCENT
+  // climbed every station and then failed AT THE EXIT: walking outward over the sill, the capsule
+  // clipped a collar wall, wall-slid back over the crack, fell into the open trench, and the
+  // unstick's back-up move then walked it DEEPER (backing away from an outward target is +s here) —
+  // ended 5m inside, 1.1m below terrain, wedged. cave-walk's trace names it: every slot leg ok,
+  // `approach:X`. The last CREVICE_LIP_RUN metres splay outward so the exit walk sheds off the lip
+  // instead of back into it — which is also what a weathered crack edge looks like. The visible
+  // squeeze (s past the flare) keeps the full narrowness.
+  const flare = T.CREVICE_LIP_FLARE * (1 - sm(0, T.CREVICE_LIP_RUN, s));
+  if (s <= pinchAt) return flare + T.CREVICE_HALF_W_MOUTH + (T.CREVICE_HALF_W_PINCH - T.CREVICE_HALF_W_MOUTH) * sm(0, pinchAt, s);
   return T.CREVICE_HALF_W_PINCH + (T.CREVICE_HALF_W_DEEP - T.CREVICE_HALF_W_PINCH) * sm(pinchAt, totalS, s);
 }
 
@@ -650,6 +659,11 @@ export function spawnCaveEntrance(
       // carved cell is a correctness invariant — true, but that invariant is already enforced
       // outright by the `d0 <= 0.001` clamp below, so expand-only bought nothing and cost 1.5m of
       // extra skirt on every side.
+      // W-4.2 r4 tried per-bearing fall TONGUES here to break the overhead rectangle read — and it
+      // was the wrong trade, reverted the same round: the tongues sprawled the GROUND-LEVEL
+      // silhouette wider (the exact "smaller and more compact" ask, undone) to fix a 26m straight-
+      // down view no player ever stands in. The overhead outline staying broadly rectangular is the
+      // named residual; the rect is holeDist's basis and only a new outline basis would change it.
       const dbWob = d0 - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
       // …and the profile is TWO-STAGE: a walkable ramp off the rock (the KCC has to be able to step
       // up onto the apron from the sand — a hard rim here means you cannot reach the mouth), then a
@@ -665,7 +679,25 @@ export function spawnCaveEntrance(
       const swU = (wx - swCx) / swRx, swV = (wz - swCz) / swRz;
       const swD = Math.hypot(swU, swV);
       const swell = swD >= 1 ? 0 : T.CREVICE_TOR_SWELL * Math.pow(1 - swD, 1.2);
-      let apron = (APRON + swell) - ramp * (APRON + swell + 0.30) - dive * 3.1;
+      // W-4.2 — THE TABLE SINKS PAST THE COLLAR (Zach: "the skirt should be much smaller and more
+      // compact, ending closer to the tunnel and blending seamlessly with the terrain"). The proud
+      // table exists to cover the carved hole — but past the sky-run's closure the fissure ROOF is
+      // clamped BELOW terrain, so the cover there needs presence, not height. The APRON term decays
+      // along the slot: full at the mouth collar, near-sand past the roof closure. The SWELL does
+      // NOT decay — the whaleback IS the slot-top cover where the slot ceiling still pokes above
+      // terrain, and its own taper already tracks the descending floor. Leak safety is not argued
+      // here: cave-void's escape rays are the machine check.
+      const aSink = 1 - T.CREVICE_APRON_TAIL_SINK
+        * smoothstep(T.CREVICE_SKY_RUN + T.CREVICE_SKY_TAPER * 0.5 + 0.8,
+                     T.CREVICE_SKY_RUN + T.CREVICE_SKY_TAPER * 0.5 + 4.2, pr.s);
+      // …and LATERALLY too (r5): the s-sink alone left the collar's sideways skirt proud out to the
+      // rim — at eye level that WAS the wide plate ("ending closer to the tunnel" applies on every
+      // axis, not just along the slot). Proud rock is confined to a corridor around the crack; past
+      // the fin's own spread the table lies down. Multiplicative, same floor.
+      const aSinkP = 1 - T.CREVICE_APRON_TAIL_SINK
+        * smoothstep(T.CREVICE_TOR_FIN_SPREAD + 0.8, T.CREVICE_TOR_FIN_SPREAD + 3.4, Math.abs(pr.perp));
+      const aTop = APRON * Math.min(aSink, aSinkP);
+      let apron = (aTop + swell) - ramp * (aTop + swell + 0.30) - dive * 3.1;
       // R6 — the apron's RELIEF fades out with the apron itself. Without this the ledge noise and the
       // tor's general relief (±1.3m between them) are the same size as the whole falloff, so the
       // buried outer skirt keeps breaking back through the sand: a 26m flat shelf with a ragged rim
@@ -679,7 +711,7 @@ export function spawnCaveEntrance(
               // W-4 r2: 1.25 → 0.55. At FIN_H 5.2 the fin dwarfed these ledges; at 2.1 they WERE
               // the silhouette — a terraced 25m plate (the R3 lily pad, back). Scaled with the tor.
               + noise3(wx * 0.72 + 63, 1.7, wz * 0.72 + 88) * 0.07) * 0.55 * aFade;
-      if (d0 <= 0.001) apron = APRON + swell;         // inside hole+margin: full cover, always
+      if (d0 <= 0.001) apron = Math.max(0.07, aTop) + swell;   // full cover always; the 0.07 floor keeps the terrain sheet's cut edge under rock
       // The fin. R1 used perpFade² and got a pair of sharp CONES ("Mount Fuji with a notch"). Real
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
       // a plateau out to FIN_PLATEAU then a hard shoulder, and the top is clamped flat-ish.

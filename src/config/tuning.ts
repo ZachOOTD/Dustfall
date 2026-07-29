@@ -946,17 +946,25 @@ export const Tuning = {
   CREVICE_SLOPE_DEG: 27,               // ° — nominal descent slope; each leg's run is sized from its drop
   CREVICE_BEND_DEG: 26,                // ° — heading bend at the first knee (mirrored by seed parity)
   CREVICE_BEND2_DEG: 18,               // ° — heading bend back at the second knee
-  CREVICE_HALF_W_MOUTH: 1.44,          // m — half clear width at the mouth (2.88m). Cycle-7 R1: was 1.25 (2.50m). The
+  CREVICE_HALF_W_MOUTH: 0.62,          // m — half clear width at the mouth (1.24m). W-4.2: was 1.44 (2.88m — cycle 7 had WIDENED it from 1.25 for approach legibility, the pass Zach reversed). "A small passage that the player barely fits through": capsule ~0.9m wide, so ~17cm a side at the lip. The cycle-7 note:
                                        //     floor/wall crease is now FILLETED (CREVICE_CREASE_FILL) and the wall noise
                                        //     runs at full-ish strength down to the floor (CREVICE_WALL_NOISE_FLOOR
                                        //     0.10→0.55), both of which eat walkable width at the sand line — so the
                                        //     nominal width is taken back here. Net clear at foot level ≈ 2.3-2.5m, i.e.
                                        //     the crevice read is UNCHANGED; only the artefact is gone.
-  CREVICE_HALF_W_PINCH: 1.50,          // m — the tightest point, right where the rock closes overhead (3.00m). Was 1.05
+  CREVICE_HALF_W_PINCH: 0.72,          // m — the tightest point, right where the rock closes overhead (1.44m). W-4.2: was 1.50 (3.00m); the original Underworld value was 1.05. Slightly wider than the mouth so the squeeze is at the THRESHOLD, not mid-descent where the unstick wiggle needs room. Old note: was 1.05
                                        //     (2.1m): the KCC could walk DOWN it but wedged on the climb back out on
                                        //     3 of 6 gate seeds. Same lesson as CAVE_GEN_GALLERY_HALF_W 2.3→2.8 in
                                        //     Underworld — a climbing capsule needs lateral room to recover.
-  CREVICE_HALF_W_DEEP: 2.5,            // m — widens as it approaches the cave (3.6m)
+  CREVICE_HALF_W_DEEP: 1.9,            // m — widens as it approaches the cave. W-4.2: was 2.5 — the widening beat survives, scaled to the narrower slot
+  // THE LIP FLARE (W-4.2) — mechanical before aesthetic: at 1.24m clear, the ascent cleared every
+  // station then failed AT THE EXIT — wall-slid off a collar wall back into the trench, and the
+  // unstick's back-up walked it deeper (cave-walk trace: every slot leg ok, `approach:X`). The last
+  // LIP_RUN metres splay outward so the exit sheds OFF the lip instead of back into it. The visible
+  // squeeze past the flare keeps the full W-4.2 narrowness.
+  CREVICE_LIP_FLARE: 0.28,             // m — extra half-width at s=0, smoothstepped to 0 by LIP_RUN (mouth aperture 1.24 → 1.80m at the very lip)
+  CREVICE_LIP_RUN: 1.5,                // m — how far into the slot the flare persists
+  CREVICE_APRON_TAIL_SINK: 0.85,       // ×APRON removed at the tail (W-4.2 — the far cover sits ~0.08 proud + the swell; the collar keeps full height). 0 = the old full-length proud table
   CREVICE_HEIGHT: 3.0,                 // m — clear height of the roofed slot
   CREVICE_SDF_MARGIN: 0.62,            // m — the cave-SDF slot is this much WIDER than the tor fissure, so the
                                        //     tor's walls are always the nearer surface (never a backface void).
@@ -998,7 +1006,7 @@ export const Tuning = {
                                        //     no seed on the net shows it. Raising it MOVES THE WHOLE CAVE (see
                                        //     CREVICE_ROOF_DROP), so it belongs to a cycle that can re-baseline the room
                                        //     graph, not to an entrance fix round.
-  CREVICE_SKY_RUN: 6.0,                // m — run over which the fissure is open to the sky (the rest is roofed).
+  CREVICE_SKY_RUN: 3.2,                // m — run over which the fissure is open to the sky (the rest is roofed). W-4.2: was 6.0 — "quite open, especially from above" was mostly THIS: six open-air metres of trench. Rock closes over in half the distance now, so from above the entrance is a short dark slit
                                        //     Cycle-7 R1: 6.5→6.0. THE ROOF-LAMINA ROOT CAUSE. The roof crossed the
                                        //     rock top at s≈8.57 → x≈site.x+8.40, and the carved terrain hole ends at
                                        //     x=site.x+8.33 (3 cells). So the closure landed 7cm PAST the hole edge and
@@ -1083,19 +1091,19 @@ export const Tuning = {
                                        //     scratch across a smooth dome. Shoulders beside a slot, which is what a
                                        //     split tor actually looks like.
   CREVICE_TOR_FIN_SHOULDER: 2.6,       // m — half-width over which that notch recovers to full fin height
-  CREVICE_APRON_EDGE: 1.6,        // W-4 r2: 3.0 → 1.6 — the outline lobes were throwing the rock plate metres past the fall            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
+  CREVICE_APRON_EDGE: 2.3,        // W-4.2 r3: 1.0 → 2.3. From ABOVE the outline read as a rounded RECTANGLE — the hole rect showing through (R5's own warning: one weak wobble cannot break a 13m straight edge). The lobes this re-buys are now cheap: past the collar the TAIL-SINK lays them at sand level, so they widen the outline's SHAPE without rebuilding the proud plate            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
                                        //     single 16m-wavelength octave, which cannot break a 13m straight edge — the
                                        //     apron kept the carve rect's straight polygonal boundary (cycle-7 sev2).
   CREVICE_TOR_SWELL: 1.9,              // m — broad dome over the carved hole, so the covering rock is a whaleback
                                        //     rather than a table. See the R7 note in caveEntrance.ts.
   CREVICE_APRON_RAMP: 1.7,        // W-4 r3: 1.0 → 1.7 — a longer, gentler meeting with the sand             // m — the WALKABLE part of the apron's outer ramp (0.85m of drop → ~40°, under
                                        //     the KCC's 50° climb). Beyond it the apron dives under the sheet fast.
-  CREVICE_APRON_DRIFT: 1.3,       // W-4 r4: a longer asymmetric tail — one side runs out under the sand like a half-buried reef            // m — the apron's falloff is stretched this much further on its lee side, so the
+  CREVICE_APRON_DRIFT: 0.9,       // W-4.2: 1.3 → 0.9 — the tail stays asymmetric but compact            // m — the apron's falloff is stretched this much further on its lee side, so the
                                        //     sand meets rock as a wind drift rather than as a symmetric plate.
   CREVICE_TOR_FIN_H: 2.1,              // m — the tor's rock fin, above local terrain. W-4 (walk-test 2026-07-29): 5.2 → 2.1 — Zach reversed cycle 7's landmark read ("smaller like a little crevice you find on a small rock … easy to miss if you weren't paying attention"). Head-height rock, not a skyline
-  CREVICE_TOR_FIN_PLATEAU: 2.4,   // W-4: 3.6 → 2.4 (smaller rock, tighter crown)        // m — the fin holds full height this far either side of the crack (a blocky
+  CREVICE_TOR_FIN_PLATEAU: 1.5,   // W-4.2: 3.6 → 2.4 → 1.5 — the crown hugs the crack        // m — the fin holds full height this far either side of the crack (a blocky
                                        //     bedrock plateau; round 1's squared falloff gave two Fuji-shaped cones)
-  CREVICE_TOR_FIN_SPREAD: 7.0,    // W-4 r4 (7.4; r1 tried 5.2): at low height the flanks must run OUT to the rim — pulling them in left a flat brim between mound and edge, the pancake read         // m — perpendicular distance over which the fin falls to the apron
+  CREVICE_TOR_FIN_SPREAD: 4.2,    // W-4.2: 7.0 → 4.2 — WITH the apron fall shortened to match (1.9), the flanks still meet the toe without a flat brim; r1's mistake was pulling the flanks in while leaving the apron wide         // m — perpendicular distance over which the fin falls to the apron
   CREVICE_TOR_BUMP: 0.05,              // shader normal-perturbation for the tor (cf. CAVE_ROCK_BUMP_INTERIOR 0.85 — that is
                                        //     tuned for torch-lit interior rock and reads as camouflage in sunlight)
   CREVICE_TOR_NOISE: 0.85,        // W-4: 1.15 → 0.85 — relief scaled with the fin, else the noise IS the silhouette             // m — multi-octave relief on the tor's top surface
@@ -1107,7 +1115,7 @@ export const Tuning = {
   //   0.039→0.171, A/B-proven both directions; it also moved caveDigest via the mouth sill). If the
   //   apron's VISUAL height ever needs to drop, split a separate render-side constant — never this one
   CREVICE_APRON_MARGIN: 0.9,           // m — apron holds full height this far outside the hole rect
-  CREVICE_APRON_FALL: 3.0,        // W-4 r4 (was 2.3; r2/r3 tried 1.6/1.4 and made it WORSE — the 3.1m dive over a shorter run is a STEEPER buried face, and that near-vertical toe is the shadowed 'saucer edge'. A LONG toe lets rock disappear under sand)             // m — then ramps down into the sand over this distance (~30°, walkable)
+  CREVICE_APRON_FALL: 1.9,        // W-4.2 ("ending closer to the tunnel"): 3.0 → 1.9. r2/r3's saucer-edge lesson still stands — the toe IS steeper — but the whole form is half the size now, so the shadow band is short; judged in shots, residual named if it reads             // m — then ramps down into the sand over this distance (~30°, walkable)
   CREVICE_TOR_VOXEL: 0.32,             // m — the tor's own surface-nets grid spacing (finer than the cave's 0.45)
 
   // UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE. A deterministic room-graph +
@@ -1303,7 +1311,7 @@ export const Tuning = {
   //    Carried by every `warren` cave and no other kind — the warren already ships the dressing of
   //    somebody having worked down there (scrap caches, salvage plates, rubble), so this gives that
   //    dressing its subject. Canonical NEVER carries it, which is what keeps the origin-parity
-  //    digests (4942306d / 33961250) untouched BY CONSTRUCTION rather than by re-baselining.
+  //    digests (ec2ebf98 / 876749d6) untouched BY CONSTRUCTION rather than by re-baselining.
   //    The whole beat is spawned from a resident sink, so none of its meshes can enter caveGen's
   //    hashed mesh set either (the digest is taken inside doFinalize, before any sink attaches).
   // The body is seated against the MEASURED wall (`makeWallCaster`), not at a fraction of the

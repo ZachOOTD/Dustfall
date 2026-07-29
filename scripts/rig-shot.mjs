@@ -5876,7 +5876,7 @@ const SCENARIOS = {
         if (listA.length < 40) fails.push(`BEAT-SITES only ${listA.length} sites swept — too few to conclude anything`);
         if (!kindsSeen.has('warren')) fails.push('BEAT-SITES no warren appeared in a 12km box — the sweep proves nothing about the beat');
         if (beats.length === 0) fails.push('BEAT-SITES not one site carries the beat — it would never appear in a real world');
-        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "4942306d / 33961250
+        // 3 — ORIGIN PARITY, PROVEN PURELY. This is the assertion that makes "ec2ebf98 / 876749d6
         //     cannot move" a machine fact instead of a claim in a comment.
         if (carries('canonical')) fails.push('BEAT-SITES canonical carries the beat — the ORIGIN CAVE would carry an authored corpse and its parity digest would be at risk');
         const originClear = T.CAVE_SITE_ORIGIN_CLEAR_M;   // `clr` is not declared until below this block
@@ -19057,6 +19057,10 @@ async function caveShotSet(page, prefix) {
       await eyeAt(13, 'approach-near', 3);
       // The THRESHOLD — standing at the lip looking in (the "do I commit?" frame).
       await shoot({ exp: 1.15, cam: [geo.mouthX - 7.5, geo.gy + 2.0, geo.cz], look: [geo.mouthX + 9, geo.gy - 0.4, geo.cz] }, 'threshold');
+      // OVERHEAD (W-4.2, Zach: "quite open, especially from above") — plan view from 26m up. The
+      // from-above read has no ground framing that can answer it: how big is the rock in plan, and
+      // does the fissure read as a hairline crack or an open trench?
+      await shoot({ exp: 1.15, cam: [geo.mouthX + 4, geo.gy + 26, geo.cz + 0.01], look: [geo.mouthX + 4, geo.gy, geo.cz] }, 'overhead');
       // THE DESCENT at eye height, a third of the way down the slot, looking on down.
       if (geo.wps && geo.wps.length > 3) {
         const a = geo.wps[2], b2 = geo.wps[Math.min(geo.wps.length - 1, 4)];

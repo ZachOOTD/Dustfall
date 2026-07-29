@@ -697,7 +697,7 @@ function buildSpeleothem(
   //    which leaves only the ceiling darkening ramp.
   //
   //    KIND-NEUTRAL ON PURPOSE, canonical included: `caveDigest` hashes vertex POSITIONS only, so a
-  //    colour change cannot move the origin digest (4942306d). The GEOMETRY half of this fix is the
+  //    colour change cannot move the origin digest (ec2ebf98). The GEOMETRY half of this fix is the
   //    kind-gated `speleoSolidity`, for exactly the opposite reason.
   const nrm = geo.attributes.normal as THREE.BufferAttribute;
   const col = new Float32Array(pos.length);
@@ -1418,7 +1418,7 @@ function buildFungiCluster(
  *  bloom looks like, and never as one blob. Enforced by RELAXATION, not by re-placement, and that is
  *  the load-bearing choice: a pair that already satisfies the rule is not moved by one float, so
  *  every canonical cluster that was already legal is byte-identical, and no cluster anywhere changes
- *  a single mushroom's SIZE — which is why the cave-walk vertex digest (4942306d at the origin)
+ *  a single mushroom's SIZE — which is why the cave-walk vertex digest (ec2ebf98 at the origin)
  *  cannot move, since it hashes each mesh's local geometry.
  *
  *  It consumes ZERO `rand()` draws (the tie-break for a perfectly-coincident pair is derived from
