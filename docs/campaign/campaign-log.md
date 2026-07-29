@@ -6,7 +6,36 @@ Newest cycle at top. Prior campaigns archived alongside
 Charter: [campaign-deeper.md](campaign-deeper.md) · Walk-test source of truth:
 [cave-walktest-2026-07-24.md](cave-walktest-2026-07-24.md) · Steering: [steering.md](steering.md)
 
-## PAUSED (2026-07-28 late) — Zach: "need to pause now" — ⚠ A REGRESSION IS OPEN
+## ⚠ CORRECTION (2026-07-28, on resume) — the "regression" below was MISCALLED. It is a FLAKE.
+
+**I got this wrong and the record must say so.** The pause entry below calls the warren march
+failure a confirmed regression. On resume the first two measurements overturned it:
+
+1. **The geometry is byte-identical.** Warren's mesh digest is `9219905d` in **six** consecutive
+   `cave-kinds` runs — five marched 12/12 and the failing one marched 8/12 **on the same digest**.
+   Cycle 11's only change to `caveGen.ts` was an additive read-back function; it moved no vertex.
+   The rubble/placement-sampler hypothesis in the pause note is **dead**.
+2. **The repro passed**: `pass=1 … digest=9219905d … reached=12/12 ascent=OUT strands=0 fails=0`.
+
+So on the cycle-11 tree the warren march is 1 fail / 1 pass on identical rock. **That is a flake,
+and my pause note asserted a regression off n=1** — the exact error this campaign wrote the n≥5
+rule for (D311 / the 4242 lesson), committed in the opposite direction. Twelve prior passes made
+one failure *feel* conclusive; feeling is not the bar.
+
+Supporting facts gathered while narrowing it: stamina no longer gates movement
+(`controller.ts:227`), so the new cave-cold branch cannot be slowing the capsule; and the stall
+sits at the chamber-3 **wall** with the capsule moving 3.2m where legs normally move ~16m — a
+walker wedging while hunting the corridor mouth, i.e. a **pathing** outcome, not an obstruction.
+The live hypothesis is D311's own class: marches are dt-coupled, cycle 11 added real per-frame
+work (the cold branch, plus a duplicated `caveContainmentAt` its own report flagged), and on
+marginal geometry a small timing shift changes the walker's path. If so this is a **pre-existing
+gate fragility any frame-cost change would expose**, and the fix belongs in the march leg recipe,
+not in the game.
+
+**Sampling to n≥5 before any fix is designed.** Everything below this heading stands as the
+contemporaneous record, wrong call included.
+
+## PAUSED (2026-07-28 late) — Zach: "need to pause now" — ⚠ A REGRESSION IS OPEN (MISCALLED — see above)
 
 **Read this before anything else on resume.** The owed cycle-11 gate legs ran to a verdict:
 
