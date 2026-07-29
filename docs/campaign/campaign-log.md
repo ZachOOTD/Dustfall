@@ -47,6 +47,28 @@ smaller and more compact, ending closer to the tunnel and blending seamlessly wi
 - Digest re-baseline #4 (sanctioned; the slot is hashed): `ec2ebf98` / `876749d6`, 1337 confirmed by
   two independent probes, all literals swept.
 
+### The batch's own gate of record — and two instrument defects it surfaced (`89b0d24`)
+
+The final `verify:all`: **22/24 legs green including every gate this session added** (STORM-CAVE,
+POOL-BASIN, BEAT-SITES ×2, BEAT-BUILD, the narrowed-entrance marches + voids). The 2 reds were ONE
+instrument lying twice — the pixel gate's no-glow canary, on both seeds, **firing on the
+best-behaved water in the game** (D316's third instance tonight):
+
+- Its mask was CHANGED PIXELS, not the footprint its own message claims. A black mirror over black
+  rock changes only its glints; the median OF THE GLINTS is bright by construction. It had passed
+  for weeks only because the 6m open-sky run spilled faint light onto the pool body — W-4.2 halved
+  the sky run, the room got properly darker, and the mask collapsed on both seeds at once. One
+  lighting nudge from lying in either direction.
+- Fixed by measuring what the theory always claimed: a THIRD render (water forced flat-white) gives
+  the geometric footprint; self-illumination = a high median over a substantial **coverage** of it.
+  Then seed 7 exposed the sibling tooth treating 22px of LSB dust as "a uniform wash" — in the
+  verdict's own documented trivial-pass pose. A ≥250px substantiveness floor restores it.
+- **Both floors are red-proof-clearing by three orders of magnitude**: the forced luminous sheet
+  (the round-13 defect class) measures 543k px at coverage 1.0, median 153 — every tooth fires.
+
+Final rows: `pool-fill` **0 fails on both seeds**, with `storm-cave` / `pool-basin` /
+`lantern-rt` / `cave-cold` green in the same runs. Batch closed.
+
 **Origin digests moved TWICE this session, both sanctioned by the walk-test:** the dais seal
 (`d8f15005/99e0015b → b2de403d/cfbd1198`) then the basins (`→ 4942306d/33961250`). No gate asserts
 the literals; stability ×2 and the sync-vs-sliced contract are the machine teeth and both held.
