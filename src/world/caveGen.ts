@@ -2083,7 +2083,29 @@ export interface SpawnedCave {
    *  MEASURED rock plus the yaw that faces the figure back into the room. Same deliberate choice as
    *  `scrapAnchors`: an anchor and not a mesh, because the props it implies need a `GameContext` to
    *  register and — more importantly — need somebody who can DEspawn them when the cave is evicted. */
-  beatAnchor: { pos: THREE.Vector3; yaw: number } | null;
+  beatAnchor: BeatAnchor | null;
+}
+
+/** DEEPER cycle 12 — the dead-explorer seat plus a patch of the REAL rock around it, so the props
+ *  arranged around the figure can each sit on the stone under THEM rather than on the one height
+ *  measured at the seat. `floor` is an axis-aligned world-space height grid; sample it with
+ *  {@link sampleBeatFloor}. */
+export interface BeatAnchor {
+  pos: THREE.Vector3;
+  yaw: number;
+  floor: { x0: number; z0: number; cell: number; n: number; h: number[] };
+}
+
+/** Bilinear read of a {@link BeatAnchor}'s rock-height patch, clamped at the edges. Kept beside the
+ *  producer so the two cannot drift: a consumer that re-derived the indexing would be free to be
+ *  subtly wrong in a way nothing would catch. */
+export function sampleBeatFloor(f: BeatAnchor['floor'], x: number, z: number): number {
+  const fx = Math.min(f.n - 1.0001, Math.max(0, (x - f.x0) / f.cell));
+  const fz = Math.min(f.n - 1.0001, Math.max(0, (z - f.z0) / f.cell));
+  const ix = Math.floor(fx), iz = Math.floor(fz), tx = fx - ix, tz = fz - iz;
+  const o = iz * f.n + ix;
+  const c00 = f.h[o], c10 = f.h[o + 1], c01 = f.h[o + f.n], c11 = f.h[o + f.n + 1];
+  return (c00 * (1 - tx) + c10 * tx) * (1 - tz) + (c01 * (1 - tx) + c11 * tx) * tz;
 }
 
 /** DEEPER cycle 5 — a RESUMABLE cave spawn. `step(budgetMs)` advances the build and returns true
@@ -2159,7 +2181,7 @@ export function startSpawnCave(
   let brand!: () => number;                 // DEEPER cycle 12 — dead-explorer bearing RNG (own stream)
   let rubbleHeaps = 0;
   let scrapAnchors: THREE.Vector3[] = [];
-  let beatAnchor: { pos: THREE.Vector3; yaw: number } | null = null;   // cycle 12 — the dead explorer
+  let beatAnchor: BeatAnchor | null = null;   // cycle 12 — the dead explorer
   let msMesh = 0;
   let msRockSamplers = 0;                   // CLOSE-OUT — the two real-rock sampler passes
   let out: SpawnedCave | null = null;
@@ -2374,7 +2396,29 @@ export function startSpawnCave(
           // The figure faces back INTO the room (the skeleton's own convention is +Z forward, away
           // from the wall it leans on), so the player walking in meets it head-on rather than
           // finding the back of a skull.
-          beatAnchor = { pos: new THREE.Vector3(bx, by, bz), yaw: Math.atan2(-ux, -uz) };
+          // …and a small patch of the REAL rock around it. The anchor alone is exact only AT THE
+          // SEAT: the tableau is a rigid ~2.4m-wide arrangement and the displaced SDF floor falls
+          // away under its edges, which measured as the journal floating 8.8cm, the crate 5.5cm and
+          // the lantern 10.0cm while the seat sat at 0.4cm. A prop hovering a hand's width over the
+          // stone is the exact defect cycle 9's close-out critic raised and `makeRockFloorSampler`
+          // was built to kill; the anchor's own point value cannot fix it because the problem is the
+          // GRADIENT, not the height. Published as a grid rather than as per-prop heights so this
+          // module stays ignorant of the tableau's layout — the composer samples whatever offsets it
+          // happens to use. Sampled HERE because `rockFloor` reads the SDF surface that is in hand at
+          // the dress stage: a Rapier downcast at sink-attach time would be the wrong tool anyway,
+          // since the QueryPipeline only rebuilds on `world.step()` and the cave's collider is not
+          // in it yet on the frame it finalizes.
+          const n = Tuning.CAVE_BEAT_FLOOR_N, cell = Tuning.CAVE_BEAT_FLOOR_CELL;
+          const x0 = bx - ((n - 1) / 2) * cell, z0 = bz - ((n - 1) / 2) * cell;
+          const h: number[] = [];
+          for (let iz = 0; iz < n; iz++) {
+            for (let ix = 0; ix < n; ix++) h.push(rockFloor(x0 + ix * cell, z0 + iz * cell, by));
+          }
+          beatAnchor = {
+            pos: new THREE.Vector3(bx, by, bz),
+            yaw: Math.atan2(-ux, -uz),
+            floor: { x0, z0, cell, n, h },
+          };
         }
       }
     }

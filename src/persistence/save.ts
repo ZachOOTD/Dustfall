@@ -617,7 +617,11 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         const extractedIndices = comps.flatMap((c, i) => (c.visible ? [] : [i]));
         return { id: s.id, salvageRemaining: s.salvageRemaining, stripped: s.stripped, extractedIndices };
       }),
-      lootContainers: ctx.lootContainers.list.map((c) => ({
+      // DEEPER cycle 12 — a cave story-beat cache is EXCLUDED from this id-keyed array, for exactly
+      // the reason the streamed `salvageables` above are: its container is spawned by a resident
+      // sink, so its runtime id is LOAD-ORDER DEPENDENT and a saved id could silently patch a
+      // DIFFERENT crate after reload (D292). It persists by descriptor key in `caveBeats` instead.
+      lootContainers: ctx.lootContainers.list.filter((c) => !c.mesh.userData.caveBeatKey).map((c) => ({
         id: c.id,
         opened: c.opened,
         contents: c.contents.map((e) => ({ ...e })),
@@ -1223,6 +1227,18 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     // array (a hand-edited or future-shape save) as "emptied", which is the conservative reading —
     // it can never hand the player a cache back.
     for (const b of save.caveBeats) ctx.caveBeats.set(b.key, (b.contents ?? []).map((e) => ({ ...e })));
+  }
+  // …and re-sync any beat cache that is ALREADY RESIDENT. Loading does not re-run the sink, so a
+  // player who saves, loots, and loads again while still standing in the cave would otherwise keep
+  // the pre-load contents until the cave happened to evict. Contents are replaced in place because
+  // the loot menu may be holding this very container.
+  for (const c of ctx.lootContainers.list) {
+    const key = c.mesh.userData.caveBeatKey as string | undefined;
+    if (!key) continue;
+    const remembered = ctx.caveBeats.get(key);
+    c.contents.length = 0;
+    if (remembered) { for (const e of remembered) c.contents.push({ ...e }); c.opened = true; }
+    else for (const e of Tuning.CAVE_BEAT_CACHE) c.contents.push({ itemId: e.itemId as ItemId, count: e.count });
   }
 
   for (const l of ctx.lanterns.list) {

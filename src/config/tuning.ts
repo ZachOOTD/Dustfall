@@ -1307,14 +1307,41 @@ export const Tuning = {
   // grid (`addRubble`/`addSpeleothems` both keep clear of it), so 0.72 would have parked the tableau
   // on the walk line — harmless for collision (the beat has no collider at all) but wrong for the
   // staging, which is "out by the wall, off the path."
+  // The rock patch published with the anchor so every prop beds on the stone under IT. The tableau
+  // spans ~2.4m, so ±1.2m at 30cm covers it; the grid is 81 floats per beat cave, once, at build.
+  CAVE_BEAT_FLOOR_N: 17,               // samples per side (odd, so the anchor is a grid point)
+  // 15cm and not the 30cm first tried. 30cm left the canteen 5.4cm proud: the residual is bilinear
+  // interpolation error across a displaced floor, so it scales with the spacing, and "finer than the
+  // 0.45m SDF voxel buys nothing" was wrong — the voxel bounds the SURFACE's detail, not the error of
+  // sampling it. 289 floats once per beat cave is not a cost worth defending.
+  CAVE_BEAT_FLOOR_CELL: 0.15,          // m between samples
+  CAVE_BEAT_BED_M: 0.02,               // m — seat depth for the THIN props (the journal is a 3cm book: bed it like the solids and it is buried)
+  // The solid props get a deeper bed, and the reason is measured rather than aesthetic. The seating
+  // sampler (`rockFloor`, a 0.45m max-splat over up-facing SDF vertices) and the gate's Rapier
+  // downcast do not agree to better than ~5cm on displaced floor — that residual is why the canteen
+  // still read 4.8cm proud after its placement was made exact. Bedding the solids past the
+  // disagreement means the error can only ever show as a little penetration, never as daylight.
+  CAVE_BEAT_BED_PROP_M: 0.06,          // m — seat depth for the solid props (lantern, canteen, flakes)
   CAVE_BEAT_WALL_FRAC: 0.80,           // × chamber rx — FALLBACK seat when the wall cast misses
   CAVE_BEAT_WALL_BACKOFF: 0.55,        // m — pulled back off the measured wall so the slumped figure leans against rock instead of intersecting it (the tableau is ~0.9m deep)
-  CAVE_BEAT_JOURNAL_FWD: 0.62,         // m — journal along the skeleton's +Z (its authored right-hand reach is ~0.65; this lands it at the fingertips)
-  CAVE_BEAT_JOURNAL_SIDE: 0.10,        // m — journal offset to the reaching (right) side, so the hand is beside the book and not on top of it
+  // ⚑ MOVED IN THE CLOSE-READ PASS (cycle 12, the visual half). These were 0.62 / 0.10, sized against
+  //   the OLD skeleton's authored hand offset — but that offset was never a reach the figure's arm
+  //   could make: its forearm and hand were placed by hand-tuned offsets that do not meet the elbow,
+  //   so "the authored right-hand reach is ~0.65" measured a DETACHED hand. On the close-read figure
+  //   the arm is a real chain (humerus 0.34 + forearm 0.27 + hand 0.16 off a shoulder at z −0.21,
+  //   most of that budget spent dropping 0.58m to the floor), and its fingertips physically cannot
+  //   pass z ≈ +0.25. At 0.62 the journal lay 0.37m BEYOND the fingers — far enough that it reads as
+  //   an unrelated prop lying near a body rather than the book that slipped out of the hand. At 0.36
+  //   it sits ~0.11m past the open fingertips: dropped. Nothing but `deadExplorer.ts` reads these.
+  CAVE_BEAT_JOURNAL_FWD: 0.36,         // m — journal along the skeleton's +Z, just past the open fingertips
+  CAVE_BEAT_JOURNAL_SIDE: 0.20,        // m — journal offset to the reaching (right) side, so the hand is beside the book and not on top of it
   CAVE_BEAT_CRATE_SIDE: 0.85,          // m — the loot crate beside the body, on the +X side
   CAVE_BEAT_CRATE_FWD: 0.18,           // m — …and slightly forward, so it reads as spilled beside them rather than stacked behind
-  CAVE_BEAT_LANTERN_FWD: 0.78,         // m — the spent lantern on its side just past the reaching hand: the light that ran out
-  CAVE_BEAT_LANTERN_SIDE: -0.26,       // m — on the far side of the journal, so the two props do not overlap at torch range
+  // ⚑ MOVED WITH THE JOURNAL (same reason): 0.78 forward is past the close-read figure's own TOES,
+  //   which put the lantern out in open floor with nothing near it. 0.40/-0.44 sets it down just
+  //   outside the fallen left knee — within arm's reach of where they sat, tipped over.
+  CAVE_BEAT_LANTERN_FWD: 0.40,         // m — the spent lantern on its side beside them: the light that ran out
+  CAVE_BEAT_LANTERN_SIDE: -0.44,       // m — on the far side from the journal, so the two props do not overlap at torch range
   CAVE_BEAT_CANTEEN_SIDE: -0.42,       // m — the fallen canteen at the hip
   CAVE_BEAT_CANTEEN_FWD: 0.05,
   // ⚑ FLAGGED FOR ZACH (cycle-12 plan Q4) — the cache contents. HAND-AUTHORED and passed straight

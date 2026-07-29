@@ -16,7 +16,7 @@ import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
 import { caveEntranceHoleFitsTile, caveEntranceSite, creviceClearProfile, spawnCaveEntrance } from './world/caveEntrance.ts';   // UNDERWORLD cycle 1 (D307, FEATURES.caveTest)
-import { caveGenSeed, spawnCave, type CaveFungiCluster, type SpawnedCave } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
+import { caveGenSeed, spawnCave, sampleBeatFloor, type CaveFungiCluster, type SpawnedCave } from './world/caveGen.ts';   // UNDERWORLD cycle 2/3 — the generated cave body + harvestable fungi
 import { getPlayerPos } from './util/playerPos.ts';   // canonical player position (speeder/sled-aware)
 import { createCaveStream, type CaveStream } from './world/caveStream.ts';   // DEEPER cycle 5 (D-4) — cave build budget + resident cap
 import { caveSitesNear } from './world/caveSites.ts';                       // DEEPER cycle 8 — seed-pure rocky-terrain cave placement
@@ -858,8 +858,23 @@ if (caveStream) {
       // Its own stream, seeded from the cave's own generation seed, so a re-streamed cave's tableau
       // is identical on re-entry (D290) and nothing draws from a shared scatter stream (D208).
       const rand = makeRng((cave.probe.seed ^ 0xbea713) >>> 0);
-      const de = buildDeadExplorer(rand);
-      de.group.position.copy(anchor.pos);
+
+      // ── SEATING. The anchor's height is exact at the SEAT and nowhere else: the tableau is a rigid
+      //    ~2.4m arrangement and the displaced cave floor falls away under its edges (measured, before
+      //    this: journal 8.8cm, lantern 10.0cm, crate 5.5cm in the air, with the seat at 0.4cm).
+      //    So the FIGURE — one rigid body that cannot follow the ground — is dropped to the LOWEST
+      //    rock under its own footprint, which beds the high side into stone instead of floating the
+      //    low side over it; and every loose prop is seated individually through `groundY`.
+      const cy = Math.cos(anchor.yaw), sy = Math.sin(anchor.yaw);
+      const rockAtLocal = (lx: number, lz: number): number =>
+        sampleBeatFloor(anchor.floor, anchor.pos.x + lx * cy + lz * sy, anchor.pos.z - lx * sy + lz * cy);
+      // The figure's own footprint: seat, both feet, and the reaching hand.
+      let groupY = Infinity;
+      for (const [lx, lz] of [[0, 0], [-0.16, 0.52], [0.16, 0.52], [0.1, 0.3]] as const) {
+        groupY = Math.min(groupY, rockAtLocal(lx, lz));
+      }
+      const de = buildDeadExplorer(rand, (lx, lz) => rockAtLocal(lx, lz) - groupY);
+      de.group.position.set(anchor.pos.x, groupY, anchor.pos.z);
       de.group.rotation.y = anchor.yaw;
       three.scene.add(de.group);
       // World-space anchors derived from the group's own transform, so the props and the tableau can
@@ -883,7 +898,7 @@ if (caveStream) {
         ? remembered.map((e) => ({ ...e }))
         : Tuning.CAVE_BEAT_CACHE.map((e) => ({ itemId: e.itemId as ItemId, count: e.count }));
       if (contents.length > 0) {
-        container = spawnLootContainerAt(three.scene, cratePos, contents, rand);
+        container = spawnLootContainerAt(three.scene, cratePos, contents, rand, { muted: true, open: true });
         if (remembered) container.opened = true;   // it stays visibly rifled once you have been in it
         // The descriptor key travels WITH the container so `saveGame` can record an emptied cache
         // even when the cave is still resident — the player can loot it and hit save without ever

@@ -117,13 +117,43 @@ function makeSpilledFlake(rand: Rng): THREE.Mesh {
 }
 
 /** Compose the tableau. `rand` is the caller's per-cave stream — the same seed always
- *  produces the same scene, so a re-streamed cave's body is identical on re-entry (D290). */
-export function buildDeadExplorer(rand: Rng): DeadExplorer {
+ *  produces the same scene, so a re-streamed cave's body is identical on re-entry (D290).
+ *
+ *  `groundY(lx, lz)` returns the real rock height in the GROUP'S OWN LOCAL Y at a local (x, z).
+ *  Every loose prop is seated with it, because the tableau is rigid and ~2.4m wide while the
+ *  displaced cave floor is not flat: seating everything at y=0 floated the lantern a measured 10cm
+ *  while the seat sat at 0.4cm. Defaults to a flat floor so the composer stays usable (and
+ *  screenshot-able) without a cave under it. */
+export function buildDeadExplorer(rand: Rng, groundY: (lx: number, lz: number) => number = () => 0): DeadExplorer {
   const group = new THREE.Group();
   group.name = 'deadExplorer';
+  // Bed props slightly INTO the stone. Hovering never reads as resting; a little penetration always
+  // does — the same bias `makeRockFloorSampler` applies for the same reason.
+  const seat = (lx: number, lz: number, bed: number = Tuning.CAVE_BEAT_BED_M): number => groundY(lx, lz) - bed;
+  /** Drop `obj` until its LOWEST VERTEX rests at the floor under it. Props are laid on their sides
+   *  at random rotations, so how far their geometry reaches below their origin is not a constant —
+   *  the spent lantern's hand-tuned "+0.17 so the tipped cage rests" measured 8.7cm of daylight
+   *  under it. Measured, never guessed: the same rule the rock samplers follow. */
+  const restOnFloor = (obj: THREE.Object3D, lx: number, lz: number): void => {
+    obj.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(obj);
+    if (!isFinite(bb.min.y)) return;
+    // Sample the rock under where the prop's MASS actually is, not under its nominal anchor point.
+    // These props are laid on their sides at a random yaw, so a flask's footprint can sit 10-20cm
+    // from the point it was placed at; over a displaced floor that offset is worth centimetres, and
+    // it was the whole of the canteen's residual 5.4cm.
+    void lx; void lz;
+    obj.position.y += seat((bb.min.x + bb.max.x) / 2, (bb.min.z + bb.max.z) / 2, Tuning.CAVE_BEAT_BED_PROP_M) - bb.min.y;
+  };
 
-  // ── The figure. Its authored pose IS this beat; nothing here re-poses it.
-  const skel = makeSkeleton();
+  // ── The figure. Its authored STAGING is this beat — slumped against the wall, head fallen, right
+  //    arm out where the book slipped from it — and nothing here re-poses it. `closeRead` rebuilds
+  //    the FORMS for the 1-2m torch read this tableau is met at (real joint chains, capped swept-tube
+  //    bones with a tip-radius floor, recessed solid orbits, dried-bone colour); the shipped 2-4m
+  //    wreck skeleton is what `makeSkeleton()` with no arguments still returns, unchanged, for the
+  //    opening scene and the wordless surface scenes.
+  const skel = makeSkeleton({ closeRead: true });
+  skel.userData.beatProp = 'figure';
   group.add(skel);
 
   // ── The spent lantern, on its side just past the reaching hand.
@@ -133,21 +163,30 @@ export function buildDeadExplorer(rand: Rng): DeadExplorer {
     0.0,
     Tuning.CAVE_BEAT_LANTERN_FWD,
   );
-  // Tipped over onto its side — a lantern that was set down and then fell, not one placed.
-  lantern.rotation.set(0, rand() * Math.PI * 2, Math.PI * 0.5 + (rand() - 0.5) * 0.2);
-  lantern.position.y = 0.17;                          // the tipped cage rests on the floor
+  // Tipped over onto its side — a lantern that was set down and then fell, not one placed. Yawed
+  // so the tripod legs point back at the body rather than lying along the view line: at torch range
+  // a full-length lantern laid broadside reads unmistakably as a staff or a rifle on the floor,
+  // which is the wrong object and the wrong genre. Angled, the cage and the tripod both read.
+  lantern.rotation.set(0, Math.PI * 0.62 + (rand() - 0.5) * 0.3, Math.PI * 0.5 + (rand() - 0.5) * 0.2);
+  restOnFloor(lantern, Tuning.CAVE_BEAT_LANTERN_SIDE, Tuning.CAVE_BEAT_LANTERN_FWD);
+  lantern.userData.beatProp = 'lantern';   // the bedding probe measures the REAL prop, not a plane
   group.add(lantern);
 
   // ── The canteen at the hip.
   const canteen = makeFallenCanteen(rand);
   canteen.position.x += Tuning.CAVE_BEAT_CANTEEN_SIDE;
   canteen.position.z += Tuning.CAVE_BEAT_CANTEEN_FWD;
+  restOnFloor(canteen, Tuning.CAVE_BEAT_CANTEEN_SIDE, Tuning.CAVE_BEAT_CANTEEN_FWD);
+  canteen.userData.beatProp = 'canteen';
   group.add(canteen);
 
   // ── A little gear spilled between the crate and the body.
+  // The crate and the journal are spawned by the CALLER (they are interactables and need a
+  // GameContext), so their bedding is baked into the published local anchors — `localToWorld` then
+  // puts them on the right stone without the caller knowing anything about the floor.
   const crateLocal = new THREE.Vector3(
     Tuning.CAVE_BEAT_CRATE_SIDE,
-    0,
+    seat(Tuning.CAVE_BEAT_CRATE_SIDE, Tuning.CAVE_BEAT_CRATE_FWD),
     Tuning.CAVE_BEAT_CRATE_FWD,
   );
   const flakes = 2 + Math.floor(rand() * 2);
@@ -157,6 +196,7 @@ export function buildDeadExplorer(rand: Rng): DeadExplorer {
     const r = 0.28 + rand() * 0.26;
     f.position.x += crateLocal.x + Math.cos(a) * r;
     f.position.z += crateLocal.z + Math.sin(a) * r;
+    f.position.y += seat(f.position.x, f.position.z, Tuning.CAVE_BEAT_BED_PROP_M);
     group.add(f);
   }
 
@@ -173,7 +213,7 @@ export function buildDeadExplorer(rand: Rng): DeadExplorer {
     group,
     journalLocal: new THREE.Vector3(
       Tuning.CAVE_BEAT_JOURNAL_SIDE,
-      0.0,
+      seat(Tuning.CAVE_BEAT_JOURNAL_SIDE, Tuning.CAVE_BEAT_JOURNAL_FWD),
       Tuning.CAVE_BEAT_JOURNAL_FWD,
     ),
     journalYaw: (rand() - 0.5) * 0.9,                 // askew, as dropped

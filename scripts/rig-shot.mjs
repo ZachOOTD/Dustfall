@@ -18050,12 +18050,21 @@ async function caveKindShots(page, kind, residentKey) {
       const K = p.kind;
       if (K === 'fungal' && fung) tgt = fung;
       if (K === 'warren') {
-        // The SCRAP ANCHORS, straight off the built cave — the pickup list was the wrong source (it
-        // is spawned by the resident sink, may not be populated yet, and carries no node).
-        const anc = (res.cave.scrapAnchors || []).map((v) => ({ x: v.x, y: v.y, z: v.z }));
-        let best = null, bd = 1e9;
-        for (const q of anc) { const d = Math.hypot(q.x - egg.x, q.z - egg.z); if (d < bd) { bd = d; best = q; } }
-        if (best) tgt = { x: best.x, y: best.y, z: best.z, r: 1.1 };
+        // ── DEEPER cycle 12 — THE WARREN'S SIGNATURE IS THE DEAD EXPLORER, not a scrap flake. The
+        //    kind's defining feature moved when the beat landed, so the frame that exists to show
+        //    "what did this kind change" moved with it. Same lesson as the line it replaces: take the
+        //    anchor PUBLISHED ON THE BUILT CAVE (`cave.beatAnchor`), never the sink-spawned scene
+        //    objects, which may not be populated when the framing is computed.
+        const ba0 = res.cave.beatAnchor;
+        if (ba0) tgt = { x: ba0.pos.x, y: ba0.pos.y + 0.35, z: ba0.pos.z, r: 1.1 };
+        else {
+          // The SCRAP ANCHORS, straight off the built cave — the pickup list was the wrong source (it
+          // is spawned by the resident sink, may not be populated yet, and carries no node).
+          const anc = (res.cave.scrapAnchors || []).map((v) => ({ x: v.x, y: v.y, z: v.z }));
+          let best = null, bd = 1e9;
+          for (const q of anc) { const d = Math.hypot(q.x - egg.x, q.z - egg.z); if (d < bd) { bd = d; best = q; } }
+          if (best) tgt = { x: best.x, y: best.y, z: best.z, r: 1.1 };
+        }
       }
       if (K === 'shaft') {
         // Rubble heaps DECLARE themselves (`userData.rubbleHeap`). The previous version guessed —
@@ -18088,7 +18097,153 @@ async function caveKindShots(page, kind, residentKey) {
         out.push({ name: 'signature', cam: [sx, fy + EYE, sz], look: [tgt.x, Math.max(tgt.y, fy) + 0.35, tgt.z] });
       }
     }
-    return { specs: out, shelfCount };
+    // ── 4 — THE DEAD EXPLORER, AT THE RANGE IT IS ACTUALLY READ (DEEPER cycle 12, the close-read
+    //    pass). This prop is met at 1-2m by torchlight, kneeling over it — which is a completely
+    //    different instrument from the 2.6m `signature` frame, and the defects that matter (a
+    //    zero-thickness eye socket, a limb that tapers to a blade, a faceted tube) are INVISIBLE at
+    //    2.6m by construction. Five framings, one per failure mode:
+    //      beat      — the whole tableau at 4m, i.e. the read as you walk into the room.
+    //      torch     — 1.5m head-on, the conversation distance.
+    //      skull     — 1.0m on the skull, face-on; and
+    //      skullturn — the SAME skull from ~70° off-axis: the head-turn. A `CircleGeometry` socket
+    //                  is a single face, so it survives the first frame and VANISHES in this one.
+    //                  Two frames or the socket claim is untested.
+    //      limb      — a grazing, near-floor angle along the reaching arm: the edge-on read of the
+    //                  limb bones (rule 7's "verify from grazing angles, not face-on").
+    //      fracture  — a macro on a DECLARED broken bone (`userData.boneFracture`), the shot that
+    //                  proves the cross-section is solid and splintered rather than a capped pill.
+    //    Anchors come off the BUILT CAVE (`cave.beatAnchor`) with the declared prop tags as a
+    //    refinement, never from a scene search alone — same lesson as the signature frame above.
+    const ba = res.cave.beatAnchor;
+    let bedding = null;
+    if (ba) {
+      const fx = Math.sin(ba.yaw), fz = Math.cos(ba.yaw);      // the figure's own +Z (it faces the room)
+      const sx0 = fz, sz0 = -fx;                               // its right-hand side
+      const L2W = (lx, ly, lz) => ({
+        x: ba.pos.x + lx * sx0 + lz * fx,
+        y: ba.pos.y + ly,
+        z: ba.pos.z + lx * sz0 + lz * fz,
+      });
+      // Declared prop anchors, if the sink has attached (it has, whenever a resident exists — but a
+      // missing tag must degrade to the authored local offset, never to no frame at all).
+      let skullW = null, fracW = null, fracR = 0.03;
+      for (const root of ctx.three.scene.children) {
+        if (root.name !== 'deadExplorer') continue;
+        root.traverse((o) => {
+          const u = o.userData || {};
+          if (u.skullAnchor) { const v = new THREE.Vector3(); o.getWorldPosition(v); skullW = v; }
+          if (u.boneFracture) {
+            const v = new THREE.Vector3();
+            o.localToWorld(v.set(u.boneFracture.x, u.boneFracture.y, u.boneFracture.z));
+            fracW = v; fracR = u.boneFracture.r || 0.03;
+          }
+        });
+      }
+      const SK = skullW || L2W(0, 0.754, -0.410);               // the authored skull centre
+      // ── THE BEDDING PROBE. The tableau is ONE plane (the group's anchor y) but the cave floor is
+      //    DISPLACED rock, so every prop out at the edge of the group can be left hanging in air —
+      //    which the `fracture` macro caught as a levitating journal. Measure the rock under each
+      //    prop and name the gap in metres; a picture cannot answer "is that 2cm or 10cm?".
+      //    ⚠ THIS PROBE WAS REWRITTEN THE FIRST TIME IT WAS TRUSTED. Its first version measured
+      //    `anchor.pos.y - rockUnder(localOffset)` — the ANCHOR PLANE against the rock, never the
+      //    prop. That is a real quantity (it is the floor's gradient under the tableau) but it is not
+      //    the question, and it is INSENSITIVE TO THE FIX BY CONSTRUCTION: after every prop was
+      //    re-seated on its own rock the probe reported the same seven numbers to the millimetre,
+      //    because none of them had ever depended on where a prop was. A gate that cannot move when
+      //    the defect is fixed cannot tell you the defect is fixed. Measure the OBJECT.
+      const propWorld = [];
+      const beatRoot = (() => { let r = null; res.cave.group.parent.traverse((o) => { if (o.name === 'deadExplorer') r = o; }); return r; })();
+      if (beatRoot) {
+        beatRoot.updateMatrixWorld(true);
+        beatRoot.traverse((o) => {
+          const tag = o.userData && o.userData.beatProp;
+          if (!tag) return;
+          propWorld.push([tag, o]);
+        });
+      }
+      const jr = (ctx.journals.list || []).find((j) => Math.hypot(j.pos.x - ba.pos.x, j.pos.z - ba.pos.z) < 2.0);
+      if (jr) propWorld.push(['journal', jr.mesh]);
+      const cr = (ctx.lootContainers.list || []).find((c) => Math.hypot(c.pos.x - ba.pos.x, c.pos.z - ba.pos.z) < 2.5);
+      if (cr) propWorld.push(['crate', cr.mesh]);
+      //    …and measure the prop's LOWEST VERTEX, not its origin. Round 2 of this probe reported the
+      //    lantern at +0.157 and the canteen at +0.153 while both were correctly seated: their
+      //    origins sit deliberately above their contact points (a tipped lantern rests on its cage,
+      //    a flask on its rim), so origin-vs-rock reads a design offset as a defect. The question is
+      //    "is there daylight under this object", and that is the bounding box's floor.
+      bedding = propWorld.length
+        ? propWorld.map(([nm, o]) => {
+          const bb = new THREE.Box3().setFromObject(o);
+          if (!isFinite(bb.min.y)) return `${nm}=NO-GEOMETRY`;
+          const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
+          const h = g.castDown(cx, cz, bb.max.y + 1.6, true);
+          return `${nm}=${h ? (bb.min.y - h.hitY).toFixed(3) : 'MISS'}`;
+        }).join(' ')
+        : 'NO TAGGED PROPS FOUND — the probe measured nothing (vacuous)';
+      // A camera stand-off that cannot end up inside the rock: measure along the bearing and keep
+      // 0.35m of air behind the eye (the beat sits AGAINST a wall, so "back off 4m" is only safe if
+      // the room is actually that deep — the r1 lesson from the signature frame).
+      const backOff = (want) => {
+        const d = hRay(ba.pos.x, ba.pos.y + EYE * 0.6, ba.pos.z, fx, fz, want + 0.8);
+        return Math.max(1.0, Math.min(want, d - 0.35));
+      };
+      const park = (name, dist, side, eyeY, look, extra) => {
+        const D = backOff(dist);
+        const cx = ba.pos.x + fx * D + sx0 * side, cz = ba.pos.z + fz * D + sz0 * side;
+        const fy = floorAt(cx, cz, ba.pos.y);
+        out.push({ name, cam: [cx, fy + eyeY, cz], look: [look.x, look.y, look.z], ...(extra || {}) });
+      };
+      // (e) the arrival read — standing, 4m out.
+      park('beat', 4.0, 0, EYE, L2W(0, 0.55, 0));
+      // (a) 1.5m head-on, still standing: this is the torch-range conversation frame.
+      park('torch', 1.5, 0.15, EYE, L2W(0, 0.55, 0));
+      // (b) 1.0m on the skull, at ITS height — the player has crouched to look at the face. A 34°
+      //     lens so the head fills the frame honestly instead of being 40px in a wide shot.
+      {
+        const D = backOff(1.0);
+        out.push({
+          name: 'skull', cam: [ba.pos.x + fx * D + sx0 * 0.10, SK.y + 0.10, ba.pos.z + fz * D + sz0 * 0.10],
+          look: [SK.x, SK.y, SK.z], fov: 34,
+        });
+      }
+      // (b') THE HEAD-TURN. Same distance, same lens, ~70° around: the socket's grazing read.
+      {
+        const a = 1.22;                                        // rad off the facing axis
+        const ax = fx * Math.cos(a) + sx0 * Math.sin(a), az = fz * Math.cos(a) + sz0 * Math.sin(a);
+        const D = Math.max(0.75, Math.min(1.0, hRay(SK.x, SK.y, SK.z, ax, az, 1.8) - 0.3));
+        out.push({
+          name: 'skullturn', cam: [SK.x + ax * D, SK.y + 0.06, SK.z + az * D],
+          look: [SK.x, SK.y, SK.z], fov: 34,
+        });
+      }
+      // (c) THE GRAZING LIMB READ — low, from the side, looking along the reaching right arm and the
+      //     femurs. Edge-on is where a 5-segment cylinder shows its facets and a blade shows its edge.
+      {
+        const t = L2W(0.15, 0.16, 0.30);
+        const a = 1.05;
+        const ax = -(fx * Math.cos(a) + sx0 * Math.sin(a)), az = -(fz * Math.cos(a) + sz0 * Math.sin(a));
+        const D = Math.max(0.8, Math.min(1.35, hRay(t.x, t.y + 0.2, t.z, ax, az, 2.2) - 0.3));
+        out.push({
+          name: 'limb', cam: [t.x + ax * D, t.y + 0.16, t.z + az * D], look: [t.x, t.y, t.z], fov: 40,
+        });
+      }
+      // (d) THE FRACTURE MACRO. Only emitted when a bone DECLARES a break, so a silently-missing
+      //     fracture is a missing FILE (the shelf-evidence lesson) rather than a green grade on a
+      //     photograph of something else.
+      if (fracW) {
+        const a = 2.35;
+        const ax = fx * Math.cos(a) + sx0 * Math.sin(a), az = fz * Math.cos(a) + sz0 * Math.sin(a);
+        const D = 0.55;
+        const fov = Math.min(60, Math.max(18, (2 * Math.atan((fracR * 5.0) / D) * 180) / Math.PI));
+        out.push({
+          name: 'fracture', cam: [fracW.x + ax * D, fracW.y + 0.16, fracW.z + az * D],
+          look: [fracW.x, fracW.y, fracW.z], fov: +fov.toFixed(1),
+        });
+      } else {
+        out.push({ name: '__nofracture' });
+      }
+    }
+    const keep = out.filter((s) => s.name !== '__nofracture');
+    return { specs: keep, shelfCount, noFracture: keep.length !== out.length, hasBeat: !!ba, bedding };
   }, { KEY: residentKey, EYE });
   if (!plan) { console.log(`[cave-kinds] ${kind}: no resident to shoot`); return; }
   const specs = plan.specs;
@@ -18101,6 +18256,18 @@ async function caveKindShots(page, kind, residentKey) {
       + `fungiWallChance talking (warren 0.15 / shaft 0.2 over 1-2 fungi chambers), not a broken helper.`);
   } else {
     console.log(`[cave-kinds] ${kind}: ${plan.shelfCount} visible wall shelves; framing the nearest one.`);
+  }
+  if (plan.bedding) {
+    console.log(`[cave-kinds] ${kind} beat BEDDING (each prop's REAL world y MINUS the rock under it; `
+      + `+ve = the prop is hanging that far above the floor, -ve = bedded into it): ${plan.bedding}`);
+  }
+  if (plan.hasBeat && plan.noFracture) {
+    console.log(`[cave-kinds] ⚠ FRACTURE EVIDENCE ABSENT — the dead explorer in '${kind}' declares no `
+      + `\`userData.boneFracture\`, so scen-kind-${kind}-fracture${TAG}.png does not exist and the `
+      + `cross-section claim (rule 7) is UNTESTED. That is the builder's tag missing, not a broken helper.`);
+  }
+  if (!plan.hasBeat && kind === 'warren') {
+    console.log(`[cave-kinds] ⚠ NO BEAT ANCHOR on this warren — the dead-explorer frames are absent.`);
   }
 
   for (const spec of specs) {
