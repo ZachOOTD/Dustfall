@@ -8,10 +8,14 @@
 // wall). Back wall sits behind on -Z; the right hand extends along +Z
 // toward where the journal lies.
 
-// ── DEEPER cycle 12 — THE CLOSE-READ PATH (`makeSkeleton({ closeRead: true })`). ─────────────────
-// The figure below was authored for a DIM WRECK read at 2-4m, where it works. The dead-explorer
-// tableau reads it at TORCH RANGE, 1-2m, kneeling over it, and at that distance it fails in ways
-// that are invisible at 2.6m by construction:
+// ── DEEPER cycle 12 — ONE FIGURE FOR EVERY CALL SITE. ────────────────────────────────────────────
+// This file used to hold TWO skeletons: the Session-W primitive composite described above, and a
+// close-read rebuild for the cave tableau. It now holds one. Zach, on seeing them side by side:
+// *"should just use our newer skeleton, the new skeleton model in the cave looks way better."*
+//
+// That is not only an aesthetic call — the W-era figure was authored for a DIM WRECK at 2-4m, and
+// at any closer read it failed in ways that are invisible at 2.6m BY CONSTRUCTION, which is why it
+// survived for so long:
 //   • the eye sockets are `CircleGeometry` — a single zero-thickness face that VANISHES edge-on, on
 //     the one feature a player puts their face against (rule 7, on the worst possible mesh);
 //   • the ribcage's four half-tori lie in the SAGITTAL plane, so at torch range it reads as a
@@ -19,7 +23,7 @@
 //   • the limbs are 5-segment cylinders whose joints do not meet — at 1m the arms are visibly
 //     DETACHED sticks floating beside the body, and both legs are authored BELOW y=0 (the femur's
 //     +1.05 rad pitch swings the bone backwards, not forwards), i.e. buried under the floor.
-// So the close-read path is a separate builder that keeps the STAGING intent exactly — slumped
+// The surviving builder keeps the STAGING intent exactly — slumped
 // against the back wall, head fallen forward, right arm out where the journal slipped from it, left
 // hand in the lap — and rebuilds the FORMS on real joint chains: every bone is a closed, capped
 // `sweptTube` (the hero-ribcage function `boneScatter.ts` already shares) with epiphysis flares at
@@ -50,203 +54,40 @@ import { sweptTube } from './giantRibcage.ts';
 // age-bleach + micro-grain). Pre-ABJ the skeleton was flat Lambert
 // (one ivory tone). World-space sampling means cracks vary across
 // each bone instance for free.
-const _boneMat = createBoneMaterial(0xd6c8a8, {
-  crackDensity: 1.2,
-  marrowHint: 0.55,
-  ageBleach: 0.4,
-});
-const _socketMat = new THREE.MeshLambertMaterial({
-  color: 0x14110a,
-  flatShading: true,
-});
-
-function box(w: number, h: number, d: number): THREE.Mesh {
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _boneMat);
-}
-
-function cylinder(r: number, h: number, segs = 6): THREE.Mesh {
-  return new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, segs), _boneMat);
-}
+/** The two bone palettes. The FORM is shared; only these differ — see SkeletonOpts.tone. */
+export interface BonePalette { bone: THREE.Material; void: THREE.Material; }
 
 export interface SkeletonOpts {
-  /** Build the CLOSE-READ figure (the dead-explorer tableau, read at 1-2m by torchlight) instead of
-   *  the shipped 2-4m wreck skeleton. Default false — and the default path below is the ORIGINAL
-   *  function body, untouched, reached before this flag is ever consulted, so the three surface call
-   *  sites (`openingScene.ts:175`, `wordlessScenes.ts:176`/`:193`) cannot move by a vertex. */
-  closeRead?: boolean;
+  /** Which bone the figure is made of. The FORM is identical either way — only the material
+   *  changes, and it changes for a measured reason, not for taste.
+   *
+   *  `cave` is deliberately DARK (0x655c4c). At 1m a torch sits ~0.5m off the bone and
+   *  inverse-square blows a mid-tone out to near-white — 0x8a7d68 rendered as bright cream, which
+   *  is exactly the "bright white bone" D252 exists to forbid.
+   *
+   *  `surface` (the default) is the opposite problem: a wreck skeleton is read at 2-4m under a
+   *  DIRECTIONAL SUN, where the cave albedo just reads as dirt. So the surface tone keeps the
+   *  sun-bleached ivory the wreck skeleton has always had — but at the cave build's CRACK SCALE,
+   *  because the crack network is sized in world space against BONE THICKNESS, not against the
+   *  lighting: at crackDensity 1.2 the blotches are ~4cm and render as chipped paint on a 3cm bone. */
+  tone?: 'surface' | 'cave';
 }
 
+/** The human skeleton, slumped as if it sat down against a wall and did not get up.
+ *
+ *  ONE BUILD FOR EVERY CALL SITE (2026-07-29, Zach: *"should just use our newer skeleton, the new
+ *  skeleton model in the cave looks way better"*). The original 2-4m wreck skeleton this replaced
+ *  was not merely coarser — it was STRUCTURALLY BROKEN in three ways that a close-read shot made
+ *  unmissable and a distant one never could:
+ *    · its limb joints DID NOT MEET — forearms and hands were placed by hand-tuned offsets ~0.22m
+ *      off the computed elbow, so the arms were detached sticks lying beside the body;
+ *    · BOTH LEGS WERE AUTHORED BELOW y=0 — a -Y bone swung backwards by rotation.x put every knee,
+ *      shin and foot under the floor, so the wreck skeleton had NO VISIBLE LEGS AT ALL;
+ *    · the four rib half-tori lay in the SAGITTAL plane, so the ribcage read as a coil spring.
+ *  Keeping it as a "cheaper distant variant" would have meant maintaining those three defects on
+ *  purpose. It is gone. */
 export function makeSkeleton(opts: SkeletonOpts = {}): THREE.Group {
-  if (opts.closeRead) return makeCloseReadSkeleton();
-  const g = new THREE.Group();
-
-  // ── Pelvis: sits on floor against the back wall (-Z side). ─────────────
-  const pelvis = box(0.30, 0.10, 0.22);
-  pelvis.position.set(0, 0.10, -0.22);
-  g.add(pelvis);
-
-  // ── Spine: 5 vertebrae stacking up the back wall, tilted ~20° forward.
-  // The lean creates the "slumped" silhouette — torso falls toward the legs.
-  const spineLean = -0.35; // radians (~20°) — top of spine leans forward (+Z)
-  const spineBase = new THREE.Group();
-  spineBase.position.set(0, 0.15, -0.20);
-  spineBase.rotation.x = spineLean;
-  g.add(spineBase);
-  for (let i = 0; i < 5; i++) {
-    const v = cylinder(0.05, 0.10);
-    v.position.y = 0.08 + i * 0.11;
-    spineBase.add(v);
-  }
-
-  // ── Ribcage: 4 half-torus arcs around the upper torso (attached to spine
-  // so they tilt with it). Open at the front (player can see "into" the
-  // chest cavity from the inside-the-wreck side).
-  const torsoTop = new THREE.Group();
-  torsoTop.position.y = 0.55; // top of the spine (above 5 vertebrae)
-  spineBase.add(torsoTop);
-  for (let i = 0; i < 4; i++) {
-    const ring = new THREE.Mesh(
-      // Half-torus (Math.PI arc) opening forward (+Z is the gap)
-      new THREE.TorusGeometry(0.15, 0.012, 4, 10, Math.PI),
-      _boneMat,
-    );
-    ring.position.y = -i * 0.08;
-    // Default torus lies in XY plane; rotate so its plane is horizontal
-    // (XZ) and the arc opens forward.
-    ring.rotation.x = Math.PI / 2;
-    ring.rotation.z = Math.PI / 2;
-    torsoTop.add(ring);
-  }
-
-  // ── Skull: seated just above the ribcage top (was 0.78 — a floating-head gap;
-  // lowered to 0.64 so it reads as a skull on a neck, not a hovering ball). Slightly
-  // ellipsoidal (taller than wide) so it reads as a skull, not a sphere. ──────────
-  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), _boneMat);
-  skull.scale.set(0.92, 1.08, 1.0);
-  skull.position.set(0, 0.64, 0.01);
-  skull.rotation.x = 0.25;       // additional forward tilt on top of spine lean
-  skull.name = 'skullLegacy';    // the socket probe frames this by name
-  spineBase.add(skull);
-  // ── Eye sockets — SOLID TAPERING RECESSES, not discs (rule 7, fixed 2026-07-29 on Zach's call).
-  //
-  // WHAT WAS WRONG. These were `CircleGeometry(0.032, 10)` — ONE ZERO-THICKNESS FACE each. Face-on
-  // they read as sockets; at any turn they thin to a line and then vanish, and the skull becomes a
-  // smooth ball with no eyes at all. `scen-sockets-turn70-before.png` is that exact frame at 70°:
-  // both sockets gone. This is the game's FIRST IMPRESSION (`openingScene.ts`) and it is rule 7 on
-  // the one feature a player looks straight at.
-  //
-  // THE FIX. A near-black solid FRUSTUM sunk into the cranium per eye: wide mouth at the surface,
-  // narrowing 3cm inward. It is a closed body with real depth, so from any bearing what you see is a
-  // tapering hole with a rim rather than a face that happens to be edge-on. Same principle the
-  // close-read cave skull uses; this is the cheap version of it that does not need a displaced
-  // cranium, so the shipped silhouette is unchanged.
-  //
-  // Parented to the SKULL, not to `spineBase`, deliberately: the skull carries its own rotation and
-  // a non-uniform scale, and the old sockets were positioned by hand-derived numbers in the parent's
-  // frame — which is why they sat ~2cm INSIDE the surface. As children, direction × radius puts them
-  // on the sphere by construction and they inherit the squash, so they cannot drift if the skull is
-  // ever re-proportioned. `SOCK_PROUD` clears the facet inset: an 80-face icosahedron's facet
-  // centres sit a few mm inside its circumsphere, so a rim exactly at r would be buried by the flat.
-  // r1 → r2 (shot, not taste): at 0.030 radius, set high and wide and standing 6mm proud, these read
-  // as ALIEN GOGGLES face-on — two big dark ovals covering a third of the face. A real orbit is about
-  // a quarter of the face's width. Smaller, set lower and closer together, and barely proud so the
-  // TAPER does the work instead of the rim. (The close-read cave skull hit this same failure at its
-  // own round 2; recorded here so a third skull does not.)
-  const SOCK_R_OUT = 0.021, SOCK_R_IN = 0.007, SOCK_DEPTH = 0.026, SOCK_PROUD = 0.002;
-  const SKULL_R = 0.11;
-  for (const sx of [-1, 1]) {
-    const dir = new THREE.Vector3(sx * 0.34, 0.16, 0.92).normalize();
-    const socket = new THREE.Mesh(
-      new THREE.CylinderGeometry(SOCK_R_OUT, SOCK_R_IN, SOCK_DEPTH, 12),
-      _socketMat,
-    );
-    socket.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);   // +Y (the wide end) → outward
-    socket.position.copy(dir).multiplyScalar(SKULL_R + SOCK_PROUD - SOCK_DEPTH * 0.5);
-    skull.add(socket);
-  }
-  const nasal = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.045, 3), _socketMat);
-  nasal.position.set(0, 0.608, 0.094);
-  nasal.rotation.set(Math.PI, 0, 0);          // inverted triangle (point down)
-  spineBase.add(nasal);
-  const brow = box(0.105, 0.02, 0.032);       // bone brow ridge over the sockets
-  brow.position.set(0, 0.7, 0.072);
-  brow.rotation.x = 0.22;
-  spineBase.add(brow);
-  // Jaw — small box under the skull
-  const jaw = box(0.092, 0.045, 0.067);
-  jaw.position.set(0, 0.562, 0.052);
-  spineBase.add(jaw);
-
-  // ── Left arm: bent at elbow, hand on lap. Lives in world space (not on
-  // the leaned spine) so it rests naturally on the pelvis. ────────────────
-  const lShoulder = new THREE.Group();
-  lShoulder.position.set(-0.13, 0.55, -0.18);
-  g.add(lShoulder);
-  const lUpperArm = cylinder(0.025, 0.28, 5);
-  lUpperArm.geometry.translate(0, -0.14, 0);
-  lUpperArm.rotation.z = -0.3;
-  lUpperArm.rotation.x = 0.45;
-  lShoulder.add(lUpperArm);
-  const lForearm = cylinder(0.022, 0.26, 5);
-  lForearm.geometry.translate(0, -0.13, 0);
-  lForearm.position.set(-0.05, -0.27, 0.10);
-  lForearm.rotation.z = -0.7;
-  lForearm.rotation.x = 1.4;
-  lShoulder.add(lForearm);
-  const lHand = box(0.06, 0.03, 0.07);
-  lHand.position.set(-0.12, -0.30, 0.28);
-  lShoulder.add(lHand);
-
-  // ── Right arm: extended forward along the floor, hand reaching toward
-  // the journal (positioned ~0.65 along +Z from skeleton origin). ─────────
-  const rShoulder = new THREE.Group();
-  rShoulder.position.set(0.13, 0.55, -0.18);
-  g.add(rShoulder);
-  const rUpperArm = cylinder(0.025, 0.30, 5);
-  rUpperArm.geometry.translate(0, -0.15, 0);
-  rUpperArm.rotation.z = 0.15;
-  rUpperArm.rotation.x = 1.2; // arm angles forward + down
-  rShoulder.add(rUpperArm);
-  const rForearm = cylinder(0.022, 0.32, 5);
-  rForearm.geometry.translate(0, -0.16, 0);
-  rForearm.position.set(0.04, -0.32, 0.20);
-  rForearm.rotation.x = 1.55; // nearly horizontal forward
-  rShoulder.add(rForearm);
-  const rHand = box(0.06, 0.03, 0.08);
-  rHand.position.set(0.08, -0.45, 0.48);
-  rShoulder.add(rHand);
-
-  // ── Femurs + lower legs: pelvis → bent knees → feet flat on floor. ─────
-  for (const side of [-1, 1]) {
-    const hip = new THREE.Group();
-    hip.position.set(side * 0.10, 0.10, -0.12);
-    g.add(hip);
-    // Femur — angles forward + down toward knee.
-    const femur = cylinder(0.030, 0.36, 5);
-    femur.geometry.translate(0, -0.18, 0);
-    femur.rotation.x = 1.05;      // ~60° forward
-    hip.add(femur);
-    // Knee + lower leg — bent forward of the body.
-    const lower = cylinder(0.028, 0.36, 5);
-    lower.geometry.translate(0, -0.18, 0);
-    lower.position.set(0, -0.16, 0.31);
-    lower.rotation.x = 0.10;
-    hip.add(lower);
-    // Foot
-    const foot = box(0.08, 0.04, 0.16);
-    foot.position.set(0, -0.34, 0.42);
-    hip.add(foot);
-  }
-
-  g.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-    }
-  });
-
-  return g;
+  return buildSkeleton(opts.tone === 'cave' ? CAVE_BONE : SURFACE_BONE);
 }
 
 // ═══ THE CLOSE-READ FIGURE ═══════════════════════════════════════════════════════════════════════
@@ -271,6 +112,23 @@ const _boneMatCave = createBoneMaterial(0x655c4c, {
 });
 /** The orbit / nasal VOID. Near-black, and a SOLID sunk into a real dish — never a facing disc. */
 const _socketMatCave = new THREE.MeshLambertMaterial({ color: 0x0a0906 });
+
+// The SURFACE palette. Same form, same crack SCALE (the network is sized against bone thickness, not
+// against the light), but the sun-bleached ivory the wreck skeleton has always had: outdoors under a
+// directional sun at 2-4m the cave albedo just reads as dirt, and `ageBleach` is what a decade in
+// the open actually does to bone. The void is the wreck skeleton's own near-black, not the cave's,
+// so an orbit in daylight is a shadow rather than a hole punched in the head.
+const _boneMatSurface = createBoneMaterial(0xc4b494, {
+  crackDensity: 9.0,
+  marrowHint: 0.5,
+  ageBleach: 0.55,
+  crackDepth: 0.45,
+  weathering: 0.5,
+});
+const _socketMatSurface = new THREE.MeshLambertMaterial({ color: 0x14110a });
+
+const CAVE_BONE: BonePalette = { bone: _boneMatCave, void: _socketMatCave };
+const SURFACE_BONE: BonePalette = { bone: _boneMatSurface, void: _socketMatSurface };
 
 /** The tip-radius floor, × the shaft radius — the `SPELEO_TIP_FLOOR` contract restated for bone.
  *  Nothing in this figure may run out to a point: at arm's length a taper-to-zero is a paper
@@ -502,7 +360,7 @@ function addSkull(bone: THREE.BufferGeometry[], void_: THREE.BufferGeometry[]): 
   put(new THREE.SphereGeometry(0.030, 18, 13).translate(0, -0.072, -0.038), bone);
 }
 
-function makeCloseReadSkeleton(): THREE.Group {
+function buildSkeleton(pal: BonePalette): THREE.Group {
   const g = new THREE.Group();
   g.name = 'skeletonCloseRead';
   const bone: THREE.BufferGeometry[] = [];
@@ -669,14 +527,14 @@ function makeCloseReadSkeleton(): THREE.Group {
   addSkull(bone, void_);
 
   const merged = mergeGeometries(bone, false);
-  const mesh = new THREE.Mesh(merged, _boneMatCave);
+  const mesh = new THREE.Mesh(merged, pal.bone);
   mesh.castShadow = true; mesh.receiveShadow = true;
   // Declared anchors for the rig framings (the `wallShelf` precedent): a diagnostic that has to GUESS
   // where the skull is photographs a stalagmite and grades it green.
   mesh.userData.boneFracture = { x: fallenA.x, y: fallenA.y, z: fallenA.z, r: 0.0155 };
   g.add(mesh);
   if (void_.length) {
-    const vm = new THREE.Mesh(mergeGeometries(void_, false), _socketMatCave);
+    const vm = new THREE.Mesh(mergeGeometries(void_, false), pal.void);
     vm.castShadow = false; vm.receiveShadow = true;
     g.add(vm);
   }

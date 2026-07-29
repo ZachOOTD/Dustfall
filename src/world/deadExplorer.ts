@@ -147,12 +147,12 @@ export function buildDeadExplorer(rand: Rng, groundY: (lx: number, lz: number) =
   };
 
   // ── The figure. Its authored STAGING is this beat — slumped against the wall, head fallen, right
-  //    arm out where the book slipped from it — and nothing here re-poses it. `closeRead` rebuilds
-  //    the FORMS for the 1-2m torch read this tableau is met at (real joint chains, capped swept-tube
-  //    bones with a tip-radius floor, recessed solid orbits, dried-bone colour); the shipped 2-4m
-  //    wreck skeleton is what `makeSkeleton()` with no arguments still returns, unchanged, for the
-  //    opening scene and the wordless surface scenes.
-  const skel = makeSkeleton({ closeRead: true });
+  //    arm out where the book slipped from it — and nothing here re-poses it. There is now ONE
+  //    skeleton build for the whole game; `tone: 'cave'` only picks the DARK dried-bone palette,
+  //    because at 1m a torch sits half a metre off the bone and inverse-square blows a mid-tone out
+  //    to near-white — the "bright white bone" D252 forbids. The surface call sites take the
+  //    sun-bleached palette instead. Same vertices either way.
+  const skel = makeSkeleton({ tone: 'cave' });
   skel.userData.beatProp = 'figure';
   group.add(skel);
 

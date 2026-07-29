@@ -16152,7 +16152,11 @@ const SCENARIOS = {
       ctx.three.renderer.setSize(900, 700, false);
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
-      const skull = ctx.three.scene.getObjectByName('skullLegacy');
+      // The figure declares its own skull (`userData.skullAnchor`) rather than the probe guessing —
+      // the merged build has no per-bone objects to search, and a diagnostic that has to guess where
+      // the head is photographs a rib and grades it green.
+      let skull = null;
+      ctx.three.scene.traverse((o) => { if (!skull && o.userData && o.userData.skullAnchor) skull = o; });
       if (!skull) return { noSkull: true };
       const V = cam.position.constructor;
       const c = skull.getWorldPosition(new V());
@@ -16174,7 +16178,11 @@ const SCENARIOS = {
     if (info.noSkull) { console.log('[skeleton-sockets] NO skullLegacy IN THE SCENE — nothing was measured (vacuous)'); throw new Error('skeleton-sockets found no skull'); }
     console.log('[skeleton-sockets] ' + JSON.stringify(info));
     const tag = argv.tag ? `-${argv.tag}` : '';
-    for (const [name, deg, dist] of [['face', 0, 0.42], ['turn70', 70, 0.42], ['graze88', 88, 0.40]]) {
+    // The first three are DIAGNOSTIC macros (0.4m) — that is where a zero-thickness socket is caught,
+    // and nowhere else. `read` is the honest one: the distance the opening wreck is actually met at.
+    // Judge TONE there and rule 7 in the macros; grading tone off a 0.4m macro optimises a frame no
+    // player will ever stand in.
+    for (const [name, deg, dist] of [['face', 0, 0.42], ['turn70', 70, 0.42], ['graze88', 88, 0.40], ['read', 22, 2.6]]) {
       await page.evaluate(({ deg, dist }) => window.__socketFrame(deg, dist), { deg, dist });
       await page.waitForTimeout(220);
       await page.screenshot({ path: join(OUT, `scen-sockets-${name}${tag}.png`), fullPage: false, timeout: 60000 });
