@@ -161,6 +161,38 @@ direction × radius puts them on the sphere by construction.
 Gates: `verify:intro` PASS (12 beats) · `verify:chunks --legs=determinism` PASS at both seeds, so the
 vignette digests did not move · tsc clean.
 
+### Follow-up 2 — ONE skeleton for the whole game
+
+Zach, on seeing the two side by side: *"should just use our newer skeleton, the new skeleton model in
+the cave looks way better."* The W-era figure is **deleted**, not demoted to a distant variant —
+keeping it would have meant maintaining its three structural defects on purpose, and each is
+invisible at 2-4m **by construction**, which is exactly how they survived since Session W:
+
+- limb joints **did not meet** (forearms/hands ~0.22m off the computed elbow — detached sticks);
+- **both legs authored below y=0** — a −Y bone swung backwards by `rotation.x`, so the wreck skeleton
+  had **no visible legs at all**;
+- the four rib half-tori lay in the **sagittal** plane — the ribcage was a coil spring.
+
+`skeleton.ts` is **154 lines lighter** and there is one build. The FORM is shared; only the PALETTE
+differs, and for a measured reason: cave bone is dark because a torch at 0.5m blows a mid-tone out to
+near-white (the "bright white bone" D252 forbids), surface bone keeps its sun-bleached ivory because
+under a directional sun at 2-4m the cave albedo just reads as dirt — at the cave build's crack SCALE,
+since the crack network is sized against bone thickness, not against the lighting.
+
+The probe gained a **`read` framing at 2.6m**, the distance the opening wreck is actually met at. The
+0.4m macros stay as rule-7 diagnostics — a zero-thickness socket is caught there and nowhere else —
+but tone is graded at `read`, because grading tone off a macro optimises a frame no player will ever
+stand in. At `read` the figure lands: a seated skeleton with **visible legs**, head fallen forward,
+quiet rather than ghoulish.
+
+⚑ **Residual, named not fixed:** at the 0.4m face-on macro the mandible's arch reads as a faint
+**grin** under overhead sun — the R6 tone risk, back in a lighting condition the cave build was never
+graded in (it was fixed for torchlight at its own r3). It is not readable at 2.6m. If the opening
+wreck lets the player get closer than that, this is worth one round on the mandible gap.
+
+Gates: `verify:intro` PASS · **`BEAT-BUILD` pass=1 with the cave tableau byte-unchanged** (same
+bedding, same `anchorGap`, same grant) · determinism PASS both seeds · tsc clean.
+
 ## ⚠ CORRECTION (2026-07-28, on resume) — the "regression" below was MISCALLED. It is a FLAKE.
 
 ### The warren flake: sampled, and a method defect found in my own sampling
