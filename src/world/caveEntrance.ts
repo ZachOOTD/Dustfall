@@ -667,7 +667,26 @@ export function spawnCaveEntrance(
       // break a 13m straight edge, so the apron kept the carve rect's straight polygonal boundary
       // and read as terraced plates (cycle-7 sev2). The 6m and 2.5m octaves are what actually
       // dissolve a straight run into lobes and scallops.
+      // ── WALK-TEST round 4 (Zach): *"right now it just looks like a big rectangle with a shaft
+      //    in the middle."* He is naming the residual W-4.2 deferred: the outline's BASIS is the
+      //    hole rect (`holeDist` clamps to it), and distance wobble cannot unbend a 13m straight
+      //    edge or its constant-radius corners. So the field is DOMAIN-WARPED: the visible outline
+      //    samples holeDist at a position bent by ~2m of low-frequency noise, which turns straight
+      //    runs into meanders and breaks the corners — every derived band (ramp, feather, dive)
+      //    follows the same bent isolines, so the elevation change stays smooth by construction.
+      //    THE COVER IS NOT WARPED: d0 (true rect distance) still drives the full-cover clamp and a
+      //    smooth cover blend below, because rock over the carved hole is a leak contract, not a
+      //    look. The feather-of-the-total then keeps every warped band edge-safe for free.
+      // The warp FADES IN with true distance (round-4 fix, same day): at full amplitude near the
+      // body, the warp gradient exceeds the field gradient and FOLDS it — a warped-out ridge with a
+      // moat behind it, which at eye level read as the sheet hovering over a black trench. Faded in
+      // over the first 2.5m the near field cannot fold, while the outline (which crosses the sand
+      // at 3-6m out) still gets the full bend.
       const d0 = holeDist(wx, wz);
+      const wA = T.CREVICE_OUTLINE_WARP * Math.min(1, Math.max(0, d0 / 2.5));
+      const wx1 = wx + noise3(wx * 0.045 + 201, 3.7, wz * 0.045 + 88) * wA;
+      const wz1 = wz + noise3(wx * 0.045 + 55, 8.1, wz * 0.045 + 140) * wA;
+      const d0v = holeDist(wx1, wz1);
       const edgeWob = (noise3(wx * 0.06 + 91, 5.5, wz * 0.06 + 37) * 0.46
                      + noise3(wx * 0.17 + 12, 2.9, wz * 0.17 + 64) * 0.34
                      + noise3(wx * 0.40 + 55, 8.2, wz * 0.40 + 19) * 0.20) * 0.5 + 0.5;
@@ -680,7 +699,7 @@ export function spawnCaveEntrance(
       // silhouette wider (the exact "smaller and more compact" ask, undone) to fix a 26m straight-
       // down view no player ever stands in. The overhead outline staying broadly rectangular is the
       // named residual; the rect is holeDist's basis and only a new outline basis would change it.
-      const dbWob = d0 - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
+      const dbWob = d0v - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
       // …and the profile is TWO-STAGE: a walkable ramp off the rock (the KCC has to be able to step
       // up onto the apron from the sand — a hard rim here means you cannot reach the mouth), then a
       // fast dive well under the sheet. R4's single 2.3m ramp to −2.1 spent its whole length near
@@ -729,7 +748,16 @@ export function spawnCaveEntrance(
       // finally delivers "much smaller and more compact" at eye level.
       const aSinkP = 1 - T.CREVICE_APRON_TAIL_SINK
         * smoothstep(2.4, 5.2, Math.abs(pr.perp));
-      const aTop = APRON * Math.min(aSink, aSinkP);
+      // Round 4 — THE COLLAR UNDULATES. One uniform proud height around the rim is a slab read no
+      // matter its outline; real bedrock rims rise and drop. Low-frequency positional noise scales
+      // the collar 0.35×-1× — EXCEPT along the walk corridor (the approach line + the sill), which
+      // holds full height so the mouth's geometry and the step-up never vary underfoot.
+      const cvar = 0.35 + 0.65 * (noise3(wx * 0.06 + 301, 5.5, wz * 0.06 + 17) * 0.5 + 0.5);
+      const skyC = T.CREVICE_SKY_RUN + T.CREVICE_SKY_TAPER;
+      const walkCorr = (pr.s > -3.0 && pr.s < skyC + 1.0)
+        ? 1 - Math.min(1, Math.max(0, (Math.abs(pr.perp) - 1.7) / 1.6)) : 0;
+      const collarK = Math.max(cvar, walkCorr);
+      const aTop = APRON * Math.min(aSink, aSinkP) * collarK;
       // Feather-band grain: ±3cm at terrain-relief frequency, so the hugging band is not a plane.
       const fGrain = noise3(wx * 0.63 + 17, 3.3, wz * 0.63 + 92) * 0.03;
       // The dive only needs to put the rock JUST under the sand — it happens beyond the feather,
@@ -754,7 +782,17 @@ export function spawnCaveEntrance(
               // W-4 r2: 1.25 → 0.55. At FIN_H 5.2 the fin dwarfed these ledges; at 2.1 they WERE
               // the silhouette — a terraced 25m plate (the R3 lily pad, back). Scaled with the tor.
               + noise3(wx * 0.72 + 63, 1.7, wz * 0.72 + 88) * 0.07) * 0.55 * aFade;
-      if (d0 <= 0.001) apron = Math.max(0.07, aTop) + swell;   // full cover always; the 0.07 floor keeps the terrain sheet's cut edge under rock
+      {
+        // Cover blend (round 4): the warp may call a point "outside" that sits beside the true hole
+        // edge — a binary clamp there would be a cliff. Within 1.2m of the TRUE rect the profile
+        // blends toward full cover; the binary clamp stays as the final belt.
+        const coverT = 1 - Math.min(1, Math.max(0, d0 / 1.2));
+        if (coverT > 0) {
+          const coverH = Math.max(0.07, APRON * Math.min(aSink, aSinkP)) + swell;
+          apron = apron * (1 - coverT) + coverH * coverT;
+        }
+      }
+      if (d0 <= 0.001) apron = Math.max(0.07, aTop / Math.max(0.35, collarK)) + swell;   // full cover always; the 0.07 floor keeps the terrain sheet's cut edge under rock
       // The fin. R1 used perpFade² and got a pair of sharp CONES ("Mount Fuji with a notch"). Real
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
       // a plateau out to FIN_PLATEAU then a hard shoulder, and the top is clamped flat-ish.

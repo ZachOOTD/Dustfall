@@ -1075,7 +1075,7 @@ export const Tuning = {
   CREVICE_CREASE_FILL: 1.4,            // × voxel — smooth-max radius on the CONCAVE floor/wall crease. Fills the corner
                                        //     with a talus-like fillet whose curvature is ~1.5 voxels, so the crease no
                                        //     longer crosses the grid as a sharp line that can quantize into teeth.
-  CREVICE_HORN_RISE: 0.8,              // m — the horn's tip above CREVICE_TOR_FIN_H. W-4: 4.5 → 0.8 — the horn WAS the 78m findability device (cycle-7 sev1), and 78m findability is exactly what Zach reversed. A snag for near-range identity now, not a skyline splinter. Original note:
+  CREVICE_HORN_RISE: 0.65,             // round 4: scaled with the fin              // m — the horn's tip above CREVICE_TOR_FIN_H. W-4: 4.5 → 0.8 — the horn WAS the 78m findability device (cycle-7 sev1), and 78m findability is exactly what Zach reversed. A snag for near-range identity now, not a skyline splinter. Original note:
                                        //     contrast was already 30-36%, but the tor is 3.5:1 wide-and-low and broke
                                        //     the horizon by ~1.4° of arc, so it read as a pebble. ONE narrow splinter
                                        //     of the SAME rock — not an arch, not a monument, not a glow.
@@ -1094,13 +1094,13 @@ export const Tuning = {
   CREVICE_APRON_EDGE: 1.2,        // round 3: 2.3 → 1.2 — the outline's organic read now comes from the FEATHER's grain interleaving, and every 0.5m of wobble is 1m of tor-grid reach (build cost)        // W-4.2 r3: 1.0 → 2.3. From ABOVE the outline read as a rounded RECTANGLE — the hole rect showing through (R5's own warning: one weak wobble cannot break a 13m straight edge). The lobes this re-buys are now cheap: past the collar the TAIL-SINK lays them at sand level, so they widen the outline's SHAPE without rebuilding the proud plate            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
                                        //     single 16m-wavelength octave, which cannot break a 13m straight edge — the
                                        //     apron kept the carve rect's straight polygonal boundary (cycle-7 sev2).
-  CREVICE_TOR_SWELL: 1.55,             // m — broad dome over the carved hole, so the covering rock is a whaleback. Walk-test round 3: 1.9 → 1.55, the "lower it into the terrain" half of the ask — cover margin over the slot-top poke stays ~0.7m and cave-void (0 escapes / 8160 rays) is the arbiter, re-run after this change
+  CREVICE_TOR_SWELL: 1.35,             // round 4: 1.55 → 1.35, cover margin ~0.5m — cave-void is the arbiter, re-run after             // m — broad dome over the carved hole, so the covering rock is a whaleback. Walk-test round 3: 1.9 → 1.55, the "lower it into the terrain" half of the ask — cover margin over the slot-top poke stays ~0.7m and cave-void (0 escapes / 8160 rays) is the arbiter, re-run after this change
                                        //     rather than a table. See the R7 note in caveEntrance.ts.
   CREVICE_APRON_RAMP: 1.7,        // W-4 r3: 1.0 → 1.7 — a longer, gentler meeting with the sand             // m — the WALKABLE part of the apron's outer ramp (0.85m of drop → ~40°, under
                                        //     the KCC's 50° climb). Beyond it the apron dives under the sheet fast.
   CREVICE_APRON_DRIFT: 0.9,       // W-4.2: 1.3 → 0.9 — the tail stays asymmetric but compact            // m — the apron's falloff is stretched this much further on its lee side, so the
                                        //     sand meets rock as a wind drift rather than as a symmetric plate.
-  CREVICE_TOR_FIN_H: 2.1,              // m — the tor's rock fin, above local terrain. W-4 (walk-test 2026-07-29): 5.2 → 2.1 — Zach reversed cycle 7's landmark read ("smaller like a little crevice you find on a small rock … easy to miss if you weren't paying attention"). Head-height rock, not a skyline
+  CREVICE_TOR_FIN_H: 1.75,             // round 4: 2.1 → 1.75 ("lower the whole entrance model in the terrain further")              // m — the tor's rock fin, above local terrain. W-4 (walk-test 2026-07-29): 5.2 → 2.1 — Zach reversed cycle 7's landmark read ("smaller like a little crevice you find on a small rock … easy to miss if you weren't paying attention"). Head-height rock, not a skyline
   CREVICE_TOR_FIN_PLATEAU: 1.5,   // W-4.2: 3.6 → 2.4 → 1.5 — the crown hugs the crack        // m — the fin holds full height this far either side of the crack (a blocky
                                        //     bedrock plateau; round 1's squared falloff gave two Fuji-shaped cones)
   CREVICE_TOR_FIN_SPREAD: 4.2,    // W-4.2: 7.0 → 4.2 — WITH the apron fall shortened to match (1.9), the flanks still meet the toe without a flat brim; r1's mistake was pulling the flanks in while leaving the apron wide         // m — perpendicular distance over which the fin falls to the apron
@@ -1123,6 +1123,7 @@ export const Tuning = {
   // THE FEATHER (walk-test round 3 — "blend more into the sand organically"): between the ramp
   // and the dive, the rock HUGS the terrain at +FEATHER_PROUD with ±3cm grain for FEATHER_M metres,
   // so the rock/sand crossing happens interleaved in micro-relief instead of on a visible curve.
+  CREVICE_OUTLINE_WARP: 2.1,           // m — domain-warp amplitude on the apron outline (round 4: bends the hole-rect's straight edges + corners into meanders; the cover contract stays unwarped)
   CREVICE_APRON_FEATHER_M: 2.4,        // m — length of the hugging band
   CREVICE_APRON_FEATHER_PROUD: 0.035,  // m — how proud the hugging band sits (under the terrain's own ±7cm relief)
   CREVICE_APRON_FALL: 0.7,        // round 3: 1.9 → 0.7 — the dive is under-sand housekeeping now (the feather owns the visible crossing), and reach is build cost        // W-4.2 ("ending closer to the tunnel"): 3.0 → 1.9. r2/r3's saucer-edge lesson still stands — the toe IS steeper — but the whole form is half the size now, so the shadow band is short; judged in shots, residual named if it reads             // m — then ramps down into the sand over this distance (~30°, walkable)
