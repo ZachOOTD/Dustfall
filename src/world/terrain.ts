@@ -201,7 +201,7 @@ export interface Terrain {
   // ground is never drawn open while it is still solid, or vice versa.
   /** Open the hole for `block` (idempotent per key). Rebuilds the owning
    *  tile's index buffer + colliders if that tile is loaded. */
-  addCaveHole: (key: string, block: CaveHoleBlock) => void;
+  addCaveHole: (key: string, block: CaveHoleBlock | CaveHoleBlock[]) => void;
   /** Close it again and restore the sheet EXACTLY (idempotent). */
   removeCaveHole: (key: string) => void;
   /** Is the terrain tile containing (x, z) currently loaded? A cave may only
@@ -504,12 +504,12 @@ export function createTerrain(
   //
   // 80× cheaper than re-baking a trimesh is what makes the hole affordable to OPEN AND CLOSE with
   // the cave's residency instead of baking it in for the tile's lifetime.
-  const dynHoles = new Map<string, CaveHoleBlock>();
+  const dynHoles = new Map<string, CaveHoleBlock[]>();   // round 7 — one hole = a LIST of cell rects (the raster that hugs the slot)
   const _holeStats = { opens: 0, closes: 0, rebuilds: 0, maxRebuildMs: 0, colliders: 0 };
 
   const dynBlocksFor = (tx: number, tz: number): CaveHoleBlock[] => {
     const out: CaveHoleBlock[] = [];
-    for (const b of dynHoles.values()) if (b.tileTx === tx && b.tileTz === tz) out.push(b);
+    for (const list of dynHoles.values()) for (const b of list) if (b.tileTx === tx && b.tileTz === tz) out.push(b);
     // Stable order — two derivations of the same tile must produce the same index buffer.
     out.sort((a, b) => (a.iMin - b.iMin) || (a.jMin - b.jMin));
     return out;
@@ -865,17 +865,18 @@ export function createTerrain(
     // ── DEEPER cycle 8 — the streamed-cave hole API (see the Terrain interface note). ──
     addCaveHole: (key, block) => {
       if (dynHoles.has(key)) return;                       // idempotent
-      dynHoles.set(key, block);
+      const list = Array.isArray(block) ? block : [block];
+      dynHoles.set(key, list);
       _holeStats.opens++;
-      const tile = tileOf(block);
+      const tile = tileOf(list[0]);                        // one hole = one tile (the seam rule)
       if (tile) rebuildTileHoles(tile);                    // not loaded ⇒ the next build picks it up
     },
     removeCaveHole: (key) => {
-      const block = dynHoles.get(key);
-      if (!block) return;                                  // idempotent
+      const list = dynHoles.get(key);
+      if (!list) return;                                   // idempotent
       dynHoles.delete(key);
       _holeStats.closes++;
-      const tile = tileOf(block);
+      const tile = tileOf(list[0]);
       if (tile) rebuildTileHoles(tile);
     },
     isTileLoadedAt: (x, z) => tiles.has(tileKey(Math.round(x / SIZE), Math.round(z / SIZE))),

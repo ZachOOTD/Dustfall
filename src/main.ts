@@ -222,7 +222,7 @@ if (caveSite) {
     (obj) => three.renderer.compileAsync(obj, three.camera, three.scene),
   );
   const tEnt = performance.now();
-  const bore = spawnCaveEntrance(three.scene, physics.world, terrain, caveSite, worldSeed);
+  const bore = spawnCaveEntrance(three.scene, physics.world, terrain, caveSite, worldSeed, true /* origin carves the boot-time RECT — the lid must match (round 7) */);
   _mark('cave:entrance');
   const tBody = performance.now();
   const cave = spawnCave(three.scene, physics.world, terrain, bore.junction, caveGenSeed(worldSeed));

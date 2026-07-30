@@ -1123,7 +1123,11 @@ export const Tuning = {
   // THE FEATHER (walk-test round 3 — "blend more into the sand organically"): between the ramp
   // and the dive, the rock HUGS the terrain at +FEATHER_PROUD with ±3cm grain for FEATHER_M metres,
   // so the rock/sand crossing happens interleaved in micro-relief instead of on a visible curve.
-  CREVICE_OUTLINE_WARP: 2.1,           // m — domain-warp amplitude on the apron outline (round 4: bends the hole-rect's straight edges + corners into meanders; the cover contract stays unwarped)
+  CREVICE_LID_SAND_M: 0.10,            // m proud — below this the tor wears the EXACT ground colour (round 6: the hole-shaped lid disappears into the desert; only the organic proud forms read as rock)
+  CREVICE_LID_ROCK_M: 0.26,            // m — fade span from sand colour to rock colour above LID_SAND_M
+  CREVICE_SWELL_SPINE_W: 3.4,          // m — the swell's half-width ACROSS the slot (round 5: was hole-half+3 ≈ 7.2 — a dome over the whole rect; now a spine over the fissure line)
+  CREVICE_MARGIN_LOBE: 0.55,           // round 5 — bearing-asymmetric margin shrink (0..this ×, shrink-only): some flanks keep 2-3m of skirt, others the full run
+  CREVICE_OUTLINE_WARP: 2.6,           // round 5: 2.1 → 2.6 (the fold guard's fade-in makes the larger bend safe)           // m — domain-warp amplitude on the apron outline (round 4: bends the hole-rect's straight edges + corners into meanders; the cover contract stays unwarped)
   CREVICE_APRON_FEATHER_M: 2.4,        // m — length of the hugging band
   CREVICE_APRON_FEATHER_PROUD: 0.035,  // m — how proud the hugging band sits (under the terrain's own ±7cm relief)
   CREVICE_APRON_FALL: 0.7,        // round 3: 1.9 → 0.7 — the dive is under-sand housekeeping now (the feather owns the visible crossing), and reach is build cost        // W-4.2 ("ending closer to the tunnel"): 3.0 → 1.9. r2/r3's saucer-edge lesson still stands — the toe IS steeper — but the whole form is half the size now, so the shadow band is short; judged in shots, residual named if it reads             // m — then ramps down into the sand over this distance (~30°, walkable)

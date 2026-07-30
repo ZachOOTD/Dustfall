@@ -36,7 +36,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { Tuning } from '../config/tuning.ts';
 import { startSpawnCave, type CaveJunction, type CaveSpawnJob, type SpawnedCave } from './caveGen.ts';
 import type { CaveKind } from './caveKinds.ts';   // DEEPER cycle 9 — cave kinds
-import { caveEntranceHoleBlock, spawnCaveEntrance, type CaveEntrance } from './caveEntrance.ts';
+import { caveEntranceHoleBlocks, spawnCaveEntrance, type CaveEntrance } from './caveEntrance.ts';
 import { releaseCavePoolMaterial } from './cavePools.ts';   // per-cave water material — disposed on eviction
 import type { Terrain } from './terrain.ts';
 
@@ -507,7 +507,11 @@ export function createCaveStream(
         let holeKey: string | null = null;
         if (inflight.site) {
           holeKey = inflight.key;
-          terrain.addCaveHole(holeKey, caveEntranceHoleBlock({ x: inflight.site.x, z: inflight.site.z }));
+          // Round 7 tried a seed-bent slot-hugging RASTER here and the streamed march went RED on
+          // both seeds — a roof lip at head height where the rastered row transitions meet the
+          // ROOF_UNDER safety clamp (fwdClear@1.7m = 0.5m, mid-descent). The arithmetic in the
+          // caveEntranceHoleBlocks doc records why the hole cannot shrink; the carve stays the RECT.
+          terrain.addCaveHole(holeKey, caveEntranceHoleBlocks({ x: inflight.site.x, z: inflight.site.z }));
         }
         addResident(
           inflight.key, inflight.seed, inflight.job.result(), false,

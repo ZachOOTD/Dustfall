@@ -166,6 +166,83 @@ export function caveEntranceHoleFitsTile(site: { x: number; z: number }, cellsX?
   return r.iMin >= 0 && r.iMax <= CELLS - 1 && r.jMin >= 0 && r.jMax <= CELLS - 1;
 }
 
+/** Analytic lateral (Z) offset of the slot centreline at along-distance `sx` past the mouth —
+ *  the SAME legs `buildCreviceLine` walks (runs = drop/tan(slope), headings mirrored by seed
+ *  parity), without needing terrain. Used by the hole raster: at 4.17m cells, ±1m of accuracy is
+ *  ample, and the streamed gates (walk/void) are the arbiters of the envelope. */
+function slotZOffsetAt(sx: number, seed: number): number {
+  const T = Tuning;
+  const tanS = Math.tan((T.CREVICE_SLOPE_DEG * Math.PI) / 180);
+  const mirror = (seed & 1) === 0 ? 1 : -1;
+  const legs = [
+    { ang: 0, run: (T.CREVICE_DEPTH * 0.29) / tanS },
+    { ang: mirror * T.CREVICE_BEND_DEG, run: (T.CREVICE_DEPTH * 0.33) / tanS },
+    { ang: mirror * (T.CREVICE_BEND_DEG - T.CREVICE_BEND2_DEG), run: (T.CREVICE_DEPTH * 0.38) / tanS },
+  ];
+  let z = 0, walked = 0;
+  for (const L of legs) {
+    const a = (L.ang * Math.PI) / 180;
+    const take = Math.max(0, Math.min(L.run, sx - walked));
+    z += Math.sin(a) * take;
+    walked += L.run;
+    if (sx <= walked) break;
+  }
+  return z;
+}
+
+/** ROUND 7 — THE HOLE CANNOT SHRINK, and this function is kept as the PROOF and the future hook.
+ *
+ *  Zach chose the structural fix ("the hole hugs the slot") and it was built exactly as designed:
+ *  deep roofed columns take only the cell row the analytic centreline crosses, the hole bends with
+ *  the seed's mirror parity, area −25%, terrain-side cost zero (the tile machinery already consumes
+ *  block lists). The streamed march then went RED ON BOTH SEEDS: a roof lip at head height
+ *  (fwdClear@1.7m = 0.5m) mid-descent, where a rastered-out cell's ROOF_UNDER clamp crosses the
+ *  walk line. The post-mortem arithmetic says the failure is STRUCTURAL, not a bug in the raster:
+ *
+ *    · Columns k0-k2 (s ≲ 8m): the fissure's AIR SPAN is halfW + wall noise + margin ≈ 2.2-2.9m
+ *      half-width against 4.17m cells — it straddles both rows on essentially every seed, AND the
+ *      floor is still shallow enough there that a clamped cell over any part of the walk line
+ *      pinches under the 2.25m invariant. Those columns need the full 2-row span. Always.
+ *    · Column k3 (floor ≤ −3.5m): clamped headroom is depth-safe on AVERAGE — but the ±1.3m ground
+ *      variance that produced cycle 9's measured 1-in-9 unenterable tail lives exactly in that
+ *      margin. Narrowing k3 re-opens the tail the 4th cell was added to close.
+ *
+ *  So the rect IS the minimal safe hole under the current descent geometry, and "the entrance looks
+ *  rectangular" is solved on the VISUAL side (the spine, the sand-coloured lid, the warp, the
+ *  margin lobes) — not by carving less. If the raster is ever retried, it must derive rows from the
+ *  REAL built line (buildCreviceLine re-sizes runs against terrain; the analytic line here is up to
+ *  ~1m off), and it must prove the k3-tail arithmetic against the headroom sweep at n(sites) ≥ 400.
+ *
+ *  WITHOUT a seed this returns the full rect — which is now every caller's path. */
+export function caveEntranceHoleBlocks(site: { x: number; z: number }, seed?: number): CaveHoleBlock[] {
+  const full = caveEntranceHoleBlock(site);
+  if (seed === undefined) return [full];
+  const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
+  const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
+  const r = rawHoleCells(site);
+  const clampCell = (n: number): number => Math.max(0, Math.min(CELLS - 1, n));
+  const vX = (i: number): number => r.centerX + (i / CELLS - 0.5) * SIZE;
+  const vZ = (j: number): number => r.centerZ + (j / CELLS - 0.5) * SIZE;
+  const cell = SIZE / CELLS;
+  const mk = (iA: number, iB: number, jA: number, jB: number): CaveHoleBlock => ({
+    tileTx: r.tileTx, tileTz: r.tileTz,
+    iMin: iA, iMax: iB, jMin: jA, jMax: jB,
+    xMin: vX(iA), xMax: vX(iB + 1), zMin: vZ(jA), zMax: vZ(jB + 1),
+  });
+  const out: CaveHoleBlock[] = [mk(clampCell(r.iMin), clampCell(r.iMin + 1), full.jMin, full.jMax)];
+  let run: { i0: number; i1: number; j: number } | null = null;
+  for (let i = r.iMin + 2; i <= r.iMax; i++) {
+    const sMid = vX(i) + cell * 0.5 - site.x;
+    const zLine = site.z + slotZOffsetAt(Math.max(0, sMid), seed);
+    const j = clampCell(Math.max(full.jMin, Math.min(full.jMax, Math.floor((zLine - r.centerZ) / cell + CELLS / 2))));
+    const ic = clampCell(i);
+    if (run && run.j === j && ic === run.i1 + 1) run.i1 = ic;
+    else { if (run) out.push(mk(run.i0, run.i1, run.j, run.j)); run = { i0: ic, i1: ic, j }; }
+  }
+  if (run) out.push(mk(run.i0, run.i1, run.j, run.j));
+  return out;
+}
+
 export function caveEntranceHoleBlock(site: { x: number; z: number }, cellsX?: number): CaveHoleBlock {
   const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
   const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
@@ -370,6 +447,10 @@ export function creviceClearProfile(
   const T = Tuning;
   const line = opts?.line ?? buildCreviceLine(site, terrain, seed);
   const block = caveEntranceHoleBlock(site, opts?.cellsX);
+  // Round 7 — the RASTERED hole (the blocks the terrain actually carves for this seed). Distances
+  // run against the union of these rects, so the roof-clamp lift region can never reach a cell that
+  // still has sheet over it. `block` stays as the BOUNDS for bounds-only consumers.
+  const holeBlocks = [block];   // the carve is the rect (see the round-7 note in caveEntranceHoleBlocks) — the model models what is carved
   const roofUnder = opts?.roofUnder ?? T.CREVICE_ROOF_UNDER;
   const step = opts?.step ?? 0.25;
   const SKY = T.CREVICE_SKY_RUN, TAPER = T.CREVICE_SKY_TAPER;
@@ -378,18 +459,26 @@ export function creviceClearProfile(
     const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
     return t * t * (3 - 2 * t);
   };
-  // The two hole distances the tor's column loop uses, noise-free and drift-free.
+  // The two hole distances the tor's column loop uses, noise-free and drift-free — over the UNION.
   const AMARG = T.CREVICE_APRON_MARGIN;
   const holeSigned = (x: number, z: number): number => {
-    const dx = Math.max(block.xMin - x, x - block.xMax);
-    const dz = Math.max(block.zMin - z, z - block.zMax);
-    const ox = Math.max(dx, 0), oz = Math.max(dz, 0);
-    return ox > 0 || oz > 0 ? Math.hypot(ox, oz) : Math.max(dx, dz);
+    let best = Infinity;
+    for (const b of holeBlocks) {
+      const dx = Math.max(b.xMin - x, x - b.xMax);
+      const dz = Math.max(b.zMin - z, z - b.zMax);
+      const ox = Math.max(dx, 0), oz = Math.max(dz, 0);
+      best = Math.min(best, ox > 0 || oz > 0 ? Math.hypot(ox, oz) : Math.max(dx, dz));
+    }
+    return best;
   };
   const holeDist = (x: number, z: number): number => {
-    const dx = Math.max(block.xMin - AMARG - x, 0, x - (block.xMax + AMARG));
-    const dz = Math.max(block.zMin - AMARG - z, 0, z - (block.zMax + AMARG));
-    return Math.hypot(dx, dz);
+    let best = Infinity;
+    for (const b of holeBlocks) {
+      const dx = Math.max(b.xMin - AMARG - x, 0, x - (b.xMax + AMARG));
+      const dz = Math.max(b.zMin - AMARG - z, 0, z - (b.zMax + AMARG));
+      best = Math.min(best, Math.hypot(dx, dz));
+    }
+    return best;
   };
   // Where the tor's rock ENDS: `colBound = AFALL + 1.0 − max(0, d0 − 0.25)` must stay positive.
   // WALK-TEST round 3, the real finding: THE "DEFINED EDGE" WAS THIS NUMBER ALL ALONG. The reach
@@ -546,10 +635,16 @@ export function spawnCaveEntrance(
   terrain: Terrain,
   site: { x: number; z: number },
   seed: number,
+  /** Round 7 — MUST MIRROR WHAT THE CARVE DID. Streamed sites carve the seed-bent RASTER (default);
+   *  the ORIGIN carves the full boot-time rect (no seed at createTerrain, D307 byte-identical), and
+   *  its tor must lid that rect — a raster lid over a rect carve leaves carved corner cells with no
+   *  rock over them: a pit into the void. The main.ts origin call passes true. */
+  holeRect = true,
 ): CaveEntrance {
   const T = Tuning;
   const t0 = performance.now();
   const block = caveEntranceHoleBlock(site);
+  const holeBlocks = holeRect ? [block] : caveEntranceHoleBlocks(site, seed);   // round 7 — the lid follows THE CARVE (raster for streamed, rect for origin)
   const line = buildCreviceLine(site, terrain, seed);
   const st = line.stations;
   const last = st[st.length - 1];
@@ -569,12 +664,16 @@ export function spawnCaveEntrance(
   const driftAng = arand() * Math.PI * 2;
   const driftX = Math.cos(driftAng), driftZ = Math.sin(driftAng);
   const holeDist = (x: number, z: number): number => {
-    const dx = Math.max(block.xMin - AMARG - x, 0, x - (block.xMax + AMARG));
-    const dz = Math.max(block.zMin - AMARG - z, 0, z - (block.zMax + AMARG));
-    const d = Math.hypot(dx, dz);
+    let d = Infinity, bx2 = 0, bz2 = 0;
+    for (const b of holeBlocks) {
+      const dx = Math.max(b.xMin - AMARG - x, 0, x - (b.xMax + AMARG));
+      const dz = Math.max(b.zMin - AMARG - z, 0, z - (b.zMax + AMARG));
+      const dd = Math.hypot(dx, dz);
+      if (dd < d) { d = dd; bx2 = dx; bz2 = dz; }
+    }
     if (d <= 0) return 0;
     // Lee-side stretch: shorten the effective distance downwind so the ramp reaches further out.
-    const nx = dx / d, nz = dz / d;
+    const nx = bx2 / d, nz = bz2 / d;
     const lee = Math.max(0, nx * driftX + nz * driftZ);
     return Math.max(0, d - lee * lee * T.CREVICE_APRON_DRIFT);
   };
@@ -582,10 +681,14 @@ export function spawnCaveEntrance(
    *  sheet exists everywhere this is positive, so the fissure may only be open ABOVE the surface
    *  where it is negative — see CREVICE_ROOF_UNDER. */
   const holeSigned = (x: number, z: number): number => {
-    const dx = Math.max(block.xMin - x, x - block.xMax);
-    const dz = Math.max(block.zMin - z, z - block.zMax);
-    const ox = Math.max(dx, 0), oz = Math.max(dz, 0);
-    return ox > 0 || oz > 0 ? Math.hypot(ox, oz) : Math.max(dx, dz);
+    let best = Infinity;
+    for (const b of holeBlocks) {
+      const dx = Math.max(b.xMin - x, x - b.xMax);
+      const dz = Math.max(b.zMin - z, z - b.zMax);
+      const ox = Math.max(dx, 0), oz = Math.max(dz, 0);
+      best = Math.min(best, ox > 0 || oz > 0 ? Math.hypot(ox, oz) : Math.max(dx, dz));
+    }
+    return best;
   };
 
   // ── THE HORN (cycle-7 sev1: 78m findability). One narrow splinter of the same rock, standing a
@@ -623,7 +726,11 @@ export function spawnCaveEntrance(
     + T.CREVICE_APRON_FEATHER_M + AFALL + AMARG + 0.4;
   // The whaleback swell's ellipse: the carved hole's own footprint, grown a little.
   const swCx = (block.xMin + block.xMax) * 0.5, swCz = (block.zMin + block.zMax) * 0.5;
-  const swRx = (block.xMax - block.xMin) * 0.5 + 3.0, swRz = (block.zMax - block.zMin) * 0.5 + 3.0;
+  // Round 5 ("still looks too bulky"): the swell is a SPINE, not a dome. The slot-top pokes above
+  // terrain only along the FISSURE LINE — covering the whole hole rect with a 1.35m whaleback was
+  // most of the visible bulk. The ellipse keeps its length (the slot's run) and narrows across it;
+  // the rest of the lid drops toward the 0.07 floor and undulates. cave-void stays the arbiter.
+  const swRx = (block.xMax - block.xMin) * 0.5 + 3.0, swRz = T.CREVICE_SWELL_SPINE_W;
   let gx0 = block.xMin - R, gx1 = block.xMax + R, gz0 = block.zMin - R, gz1 = block.zMax + R;
   for (const s of st) {
     if (s.x < gx0 + 3 || s.x > gx1 - 3) { /* the slot leaves the tor — that is expected */ }
@@ -699,7 +806,15 @@ export function spawnCaveEntrance(
       // silhouette wider (the exact "smaller and more compact" ask, undone) to fix a 26m straight-
       // down view no player ever stands in. The overhead outline staying broadly rectangular is the
       // named residual; the rect is holeDist's basis and only a new outline basis would change it.
-      const dbWob = d0v - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
+      // Round 5 — ASYMMETRIC MARGINS, shrink-biased. A rect inflated by a CONSTANT margin is a
+      // rounded rectangle at every distance; real outcrops carry 2m of skirt on one flank and 8m on
+      // another. The multiplier stretches perceived distance (1..1+LOBE), so some bearings pull the
+      // rock in hard and none push it out — the W-4.2 tongue experiment sprawled precisely because
+      // it EXTENDED bearings; with the sink+feather in place, shrink-only asymmetry has no sprawl
+      // mode at all.
+      const mLobe = 1 + T.CREVICE_MARGIN_LOBE
+        * (noise3(wx * 0.028 + 401, 6.3, wz * 0.028 + 77) * 0.5 + 0.5);
+      const dbWob = d0v * mLobe - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
       // …and the profile is TWO-STAGE: a walkable ramp off the rock (the KCC has to be able to step
       // up onto the apron from the sand — a hard rim here means you cannot reach the mouth), then a
       // fast dive well under the sheet. R4's single 2.3m ramp to −2.1 spent its whole length near
@@ -788,11 +903,16 @@ export function spawnCaveEntrance(
         // blends toward full cover; the binary clamp stays as the final belt.
         const coverT = 1 - Math.min(1, Math.max(0, d0 / 1.2));
         if (coverT > 0) {
-          const coverH = Math.max(0.07, APRON * Math.min(aSink, aSinkP)) + swell;
+          // Round 6 fix: MUST be the same expression the in-hole lid uses (aTop, i.e. WITH the
+          // collar undulation). Targeting un-undulated height here left a 0.1-0.36m step exactly at
+          // the true hole rect — the one line the warp cannot touch — and under low sun that step
+          // re-drew the rectangle as a shadow ribbon the moment round 5 thinned the lid that used
+          // to bury it.
+          const coverH = Math.max(0.07, aTop) + swell;
           apron = apron * (1 - coverT) + coverH * coverT;
         }
       }
-      if (d0 <= 0.001) apron = Math.max(0.07, aTop / Math.max(0.35, collarK)) + swell;   // full cover always; the 0.07 floor keeps the terrain sheet's cut edge under rock
+      if (d0 <= 0.001) apron = Math.max(0.07, aTop) + swell;   // cover always ≥ the 0.07 floor (the sheet's cut edge stays under rock) — but the LID follows the collar undulation down instead of being forced to full height: a thin lumpy lid + the spine is the whole silhouette over the hole now
       // The fin. R1 used perpFade² and got a pair of sharp CONES ("Mount Fuji with a notch"). Real
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
       // a plateau out to FIN_PLATEAU then a hard shoulder, and the top is clamped flat-ish.
@@ -1009,6 +1129,16 @@ export function spawnCaveEntrance(
         Math.max(0, g[0] * vScale + strat), Math.max(0, g[1] * vScale + strat), Math.max(0, g[2] * vScale + strat),
       );
       ex.copy(legacy).lerp(groundRock, T.CREVICE_TOR_BIOME_MATCH);
+      // ROUND 6 — THE LID WEARS THE SAND. Rounds 4-5 made the PROUD forms organic (spine, collar,
+      // fin, warped skirt), but the near-flat lid that seals the carved hole is hole-SHAPED, and a
+      // rock-coloured rectangle at sand level is still a rectangle from above. Geometry cannot fix
+      // it (the hole is the cycle-9 enterability contract) — colour can: below LID_SAND_M of
+      // proudness the surface takes the EXACT ground colour (the same per-vertex sample as the
+      // biome tint), fading to rock across LID_ROCK_M. The seal is untouched; the rectangle simply
+      // stops being visible. Sand-coloured rock at ground level is also just… what buried rock is.
+      const proud = Math.max(0, wy - tH);
+      const sandT = 1 - Math.min(1, Math.max(0, (proud - T.CREVICE_LID_SAND_M) / T.CREVICE_LID_ROCK_M));
+      if (sandT > 0) ex.lerp(new THREE.Color(g[0], g[1], g[2]), sandT * sandT * (3 - 2 * sandT));
       c.lerp(ex, dEx * 0.95);
     }
     col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
