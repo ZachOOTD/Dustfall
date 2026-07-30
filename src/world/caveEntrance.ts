@@ -723,7 +723,8 @@ export function spawnCaveEntrance(
   // 7 ("angular fins with a black void behind them"). Same lesson, third time: sized FROM THE
   // TERMS — every term — so a profile change cannot silently outgrow its grid again.
   const R = 0.25 + T.CREVICE_APRON_EDGE * 0.5 + T.CREVICE_APRON_RAMP
-    + T.CREVICE_APRON_FEATHER_M + AFALL + AMARG + 0.4;
+    + T.CREVICE_APRON_FEATHER_M + AFALL + AMARG
+    + T.CREVICE_EDGE_LOBE_M + T.CREVICE_EDGE_LOBE2_M + 0.4;   // round 8 — expanded lobes push every band outward by up to the lobe sum
   // The whaleback swell's ellipse: the carved hole's own footprint, grown a little.
   const swCx = (block.xMin + block.xMax) * 0.5, swCz = (block.zMin + block.zMax) * 0.5;
   // Round 5 ("still looks too bulky"): the swell is a SPINE, not a dome. The slot-top pokes above
@@ -784,16 +785,28 @@ export function spawnCaveEntrance(
       //    THE COVER IS NOT WARPED: d0 (true rect distance) still drives the full-cover clamp and a
       //    smooth cover blend below, because rock over the carved hole is a leak contract, not a
       //    look. The feather-of-the-total then keeps every warped band edge-safe for free.
-      // The warp FADES IN with true distance (round-4 fix, same day): at full amplitude near the
-      // body, the warp gradient exceeds the field gradient and FOLDS it — a warped-out ridge with a
-      // moat behind it, which at eye level read as the sheet hovering over a black trench. Faded in
-      // over the first 2.5m the near field cannot fold, while the outline (which crosses the sand
-      // at 3-6m out) still gets the full bend.
+      // ── WALK-TEST round 8 (Zach, decisive clarification): *"i don't mean the entrance to the
+      //    shaft, i mean the exterior where the rock model meets the real terrain … from above you
+      //    can clearly see the shape, the straight lines and 4 corners."*
+      //    Post-mortem of why three rounds of outline work missed: the outline a viewer SEES from
+      //    above is not the mesh boundary (that lies at sand level, sand-coloured, invisible) — it
+      //    is the RAMP BAND, the 0.1-0.35m proudness contour where the sand tint hands over to
+      //    rock. And the round-4 domain warp FADED TO ZERO exactly there (its anti-fold guard), so
+      //    the one contour that defines the perceived shape was the one thing never warped. The
+      //    warp bent invisible sand-level bands; the visible band hugged the rectangle.
+      //    Replaced with a BOUNDARY OFFSET on the profile coordinate itself: multi-scale signed
+      //    lobes that move where the ramp band sits. An offset (unlike a domain re-sample of a
+      //    steep field) cannot produce the round-4 moat as long as its gradient stays under the
+      //    field's; shrink is clamped so the visible edge can never reach the hole's cover band
+      //    (which would re-trace the rect from inside), expansion runs free — expanded lobes are
+      //    proud rock, which is exactly the organic variation being asked for.
       const d0 = holeDist(wx, wz);
-      const wA = T.CREVICE_OUTLINE_WARP * Math.min(1, Math.max(0, d0 / 2.5));
-      const wx1 = wx + noise3(wx * 0.045 + 201, 3.7, wz * 0.045 + 88) * wA;
-      const wz1 = wz + noise3(wx * 0.045 + 55, 8.1, wz * 0.045 + 140) * wA;
-      const d0v = holeDist(wx1, wz1);
+      const d0v = d0;
+      const eLobe = Math.max(
+        -T.CREVICE_EDGE_LOBE_SHRINK_M,
+        T.CREVICE_EDGE_LOBE_M * noise3(wx * 0.071 + 611, 4.9, wz * 0.071 + 233)
+        + T.CREVICE_EDGE_LOBE2_M * noise3(wx * 0.155 + 87, 7.3, wz * 0.155 + 149),
+      );
       const edgeWob = (noise3(wx * 0.06 + 91, 5.5, wz * 0.06 + 37) * 0.46
                      + noise3(wx * 0.17 + 12, 2.9, wz * 0.17 + 64) * 0.34
                      + noise3(wx * 0.40 + 55, 8.2, wz * 0.40 + 19) * 0.20) * 0.5 + 0.5;
@@ -806,15 +819,9 @@ export function spawnCaveEntrance(
       // silhouette wider (the exact "smaller and more compact" ask, undone) to fix a 26m straight-
       // down view no player ever stands in. The overhead outline staying broadly rectangular is the
       // named residual; the rect is holeDist's basis and only a new outline basis would change it.
-      // Round 5 — ASYMMETRIC MARGINS, shrink-biased. A rect inflated by a CONSTANT margin is a
-      // rounded rectangle at every distance; real outcrops carry 2m of skirt on one flank and 8m on
-      // another. The multiplier stretches perceived distance (1..1+LOBE), so some bearings pull the
-      // rock in hard and none push it out — the W-4.2 tongue experiment sprawled precisely because
-      // it EXTENDED bearings; with the sink+feather in place, shrink-only asymmetry has no sprawl
-      // mode at all.
-      const mLobe = 1 + T.CREVICE_MARGIN_LOBE
-        * (noise3(wx * 0.028 + 401, 6.3, wz * 0.028 + 77) * 0.5 + 0.5);
-      const dbWob = d0v * mLobe - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5;
+      // (Round 5's shrink-only margin multiplier is folded into eLobe above — one mechanism at the
+      //  visible contour instead of two half-measures that each moved ~1.7m.)
+      const dbWob = d0v - 0.25 - T.CREVICE_APRON_EDGE * (edgeWob * 2 - 1) * 0.5 - eLobe;
       // …and the profile is TWO-STAGE: a walkable ramp off the rock (the KCC has to be able to step
       // up onto the apron from the sand — a hard rim here means you cannot reach the mouth), then a
       // fast dive well under the sheet. R4's single 2.3m ramp to −2.1 spent its whole length near
@@ -908,11 +915,18 @@ export function spawnCaveEntrance(
           // the true hole rect — the one line the warp cannot touch — and under low sun that step
           // re-drew the rectangle as a shadow ribbon the moment round 5 thinned the lid that used
           // to bury it.
-          const coverH = Math.max(0.07, aTop) + swell;
+          const coverH = Math.max(T.CREVICE_LID_MIN_M, aTop) + swell;
           apron = apron * (1 - coverT) + coverH * coverT;
         }
       }
-      if (d0 <= 0.001) apron = Math.max(0.07, aTop) + swell;   // cover always ≥ the 0.07 floor (the sheet's cut edge stays under rock) — but the LID follows the collar undulation down instead of being forced to full height: a thin lumpy lid + the spine is the whole silhouette over the hole now
+      // ROUND 8d — THE LID FLOOR MUST EXCEED THE VOXEL. Round 5's "thin lid" floor was 0.07m against
+      // the tor's 0.32m surface-nets grid: a slab thinner than the sampling does not MESH, so the
+      // lid silently vanished over off-spine carved cells — a real 3×5m hole in the solid, showing
+      // the carved void as a bright sliver. It was born in round 5 and survived FOUR rounds of
+      // misattribution (deep shrink lobe → sand tint → tint again) because it sat in no gate's
+      // coverage: the void gate samples from inside the CAVE, and no ray stands over off-slot
+      // carved cells. Found by raycasting the built mesh for interior gaps (the live-tab probe).
+      if (d0 <= 0.001) apron = Math.max(T.CREVICE_LID_MIN_M, aTop) + swell;
       // The fin. R1 used perpFade² and got a pair of sharp CONES ("Mount Fuji with a notch"). Real
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
       // a plateau out to FIN_PLATEAU then a hard shoulder, and the top is clamped flat-ish.
@@ -965,7 +979,11 @@ export function spawnCaveEntrance(
         // 1.5-2.5) the hug was only 0-15% engaged and the un-feathered stack still crossed the
         // sand at 0.3-0.4m proud — measured on the live build, band unchanged. The hug must OWN
         // the crossing: full by 2.0, leaving the remaining ~2.5m of feather as a true hug band.
-        const hugT = sm01((dbWob - T.CREVICE_APRON_RAMP * 0.5) / 1.2);
+        // …and the hug FADES OUT across the cover band (round 8f): its interior guard (d0 > 0.001)
+        // protected the lid but made a hard 0.4m step exactly AT the rect line — outside hugged to
+        // +0.035, inside floored at 0.42 — which rendered as a straight crease with a corner: the
+        // rectangle's ghost. Fading over the same 1.2m band the cover blend owns makes the seam C0.
+        const hugT = sm01((dbWob - T.CREVICE_APRON_RAMP * 0.5) / 1.2) * Math.min(1, d0 / 1.2);
         if (hugT > 0) {
           const hug = terrH + T.CREVICE_APRON_FEATHER_PROUD + fGrain
             - dive * (0.42 + T.CREVICE_APRON_FEATHER_PROUD);
@@ -1009,7 +1027,21 @@ export function spawnCaveEntrance(
       const hrw = holeSigned(wx, wz) + noise3(wx * 0.19 + 31, 4.7, wz * 0.19 + 63) * 0.55;
       const openFree = Math.max(1 - smoothstep(-0.9, 0.3, hrw), 1 - smoothstep(SKY * 0.5, SKY, pr.s));
       colRoof[o] = Math.min(taperRoof, terrH - T.CREVICE_ROOF_UNDER + openFree * 120);
-      colBound[o] = AFALL + 1.0 - Math.max(0, dbWob);  // >0 inside the tor's footprint, <0 outside
+      // ROUND 8e — THE NIGHT'S REAL BOUNDARY, found last. `bound` is INTERSECTED into the SDF
+      // (f = smin(slab, bound)), so the solid hard-ends where it hits zero — and it was keyed to
+      // dbWob with a reach of AFALL+1.0. Two consequences, both measured tonight:
+      //   · every band past the ramp (feather, hug, lobes) NEVER EXISTED IN THE MESH once W-4.3
+      //     shrank AFALL to 0.7 (cut at dbWob 1.7 = the ramp's end) — the persistent "edge" was
+      //     this cut face, not any height term, which is why five height-side fixes changed
+      //     nothing;
+      //   · a shrink lobe pushes dbWob POSITIVE INSIDE THE CARVED RECT, so `bound` deleted the
+      //     solid OVER THE HOLE — the 3×5m interior gap with the carve showing through, immune to
+      //     the lid floor because `bound` never looks at heights.
+      // It is now keyed to the TRUE distance with the FULL profile reach: the visible outline
+      // belongs to the height profile (where the lobes live), and `bound` is only the far cap that
+      // ends the slab under the sand, beyond everything visible.
+      colBound[o] = (T.CREVICE_APRON_RAMP + T.CREVICE_APRON_FEATHER_M + AFALL
+        + T.CREVICE_EDGE_LOBE_M + T.CREVICE_EDGE_LOBE2_M + 1.0) - Math.max(0, d0 - 0.25);
       if (colBot[o] < yLo) yLo = colBot[o];
       if (top > yHi) yHi = top;
     }
