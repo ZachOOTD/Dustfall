@@ -789,3 +789,24 @@ docs-only). But the timestamps falsified the premise the regression call rested 
 claimed the failing run was *"SOLO on a quiet machine (so dt-coupling does not explain it)"*, and an
 agent was concurrently reading files and writing two commits. **"The machine was quiet" is a claim
 that needs evidence, not an assumption**, and D311's dt-coupling was excluded on the strength of it.
+
+## D319 — when N confident fixes each change nothing, the defect is a SUM: instrument the sum (DEEPER walk-test W-4.3, 2026-07-30)
+
+**friction-score: 2**
+
+The entrance's perimeter band survived SIX single-cause fixes — each mechanism real, each fix
+correct, each visually null: the grid clip, the fin clip, cast shadow (A/B'd, exonerated), the
+terrain datum (measured, exonerated), the smax pedestal, the relief floor, the hug ordering. Five of
+those defects were genuinely present AT ONCE, each contributing 0.1-0.4m of rim height — so removing
+any one left a band indistinguishable from before, and every fix "failed."
+
+**The rule.** A visual defect that survives a correct fix is not evidence the fix was wrong — it is
+evidence the defect has MORE THAN ONE parent. Stop fixing terms; measure the assembled quantity
+(here: a live-tab transect of final rock-top minus terrain along bearings, then term-stack
+arithmetic against the measured heights). And when the terms are many and future-open, the durable
+fix constrains the SUM, not the parts — the feather now converges the TOTAL column to the hug band,
+so any term added later is automatically inside the contract.
+
+**Corollary for procedural height fields specifically:** smooth-max is not free — `smax(a,b,k)`
+bulges by up to k/4 exactly where its arguments are close, which for ground-hugging terms means
+exactly at the silhouette rim. Budget for blend pedestals wherever smax feeds a zero-crossing.

@@ -392,7 +392,15 @@ export function creviceClearProfile(
     return Math.hypot(dx, dz);
   };
   // Where the tor's rock ENDS: `colBound = AFALL + 1.0 − max(0, d0 − 0.25)` must stay positive.
-  const torReach = T.CREVICE_APRON_FALL + 1.0 + 0.25;
+  // WALK-TEST round 3, the real finding: THE "DEFINED EDGE" WAS THIS NUMBER ALL ALONG. The reach
+  // gates where the rock field exists, and it has never covered the full profile (it was
+  // AFALL+1.25 ≈ 3.15m against a ramp+dive that needed ~5m with the outline wobble) — so every tor
+  // all campaign has ended in a VERTICAL CLIP FACE mid-dive: a shadowed cut ring around the whole
+  // perimeter, misread twice tonight as "the dive face showing". The reach now covers ramp +
+  // feather + the under-sand drop + the wobble's outward swing, so the solid tapers below the sand
+  // and the mesh boundary is buried where no camera can see it.
+  const torReach = 0.25 + T.CREVICE_APRON_EDGE * 0.5 + T.CREVICE_APRON_RAMP
+    + T.CREVICE_APRON_FEATHER_M + T.CREVICE_APRON_FALL + 0.3;
   // The SDF slot's own ceiling, which is what bounds the space once the tor is behind you.
   const sdfCeilOver = T.CREVICE_HEIGHT + T.CREVICE_SDF_MARGIN * 0.6;
   const torCeilOver = T.CREVICE_HEIGHT - T.CREVICE_ROOF_DROP;
@@ -604,7 +612,15 @@ export function spawnCaveEntrance(
   // The cycle-7 lee-side drift moved that truncation OUT to where the slab surfaces, and the open
   // face showed on the sand as a row of angular fins with a black void behind them (seed 1337,
   // app15, apron tip). Sized from the actual terms now, not by eye.
-  const R = AMARG + AFALL + T.CREVICE_APRON_DRIFT + 1.8;
+  // Round 3 (the walk-test's "defined edge"): THIS FORMULA WAS THE EDGE. It was sized from the
+  // OLD two-stage profile and never learned about the feather — R came to 3.9m against a profile
+  // that now runs ~6.3m (0.25 offset + wobble + ramp + FEATHER + fall, past the AMARG line), so
+  // every tor clipped at the grid face while still 0.4-1.2m proud: a vertical cut ring around the
+  // whole perimeter, which is exactly the failure the comment above already describes from R4/cycle
+  // 7 ("angular fins with a black void behind them"). Same lesson, third time: sized FROM THE
+  // TERMS — every term — so a profile change cannot silently outgrow its grid again.
+  const R = 0.25 + T.CREVICE_APRON_EDGE * 0.5 + T.CREVICE_APRON_RAMP
+    + T.CREVICE_APRON_FEATHER_M + AFALL + AMARG + 0.4;
   // The whaleback swell's ellipse: the carved hole's own footprint, grown a little.
   const swCx = (block.xMin + block.xMax) * 0.5, swCz = (block.zMin + block.zMax) * 0.5;
   const swRx = (block.xMax - block.xMin) * 0.5 + 3.0, swRz = (block.zMax - block.zMin) * 0.5 + 3.0;
@@ -669,8 +685,18 @@ export function spawnCaveEntrance(
       // up onto the apron from the sand — a hard rim here means you cannot reach the mouth), then a
       // fast dive well under the sheet. R4's single 2.3m ramp to −2.1 spent its whole length near
       // terrain level, which is what made the outcrop read as a 26m lily pad lying on the desert.
-      const ramp = Math.min(1, Math.max(0, dbWob) / T.CREVICE_APRON_RAMP);
-      const dive = Math.min(1, Math.max(0, dbWob - T.CREVICE_APRON_RAMP) / AFALL);
+      // WALK-TEST 2026-07-29 round 3 (Zach, screenshot of the rim): *"i don't like how i can see
+      // the defined edge around it, i want it to blend more into the sand organically."* The edge
+      // WAS the profile: rock crossed the sand mid-DIVE at 35-60°, so the whole perimeter was a
+      // crisp geometric intersection line. The profile is now THREE-stage — a smoothstepped ramp
+      // (tangent at both ends), then a FEATHER band that hugs the terrain at +FEATHER_PROUD ±2-4cm
+      // of micro-grain for FEATHER_M metres, and only then the dive, well outside the visible line.
+      // Inside the feather the rock and the sand's own relief trade places along the rim, which is
+      // what "organic" is: the crossing happens in noise, not on a curve.
+      const sm01 = (x: number): number => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
+      const ramp = sm01(dbWob / T.CREVICE_APRON_RAMP);
+      const FE = T.CREVICE_APRON_FEATHER_M;
+      const dive = sm01((dbWob - T.CREVICE_APRON_RAMP - FE) / AFALL);
       // R7 — THE WHALEBACK SWELL. The rock that covers the carved hole was a geometrically FLAT
       // 0.55m-proud table ~19 × 15m across; at 15-40m that is a lily pad lying on the sand no matter
       // what its outline does, which is why three rounds of edge work never fixed the "terraced
@@ -694,16 +720,33 @@ export function spawnCaveEntrance(
       // rim — at eye level that WAS the wide plate ("ending closer to the tunnel" applies on every
       // axis, not just along the slot). Proud rock is confined to a corridor around the crack; past
       // the fin's own spread the table lies down. Multiplicative, same floor.
+      // Round 3 final: the proud collar is only as wide as the SILL needs (the walk line + the
+      // fissure shoulders). The last visible band standing after the grid + fin fixes was the
+      // ramp's own away-from-sun face — plain Lambert on a 28° slope in low sun — and its height is
+      // its visibility: at 0.55m proud it is a continuous shaded ribbon around the whole form; at
+      // ~0.1m it is a pencil line broken by the feather grain. So full height holds only within
+      // ±2.4m of the crack, and the broad slab lies down everywhere else. This is also what
+      // finally delivers "much smaller and more compact" at eye level.
       const aSinkP = 1 - T.CREVICE_APRON_TAIL_SINK
-        * smoothstep(T.CREVICE_TOR_FIN_SPREAD + 0.8, T.CREVICE_TOR_FIN_SPREAD + 3.4, Math.abs(pr.perp));
+        * smoothstep(2.4, 5.2, Math.abs(pr.perp));
       const aTop = APRON * Math.min(aSink, aSinkP);
-      let apron = (aTop + swell) - ramp * (aTop + swell + 0.30) - dive * 3.1;
+      // Feather-band grain: ±3cm at terrain-relief frequency, so the hugging band is not a plane.
+      const fGrain = noise3(wx * 0.63 + 17, 3.3, wz * 0.63 + 92) * 0.03;
+      // The dive only needs to put the rock JUST under the sand — it happens beyond the feather,
+      // where the crossing has already been made in grain, so nobody ever sees its slope. The old
+      // −3.1m plunge existed because the dive WAS the visible outline; it no longer is, and a
+      // shallow drop keeps the reach (and the tor's build cost) sane.
+      let apron = (aTop + swell)
+        - ramp * (aTop + swell - T.CREVICE_APRON_FEATHER_PROUD - fGrain)
+        - dive * (0.42 + T.CREVICE_APRON_FEATHER_PROUD);
       // R6 — the apron's RELIEF fades out with the apron itself. Without this the ledge noise and the
       // tor's general relief (±1.3m between them) are the same size as the whole falloff, so the
       // buried outer skirt keeps breaking back through the sand: a 26m flat shelf with a ragged rim
       // lying on the desert — the "lily pad" R3 named and R4/R5 never actually killed, because they
       // reshaped the OUTLINE and left the amplitude alone.
-      const aFade = 1 - Math.min(1, Math.max(0, dbWob) / AFALL);
+      // Ledge noise dies by the FEATHER START — inside the feather only fGrain lives, or the
+      // hugging band grows ledges and the rim line comes back as terracing.
+      const aFade = 1 - Math.min(1, Math.max(0, dbWob) / (T.CREVICE_APRON_RAMP * 0.9));
       // R4 — break the apron out of a flat plateau into low bedrock LEDGES. R3's apron read as a
       // poured concrete platform: 23m across and geometrically flat, because the only relief it got
       // was the 0.30-weighted tail of the fin's noise term.
@@ -716,7 +759,11 @@ export function spawnCaveEntrance(
       // fissured bedrock is blocky: a PLATEAU beside the crack with steep flanks. So the profile is
       // a plateau out to FIN_PLATEAU then a hard shoulder, and the top is clamped flat-ish.
       const ap0 = Math.abs(pr.perp);
-      const along = smoothstep(-5.2, -1.6, pr.s) * (1 - smoothstep(block.xMax - site.x + 0.5, block.xMax - site.x + 6.2, pr.s));
+      // Far fade pulled from +6.2 to +3.8 (round 3): at +6.2 the fin completed its taper OUTSIDE
+      // the grid, so it arrived at the mesh boundary still near full height and clipped — the tall
+      // dark wall on the deep-end bearing of the transect (+x: 1.1-1.25m proud for 7 straight
+      // metres, then a cliff). The taper now finishes inside the grid with margin.
+      const along = smoothstep(-5.2, -1.6, pr.s) * (1 - smoothstep(block.xMax - site.x + 0.3, block.xMax - site.x + 3.8, pr.s));
       const plateau = 1 - smoothstep(T.CREVICE_TOR_FIN_PLATEAU, T.CREVICE_TOR_FIN_SPREAD, ap0);
       // Per-side asymmetry — one wall of a fissure is always the taller one.
       const sideBias = pr.perp > 0 ? 1.0 : 0.78;
@@ -745,6 +792,28 @@ export function spawnCaveEntrance(
                    + noise3(wx * 0.44 + 29, 2.2, wz * 0.44 + 17) * 0.12;
       top += relief * T.CREVICE_TOR_NOISE
            * (0.12 + 0.43 * aFade + 0.45 * Math.min(1, prom / Math.max(0.5, T.CREVICE_TOR_FIN_H * 0.45)));
+      // ROUND 3, THE FIX THAT TOOK — FEATHER THE TOTAL. Six single-term fixes failed because the
+      // band was never one term: the smax blend adds a ~+0.13m PEDESTAL exactly where fin≈apron≈0
+      // (IQ smooth-max bulges when its arguments are close — i.e., at the rim), the relief floor
+      // keeps ±0.10m alive out there, and the swell tail rides over the apron's feather — measured
+      // 0.39-0.47m proud at the rim against a formula that claimed 0.035. Their stacked gradients
+      // crossed the sand at 35-50°, and under a low sun a continuous 0.4m shaded face is THE band.
+      // So the hug is enforced on the SUM, after every term: across the feather the whole column
+      // converges to PROUD±grain no matter what upstream did, and the rock/sand crossing happens
+      // in 3cm grain by construction — on every bearing, for every future term anyone adds.
+      if (d0 > 0.001) {
+        // Saturates EARLY (by dbWob ≈ 2.0), deliberately: the first version ramped the hug over
+        // the full feather length, so at the rim (the noise-determined zero-crossing, dbWob
+        // 1.5-2.5) the hug was only 0-15% engaged and the un-feathered stack still crossed the
+        // sand at 0.3-0.4m proud — measured on the live build, band unchanged. The hug must OWN
+        // the crossing: full by 2.0, leaving the remaining ~2.5m of feather as a true hug band.
+        const hugT = sm01((dbWob - T.CREVICE_APRON_RAMP * 0.5) / 1.2);
+        if (hugT > 0) {
+          const hug = terrH + T.CREVICE_APRON_FEATHER_PROUD + fGrain
+            - dive * (0.42 + T.CREVICE_APRON_FEATHER_PROUD);
+          top = top * (1 - hugT) + hug * hugT;
+        }
+      }
       colTop[o] = top;
       colBot[o] = Math.min(terrH - 3.0, pr.floorY - 1.8);
       // The tor's fissure floor sits 12cm ABOVE the SDF slot floor, not below it. Carving below

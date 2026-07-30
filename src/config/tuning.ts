@@ -1091,10 +1091,10 @@ export const Tuning = {
                                        //     scratch across a smooth dome. Shoulders beside a slot, which is what a
                                        //     split tor actually looks like.
   CREVICE_TOR_FIN_SHOULDER: 2.6,       // m — half-width over which that notch recovers to full fin height
-  CREVICE_APRON_EDGE: 2.3,        // W-4.2 r3: 1.0 → 2.3. From ABOVE the outline read as a rounded RECTANGLE — the hole rect showing through (R5's own warning: one weak wobble cannot break a 13m straight edge). The lobes this re-buys are now cheap: past the collar the TAIL-SINK lays them at sand level, so they widen the outline's SHAPE without rebuilding the proud plate            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
+  CREVICE_APRON_EDGE: 1.2,        // round 3: 2.3 → 1.2 — the outline's organic read now comes from the FEATHER's grain interleaving, and every 0.5m of wobble is 1m of tor-grid reach (build cost)        // W-4.2 r3: 1.0 → 2.3. From ABOVE the outline read as a rounded RECTANGLE — the hole rect showing through (R5's own warning: one weak wobble cannot break a 13m straight edge). The lobes this re-buys are now cheap: past the collar the TAIL-SINK lays them at sand level, so they widen the outline's SHAPE without rebuilding the proud plate            // m — total amplitude of the multi-octave wobble on the apron's outline. R4 had a
                                        //     single 16m-wavelength octave, which cannot break a 13m straight edge — the
                                        //     apron kept the carve rect's straight polygonal boundary (cycle-7 sev2).
-  CREVICE_TOR_SWELL: 1.9,              // m — broad dome over the carved hole, so the covering rock is a whaleback
+  CREVICE_TOR_SWELL: 1.55,             // m — broad dome over the carved hole, so the covering rock is a whaleback. Walk-test round 3: 1.9 → 1.55, the "lower it into the terrain" half of the ask — cover margin over the slot-top poke stays ~0.7m and cave-void (0 escapes / 8160 rays) is the arbiter, re-run after this change
                                        //     rather than a table. See the R7 note in caveEntrance.ts.
   CREVICE_APRON_RAMP: 1.7,        // W-4 r3: 1.0 → 1.7 — a longer, gentler meeting with the sand             // m — the WALKABLE part of the apron's outer ramp (0.85m of drop → ~40°, under
                                        //     the KCC's 50° climb). Beyond it the apron dives under the sheet fast.
@@ -1120,7 +1120,12 @@ export const Tuning = {
   //   0.039→0.171, A/B-proven both directions; it also moved caveDigest via the mouth sill). If the
   //   apron's VISUAL height ever needs to drop, split a separate render-side constant — never this one
   CREVICE_APRON_MARGIN: 0.9,           // m — apron holds full height this far outside the hole rect
-  CREVICE_APRON_FALL: 1.9,        // W-4.2 ("ending closer to the tunnel"): 3.0 → 1.9. r2/r3's saucer-edge lesson still stands — the toe IS steeper — but the whole form is half the size now, so the shadow band is short; judged in shots, residual named if it reads             // m — then ramps down into the sand over this distance (~30°, walkable)
+  // THE FEATHER (walk-test round 3 — "blend more into the sand organically"): between the ramp
+  // and the dive, the rock HUGS the terrain at +FEATHER_PROUD with ±3cm grain for FEATHER_M metres,
+  // so the rock/sand crossing happens interleaved in micro-relief instead of on a visible curve.
+  CREVICE_APRON_FEATHER_M: 2.4,        // m — length of the hugging band
+  CREVICE_APRON_FEATHER_PROUD: 0.035,  // m — how proud the hugging band sits (under the terrain's own ±7cm relief)
+  CREVICE_APRON_FALL: 0.7,        // round 3: 1.9 → 0.7 — the dive is under-sand housekeeping now (the feather owns the visible crossing), and reach is build cost        // W-4.2 ("ending closer to the tunnel"): 3.0 → 1.9. r2/r3's saucer-edge lesson still stands — the toe IS steeper — but the whole form is half the size now, so the shadow band is short; judged in shots, residual named if it reads             // m — then ramps down into the sand over this distance (~30°, walkable)
   CREVICE_TOR_VOXEL: 0.32,             // m — the tor's own surface-nets grid spacing (finer than the cave's 0.45)
 
   // UNDERWORLD cycle 2 (2026-07-19) — the CAVE-GEN CORE. A deterministic room-graph +
