@@ -855,6 +855,30 @@ export function spawnCaveEntrance(
   const nrm = geo.attributes.normal as THREE.BufferAttribute;
   const col = new Float32Array(nv * 3);
   const c = new THREE.Color();
+  // WALK-TEST 2026-07-29 (Zach, with a screenshot of a warm-brown tor on pale cracked hardpan):
+  // *"the cave entrance really looks out of place in some biomes. can we update the texture of the
+  // cave entrance rock to match the biome it is placed in?"* The exterior tone was ONE fixed
+  // sun-baked brown for every tor in every biome. It is now DERIVED FROM THE LOCAL GROUND:
+  // `terrain.groundSample` is the same single source of truth the terrain tiles and terrain-matching
+  // decor already use, so the rock is the bedrock OF its ground by construction — chalky on the
+  // salt flats, sandy at the ergs' edges, the old brown on dark rocky ground — and a tor straddling
+  // a biome boundary blends across it for free (the sample is per-vertex).
+  //
+  // "Rockified", not painted: the ground colour is pulled down in value with the SAME bleach +
+  // strata modulation the old tone carried, so it still reads as rock — the knob for how strongly
+  // it matches is CREVICE_TOR_BIOME_MATCH (0 = the legacy fixed brown, 1 = fully ground-derived).
+  //
+  // Cost: groundSample runs biome noise per call, so it is cached on a 1.6m grid (~150 entries per
+  // tor) rather than per-vertex — the tor build is already the named worst frame (~155-175ms).
+  const _gCache = new Map<number, [number, number, number]>();
+  const groundNear = (x: number, z: number): [number, number, number] => {
+    const kx = Math.round(x * 0.625), kz = Math.round(z * 0.625);   // 1.6m cells
+    const key = kx * 73856093 ^ kz * 19349663;
+    let g = _gCache.get(key);
+    if (!g) { g = terrain.groundSample(kx * 1.6, kz * 1.6).color; _gCache.set(key, g); }
+    return g;
+  };
+  const legacy = new THREE.Color(); const groundRock = new THREE.Color(); const ex = new THREE.Color();
   for (let v = 0; v < nv; v++) {
     const wx = nets.vx[v], wy = nets.vy[v], wz = nets.vz[v];
     caveVertexColor('wall', wx, wy, wz, 0, cnoise, c, nrm.getY(v));
@@ -862,15 +886,22 @@ export function spawnCaveEntrance(
     const tH = terrain.pureHeightAt(wx, wz);
     const dEx = 1 - Math.min(1, Math.max(0, (tH - wy) / 3.5));
     if (dEx > 0) {
-      // Sun-baked exterior tone. R2: R1's tone was as dark as the cave palette, so from 34m the
-      // outcrop read as a black lump against sunlit sand — a landmark you notice but can't identify
-      // as rock. Lifted to real desert-rock value, with only a gentle bleach variation (the cave
-      // palette's ±0.55 mineral staining is an INTERIOR read and gets blended out up here).
+      // Sun-baked exterior value shaping (R2's lesson stands: as dark as the cave palette, the
+      // outcrop read as a black lump from 34m — whatever the hue, the VALUE stays desert-rock).
       const bleach = 0.5 + 0.5 * cnoise(wx * 0.05 + 3, 1.7, wz * 0.05 + 8);
       const strat = 0.04 * Math.sin(wy * 1.35 + cnoise(wx * 0.03, 0, wz * 0.03) * 2.2);
-      const ex = new THREE.Color(
+      legacy.setRGB(
         0.635 + bleach * 0.11 + strat, 0.560 + bleach * 0.097 + strat, 0.455 + bleach * 0.078 + strat,
       ).convertSRGBToLinear();
+      const g = groundNear(wx, wz);
+      // Bedrock of this ground: the ground's own hue, pulled down in value (wet-stone-vs-dust) and
+      // carrying the same bleach lift + strata bands. groundSample returns LINEAR (it feeds the
+      // terrain's own vertex colours), so no colour-space conversion here.
+      const vScale = 0.78 + bleach * 0.20;
+      groundRock.setRGB(
+        Math.max(0, g[0] * vScale + strat), Math.max(0, g[1] * vScale + strat), Math.max(0, g[2] * vScale + strat),
+      );
+      ex.copy(legacy).lerp(groundRock, T.CREVICE_TOR_BIOME_MATCH);
       c.lerp(ex, dEx * 0.95);
     }
     col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;

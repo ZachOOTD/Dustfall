@@ -1104,6 +1104,11 @@ export const Tuning = {
   CREVICE_TOR_FIN_PLATEAU: 1.5,   // W-4.2: 3.6 → 2.4 → 1.5 — the crown hugs the crack        // m — the fin holds full height this far either side of the crack (a blocky
                                        //     bedrock plateau; round 1's squared falloff gave two Fuji-shaped cones)
   CREVICE_TOR_FIN_SPREAD: 4.2,    // W-4.2: 7.0 → 4.2 — WITH the apron fall shortened to match (1.9), the flanks still meet the toe without a flat brim; r1's mistake was pulling the flanks in while leaving the apron wide         // m — perpendicular distance over which the fin falls to the apron
+  // WALK-TEST 2026-07-29 — the tor's exterior derives from the LOCAL GROUND COLOUR (Zach: the
+  // entrance "really looks out of place in some biomes"). 0 = the legacy fixed sun-baked brown,
+  // 1 = fully ground-derived bedrock. The rockifying value-shaping (bleach + strata) applies at
+  // every setting, so this dials HUE match, never flatness.
+  CREVICE_TOR_BIOME_MATCH: 0.82,
   CREVICE_TOR_BUMP: 0.05,              // shader normal-perturbation for the tor (cf. CAVE_ROCK_BUMP_INTERIOR 0.85 — that is
                                        //     tuned for torch-lit interior rock and reads as camouflage in sunlight)
   CREVICE_TOR_NOISE: 0.85,        // W-4: 1.15 → 0.85 — relief scaled with the fin, else the noise IS the silhouette             // m — multi-octave relief on the tor's top surface
