@@ -2775,6 +2775,7 @@ const SCENARIOS = {
         // DEEPER cycle 4 — the crevice, reported SEPARATELY from the corridor slope ceiling.
         entSlope: borep.descentAngleDeg, entMouthW: borep.mouthClearW, entPinchW: borep.pinchClearW,
         entTorTris: borep.torTris, entMs: borep.msTor, slotTrace, ascTrace,
+        entDigest: borep.torDigest, entPhases: borep.msPhases,
         trace, tourStr: tour.join('>'), strands,
         nodesXY: nodes.map((n) => `${n.id}<-${n.parent}:(${n.x.toFixed(1)},${n.z.toFixed(1)},${n.y.toFixed(1)})r${n.rx.toFixed(1)}h${n.height.toFixed(1)}`),
       };
@@ -2786,6 +2787,12 @@ const SCENARIOS = {
     // fight its way out of one of them is the early warning for the flake that eventually goes red.
     if (r.strands && r.strands.length) console.log(`[cave-walk] ⚠ STRANDED LEGS (tolerated, node already reached): [${r.strands.join(' ')}]`);
     console.log(`CAVE-CREVICE seed=${r.seed ?? '?'} slope=${r.entSlope ?? '?'}° mouthW=${r.entMouthW ?? '?'}m pinchW=${r.entPinchW ?? '?'}m torTris=${r.entTorTris ?? '?'} ms=${r.entMs ?? '?'}`);
+    // cycle 13 — the tor DIGEST (a moved vertex is a bug, never a re-baseline) + the phase split
+    // (a perf regression is attributable to a stage instead of to one 200ms total).
+    const _ph = r.entPhases ?? {};
+    console.log(`CAVE-TOR seed=${r.seed ?? '?'} digest=${r.entDigest ?? '?'} tris=${r.entTorTris ?? '?'} total=${r.entMs ?? '?'}ms`
+      + ` setup=${_ph.setup ?? '?'} cols=${_ph.cols ?? '?'} field=${_ph.field ?? '?'} nets=${_ph.nets ?? '?'}`
+      + ` geom=${_ph.geom ?? '?'} color=${_ph.color ?? '?'} finalize=${_ph.finalize ?? '?'}`);
     if (r.slotTrace) console.log(`[cave-walk] descent=[${r.slotTrace.join(' ')}] ascent=[${(r.ascTrace ?? []).join(' ')}]`);
     console.log(`[cave-walk] kinds=[${r.kinds ?? '?'}]`);
     if (r.nodesXY) console.log(`[cave-walk] nodes=[${r.nodesXY.join(' ')}] tour=${r.tourStr}`);

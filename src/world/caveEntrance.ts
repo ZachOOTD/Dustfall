@@ -615,8 +615,32 @@ export interface CaveEntranceProbe {
   centerZ: number;
   torTris: number;
   msTor: number;
+  /** FNV-1a over every tor vertex, rounded to 1cm — the SAME mix/r2 shape as `caveDigest`.
+   *
+   *  WHY THIS EXISTS (cycle 13): `caveDigest` hashes the cave graph + the CAVE meshes, and the tor
+   *  is neither — it is built here and welded to the cave only through the descent line. So the tor
+   *  MESH's vertices were in no digest anywhere, and a bug that moved one of them would ship green.
+   *  (Tor *constants* are a different story and ARE digest-coupled: `CREVICE_APRON_RISE` and the
+   *  mouth sill feed the descent line → chamber floors → `caveDigest`. Both facts are true; only
+   *  this one is about the mesh.) The sliced-build refactor needs a tooth that can see a moved
+   *  vertex, so the digest lands FIRST and is durable on its own merits. */
+  torDigest: string;
+  /** Per-phase build cost, ms. The stage names are the sliced job's own stage names, so a perf
+   *  regression can be attributed to a phase instead of to a 200ms total. */
+  msPhases: { setup: number; cols: number; field: number; nets: number; geom: number; color: number; finalize: number };
   /** Ordered world-space march waypoints: outside → mouth → each slot station → junction. */
   waypoints: Array<{ name: string; x: number; y: number; z: number }>;
+}
+
+/** The tor-mesh determinism digest — see `CaveEntranceProbe.torDigest`. Kept beside the probe type
+ *  so the sync and sliced builders can only ever hash the same way. */
+export function torMeshDigest(geo: THREE.BufferGeometry): string {
+  let h = 0x811c9dc5 >>> 0;
+  const mix = (n: number): void => { h = Math.imul(h ^ (n & 0xffffffff), 0x01000193) >>> 0; };
+  const r2 = (v: number): number => Math.round(v * 100);
+  const p = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) { mix(r2(p.getX(i))); mix(r2(p.getY(i))); mix(r2(p.getZ(i))); }
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
 export interface CaveEntrance {
@@ -750,6 +774,8 @@ export function spawnCaveEntrance(
   const colRoof = new Float32Array(cw * cd);       // fissure roof Y (far above the rock top where open to the sky)
   const colPerp = new Float32Array(cw * cd);       // signed distance from the slot axis
   const colBound = new Float32Array(cw * cd);      // horizontal closure term
+  const _msSetup = performance.now() - t0;
+  let _tp = performance.now();
   let yLo = Infinity, yHi = -Infinity;
   const SKY = T.CREVICE_SKY_RUN, TAPER = T.CREVICE_SKY_TAPER;
   const smoothstep = (a: number, b: number, x: number): number => {
@@ -1046,6 +1072,7 @@ export function spawnCaveEntrance(
       if (top > yHi) yHi = top;
     }
   }
+  const _msCols = performance.now() - _tp; _tp = performance.now();
   const gy0 = yLo - VOX * 2, gy1 = yHi + VOX * 2;
   const ny = Math.ceil((gy1 - gy0) / VOX);
   const ch = ny + 1;
@@ -1100,7 +1127,9 @@ export function spawnCaveEntrance(
     }
   }
 
+  const _msField = performance.now() - _tp; _tp = performance.now();
   const nets = surfaceNets(field, cw, ch, cd, gx0, gy0, gz0, VOX);
+  const _msNets = performance.now() - _tp; _tp = performance.now();
   const nv = nets.vx.length;
   const pos = new Float32Array(nv * 3);
   for (let v = 0; v < nv; v++) { pos[v * 3] = nets.vx[v]; pos[v * 3 + 1] = nets.vy[v]; pos[v * 3 + 2] = nets.vz[v]; }
@@ -1108,6 +1137,7 @@ export function spawnCaveEntrance(
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setIndex(nets.idx);
   geo.computeVertexNormals();
+  const _msGeom = performance.now() - _tp; _tp = performance.now();
 
   // ── Vertex colour: sun-bleached desert rock outside, blending to the cave palette as the
   //    surface drops into the fissure. Same palette function as the cave body (one copy). ──
@@ -1176,6 +1206,7 @@ export function spawnCaveEntrance(
     col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const _msColor = performance.now() - _tp; _tp = performance.now();
 
   const group = new THREE.Group();
   group.name = 'caveEntrance';
@@ -1193,6 +1224,7 @@ export function spawnCaveEntrance(
 
   // Rule 9 — the collider IS the drawn geometry.
   const body = makeStaticTrimesh(world, [mesh], { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }, new THREE.Matrix4());
+  const _msFinalize = performance.now() - _tp;
 
   // THE DECLARED OPENING (the leviathan lesson): the sky-open slot is the cave's front door, not a
   // defect. `cave-void` excuses rays through it by this explicit declaration — never by a loosened
@@ -1231,6 +1263,12 @@ export function spawnCaveEntrance(
     centerZ: site.z,
     torTris: tris,
     msTor,
+    torDigest: torMeshDigest(geo),
+    msPhases: {
+      setup: +_msSetup.toFixed(1), cols: +_msCols.toFixed(1), field: +_msField.toFixed(1),
+      nets: +_msNets.toFixed(1), geom: +_msGeom.toFixed(1), color: +_msColor.toFixed(1),
+      finalize: +_msFinalize.toFixed(1),
+    },
     waypoints,
   };
   group.userData.caveEntranceProbe = probe;
