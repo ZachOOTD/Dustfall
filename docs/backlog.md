@@ -25,12 +25,19 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
   in `caveSdf.ts`. One-line comment fix, deferred out of cycle 2 only to avoid an HMR reload
   mid-gate-sweep.
 
-- `[polish]` **The tor's vertex-COLOUR pass costs 74.7ms of a 255ms build (29%)** — measured in
-  cycle 13. It is the W-4 biome tint sampling ground per vertex through a 1.6m cache, plus a
-  per-vertex `new THREE.Color()` in the hot loop. Now SLICED (so it no longer hitches), but it is
-  still the single most expensive phase and the allocation hoist is value-identical and free.
-  NOT done tonight because the tint is a thing Zach signed off on by eye and colour is outside
-  `torDigest` (positions only) — so it wants a visual A/B, not an unattended edit.
+- `[idea]` **The tor colour pass: A/B RUN 2026-07-31 — RECOMMENDATION IS DON'T.** The pass costs
+  ~73ms of a ~255ms build, and the "free value-identical win" this entry used to claim (hoisting a
+  per-vertex `new THREE.Color()`) was **measured and falsified: it is worth 0.8ms of 73ms, ~1%.**
+  Measured on the live origin tor, 31,263 verts: `pureHeightAt` **49.6ms** · `new THREE.Color()`
+  **0.8ms** · setRGB 0.5ms · lerp 0.4ms. The real cost is per-vertex terrain height sampling.
+  That CAN be made ~100× cheaper with a 2m-grid bilinear height cache (305 calls instead of 31,263,
+  ≈49ms saved, max height error 2.3mm → ~0.07% tint-weight shift, invisible; probe was
+  responsiveness-checked — error grows 0.0001/0.0023/0.031/0.167m at 0.32/2/8/32m grids).
+  **Not taken, deliberately:** the colour pass is SLICED, so it no longer hitches anything. The
+  saving would only shorten a streamed build nobody perceives (~15 frames → ~11) and ~50ms off a
+  5.3s boot, in exchange for a real (if tiny) change to a tint Zach approved by eye and a permanent
+  extra cache to reason about. Optimising a number no player experiences is not worth a visual risk.
+  Reopen only if the tor build becomes a measured problem again.
 - `[polish]` **Rim dark line at extreme grazing angles** (W-4 residual, on record in the W-4
   commit) — the skirt toe wants a sand-lap term (new geometry, not a tint) where the tor meets
   the terrain. Accepted for ship; revisit if Zach re-flags it on a walk.
