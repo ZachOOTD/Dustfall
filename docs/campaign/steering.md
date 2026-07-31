@@ -85,6 +85,24 @@ efficiencies we should implement along the way"):**
 entrance, the remesh read, or the water pools. Build → screenshot → critique → iterate, 5-8 rounds
 for new visual elements. Never >150 LOC of visual code in one Edit without a screenshot between.
 
+**PROCESS LEVERS (2026-07-30 reflection, Zach approved — in force):**
+1. **Critic-before-present (amends efficiency-watch #5).** Any time work is presented for Zach's
+   AESTHETIC judgment ("organic", "blends", "low-profile", "natural") — not only new hero elements —
+   2-3 fresh critics review the presenting shot set FIRST, overhead included. W-4's "big rectangle
+   from above" sat in the rig's own overhead framing for rounds before Zach said it; a fresh critic
+   reads that shot in one pass. ~2 min per present, attacks the 8-round problem directly.
+2. **The two-null-fix tripwire.** The SECOND fix that changes nothing about a symptom STOPS the
+   edit loop — before any third attempt, instrument the assembled quantity (term-stack print,
+   live-tab raycast, A/B one axis). W-4 fired eleven confident single-hypothesis edits across two
+   defects whose real causes were sums. Canon: `shared-memory/defect-is-a-sum.md`.
+3. **The angle handshake.** When Zach's feedback names a viewpoint or a visible line ("from above",
+   "where the rock meets the terrain"), the FIRST reply is one annotated screenshot — "this line?" —
+   before any code. Three of W-4's eight rounds were aimed at the wrong band; one round-trip would
+   have bought them back.
+4. **Draft-at-the-D-entry.** A D-entry with cross-project value gets its framework pending draft
+   written the SAME DAY, not at campaign end; consolidation ends `git status` clean (the 07-29
+   consolidation stranded half its work uncommitted for a day).
+
 **Process:** one code-writing agent at a time · never `git stash` here · Fable plans / Opus
 executes · **push HELD** — commit to this branch, master untouched · walk-test feedback gets
 written down the SAME DAY (the 4-day gap that produced this campaign's cycle 1 was the miss).

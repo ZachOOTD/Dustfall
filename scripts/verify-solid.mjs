@@ -98,8 +98,37 @@ const ASSET_DEFS = {
   leviathan: { enclosure: true },
   ribcage: { enclosure: false },
   hab_dome: { enclosure: true },
+  // ── CAVE ENROLLMENT (2026-07-30, process rule 10). The dais shipped see-through into a walk-test
+  // with this harness sitting green beside it — geometry only gets protection it is ENROLLED in.
+  // Per-check scoping is explicit N/A with a reason, never a silently-vacuous OK:
+  //   · `na` — checks that CANNOT apply here, with the printed reason.
+  //   · `orbitEls` — backface orbit elevations. The dais's underside is an open skirt buried in the
+  //     cave floor BY DESIGN, so below-horizon orbits (el −18) would false-flag it; above-horizon
+  //     views are every view a player can have of it.
+  //   · `buriedUnderside` — openend excuses boundary loops hugging the asset's own lowest extent
+  //     (grid-clip / buried skirt rims). Datum is the component's own min-Y, NOT terrain height —
+  //     these assets live underground, where a REAL hole is also "below terrain", so a terrain
+  //     datum would excuse the exact defect class (dais see-through) this enrollment exists for.
+  cave_tor: {
+    enclosure: false,
+    buriedUnderside: true,
+    na: {
+      backface: 'underground-clipped solid — the SDF grid clips it below terrain, so every below-horizon orbit sees the by-design open underside; the tor defect class (vanished sub-voxel lid = a topological hole) is owned by openend',
+      floating: 'terrain-conformal, extends below ground — the surface-terrain datum is inapplicable',
+    },
+    // Enterability of the slot is owned by the cave-walk gate (full KCC march, verify:chunks) —
+    // stronger than walkin's sphere-march, so this stays a non-enclosure here.
+  },
+  cave_dais: {
+    enclosure: false,
+    buriedUnderside: true,
+    orbitEls: [8, 30],
+    na: {
+      floating: 'underground — the surface-terrain datum sits ~20m above the cave floor it stands on',
+    },
+  },
 };
-const RUN_LIST = ASSET === 'all' ? ['skyfall', 'leviathan', 'ribcage', 'hab_dome'] : [ASSET];
+const RUN_LIST = ASSET === 'all' ? ['skyfall', 'leviathan', 'ribcage', 'hab_dome', 'cave_tor', 'cave_dais'] : [ASSET];
 
 // Detector thresholds — documented + tunable in docs/verify-solid.md.
 const PARAMS = {
@@ -115,6 +144,10 @@ const PARAMS = {
   // 3. openend
   loopDiag: 1.2,         // a boundary loop whose world bbox-diagonal ≥ 1.2m = a real open cross-section
   loopEdges: 8,          // … and ≥ 8 boundary edges (ignores incidental primitive seams)
+  buriedBandM: 0.75,     // buriedUnderside assets: a loop whose centre hugs the component's own
+                         //   lowest extent (within this band) is the by-design clipped/buried
+                         //   underside; anything higher is a real hole. Sized for the dais skirt
+                         //   ring, whose per-segment depth follows the rocky floor (~±0.4m).
   // 4. floating
   floatTol: 0.5,         // a component floating > 0.5m above the terrain under its footprint
   minCompSize: 0.6,      // … and ≥ 0.6m across (ignore tiny greebles legitimately mid-air)
@@ -249,6 +282,31 @@ async function installSolidLib() {
       rc.applyColliders(ctx.physics.world, new THREE.Vector3(x, gy, z), 0);
       rc.group.updateMatrixWorld(true);
       return { rootName: 'giantRibcage', center: lib.centerOf(rc.group) };
+    }
+    if (name === 'cave_tor' || name === 'cave_dais') {
+      // The origin cave (tor + interior + dais) builds at BOOT — but possibly sliced across ticks
+      // (the S6 hitch-free generator), and `paused` gates the tick loop. So: unpause, poll for the
+      // content, repause. The tor group self-names ('caveEntrance', with its declared
+      // `intendedOpening` already on it for the cave-void gate); the dais carries `userData.eggDais`
+      // and gets a runtime name here so the orchestrator's getObjectByName contract holds — still
+      // zero game-source changes.
+      ctx.flags.paused = false;
+      const findIt = () => {
+        if (name === 'cave_tor') return ctx.three.scene.getObjectByName('caveEntrance');
+        let hit = null;
+        ctx.three.scene.traverse((o) => { if (!hit && o.userData && o.userData.eggDais) hit = o; });
+        return hit;
+      };
+      let root = null;
+      const t0 = performance.now();
+      while (!root && performance.now() - t0 < 45000) {
+        root = findIt();
+        if (!root) await new Promise((r) => setTimeout(r, 400));
+      }
+      ctx.flags.paused = true;
+      if (!root) return { skip: `${name}: origin cave content not in scene after 45s (VITE_CAVE=0? generator stalled?)` };
+      if (!root.name) root.name = 'caveEggDais';
+      return { rootName: root.name, center: lib.centerOf(root) };
     }
     return { skip: `unknown asset "${name}"` };
   };
@@ -419,7 +477,7 @@ async function installSolidLib() {
           for (const id of gg.verts) { const w = toWorld(id); lmin.min(w); lmax.max(w); }
           const diag = lmin.distanceTo(lmax);
           const ctr = lmin.clone().add(lmax).multiplyScalar(0.5);
-          loops.push({ diag, edges: gg.edges, verts: gg.verts.size, center: [+ctr.x.toFixed(2), +ctr.y.toFixed(2), +ctr.z.toFixed(2)] });
+          loops.push({ diag, edges: gg.edges, verts: gg.verts.size, center: [+ctr.x.toFixed(2), +ctr.y.toFixed(2), +ctr.z.toFixed(2)], bbox: [lmin.x, lmin.y, lmin.z, lmax.x, lmax.y, lmax.z] });
         }
         loops.sort((a2, b2) => b2.diag - a2.diag);
         comps.push({
@@ -437,14 +495,18 @@ async function installSolidLib() {
   // ── CHECK 3 — OPEN END / UNCLOSED SOLID (large boundary loop), MINUS the asset's
   //    DECLARED intended openings (see lib.openingsOf — a detector must not call the
   //    front door a defect; that mistake is what sealed the leviathan). ──
-  lib.checkOpenEnd = (comps, P, openings) => {
+  lib.checkOpenEnd = (comps, P, openings, buriedUnderside) => {
     const flags = [];
     const excused = [];
     let totalLoops = 0, maxDiag = 0;
-    const atOpening = (centerArr) => {
+    const atOpening = (centerArr, diag) => {
       for (const op of openings || []) {
         const dx = centerArr[0] - op.center.x, dy = centerArr[1] - op.center.y, dz = centerArr[2] - op.center.z;
-        if (Math.hypot(dx, dy, dz) <= op.radius) return op;
+        // Centre-in-sphere alone is a laundering channel: a defect hole CENTRED near a declared
+        // door would be excused however large it is (found by a red-proof punch that landed 1.5m
+        // from the tor's declared mouth). A door's own rim loop is ~2×radius across, so cap the
+        // excusable loop at 3×radius — bigger than that near a door is a tear, not the door.
+        if (Math.hypot(dx, dy, dz) <= op.radius && diag <= op.radius * 3) return op;
       }
       return null;
     };
@@ -453,7 +515,31 @@ async function installSolidLib() {
         totalLoops++;
         maxDiag = Math.max(maxDiag, lp.diag);
         if (lp.diag >= P.loopDiag && lp.edges >= P.loopEdges) {
-          const op = atOpening(lp.center);
+          // buriedUnderside assets (underground SDF solids): the polygonizer's DOMAIN BOX clips the
+          // solid wherever rock extends past it, leaving by-design boundary loops on the box's
+          // bottom and vertical side faces (the tor's green build carries two Ø26m loops planar on
+          // its ±Z faces). Excused: loops hugging the component's OWN min-Y (bottom clip / buried
+          // skirt rims), and loops PLANAR ON A VERTICAL side face (thin along x or z, lying at the
+          // component's x/z extent). Deliberately NOT excused: anything planar in Y above the
+          // bottom band — a vanished-lid hole in a near-flat top surface is exactly that shape, and
+          // the datum is never terrain height (underground, a REAL hole is also below terrain).
+          if (buriedUnderside) {
+            if (lp.center[1] < c.worldMin[1] + P.buriedBandM) {
+              excused.push({ mesh: c.meshLabel, openLoopDiag: +lp.diag.toFixed(2), center: lp.center, declaredBy: 'buried underside (loop hugs component min-Y)' });
+              continue;
+            }
+            const bb = lp.bbox;
+            if (bb) {
+              const thinX = bb[3] - bb[0] < 0.6, thinZ = bb[5] - bb[2] < 0.6;
+              const atXFace = Math.min(Math.abs(bb[0] - c.worldMin[0]), Math.abs(c.worldMax[0] - bb[3])) < 0.5;
+              const atZFace = Math.min(Math.abs(bb[2] - c.worldMin[2]), Math.abs(c.worldMax[2] - bb[5])) < 0.5;
+              if ((thinX && atXFace) || (thinZ && atZFace)) {
+                excused.push({ mesh: c.meshLabel, openLoopDiag: +lp.diag.toFixed(2), center: lp.center, declaredBy: 'domain side-clip (planar on a vertical bbox face)' });
+                continue;
+              }
+            }
+          }
+          const op = atOpening(lp.center, lp.diag);
           if (op) { excused.push({ mesh: c.meshLabel, openLoopDiag: +lp.diag.toFixed(2), center: lp.center, declaredBy: op.declaredBy }); continue; }
           flags.push({ mesh: c.meshLabel, openLoopDiag: +lp.diag.toFixed(2), edges: lp.edges, center: lp.center });
         }
@@ -513,9 +599,15 @@ async function installSolidLib() {
   };
 
   // ── CHECK 2 — BACKFACE / SEE-THROUGH (offscreen front/back render sweep). ──
-  lib.checkBackface = (root, center, P, probe) => {
+  lib.checkBackface = (root, center, P, probe, orbitEls) => {
     const g = window.__game; const ctx = g.ctx; const THREE = g.THREE;
     const renderer = ctx.three.renderer; const scene = ctx.three.scene;
+    // Scene isolation below hides every top-level child except the root — which silently renders
+    // ZERO frames when the root is NESTED (the dais lives inside the cave group), and zero frames
+    // used to mean a vacuous PASS. Re-parent a nested root to the scene for the shots (attach
+    // preserves the world transform), restore after.
+    const prevParent = root.parent !== scene ? root.parent : null;
+    if (prevParent) scene.attach(root);
     // Front=white / back=magenta, DoubleSide so the NEAREST surface wins: if a back
     // face is the nearest thing along a pixel, no front face covers it ⇒ see-through.
     const mat = new THREE.ShaderMaterial({
@@ -544,8 +636,9 @@ async function installSolidLib() {
     const shots = [];
     // EXTERIOR orbit sweep: grazing + slightly-below + above (below/graze reveal open
     // bellies + torn ends). From OUTSIDE, a closed correctly-wound solid shows ZERO
-    // back-faces — so these are the GATING shots.
-    for (const el of [8, -18, 30]) {
+    // back-faces — so these are the GATING shots. `orbitEls` is the per-asset override
+    // (ASSET_DEFS) for assets whose underside is buried by design.
+    for (const el of (orbitEls || [8, -18, 30])) {
       for (let az = 0; az < 360; az += 30) {
         const a = (az * Math.PI) / 180, e = (el * Math.PI) / 180;
         shots.push({ name: `orbit-el${el}-az${az}`, interior: false, pos: [c.x + Math.sin(a) * Math.cos(e) * dist, c.y + Math.sin(e) * dist, c.z + Math.cos(a) * Math.cos(e) * dist], look: [c.x, c.y, c.z] });
@@ -590,10 +683,17 @@ async function installSolidLib() {
     renderer.setRenderTarget(prevTarget);
     renderer.setClearColor(prevClear, prevClearA);
     for (const [ch, v] of prevVis) ch.visible = v;
+    if (prevParent) prevParent.attach(root);
     rt.dispose(); mat.dispose();
 
     // GATE on EXTERIOR shots only (interior back-faces are expected for a shell).
     const ext = results.filter((s) => !s.interior && s.silhouette >= P.minSilhouette);
+    // ZERO valid exterior frames is a HARNESS defect (asset never rendered ≥ minSilhouette px —
+    // wrong root, bad orbit, isolation bug), and it used to read as a clean pass. Fail LOUD: a
+    // check that measured nothing must never report OK (gate-instrument-responsiveness).
+    if (ext.length === 0) {
+      return { pass: false, seeThroughAngles: [], worstExteriorAngle: null, interiorViews_informational: [], shotsRendered: results.length, noValidFrames: `0 of ${results.filter((s) => !s.interior).length} exterior frames reached minSilhouette=${P.minSilhouette}px — the check measured NOTHING (orbit/isolation bug), refusing to pass vacuously` };
+    }
     const bad = ext.filter((s) => s.frac > P.bleedFrac).sort((a, b) => b.frac - a.frac);
     const worst = ext.slice().sort((a, b) => b.frac - a.frac)[0];
     const interiorInfo = results.filter((s) => s.interior && s.silhouette >= P.minSilhouette)
@@ -966,10 +1066,14 @@ async function installSolidLib() {
     const comps = lib.connectivity(root);
     const openings = lib.openingsOf(root, cfg);
     const out = { name, rootName: spawn.rootName, enclosure: cfg.enclosure, center: { x: +center.x.toFixed(1), y: +center.y.toFixed(1), z: +center.z.toFixed(1), radius: +center.radius.toFixed(1) }, hasProbe: !!probe, declaredOpenings: openings.map((o) => ({ at: [+o.center.x.toFixed(1), +o.center.y.toFixed(1), +o.center.z.toFixed(1)], radius: +o.radius.toFixed(1), by: o.declaredBy })), checks: {} };
-    out.checks.thin = lib.checkThin(root, P);
-    out.checks.backface = lib.checkBackface(root, center, P, probe);
-    out.checks.openend = lib.checkOpenEnd(comps, P, openings);
-    out.checks.floating = lib.checkFloating(comps, P);
+    // Per-asset explicit N/A (ASSET_DEFS.na): a check that CANNOT apply is declared and printed
+    // with its reason — never computed into a meaningless OK. Skipping the compute also matters
+    // for cave_tor's backface (36 offscreen renders of a check we'd then discard).
+    const naOf = (k) => (cfg.na && cfg.na[k]) ? { na: cfg.na[k] } : null;
+    out.checks.thin = naOf('thin') || lib.checkThin(root, P);
+    out.checks.backface = naOf('backface') || lib.checkBackface(root, center, P, probe, cfg.orbitEls);
+    out.checks.openend = naOf('openend') || lib.checkOpenEnd(comps, P, openings, cfg.buriedUnderside);
+    out.checks.floating = naOf('floating') || lib.checkFloating(comps, P);
     if (cfg.enclosure) {
       out.checks.collision = lib.checkCollision(root, center, probe, P);
       out.checks.seam = probe ? lib.checkSeam(root, center, probe, P) : { pass: true, na: 'no probe waypoints' };
@@ -1115,7 +1219,9 @@ async function main() {
     for (let idx = 0; idx < RUN_LIST.length; idx++) {
       const name = RUN_LIST[idx];
       if (idx > 0) await boot();     // fresh page per asset — isolate scene + GPU state
-      const cfg = { enclosure: ASSET_DEFS[name].enclosure, params: PARAMS, viteUrls };
+      // Spread the WHOLE def — a hand-picked field list here silently drops any knob ASSET_DEFS
+      // grows (na / orbitEls / buriedUnderside are all plain JSON, safe across evaluate).
+      const cfg = { ...ASSET_DEFS[name], params: PARAMS, viteUrls };
       let a;
       try { a = await page.evaluate(async ({ n, c }) => await window.__solidLib.run(n, c), { n: name, c: cfg }); }
       catch (e) { a = { name, skip: `evaluate threw: ${e.message}` }; }

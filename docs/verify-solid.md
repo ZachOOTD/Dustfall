@@ -47,6 +47,71 @@ Checks 5 & 6 are scoped to **enclosure** assets (hulls you enter). An open colon
 like the ribcage is walk-THROUGH by design, so those two report **N/A** for it (firing
 the exterior-wall probe on it would be a false positive).
 
+## Cave enrollment (2026-07-30 — CLAUDE.md rule 10's worked example)
+
+`cave_tor` (the crevice-entrance outcrop) and `cave_dais` (the egg pedestal) run in
+`--asset=all`. Back-enrolled after the dais shipped see-through into a walk-test while
+this harness sat green beside it — **coverage does not extend itself**; new
+walkable/visible geometry enrolls in the same change that creates it (rule 10).
+
+Both are found in the normally-booted origin world (seed 1337) rather than spawned:
+the tor by its `caveEntrance` group name, the dais by its `userData.eggDais` tag —
+still zero game-source changes. The spawn branch unpauses the sim while polling
+(cave generation is sliced across ticks and `paused` gates the tick loop), then
+repauses.
+
+Underground SDF solids need scoping the wreck assets don't, all explicit in
+`ASSET_DEFS`:
+
+- **`na` (per-check N/A with a printed reason)** — a check that cannot apply is
+  declared, never computed into a meaningless OK. The tor's `backface` is N/A (the
+  polygonizer's domain box clips it below terrain, so every below-horizon orbit sees
+  the by-design open underside); both assets' `floating` is N/A (the surface-terrain
+  datum sits ~20m above the cave floor).
+- **`orbitEls`** — the dais gates backface on above-horizon orbits only (`[8, 30]`);
+  its underside is an open skirt buried in the cave floor by design.
+- **`buriedUnderside`** — `openend` excuses two loop families: loops hugging the
+  component's OWN min-Y (bottom clip / buried skirt rims) and loops **planar on a
+  vertical bbox face** (the domain box's side clips — the tor's green build carries
+  two Ø26m loops on its ±Z faces). The datum is deliberately the component's own
+  extent, **never terrain height** — underground, a real hole is also "below
+  terrain", so a terrain datum would excuse the exact defect class (dais
+  see-through) the enrollment exists for. Loops planar in **Y** above the bottom
+  band are never excused: a vanished-lid hole in a near-flat top is exactly that
+  shape.
+
+Red-proofs run at enrollment (both readings shown to MOVE, per the
+gate-instrument-responsiveness canon):
+
+- **dais/backface** — the documented-bad cap winding (`t0, t1, APEX`) temporarily
+  restored → FLAG at 13.3% back-faces from every look-down angle (13× threshold).
+- **tor/openend** — a 1.2m disc of triangles temporarily punched from the top
+  surface (the vanished-lid failure mode; the tuning re-break `CREVICE_LID_MIN_M
+  0.07` no longer reproduces it — the W-4 rounds changed the natural lid thickness)
+  → FLAG on a Ø3.69m loop while both domain clips stay excused. The first punch
+  landed 1.5m from the declared mouth and was excused — which exposed a real
+  laundering channel, now closed: **a declared opening only excuses loops up to 3×
+  its radius** (a door's own rim is ~2×; bigger near a door is a tear).
+
+Also hardened during enrollment (harness-wide):
+
+- **`backface` fails loud on zero valid frames** — if no exterior orbit reaches
+  `minSilhouette`, that used to pass vacuously; it now fails naming the frame count.
+  (Found because the nested dais rendered zero frames until the isolation was fixed
+  to re-parent via `scene.attach`.)
+- The node→page config passes the **whole** `ASSET_DEFS` entry — a hand-picked field
+  list silently dropped any knob the registry grew.
+
+Honest limitations of the cave enrollment: the tor's `backface` N/A means a
+winding defect in the polygonizer's output would only surface via `openend` or a
+walk-test (accepted: surface nets wind consistently by construction; the hand-wound
+dais — where the real winding bug lived — IS backface-gated). A defect hole planar
+on a domain side face would be excused as a clip (the side faces are buried/apron
+margin, far from the visible body). The **cave shell itself** (chambers, corridors,
+pool basins) is NOT enrolled: basins are covered by the `POOL-BASIN` rig gate
+(collider-drop geometry probe), enterability by `cave-walk` (full KCC march), and
+shell openend would need its own weld-ring accounting — deferred, on record.
+
 ## How a modeler should use it
 
 Before declaring a hero asset done, run `--asset=<name>` and drive every applicable
