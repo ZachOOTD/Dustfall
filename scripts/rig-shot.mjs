@@ -6432,6 +6432,13 @@ const SCENARIOS = {
           atomicMs: +p.stream.maxAtomicMs.toFixed(1), atomicStage: p.stream.worstAtomicStage,
           tris: res ? res.tris : 0, colliderTris: res ? res.colliderTris : 0, digest: res ? res.digest : '-',
           hasEntrance: rec ? rec.hasEntrance : false,
+          // cycle 13 — the SLICED tor's own digest + its ACTIVE build time. `residents()` returns
+          // the live objects, so this reads the entrance the streamer actually built, not a rebuild.
+          ...(() => {
+            const r0 = ctx.caveStream.residents().find((rr) => rr.key === S.key);
+            const pr = r0 && r0.entrance ? r0.entrance.probe : null;
+            return { torDigest: pr ? pr.torDigest : '-', torActiveMs: pr ? pr.msTor : -1, torPhases: pr ? pr.msPhases : null };
+          })(),
           holeOpen: ctx.terrain.caveHoleKeys().includes(S.key),
           residents: p.residents.map((r) => r.key),
         };
@@ -6448,6 +6455,39 @@ const SCENARIOS = {
       if (!(arrive.colliderTris > 0)) fails.push(`${site.key}: streamed cave has 0 COLLIDER triangles`);
       if (!arrive.hasEntrance) fails.push(`${site.key}: streamed resident carries no crevice entrance`);
       if (!arrive.holeOpen) fails.push(`${site.key}: no carved terrain hole — the sheet never opened over the cave`);
+
+      // ── THE SYNC-vs-SLICED TOOTH (cycle 13) ─────────────────────────────────────────────────
+      //   The streamed tor is built by the SLICED driver (spread across frames); the reference is
+      //   the SAME builder run to completion in one call, at the SAME site and seed, in this same
+      //   page. If slicing changed WHAT is computed rather than only WHEN, these differ.
+      //
+      //   Note what is deliberately NOT asserted: any committed literal. A tor digest legitimately
+      //   moves whenever the entrance geometry is tuned (that happened eight times in the W-4
+      //   rounds). What can NEVER legitimately differ is sync vs sliced for one seed — so THAT is
+      //   the invariant, and it needs no re-baselining, ever.
+      const torRef = await page.evaluate(async (S) => {
+        const ctx = window.__game.ctx;
+        const mod = await import('/src/world/caveEntrance.ts');
+        const scratch = new window.__game.THREE.Scene();
+        // MUST MIRROR doTor EXACTLY: the SITE's own seed (not the world seed) and the default
+        // rect lid (streamed carves the rect — see caveStream's addCaveHole call). Getting either
+        // wrong builds a legitimately different tor and the tooth reports a geometry bug that is
+        // really an instrument bug. Both were wrong on the first run of this gate.
+        const e = mod.spawnCaveEntrance(scratch, ctx.physics.world, ctx.terrain, { x: S.x, z: S.z }, S.seed);
+        const out = { digest: e.probe.torDigest, tris: e.probe.torTris, ms: e.probe.msTor };
+        // Leave no trace: the reference tor is scratch geometry, and its collider would otherwise
+        // sit in the world as an invisible wall exactly where the real one stands.
+        try { ctx.physics.world.removeRigidBody(e.body); } catch { /* best effort */ }
+        scratch.clear();
+        return out;
+      }, { x: site.x, z: site.z, seed: site.seed });
+      if (arrive.torDigest === '-' ) {
+        fails.push(`${site.key}: no tor digest on the streamed resident — the sync/sliced tooth measured NOTHING`);
+      } else if (torRef.digest !== arrive.torDigest) {
+        fails.push(`${site.key}: SLICED tor digest ${arrive.torDigest} != SYNC ${torRef.digest} — slicing changed the geometry, not just its timing`);
+      }
+      if (arrive.torTrisMismatch) fails.push(`${site.key}: tor triangle count changed between drivers`);
+      details.push(`${site.key} torSync=${torRef.digest}(${torRef.tris}tri ${torRef.ms}ms) torSliced=${arrive.torDigest} match=${torRef.digest === arrive.torDigest ? 1 : 0}`);
 
       // ── THE MARCH — the identical `cave-walk` gate, pointed at this resident ───────────────
       let w = null;
@@ -6488,7 +6528,7 @@ const SCENARIOS = {
       const secs = ((Date.now() - t0) / 1000).toFixed(0);
       details.push(
         `${site.key} @(${site.x.toFixed(0)},${site.z.toFixed(0)}) d=${site.d.toFixed(0)}m seed=${site.seed} ` +
-        `arrive=${arrive.buildFrames}f/${arrive.tileFrames}tileF tor=${arrive.torMs}ms fin=${arrive.finMs}ms slice=${arrive.sliceMs}ms atomic=${arrive.atomicMs}ms(${arrive.atomicStage}) tris=${arrive.tris}/${arrive.colliderTris} hole=${arrive.holeOpen ? 1 : 0} digest=${arrive.digest} | ` +
+        `arrive=${arrive.buildFrames}f/${arrive.tileFrames}tileF tor=${arrive.torMs}ms fin=${arrive.finMs}ms slice=${arrive.sliceMs}ms atomic=${arrive.atomicMs}ms(${arrive.atomicStage}) tris=${arrive.tris}/${arrive.colliderTris} hole=${arrive.holeOpen ? 1 : 0} digest=${arrive.digest} torDigest=${arrive.torDigest} torActive=${arrive.torActiveMs}ms | ` +
         (w ? `MARCH chambers=${w.chambers} reached=${w.reached}/${w.chambers} tour=${w.tour} ascent=${w.exited ? 'OUT' : 'FAIL'} strands=${(w.strands || []).length} slope=${w.maxSlope}° head=${w.minHeadroom} chamHead=${w.chamMinHead} cover=${w.minCover} eggDepth=${w.eggDepth}m crevice=${w.entSlope}°/${w.entPinchW}m fails=${w.fails.length} | ` : 'MARCH skipped | ') +
         (v.fatal ? `VOID FATAL ${v.fatal}` : `VOID points=${v.points} rays=${v.totalRays} escapes=${v.escapes} excused=${v.excused} culled=${v.culled} holes=${v.holes}`) +
         ` | ${secs}s`,

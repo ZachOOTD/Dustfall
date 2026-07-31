@@ -36,7 +36,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { Tuning } from '../config/tuning.ts';
 import { startSpawnCave, type CaveJunction, type CaveSpawnJob, type SpawnedCave } from './caveGen.ts';
 import type { CaveKind } from './caveKinds.ts';   // DEEPER cycle 9 — cave kinds
-import { caveEntranceHoleBlocks, spawnCaveEntrance, type CaveEntrance } from './caveEntrance.ts';
+import { caveEntranceHoleBlocks, startSpawnCaveEntrance, type CaveEntrance, type CaveEntranceJob } from './caveEntrance.ts';
 import { releaseCavePoolMaterial } from './cavePools.ts';   // per-cave water material — disposed on eviction
 import type { Terrain } from './terrain.ts';
 
@@ -168,7 +168,7 @@ export interface CaveStream {
 /** The build stages that cannot be chopped, so their cost is reported apart from the slice budget:
  *  `graph` (the room-graph solve, ~1ms), `sdf:geom` (three.js computeVertexNormals over the whole
  *  index buffer), `dress` (speleothems + fungi), `finalize` (the Rapier trimesh bake + scene.add). */
-const ATOMIC_STAGES = new Set(['graph', 'sdf:geom', 'dress', 'finalize']);
+const ATOMIC_STAGES = new Set(['graph', 'sdf:geom', 'dress', 'finalize', 'tor:geom', 'tor:finalize']);
 
 /** Padded interior bounds from the room graph (chamber ellipsoids + their floors/ceilings). */
 function caveBounds(cave: SpawnedCave): THREE.Box3 {
@@ -244,6 +244,8 @@ export function createCaveStream(
   const queue: QueueItem[] = [];
   interface Inflight extends QueueItem {
     entrance: CaveEntrance | null;
+    /** cycle 13 — the tor's own resumable build, stepped before `job` (the interior) starts. */
+    torJob: CaveEntranceJob | null;
     job: CaveSpawnJob | null;
     /** 0 = not started, 1 = compiling, 2 = done/skipped (see `doWarm`). */
     warmState: 0 | 1 | 2;
@@ -370,27 +372,47 @@ export function createCaveStream(
     }
   };
 
-  /** Stage 1 of a streamed build: the crevice tor.
+  /** Stage 1 of a streamed build: the crevice tor. SLICED as of cycle 13.
    *
-   *  ⚠ THE ONE UNSLICED STAGE, measured and named rather than hidden. `spawnCaveEntrance` is a
-   *  single ~180ms call (measured at boot: `CAVE-PRELOAD … ent=180.1`) — a local SDF + surface-nets
-   *  pass over the tor's own voxel grid. Its field fill IS a pure per-column loop and is sliceable
-   *  on exactly the S6/D296 pattern the interior already uses, but that refactor cuts through the
-   *  geometry cycles 4 and 7 tuned and did not fit this cycle. So it runs whole, on its OWN frame,
-   *  reported through `maxTorMs` and gated by its own tripwire — never blended into `maxAtomicMs`,
-   *  where a 180ms stage would hide behind the interior's ~90ms bake.
+   *  It used to be the one unsliced stage — a single ~180-255ms call, and the worst frame in the
+   *  game. It is now the same resumable-job shape as the interior (`startSpawnCaveEntrance`), and
+   *  for the same reason: the divisible work (column precompute, field fill, polygonizer, vertex
+   *  colour ≈ 194ms of a measured 255ms) spreads across frames, leaving only the genuinely
+   *  indivisible residue on any one frame — `tor:geom` (`computeVertexNormals`, ~5ms) and
+   *  `tor:finalize` (the Rapier trimesh bake of ~63k tris, ~55ms).
    *
-   *  The tor goes live (mesh + its trimesh collider together — `spawnCaveEntrance` does both) while
-   *  the interior is still building. That is safe and deliberate: with no hole yet, it is simply a
-   *  solid rock outcrop with a fissure in it, and the terrain sheet under it is intact. Nothing is
-   *  drawn that is not also solid, which is what rule 9 asks. */
+   *  ⚠ THE HONEST LIMIT, stated rather than buried: this does NOT put the tor under a 16ms frame
+   *  budget and cannot. No slicer can chop a single `ColliderDesc.trimesh` call — the same limit
+   *  this file already states for the interior. What it buys is real: the tor stops being the worst
+   *  frame in the game and lands in the same class as the interior bake the game already ships.
+   *
+   *  `maxTorMs` still reports the tor's worst SINGLE frame (not its total), so the tripwire keeps
+   *  measuring what it always measured; atomic tor stages are additionally booked to
+   *  `maxAtomicMs`/`worstAtomicStage` via ATOMIC_STAGES, so a blown bake can never hide inside a
+   *  slice budget or vice versa.
+   *
+   *  The tor goes live (mesh + its trimesh collider together) while the interior is still building.
+   *  That is safe and deliberate: with no hole yet, it is simply a solid rock outcrop with a fissure
+   *  in it, and the terrain sheet under it is intact. Nothing is drawn that is not also solid, which
+   *  is what rule 9 asks. Slicing does not change that ordering — the entrance is published only on
+   *  the step that completes it. */
   const doTor = (f: Inflight): void => {
+    if (!f.torJob) {
+      f.torJob = startSpawnCaveEntrance(scene, world, terrain, { x: f.site!.x, z: f.site!.z }, f.seed);
+    }
+    const stageBefore = `tor:${f.torJob.stage()}`;
     const t0 = performance.now();
-    f.entrance = spawnCaveEntrance(scene, world, terrain, { x: f.site!.x, z: f.site!.z }, f.seed);
+    const done = f.torJob.step(Tuning.CAVE_BUILD_SLICE_MS);
     const ms = performance.now() - t0;
     if (ms > perf.maxTorMs) perf.maxTorMs = ms;
     perf.steps++;
     if (ms > perf.maxStepMs) perf.maxStepMs = ms;
+    if (ATOMIC_STAGES.has(stageBefore)) {
+      if (ms > perf.maxAtomicMs) { perf.maxAtomicMs = ms; perf.worstAtomicStage = stageBefore; }
+    } else if (ms > perf.maxSliceMs) {
+      perf.maxSliceMs = ms;
+    }
+    if (done) f.entrance = f.torJob.result();
   };
 
   /** ── THE SHADER WARM-UP — the fix for the 1.6-SECOND FINALIZE FRAME (DEEPER cycle 8, closing).
@@ -465,7 +487,7 @@ export function createCaveStream(
 
     if (!inflight && queue.length) {
       const next = queue.shift()!;
-      inflight = { ...next, entrance: null, job: null, warmState: 0, warmFrames: 0 };
+      inflight = { ...next, entrance: null, torJob: null, job: null, warmState: 0, warmFrames: 0 };
       // A body-only request (the legacy probe hook) already has its junction; a SITE request has to
       // build the crevice first, because the crevice IS what produces the junction the cave hangs
       // off. Either way the tor gets its own frame — never stacked onto a slice step.

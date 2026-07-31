@@ -73,7 +73,7 @@ import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { CaveJunction, CreviceStation } from './caveGen.ts';
 import { makeCaveRockMaterial } from './caveGen.ts';
-import { caveVertexColor, surfaceNets } from './caveSdf.ts';
+import { caveVertexColor, startSurfaceNets } from './caveSdf.ts';
 
 /** The tor's rock: the cave-surface material with its own (much weaker) bump uniform — same
  *  compiled program. See the round-1 note in caveGen.ts: the interior's 1.15 reads as camouflage
@@ -651,8 +651,66 @@ export interface CaveEntrance {
   line: CreviceLine;
 }
 
+/** The sliced tor build's stage names, in run order. `cols` / `field` / `cells` / `quads` /
+ *  `color` are resumable at plane (or vertex-run) granularity; `setup`, `geom` and `finalize` are
+ *  INDIVISIBLE — `geom` is one `computeVertexNormals` pass inside three.js, and `finalize` is the
+ *  Rapier trimesh bake, which no slicer can chop (`caveStream.ts` states the same limit for the
+ *  interior). */
+export type CaveEntranceStage = 'setup' | 'cols' | 'field' | 'cells' | 'quads' | 'geom' | 'color' | 'finalize' | 'done';
+
+/** A resumable tor build. `step(budgetMs)` runs until the frame budget is consumed (an indivisible
+ *  stage always runs to its end) and returns true when the build is COMPLETE.
+ *
+ *  THE INVARIANT (the same one `CaveSdfJob` states, and the reason `torDigest` exists): slicing
+ *  changes only WHEN work runs, never WHAT it computes. This is enforced BY CONSTRUCTION rather
+ *  than by review — the body below is a generator, so every local, loop counter and partially
+ *  filled array is preserved across a suspend by the language itself. There is no hand-hoisted
+ *  state to get wrong. `spawnCaveEntrance` is this same job driven with an infinite budget, so the
+ *  sync and sliced builders are literally the SAME CODE and cannot diverge: a `torDigest` change
+ *  between them is a real geometry bug, never a re-baseline. */
+export interface CaveEntranceJob {
+  step(budgetMs: number): boolean;
+  stage(): CaveEntranceStage;
+  /** Valid only once `step` has returned true. */
+  result(): CaveEntrance;
+}
+
+/** Start a SLICED tor build. Drive with `step(budgetMs)` until it returns true. */
+export function startSpawnCaveEntrance(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  site: { x: number; z: number },
+  seed: number,
+  holeRect = true,
+): CaveEntranceJob {
+  const ctl = { deadline: 0 };
+  const gen = torBuild(scene, world, terrain, site, seed, holeRect, ctl);
+  let cur: CaveEntranceStage = 'setup';
+  let out: CaveEntrance | null = null;
+  return {
+    step(budgetMs: number): boolean {
+      if (out) return true;
+      ctl.deadline = performance.now() + budgetMs;
+      const r = gen.next();
+      if (r.done) { out = r.value; cur = 'done'; return true; }
+      cur = r.value;
+      return false;
+    },
+    stage: () => cur,
+    result: () => {
+      if (!out) throw new Error('CaveEntranceJob.result() before completion');
+      return out;
+    },
+  };
+}
+
 /** Build + place the crevice: the tor solid (visual + trimesh collider) and the hand-off that
- *  carries the descent slot into the cave's own SDF field. */
+ *  carries the descent slot into the cave's own SDF field.
+ *
+ *  SYNCHRONOUS driver — the generator run with an infinite budget, so it is the same code path the
+ *  streamed build takes. Used by the boot preload (behind the boot overlay, where stretching the
+ *  build across frames would buy nothing) and by every probe/gate that wants a tor in one call. */
 export function spawnCaveEntrance(
   scene: THREE.Scene,
   world: RAPIER.World,
@@ -665,6 +723,25 @@ export function spawnCaveEntrance(
    *  rock over them: a pit into the void. The main.ts origin call passes true. */
   holeRect = true,
 ): CaveEntrance {
+  const j = startSpawnCaveEntrance(scene, world, terrain, site, seed, holeRect);
+  while (!j.step(Infinity)) { /* run to completion */ }
+  return j.result();
+}
+
+/** THE BUILDER. A generator so the sliced and sync drivers are the same code (see
+ *  `CaveEntranceJob`). `ctl.deadline` is re-read at every suspend point, so the driver can change
+ *  the budget per frame; `yield*` on the local `chk` helper is the suspend, and it also books the
+ *  elapsed time to the right phase so `msPhases` measures ACTIVE build time rather than wall-clock
+ *  across the frames the build was parked. */
+function* torBuild(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  site: { x: number; z: number },
+  seed: number,
+  holeRect: boolean,
+  ctl: { deadline: number },
+): Generator<CaveEntranceStage, CaveEntrance, void> {
   const T = Tuning;
   const t0 = performance.now();
   const block = caveEntranceHoleBlock(site);
@@ -774,8 +851,24 @@ export function spawnCaveEntrance(
   const colRoof = new Float32Array(cw * cd);       // fissure roof Y (far above the rock top where open to the sky)
   const colPerp = new Float32Array(cw * cd);       // signed distance from the slot axis
   const colBound = new Float32Array(cw * cd);      // horizontal closure term
-  const _msSetup = performance.now() - t0;
-  let _tp = performance.now();
+  const _ph = { setup: 0, cols: 0, field: 0, nets: 0, geom: 0, color: 0, finalize: 0 };
+  let _seg = performance.now();
+  /** Book time to `stage`, and SUSPEND if the frame budget is gone. Resuming re-bases the segment
+   *  clock, so parked frames never land in any phase's number. */
+  function* chk(stage: CaveEntranceStage & keyof typeof _ph): Generator<CaveEntranceStage, void, void> {
+    const now = performance.now();
+    if (now < ctl.deadline) return;
+    _ph[stage] += now - _seg;
+    yield stage;
+    _seg = performance.now();
+  }
+  const book = (stage: keyof typeof _ph): void => {
+    const now = performance.now();
+    _ph[stage] += now - _seg;
+    _seg = now;
+  };
+  _ph.setup = performance.now() - t0;
+  _seg = performance.now();
   let yLo = Infinity, yHi = -Infinity;
   const SKY = T.CREVICE_SKY_RUN, TAPER = T.CREVICE_SKY_TAPER;
   const smoothstep = (a: number, b: number, x: number): number => {
@@ -1071,8 +1164,9 @@ export function spawnCaveEntrance(
       if (colBot[o] < yLo) yLo = colBot[o];
       if (top > yHi) yHi = top;
     }
+    yield* chk('cols');
   }
-  const _msCols = performance.now() - _tp; _tp = performance.now();
+  book('cols');
   const gy0 = yLo - VOX * 2, gy1 = yHi + VOX * 2;
   const ny = Math.ceil((gy1 - gy0) / VOX);
   const ch = ny + 1;
@@ -1125,11 +1219,18 @@ export function spawnCaveEntrance(
         field[(k * ch + j) * cw + i] = f;
       }
     }
+    yield* chk('field');
   }
 
-  const _msField = performance.now() - _tp; _tp = performance.now();
-  const nets = surfaceNets(field, cw, ch, cd, gx0, gy0, gz0, VOX);
-  const _msNets = performance.now() - _tp; _tp = performance.now();
+  book('field');
+  // The polygonizer was ALREADY resumable (`startSurfaceNets` — the interior drives it every frame
+  // in the shipped game); the tor was simply calling the synchronous convenience wrapper. Driving
+  // the job directly is the whole change, and it is why `nets` needed no new polygonizer code.
+  const _nj = startSurfaceNets(field, cw, ch, cd, gx0, gy0, gz0, VOX);
+  while (!_nj.stepCells(ctl.deadline)) { _ph.nets += performance.now() - _seg; yield 'cells'; _seg = performance.now(); }
+  while (!_nj.stepQuads(ctl.deadline)) { _ph.nets += performance.now() - _seg; yield 'quads'; _seg = performance.now(); }
+  const nets = _nj.out;
+  book('nets');
   const nv = nets.vx.length;
   const pos = new Float32Array(nv * 3);
   for (let v = 0; v < nv; v++) { pos[v * 3] = nets.vx[v]; pos[v * 3 + 1] = nets.vy[v]; pos[v * 3 + 2] = nets.vz[v]; }
@@ -1137,7 +1238,7 @@ export function spawnCaveEntrance(
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setIndex(nets.idx);
   geo.computeVertexNormals();
-  const _msGeom = performance.now() - _tp; _tp = performance.now();
+  book('geom');
 
   // ── Vertex colour: sun-bleached desert rock outside, blending to the cave palette as the
   //    surface drops into the fissure. Same palette function as the cave body (one copy). ──
@@ -1169,6 +1270,7 @@ export function spawnCaveEntrance(
   };
   const legacy = new THREE.Color(); const groundRock = new THREE.Color(); const ex = new THREE.Color();
   for (let v = 0; v < nv; v++) {
+    if ((v & 4095) === 0) yield* chk('color');
     const wx = nets.vx[v], wy = nets.vy[v], wz = nets.vz[v];
     caveVertexColor('wall', wx, wy, wz, 0, cnoise, c, nrm.getY(v));
     // depth below the local terrain → 0 at/above the surface, 1 by 3.5m down
@@ -1206,7 +1308,7 @@ export function spawnCaveEntrance(
     col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const _msColor = performance.now() - _tp; _tp = performance.now();
+  book('color');
 
   const group = new THREE.Group();
   group.name = 'caveEntrance';
@@ -1224,7 +1326,7 @@ export function spawnCaveEntrance(
 
   // Rule 9 — the collider IS the drawn geometry.
   const body = makeStaticTrimesh(world, [mesh], { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }, new THREE.Matrix4());
-  const _msFinalize = performance.now() - _tp;
+  book('finalize');
 
   // THE DECLARED OPENING (the leviathan lesson): the sky-open slot is the cave's front door, not a
   // defect. `cave-void` excuses rays through it by this explicit declaration — never by a loosened
@@ -1237,7 +1339,10 @@ export function spawnCaveEntrance(
   };
 
   const tris = nets.idx.length / 3;
-  const msTor = +(performance.now() - t0).toFixed(1);
+  // ACTIVE build time (the sum of the phases), NOT wall-clock since t0 — a sliced build is parked
+  // across frames it did not consume, and charging that to the tor would make the slicing look like
+  // a 10x regression in the very number that motivated it.
+  const msTor = +(_ph.setup + _ph.cols + _ph.field + _ph.nets + _ph.geom + _ph.color + _ph.finalize).toFixed(1);
 
   const waypoints: Array<{ name: string; x: number; y: number; z: number }> = [
     { name: 'outside', x: site.x - 11, y: terrain.pureHeightAt(site.x - 11, site.z), z: site.z },
@@ -1265,9 +1370,9 @@ export function spawnCaveEntrance(
     msTor,
     torDigest: torMeshDigest(geo),
     msPhases: {
-      setup: +_msSetup.toFixed(1), cols: +_msCols.toFixed(1), field: +_msField.toFixed(1),
-      nets: +_msNets.toFixed(1), geom: +_msGeom.toFixed(1), color: +_msColor.toFixed(1),
-      finalize: +_msFinalize.toFixed(1),
+      setup: +_ph.setup.toFixed(1), cols: +_ph.cols.toFixed(1), field: +_ph.field.toFixed(1),
+      nets: +_ph.nets.toFixed(1), geom: +_ph.geom.toFixed(1), color: +_ph.color.toFixed(1),
+      finalize: +_ph.finalize.toFixed(1),
     },
     waypoints,
   };
