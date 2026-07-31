@@ -481,3 +481,42 @@ Enrolling `cave_tor`/`cave_dais` (rule 10's worked example) forced three detecto
 tested the instrument. **Considered alternatives:** terrain-height datum (rejected: excuses
 underground defects); computing then discarding N/A checks (rejected: 36 wasted renders + a
 meaningless OK in the report).
+
+## D321 — the tor build is sliced with a GENERATOR, and its tooth asserts sync==sliced rather than a literal (cycle 13, 2026-07-31)
+
+**friction-score: 2**
+
+Three calls, each of which had a plausible alternative:
+
+**1. A generator, not hand-hoisted closure state.** The cycle-13 plan budgeted ~200 touched lines in
+`caveEntrance.ts` to hoist locals into closure state with a resumable `k` index — the pattern
+`caveSdf.ts` uses. A generator gets the same result in ~25 touched lines, because the invariant we
+need ("slicing changes only WHEN work runs, never WHAT it computes") is exactly what a generator
+guarantees BY CONSTRUCTION: every local, loop counter and half-filled array is preserved by the
+language at the suspend point. Manual hoisting is ~200 opportunities to typo a variable into the
+wrong scope inside geometry that had just taken eight rounds of visual tuning. **Considered
+alternatives:** the manual hoist (rejected: strictly more risk for the same outcome); leaving the tor
+unsliced (rejected: it was the worst frame in the game).
+
+**2. The tooth asserts sync == sliced, NOT a committed digest literal.** A tor digest legitimately
+moves whenever entrance geometry is tuned — it moved eight times during the W-4 rounds alone — so a
+literal would be re-baselined routinely, and a gate that gets re-baselined routinely teaches the
+team to re-baseline it when it is right. What can NEVER legitimately differ is the same seed built
+two ways. That invariant needs no maintenance, ever.
+
+**3. `msTor` reports ACTIVE build time (the phase sum), not wall-clock since t0.** A sliced build is
+parked across frames it did not consume; charging those to the tor would make the slicing read as a
+10x regression in the very number that motivated it. The worst-FRAME number (`maxTorMs`) is
+unchanged in meaning and is what the tripwire still watches.
+
+**When:** cycle 13, the closing perf item.
+**Why it matters beyond the tor:** the first run of the new gate went RED, and it was the
+INSTRUMENT — the sync reference used the world seed and `holeRect=false` while `doTor` uses the
+site's own seed and the rect lid, so it built a legitimately different tor and reported a geometry
+bug. The gate was believed for about a minute. Any A/B tooth that REBUILDS a reference must mirror
+its subject's construction arguments exactly, and the mirroring requirement now sits at the call
+site as a comment.
+
+**The honest limit, on record:** slicing does not put the tor under a 16ms frame budget and cannot —
+~55ms of it is one `ColliderDesc.trimesh` bake, which no slicer chops. 255ms -> 58ms is the win;
+"under budget" was never available and the plan was right to refuse to promise it.

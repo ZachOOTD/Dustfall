@@ -25,10 +25,12 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
   in `caveSdf.ts`. One-line comment fix, deferred out of cycle 2 only to avoid an HMR reload
   mid-gate-sweep.
 
-- `[debt]` **Tor build cost ~236ms at entrance spawn (was ~150)** — grew across the W-4 rounds
-  (edge lobes, biome tint per-vertex ground sampling, hug pass). Cycle-13 slicing candidate;
-  `docs/campaign/cycle-13-plan.md` exists but its "tor is in no digest" premise is FALSE as
-  written (the mouth sill feeds the SDF via the descent line) — re-read before executing.
+- `[polish]` **The tor's vertex-COLOUR pass costs 74.7ms of a 255ms build (29%)** — measured in
+  cycle 13. It is the W-4 biome tint sampling ground per vertex through a 1.6m cache, plus a
+  per-vertex `new THREE.Color()` in the hot loop. Now SLICED (so it no longer hitches), but it is
+  still the single most expensive phase and the allocation hoist is value-identical and free.
+  NOT done tonight because the tint is a thing Zach signed off on by eye and colour is outside
+  `torDigest` (positions only) — so it wants a visual A/B, not an unattended edit.
 - `[polish]` **Rim dark line at extreme grazing angles** (W-4 residual, on record in the W-4
   commit) — the skirt toe wants a sand-lap term (new geometry, not a tint) where the tor meets
   the terrain. Accepted for ship; revisit if Zach re-flags it on a walk.

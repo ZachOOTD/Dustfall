@@ -1,52 +1,54 @@
-# Next session — Kickoff brief (post-DEEPER, 2026-07-30)
+# Next session — Kickoff brief (2026-07-31, after the cycle-13 night)
 
-**State:** campaign DEEPER is **COMPLETE**; its content is LIVE on master. Branch
-`campaign/2026-07-24-deeper`, tree clean. No campaign is running — this is a FREE session; Zach
-picks the direction. The SPEED RULES + EFFICIENCY WATCH + PROCESS LEVERS in
-`docs/campaign/steering.md` remain in force for any Dustfall work (they are standing, not
-campaign-scoped).
+**State:** campaign DEEPER is COMPLETE (its content is LIVE on master). Overnight, cycle 13 ran on
+branch `campaign/2026-07-24-deeper`: **the tor build is sliced** — the worst frame in the game
+(255ms) is gone. **PUSH IS HELD** for your review; nothing went to master.
 
-## Read these now (in order)
+## What happened overnight (3 commits)
 
-1. `CLAUDE.md` (auto-loaded — rules 1-10; rule 10 is new: geometry ENROLLS in verify:solid)
-2. `docs/session-end-report.md` — cumulative state through DEEPER
-3. `docs/roadmap.md` §Up next — the post-DEEPER menu
-4. `docs/backlog.md` §PENDING — residuals with their proofs
-5. `docs/decisions.md` — D277+ active (older archived); D315-D320 are this stretch's calls
+1. `27788af` **A1 — torDigest + phase timing.** The tor mesh was in NO digest anywhere, so a bug
+   that moved a vertex would ship green. Fixed first, on its own merits. Also added a per-phase
+   split, which corrected the plan's design premise: the field fill was NOT the big cost (20.9ms);
+   the **vertex colour pass is** (74.7ms, 29%).
+2. `4eb26c6` **A2+A3 — the slicing + its tooth.** Worst tor frame **255ms → 58.3ms** (active build
+   time unchanged — this spreads work, it does not speed it up). Done with a GENERATOR (~25 lines
+   touched) instead of the plan's ~200-line hand-hoist. The tooth asserts **sync == sliced**, never
+   a literal, and was RED-PROVEN. Its first red was an INSTRUMENT bug, caught and fixed.
+3. `<docs>` — changelog, D321, backlog.
 
-## Direction menu (Zach picks — do NOT self-select a big-ticket item)
+## The honest limit (please read this one)
 
-1. **Owed taste passes** (attended, cheap): cave feel (`CAVE_*`), economy feel (lootRegistry +
-   recipe costs, `verify:loot` gates it), Deep-Desert tweaks — pure tuning/data, walk-verified
-   live with Zach. ⚑ `CAVE_BEAT_CACHE` contents need his approval (economy-morning-gate).
-2. **Cycle-13 tor slicing** (perf): tor build ~236ms → slice across frames.
-   ⚠ `docs/campaign/cycle-13-plan.md` has a FALSE premise ("the tor is in no digest") — the
-   mouth sill feeds the SDF via the descent line; re-derive the digest impact first.
-3. **Character / multiplayer** — run the GDD multiplayer re-anchor interview BEFORE any build;
-   research digests in `docs/research/`.
-4. **Audio listen session** (attended) · desktop exe rebuild (`npm run tauri:build`).
+Slicing does NOT put the tor under a 16ms frame budget and **cannot**: ~55ms of it is a single
+`ColliderDesc.trimesh` bake, which no slicer chops. The tor is no longer the worst frame in the
+game and now sits in the same class as the interior bake the game already ships — that is the whole
+win, and "under budget" was never available.
 
-## Notable footguns
+## What to do first
 
-- ⚠ `CREVICE_APRON_RISE` is LOAD-BEARING (descent line → junction → every chamber floor).
-  Grep consumers before tuning ANY cosmetic-looking constant (D-entry + framework canon
-  `refactor-debt-when-superseding-a-constant.md`).
-- Origin digests (ec2ebf98 / 876749d6) move with ANY cave vertex change — re-baselines are
-  SANCTIONED only for user-requested geometry changes, recorded in the commit.
-- The two-null-fix tripwire + the angle handshake + critic-before-present are in force
-  (steering.md §PROCESS LEVERS).
-- New walkable/visible geometry enrolls in `verify:solid` same-change (rule 10), with a
-  red-proof that the reading MOVES.
-- Probes ONLY via `npm run rig -- --scenario=… --port=52xx`; full suite once per batch; long
-  gates under the orchestrator's own tracked background shell (STALL RULE).
+1. **Walk it.** A streamed cave arriving should no longer hitch the way it did. The tor now appears
+   over a few frames instead of one long stall — worth confirming that reads as smooth rather than
+   as a pop-in you dislike. (`__game.gotoErg()`-style helpers aside, just walk toward a far cave.)
+2. **Decide on push/merge.** Three commits, all gate-green, all revertible independently.
+3. Then the menu in [roadmap.md](roadmap.md) §Up next — taste passes are still the cheapest win,
+   and `CAVE_BEAT_CACHE` contents are still your call (⚑ economy gate).
+
+## Live follow-up, deliberately NOT done unattended
+
+The tor's **colour pass (74.7ms)** is the biggest remaining phase. It has a free, value-identical
+win available (a `new THREE.Color()` allocated per vertex in the hot loop). I did not take it
+because the biome tint is something you approved BY EYE and colour sits outside `torDigest`
+(positions only) — so it wants a visual A/B with you, not a night edit. Logged in
+[backlog.md](backlog.md).
+
+## Footguns unchanged
+
+- ⚠ `CREVICE_APRON_RISE` is load-bearing (descent line → chamber floors → caveDigest).
+- Any A/B tooth that REBUILDS a reference must mirror its subject's construction args exactly
+  (this bit us at 01:00 — world seed vs site seed, rect vs raster lid).
+- Rule 10: new walkable/visible geometry enrolls in `verify:solid` same-change, red-proven.
+- Probes only via `npm run rig -- --scenario=… --port=52xx`; never edit src with a probe in flight.
 
 ## Verification protocol
 
-`npm run verify` (tsc) per edit batch · `npm run verify:solid` when geometry changes (6 assets)
-· the relevant `verify:chunks` legs for cave/stream work (`--legs=` filter), full 22-leg suite
-ONCE at close · `verify:loot` for any economy data edit.
-
-## Begin
-
-Confirm the direction with Zach if he hasn't named one, TaskCreate the picked item's subtasks,
-then start. If he named it in his first message, skip the confirm and go.
+`npm run verify` (tsc) · `npm run verify:chunks` (full suite, run at close last night) ·
+`npm run verify:solid` (6 assets incl. cave_tor/cave_dais) · `verify:loot` for economy data edits.

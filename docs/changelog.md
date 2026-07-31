@@ -3,6 +3,18 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Cycle 13 — 2026-07-31 — the tor build is SLICED: the worst frame in the game, removed ✓ gates
+
+`verified` — tsc clean; the new sync-vs-sliced tooth green on both streamed sites and RED-PROVEN; full `verify:chunks` at close.
+
+- **The crevice tor was the worst frame in the game — 255.6ms measured** (seed 1337, 63,344 tris), and the last unsliced build stage. It is now a **resumable job**: divisible work (column precompute / field fill / polygonizer / vertex colour ≈ 194ms) spreads across frames, leaving only the indivisible residue. **Worst tor frame 255ms → 58.3ms** streamed; active build time unchanged at ~256ms (this spreads work, it does not make it cheaper — and `msTor` now reports ACTIVE time so a parked build cannot read as a 10× regression).
+- **MEASURE-FIRST corrected the plan's design premise.** The plan called the field fill "the big one"; measured, it is the SMALLEST divisible phase (20.9ms). The real cost is the **vertex colour pass at 74.7ms** (29%) — the W-4 biome tint samples ground per vertex. Phase split now ships on the `CAVE-TOR` probe line, so a perf regression is attributable to a stage instead of to one 250ms total. (The plan's one DERIVED number — bake 45-65ms — measured 55.6ms: accurate.)
+- **A GENERATOR, not the plan's ~200-line hand-hoist** (D321). The invariant "slicing changes only WHEN work runs, never WHAT it computes" is what a generator guarantees by construction; ~25 lines touched instead of ~200 through geometry that had just taken eight visual rounds. The polygonizer needed no new code — `startSurfaceNets` was already resumable and shipping in the interior; the tor had simply been calling the sync wrapper.
+- **`torDigest` (A1) landed FIRST, as its own commit.** `caveDigest` hashes the cave graph + CAVE meshes; the tor is neither, so every tor vertex was in **no digest anywhere** and a bug that moved one would ship green. (Distinct from the true-but-different fact that tor *constants* are digest-coupled via the descent line.)
+- **The tooth asserts sync == sliced, never a literal** — a tor digest legitimately moves whenever entrance geometry is tuned (eight times in W-4), so a literal would be re-baselined routinely; the same seed built two ways can never legitimately differ. **RED-PROVEN**: a sliced-path-only 2cm nudge flipped both sites red with sync references unchanged.
+- **The gate's first RED was the INSTRUMENT, not the code** — the reference built with the world seed and `holeRect=false` while `doTor` uses the site's own seed and the rect lid. Fixed in the reference; the mirroring requirement now sits at the call site.
+- **The honest limit, stated not buried:** this does NOT get the tor under 16ms and cannot — ~55ms is one `ColliderDesc.trimesh` bake, which no slicer chops (the same limit this codebase already states for the interior). D321.
+
 ## Campaign "DEEPER" close — 2026-07-29/30 — the walk-test batch, loot-beside-bodies, and the process reflection ✓ gates · CAMPAIGN COMPLETE, LIVE on master
 
 `verified` — tsc clean; batch gate of record 20260729T214916Z (22 legs green incl. every new sub-gate: BEAT-SITES / BEAT-BUILD / STORM-CAVE / POOL-BASIN / CACHE-BODIES, each red-proven); verify:solid 6/6 assets + selftest PASS. Two master deploys at Zach's request — the walk-test batch and loot-beside-bodies are LIVE.
