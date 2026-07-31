@@ -25,6 +25,20 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
   in `caveSdf.ts`. One-line comment fix, deferred out of cycle 2 only to avoid an HMR reload
   mid-gate-sweep.
 
+- `[debt]` **Tor build cost ~236ms at entrance spawn (was ~150)** — grew across the W-4 rounds
+  (edge lobes, biome tint per-vertex ground sampling, hug pass). Cycle-13 slicing candidate;
+  `docs/campaign/cycle-13-plan.md` exists but its "tor is in no digest" premise is FALSE as
+  written (the mouth sill feeds the SDF via the descent line) — re-read before executing.
+- `[polish]` **Rim dark line at extreme grazing angles** (W-4 residual, on record in the W-4
+  commit) — the skirt toe wants a sand-lap term (new geometry, not a tint) where the tor meets
+  the terrain. Accepted for ship; revisit if Zach re-flags it on a walk.
+- `[polish]` **Overhead outline still broadly quad at the largest scale** (W-4.6 residual,
+  structural — the carved-hole rect is the cycle-9 enterability contract and the hole-shrink
+  attempt failed RED twice; kept as proof in `caveEntranceHoleBlocks`). Accepted; only worth
+  reopening with a fundamentally different hole raster.
+- `[idea]` **Split `scripts/rig-shot.mjs` (~21k lines) into per-scenario modules** — reflection
+  lever L6, deferred as agent-facing-only friction. Fold into cycle 13 if it touches the file.
+
 ### verify:solid gaps (found in the SOLID campaign)
 - `[debt]` **No gate catches inter-mesh sliver gaps / sub-1%-silhouette hairlines.** The Skyfall
   stern crack (#28, 2026-07-17) was a bright daylight hairline along a rim, but it was <1% of the
@@ -34,6 +48,12 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
   false-positive on legitimate open mouths) — needs its own selftest fixture + threshold tuning.
   Interim: add a synthetic hairline to `--asset=selftest` and give `checkBackface` an absolute
   back-pixel floor at grazing exterior azimuths. Deferred from #28 (non-blocking).
+- `[debt]` **The cave SHELL (chambers / corridors / pool basins) is not enrolled in `verify:solid`**
+  (rule-10 back-enrollment, 2026-07-30, covered `cave_tor` + `cave_dais` only — see
+  docs/verify-solid.md "Honest limitations"). Shell `openend` needs weld-ring accounting (the
+  entrance weld is a legitimate boundary family). Interim coverage is real: basins by the
+  `POOL-BASIN` rig gate (collider-drop), enterability by `cave-walk` (full KCC march), void by
+  `cave-void`. Enroll when the shell mesher next changes.
 
 ### Infinite Sands residuals (campaign 2026-07-10, cycles 1-6)
 - `[idea]` **Sarlacc pit ignores a mounted rider** (D297 audit). `sarlaccPit.ts` reads the raw capsule (parked at -2000 while riding) so the pit never gapes/pulls/bites at a speeder crossing it. Making it `getPlayerPos`-aware is one line for the GAPE (visual), but pull/bite would apply forces to the PARKED capsule — needs a mounted-behavior design call (bite the bike? dismount-fling? immune?). Decide at a walk-test.

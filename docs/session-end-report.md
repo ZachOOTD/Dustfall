@@ -3,46 +3,77 @@
 Cumulative state. Rewritten at each `/session-end`. Per-session detail: `docs/changelog.md`;
 campaign detail: `docs/campaign/campaign-log.md`.
 
-## Current state (2026-07-11)
+## Current state (2026-07-30)
 
-**🏁 Campaign "Infinite Sands" is COMPLETE** (7 cycles, ~1.3M/10M tokens, D288–D298). The world
-is INFINITE: deterministically streamed (S1), populated with salvageable wrecks (S2), rocks/
-vignettes/prey (S3), rare hero landmarks + regional graveyard biomes (S4), hitch-free (S6), and
-PERSISTENT — far-field changes survive save/reload via SAVE_VERSION 17's descriptor-keyed
-`chunkDiffs` (S5). The released origin world + intro are byte-identical throughout. Plus the
-D297 playtest hotfix (streaming/save read `getPlayerPos`, never the speeder-parked capsule) and,
-earlier this session, the framework-wide `reap-orphans` process-leak fix
-(`gamedev-framework@e78c1ca`).
-
-**Verify:** the permanent suite is now placement ×5 + colliders + `verify:chunks` (determinism ×2
-+ cross-seed, streaming with ride + persistence legs, generation-perf) + 5 smoke gates — ALL
-GREEN on the final state. The streaming gate's persistence legs prove the full S5 lifecycle
-including a REAL page-reload + CONTINUE.
-
-**Branch:** `campaign/2026-07-10-procgen`, 8 commits (`e82d9a7`→`5f57a5d`, `fe56a99`, `47769c8`,
-+ the S5 commit). `master` untouched; nothing pushed. **Next human action: the merge review**
-(checklist in `docs/next-session-prompt.md`).
+**Campaign "DEEPER" is COMPLETE and its content is LIVE on master** (branch
+`campaign/2026-07-24-deeper`; two master deploys at Zach's request during the close). This caps a
+five-campaign run since the last full report (2026-07-11): **Sharpen & Deepen** (Skyfall hero
+freighter + far-field deepening, M7-R→M12) · **Scavenger's Economy** (identity materials +
+unified lootRegistry, SAVE_VERSION 18) · **The Deep Desert** (multi-km ergs + the ridable sled) ·
+**Underworld** (the first cave system, D307 architecture) · **DEEPER** (the cave system rebuilt
+as watertight SDF surface-nets interiors, caves as a regular rocky-terrain feature, the
+crevice-tor entrance, wadeable pool basins, cave-as-storm-shelter, the dead-explorer story beat,
+loot-only-beside-bodies, and the process-reflection close: rule 10 + the verify:solid cave
+enrollment, D320).
 
 ## What works end-to-end
-The complete released survival game + walk (or RIDE) forever in any direction: terrain, wrecks
-with working salvage, ambient life, titan-skeleton landmarks, graveyard regions — hitch-free —
-and your changes out there now persist across save/reload. Old saves (≤v16) load unchanged.
 
-## Known gaps (all logged)
-Regenerate-only: scrap rings at streamed wrecks (S5 v2), far-field vultures (D294), regional-yard
-dense cluster read, the Sarlacc-vs-rider design call (D297), streamed-landmark horizon
-silhouettes; the §A owed feel walk-tests; content-id registration-order coupling noted in D298.
+Boot → escape-pod intro → wake in the desert → tutorial → infinite streamed persistent world
+(save/reload with far-field diffs, saves ≤v17 migrate) → hero landmarks (Skyfall enterable
+freighter, leviathan interior, bone-field ribcage, erg dune seas, the ridable sled) → caves:
+find a crevice tor in rocky terrain, squeeze in, descend in true darkness on carried light, wade
+pools, meet the dead salvager + journal + rifled cache, reach the egg dais, climb out — storms
+rage on the surface while the cave shelters you (and stays cold, never damaging). The DEEPER
+deltas: every warren carries the story beat; loot containers exist ONLY beside bodies; the
+entrance reads as a small organic desert crevice (Zach: "ok looks decent now").
 
-## Suggested next
-1. **The merge review** → merge to master → redeploy web/desktop.
-2. Resume the parked **Skyfall** campaign (plugs into the S4 landmark slot).
-3. Or the §A walk-test pile / backlog polish.
+## Known issues / partials (full list: docs/backlog.md §PENDING)
 
-## Token spend (session, approx)
-Cycles 5-7 + the D297 hotfix + the process-leak investigation ≈ 700K output tokens this session;
-campaign total ~1.3M/10M across 7 cycles — well under the ceiling, with the ladder finished.
+- ⚑ **`CAVE_BEAT_CACHE` contents await Zach** (economy gate — hand-authored array, flagged).
+- **Loot-beside-bodies is deployed but unwalked** by Zach.
+- Tor build ~236ms at spawn (cycle-13 slicing candidate; its plan carries a FALSE premise —
+  the mouth sill IS digest-coupled via the descent line — re-read before executing).
+- Rim dark line at extreme grazing + broadly-quad overhead outline at largest scale (accepted
+  W-4 residuals, on record with their failed-fix proofs).
+- Cave SHELL not enrolled in verify:solid (tor + dais are; shell needs weld-ring accounting —
+  interim coverage: POOL-BASIN / cave-walk / cave-void gates).
+- Desktop exe still pre-procgen.
+
+## Constants worth tuning (new this stretch)
+
+All in `src/config/tuning.ts`: `CAVE_*` feel dials (darkness depth, torch/lantern/flashlight
+strength, mushroom glow, drip rate) · `CREVICE_*` entrance family (mouth/pinch/deep half-widths,
+apron ramp/feather/fall, edge lobes — ⚠ `CREVICE_APRON_RISE` is LOAD-BEARING: it feeds every
+chamber floor via the descent line, see the W-4 commit) · `CAVE_POOL_DEPTH_M` /
+`CAVE_POOL_BASIN_*` · `CAVE_BEAT_*` (⚑ cache contents = Zach's call) · economy: lootRegistry
+drop tables + recipe costs (data edits behind `verify:loot`).
+
+## Suggested next session (priority order — Zach picks; menu in roadmap.md §Up next)
+
+1. **Owed taste passes** (attended, cheap): cave feel / economy feel / Deep-Desert tweaks —
+   pure tuning + data edits, walk-verified live.
+2. **Cycle-13 tor slicing** (perf, gate-first) or **character/MP re-anchor** (needs the GDD
+   multiplayer interview before any build).
+3. **Audio listen session** (attended) · desktop exe rebuild when wanted.
+
+## State at session end
+
+Branch `campaign/2026-07-24-deeper`, tree clean after the closeout commit; master carries the
+full DEEPER content (deployed + live). Gates of record: the 20260729T214916Z 22-leg suite (all
+green, every new sub-gate red-proven) + verify:solid 6/6 assets + selftest PASS (2026-07-30).
+Origin digests ec2ebf98 / 876749d6. Framework repo (`~/projects/gamedev-framework`):
+consolidation current (88 canon files), pending-drafts folder EMPTY, **local-only — no remote
+backup** (worth creating a private one; the stranded-commit episode shows the repo carries
+unrecoverable value).
+
+## Token spend
+
+Not metered this stretch (attended, multi-day, model switches). The DEEPER ceiling was REMOVED
+by Zach on 2026-07-29 ("my claude subscription covers everything") — see memory
+`budget-ceilings-advisory`; wall-clock and his-call items are the only gates now.
 
 ## Iteration-discipline self-check (rule 8)
-PASS. S5 is systems work verified by behavior-level gates (a real extraction, a real reload);
-no new visual surface. The one visual/feel item this session (the speeder streaming bug) came
-from the USER's walk-test and was fixed + A/B gate-proven same session.
+
+PASS for the stretch: W-4 ran EIGHT screenshot-critiqued rounds to Zach's live verdict; W-1/2/3
+each shipped with red-proven behavior gates + shots. The closeout portion (reflection, rule 10,
+enrollment, docs) has no visual surface — harness + process work only.

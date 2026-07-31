@@ -3,6 +3,25 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign "DEEPER" close — 2026-07-29/30 — the walk-test batch, loot-beside-bodies, and the process reflection ✓ gates · CAMPAIGN COMPLETE, LIVE on master
+
+`verified` — tsc clean; batch gate of record 20260729T214916Z (22 legs green incl. every new sub-gate: BEAT-SITES / BEAT-BUILD / STORM-CAVE / POOL-BASIN / CACHE-BODIES, each red-proven); verify:solid 6/6 assets + selftest PASS. Two master deploys at Zach's request — the walk-test batch and loot-beside-bodies are LIVE.
+
+**The walk-test batch (all four items, attended steering):**
+- **W-1 cave shelter** (`e7826b3`) — storm zeroed underground via `caveContainmentAt` (NOT `inShelter`, which red-provably kills cave cold); `STORM-CAVE` gate drives a real storm wall, asserts surface>0.5 / cave=0 / temp still walks negative.
+- **W-3 dais sealed** (`c661625`) — the egg pedestal was an open cone (no top cap, no bottom seal, a hole in the COLLIDER too); closed by construction, skirt to measured rock; first fix wound the cap −Y (caught by shot, not read).
+- **W-2 pool basins** (`0df142b`) — basins carved into the SDF floor (collider-real: you wade DOWN); dome height was the "sitting on top" read (0.26→0.10); `POOL-BASIN` gate red-proven twice.
+- **W-4 the entrance, eight named rounds** (`db66f51`..`8845673`) — fin 5.2→2.1m, horn reversed, narrow squeeze (0.62m mouth) + lip flare, collar/spine, biome-matched tint (per-vertex `groundSample`), multi-scale edge lobes at the VISIBLE contour, colBound rekeyed (the mesh-hole root cause), feather-of-the-total + early-saturating hug. Zach: "ok looks decent now." Failed attempts KEPT as proof: hole-shrink (streamed march RED ×2, retreated with the multi-rect terrain API + post-mortem in place), domain warp (fold → retired for bounded lobes), lid sand camouflage (falsified twice, retired).
+- **Skeleton unified** — one build (`makeSkeleton({tone})`), W-era model deleted (−154 lines); cave tone + bleached surface tone.
+- **Loot only exists beside a body** (`16124aa`, Zach's call) — both orphan world-scatter crate spawners DELETED (not deprecated); the single spawn path is the dead-explorer tableau; 3 origin cave caches now dead salvagers; `CACHE-BODIES` gate (every container within 2m of a body) red-proven on 3 orphans.
+
+**Process reflection (attended, closes the campaign):**
+- **Rule 10** (CLAUDE.md) — new walkable/visible geometry ENROLLS in `verify:solid` in the same change; back-enrollment `cave_tor`+`cave_dais` red-proven twice (winding flip 13.3% FLAG; tri-punch Ø3.69m FLAG after the tuning re-break proved NULL). Found + closed a real laundering channel (openings excused any-size loops; now capped 3× radius) + a vacuous-pass hole (backface on zero frames). D320.
+- **Process levers in force** (steering.md, Zach approved): critic-before-present for aesthetic asks · two-null-fix tripwire · the angle handshake · draft-at-the-D-entry.
+- **Framework consolidation** — the stranded half of the 07-29 consolidation rescued + committed; DEEPER's five drafts promoted (4 new canon files + 2 fold-ins, 88 canon total); consolidate skill now ends git-clean; post-mortem drafts at the D-entry.
+- Instrument fixes along the way: `cave-kinds` regex unable to PASS since cycle 10 (fixed + all legs swept); no-glow canary rebuilt coverage-based (D316 third instance); the Bash 600s clamp honesty rule (a cut-short gate is UNKNOWN, never green).
+- ⚑ Still Zach's call: `CAVE_BEAT_CACHE` contents. Deployed but unwalked: loot-beside-bodies.
+
 ## Campaign "DEEPER" cycle 12 — 2026-07-29 — the dead explorer: a skeleton, a journal and a cache underground ✓ gates
 
 `verified` — tsc / loot / placement / colliders green; two NEW sub-gates (`BEAT-SITES`, `BEAT-BUILD`) each run green **and red-proven**; `cave-digest` seed 1337 = `d8f15005`, unchanged. Full `verify:all` launched at hand-off.
