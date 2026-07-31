@@ -323,12 +323,19 @@ for (const seed of DET_SEEDS) {
       //      the total depth stays inside the wadeable band. Geometry answers for a geometry question:
       //      at shipping exposure the water is a near-black mirror, so a screenshot cannot tell a
       //      basin from a decal.
+      //      CACHE-BODIES (walk-test 2026-07-30): every loot container sits beside a body, and the
+      //      origin cave keeps all three caches (the count degraded silently once).
+      const cbm = out.match(/CACHE-BODIES pass=(\d) fails=(\d+)/);
+      const okCb = !!cbm && cbm[1] === '1';
+      rows.push(cbm
+        ? `cache-bodies seed ${seed}: ${cbm[2]} fails  ${okCb ? 'OK' : '*** FAIL ***'}`
+        : `cache-bodies seed ${seed}: NO PROBE LINE (the orphan-crate check never reported)  *** FAIL ***`);
       const pbm = out.match(/POOL-BASIN pass=(\d) fails=(\d+)/);
       const okP = !!pbm && pbm[1] === '1';
       rows.push(pbm
         ? `pool-basin seed ${seed}: ${pbm[2]} fails  ${okP ? 'OK' : '*** FAIL ***'}`
         : `pool-basin seed ${seed}: NO PROBE LINE (the basin probe never reported)  *** FAIL ***`);
-      return { ok: ok && okL && okC && okS && okP, data: { digest: m[3] }, rows };
+      return { ok: ok && okL && okC && okS && okP && okCb, data: { digest: m[3] }, rows };
     },
     noLineRow: [
       `pool-fill seed ${seed}: NO PROBE LINE (boot failed after retry)  *** FAIL ***`,
@@ -336,6 +343,7 @@ for (const seed of DET_SEEDS) {
       `cave-cold seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
       `storm-cave seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
       `pool-basin seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
+      `cache-bodies seed ${seed}: NO PROBE LINE (pool-fill never reported)  *** FAIL ***`,
     ],
   });
 }

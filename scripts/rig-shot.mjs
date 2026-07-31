@@ -4206,6 +4206,47 @@ const SCENARIOS = {
     console.log(`[pool-fill] STORM-CAVE ${JSON.stringify(sc.notes || {})}`);
     console.log(`STORM-CAVE pass=${(sc.fails || []).length === 0 ? 1 : 0} fails=${(sc.fails || []).length}`);
 
+    // ══ WALK-TEST 2026-07-30 — CACHE-BODIES ═════════════════════════════════════════════════════
+    //    Zach: *"lets make it so those loot boxes only spawn next to skeletons in caves … at least
+    //    beside the skeletons the loot has a story/purpose."* Two teeth, and the second exists
+    //    because the first implementation SILENTLY SHIPPED 2 CACHES INSTEAD OF 3 (the deepest
+    //    pocket held a pool, whose basin clearance covered every bearing on that room's ring — no
+    //    error, just a cache that stopped existing, which no player would ever report).
+    //      1. EVERY container has a body: each loot container is within 2m of a deadExplorer group.
+    //         A crate with no corpse beside it is the exact thing being removed from the game.
+    //      2. The origin cave still carries its full THREE caches (the count is the loot economy).
+    const cb = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const fails = []; const notes = {};
+      try {
+        const tabs = [];
+        ctx.three.scene.traverse((o) => { if (o.name === 'deadExplorer') tabs.push(o); });
+        const crates = ctx.lootContainers.list;
+        notes.tableaus = tabs.length; notes.crates = crates.length;
+        if (!crates.length) return { fails: ['no loot containers in the origin cave — nothing measured (vacuous)'], notes };
+        if (crates.length !== 3) fails.push(`origin cave has ${crates.length} caches, expected 3 — a cache silently failed placement`);
+        const orphans = [];
+        for (const cr of crates) {
+          let near = Infinity;
+          for (const t of tabs) {
+            t.updateMatrixWorld(true);
+            const p2 = new g.THREE.Vector3(); t.getWorldPosition(p2);
+            near = Math.min(near, Math.hypot(p2.x - cr.pos.x, p2.z - cr.pos.z));
+          }
+          if (!(near < 2.0)) orphans.push(`(${cr.pos.x.toFixed(0)},${cr.pos.z.toFixed(0)})@${near.toFixed(2)}m`);
+        }
+        notes.orphans = orphans.length;
+        if (orphans.length) fails.push(`${orphans.length} loot container(s) with NO body within 2m: ${orphans.join(' ')} — an orphan crate is exactly what this rule removes`);
+        return { fails, notes };
+      } catch (e) {
+        fails.push(`CACHE-BODIES threw: ${String((e && e.message) || e)}`);
+        return { fails, notes };
+      }
+    }).catch((e) => ({ fails: [`CACHE-BODIES harness threw: ${String((e && e.message) || e)}`], notes: {} }));
+    for (const f of (cb.fails || [])) { fails.push(`CACHE-BODIES ${f}`); console.log(`[pool-fill] CACHE-BODIES FAIL ${f}`); }
+    console.log(`[pool-fill] CACHE-BODIES ${JSON.stringify(cb.notes || {})}`);
+    console.log(`CACHE-BODIES pass=${(cb.fails || []).length === 0 ? 1 : 0} fails=${(cb.fails || []).length}`);
+
     // ══ WALK-TEST 2026-07-29 — POOL-BASIN ══════════════════════════════════════════════════════
     //    Zach: the pools read as *"3d water sitting on top of the terrain … it should actually sit in
     //    some kind of pool."* The floor cut is now lowered under each pool, so the hollow is in the
@@ -6954,10 +6995,24 @@ const SCENARIOS = {
             if (!crate) fails.push('no loot container within 2.5m of the beat anchor');
             notes.cacheItems = crate ? crate.contents.length : 0;
             if (crate && crate.contents.length === 0) fails.push('the cache spawned EMPTY — every grant assertion below would be vacuous');
-            let tableaus = 0;
-            ctx.three.scene.traverse((o) => { if (o.name === 'deadExplorer') tableaus++; });
-            notes.tableaus = tableaus;
-            if (tableaus !== 1) fails.push(`${tableaus} deadExplorer tableaus in the scene, expected exactly 1`);
+            // SCOPED TO THIS BEAT, not to the scene (walk-test 2026-07-30). The tooth's intent has
+            // always been "this cave's beat is exactly one tableau — not zero, not duplicated". It
+            // counted scene-wide because when it was written a tableau could ONLY be a warren beat;
+            // now the origin cave's three loot caches are tableaux too (loot only spawns beside a
+            // body), and `cave-kinds` boots the origin cave alongside the warren it builds — so the
+            // scene-wide count read 4 and the gate fired on correct behaviour. Narrowed to the
+            // anchor, both original teeth survive intact: 0 near the anchor still fails, 2 still
+            // fails. The scene-wide total is printed so a real duplication elsewhere is still visible.
+            let tableaus = 0, tableausAll = 0;
+            const tp = new g.THREE.Vector3();
+            ctx.three.scene.traverse((o) => {
+              if (o.name !== 'deadExplorer') return;
+              tableausAll++;
+              o.getWorldPosition(tp);
+              if (Math.hypot(tp.x - A.x, tp.z - A.z) < 3.0) tableaus++;
+            });
+            notes.tableaus = tableaus; notes.tableausScene = tableausAll;
+            if (tableaus !== 1) fails.push(`${tableaus} deadExplorer tableaus within 3m of the beat anchor, expected exactly 1 (scene total ${tableausAll})`);
 
             // ── 2. SEATED ON REAL CAVE ROCK, BY COLLIDER IDENTITY.
             S('floor-identity');

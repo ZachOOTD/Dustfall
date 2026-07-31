@@ -2139,8 +2139,10 @@ export interface SpawnedCave {
   pools: CavePool[];
   /** World-space top of the egg-chamber dais — where main.ts places the companion egg. */
   eggDaisTop: THREE.Vector3;
-  /** World-space floor anchors for the deep loot caches (the hall + the egg chamber, battery-rich). */
-  lootAnchors: THREE.Vector3[];
+  /** Deep loot caches (hall + egg chamber + deepest pocket, battery-rich). Walk-test 2026-07-30:
+   *  these are full tableau anchors now, not bare points — every cache is placed beside a dead
+   *  salvager, so the loot reads as somebody's rather than as a box on a floor. */
+  lootAnchors: BeatAnchor[];
   /** DEEPER cycle 9 — world-space floor points for the kind's loose `scrap` scatter (empty for every
    *  kind but the warren, and ALWAYS empty for canonical). Deliberately ANCHORS, not pickups: this
    *  module has no `GameContext`, and the pickup lifecycle has to be owned by whoever can also
@@ -2250,6 +2252,7 @@ export function startSpawnCave(
   let rubbleHeaps = 0;
   let scrapAnchors: THREE.Vector3[] = [];
   let beatAnchor: BeatAnchor | null = null;   // cycle 12 — the dead explorer
+  let lootAnchors: BeatAnchor[] = [];        // walk-test 2026-07-30 — every cache is a tableau now
   let poolSpecs: CavePoolSpec[] = [];       // walk-test — computed pre-SDF so basins and water agree
   let msMesh = 0;
   let msRockSamplers = 0;                   // CLOSE-OUT — the two real-rock sampler passes
@@ -2278,7 +2281,7 @@ export function startSpawnCave(
     group.name = 'caveGen';
     _fungiWallTotal = 0; _fungiWallHidden = 0; _fungiWallCeiling = 0;   // CLOSE-OUT — wall-shelf anchor accounting
     meshes = []; decor = []; fungi = []; pools = [];
-    rubbleHeaps = 0; scrapAnchors = []; beatAnchor = null; poolSpecs = [];
+    rubbleHeaps = 0; scrapAnchors = []; beatAnchor = null; poolSpecs = []; lootAnchors = [];
 
     // Neighbour directions per node (to keep the corridor-mouth sectors clear of speleothems and,
     // since cycle 6, of water pools — shared so both agree on where a mouth is).
@@ -2532,6 +2535,70 @@ export function startSpawnCave(
       }
     }
 
+    // WALK-TEST 2026-07-30 — THE DEEP CACHES BECOME TABLEAUX. Zach: *"those loot boxes only spawn
+    // next to skeletons in caves … at least beside the skeletons the loot has a story/purpose."*
+    // These were bare `floorY + 0.02` points — the ANALYTIC plane, the exact thing that floated the
+    // cycle-12 props — and main.ts dropped an anonymous crate on each. They now carry the same
+    // payload as the beat anchor (seat on measured rock, a yaw facing into the room, and a floor
+    // patch for the tableau's spread), so a dead salvager can be placed at each by the SAME code
+    // path. Still published AFTER the digest and spawned outside this module: no mesh, no hash.
+    {
+      const mouthCos = Math.cos((Tuning.CAVE_SPELEO_MOUTH_CLEAR_DEG * Math.PI) / 180);
+      const clearOfPools = (sx: number, sz: number): boolean => {
+        for (const ps of poolSpecs) {
+          const rr = ps.radius * Tuning.CAVE_POOL_BASIN_R_MUL + 1.2;
+          if ((sx - ps.x) * (sx - ps.x) + (sz - ps.z) * (sz - ps.z) < rr * rr) return false;
+        }
+        return true;
+      };
+      const mkAnchor = (n: CaveNode, frac: number, angOff: number): BeatAnchor | null => {
+        const mouthDirs = dirsByNode.get(n.id) ?? [];
+        // Deterministic bearing (no RNG — these anchors have always been a pure function of the
+        // node), rotated in fixed steps until it clears the corridor mouths, the pools and the
+        // egg dais. Same total-order discipline as the beat's chamber choice.
+        for (let k = 0; k < 12; k++) {
+          const ang = n.id * 1.7 + angOff + k * (Math.PI / 6);
+          const ux = Math.cos(ang), uz = Math.sin(ang);
+          let blocked = false;
+          for (const md of mouthDirs) if (ux * md.x + uz * md.z > mouthCos) { blocked = true; break; }
+          if (blocked) continue;
+          const sx = n.x + ux * n.rx * frac, sz = n.z + uz * n.rx * frac;
+          if (!clearOfPools(sx, sz)) continue;
+          if (n.kind === 'egg' && Math.hypot(sx - n.x, sz - n.z) < eggDaisRadius(n.rx) + 1.4) continue;
+          const sy = rockFloor(sx, sz, n.floorY);
+          const nn = Tuning.CAVE_BEAT_FLOOR_N, cell = Tuning.CAVE_BEAT_FLOOR_CELL;
+          const x0 = sx - ((nn - 1) / 2) * cell, z0 = sz - ((nn - 1) / 2) * cell;
+          const h: number[] = [];
+          for (let iz = 0; iz < nn; iz++) {
+            for (let ix = 0; ix < nn; ix++) h.push(rockFloor(x0 + ix * cell, z0 + iz * cell, sy));
+          }
+          return { pos: new THREE.Vector3(sx, sy, sz), yaw: Math.atan2(-ux, -uz), floor: { x0, z0, cell, n: nn, h } };
+        }
+        return null;
+      };
+      // FALLBACKS, because the first version silently shipped 2 caches instead of 3: the deepest
+      // pocket had a POOL, whose basin clearance (r×1.12 + 1.2 ≈ 3.3m) covers every point on a small
+      // room's 0.5·rx ring — all 12 bearings rejected, cache gone, no error. A cache quietly not
+      // existing is a content regression the player would never report, so each slot now tries
+      // several radii before giving up, and the pocket slot walks to the next-deepest pocket.
+      const tryNode = (n: CaveNode | undefined, fracs: number[], off: number): BeatAnchor | null => {
+        if (!n) return null;
+        for (const f of fracs) { const a = mkAnchor(n, f, off); if (a) return a; }
+        return null;
+      };
+      const eggN = graph.nodes[graph.eggId];
+      const hallN = graph.nodes.find((n) => n.kind === 'hall');
+      const pocketsN = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
+      const aEgg = tryNode(eggN, [0.6, 0.72, 0.5], 0);
+      if (aEgg) lootAnchors.push(aEgg);
+      const aHall = tryNode(hallN, [0.55, 0.7, 0.42], 1.3);
+      if (aHall) lootAnchors.push(aHall);
+      for (const pk of pocketsN) {
+        const a = tryNode(pk, [0.5, 0.68, 0.35], 2.1);
+        if (a) { lootAnchors.push(a); break; }
+      }
+    }
+
     // DEEPER cycle 7 — THE ARRIVAL CUE. `addFungi` deliberately skips the entrance chamber, so the
     // hand-off frame (step out of the crevice slot into the first room) had nothing lit in it at all
     // — the room is authored, but 2-3 stops under visibility, and the player's first look into the
@@ -2643,17 +2710,8 @@ export function startSpawnCave(
     // deepest, most dangerous rooms, so the cave EARNS its danger (battery-rich, per scarcity design).
     const eggNode = graph.nodes[graph.eggId];
     const eggDaisTop = new THREE.Vector3(eggNode.x, eggNode.floorY + 0.9 + 0.23, eggNode.z);
-    const lootAnchors: THREE.Vector3[] = [];
-    const floorAnchor = (n: CaveNode, frac: number, angOff: number): THREE.Vector3 => {
-      // A deterministic floor point offset from the chamber centre (clear of the central dais / mouths).
-      const ang = (n.id * 1.7 + angOff);
-      return new THREE.Vector3(n.x + Math.cos(ang) * n.rx * frac, n.floorY + 0.02, n.z + Math.sin(ang) * n.rx * frac);
-    };
-    lootAnchors.push(floorAnchor(eggNode, 0.6, 0));                       // egg chamber (deepest)
-    const hallNode = graph.nodes.find((n) => n.kind === 'hall');
-    if (hallNode) lootAnchors.push(floorAnchor(hallNode, 0.55, 1.3));     // the big gallery
-    const pockets = graph.nodes.filter((n) => n.kind === 'pocket').sort((a, b) => a.floorY - b.floorY);
-    if (pockets.length) lootAnchors.push(floorAnchor(pockets[0], 0.5, 2.1));  // the deepest side pocket
+    // `lootAnchors` is built in the DRESS stage now (it needs the real-rock sampler) — see the note
+    // there. Published here unchanged, still after the digest.
 
     out = { group, body, graph, probe, fungi, pools, eggDaisTop, lootAnchors, scrapAnchors, beatAnchor };
   };

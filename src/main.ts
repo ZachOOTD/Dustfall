@@ -78,7 +78,7 @@ import { spawnSarlaccPit, updateSarlaccPit } from './enemies/sarlaccPit.ts';
 import { spawnDeepCave, updateDeepCave, buildCompanionEgg, type CaveEgg } from './world/deepCave.ts';
 import { rollCaveCache } from './config/lootRegistry.ts';                 // UNDERWORLD cycle 3 — deep cave caches
 import { spawnLootContainerAt, type LootContainer, type LootEntry } from './world/lootContainers.ts';
-import { buildDeadExplorer } from './world/deadExplorer.ts';   // DEEPER cycle 12 — the dead-explorer tableau
+import { placeDeadExplorer } from './world/deadExplorer.ts';   // DEEPER cycle 12 — the dead-explorer tableau
 import { placeJournal } from './world/journal.ts';
 import type { ItemId } from './inventory/types.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
@@ -244,10 +244,18 @@ if (caveSite) {
   // contents are pre-rolled from the cave-cache table on a DEDICATED seed-derived rng (never
   // touches the procgen/scatter streams → surface determinism intact). Ids are assigned first at
   // boot (deterministic order) so save restore matches on Continue.
+  // WALK-TEST 2026-07-30 (Zach): *"lets make it so those loot boxes only spawn next to skeletons in
+  // caves. doesn't really make sense for them to be on their own if the world is supposed to be
+  // empty. at least beside the skeletons the loot has a story/purpose."* Each deep cache is now a
+  // dead salvager with their pack spilled beside them — the same tableau the warren beat uses,
+  // through the same placement path (`placeDeadExplorer`), WITHOUT a journal: the journal is what
+  // makes the warren's body an authored survivor with a story rather than one more person who came
+  // for the egg and did not leave. Three of them, one per major room, is the cave's own history.
   const cacheRng = makeRng((worldSeed ^ 0xca5eca5e) >>> 0);
   for (const anchor of cave.lootAnchors) {
+    const p = placeDeadExplorer(three.scene, anchor, cacheRng, sampleBeatFloor);
     const contents = rollCaveCache(cacheRng).map((e) => ({ itemId: e.id, count: e.count ?? 1 }));
-    caveLootCaches.push(spawnLootContainerAt(three.scene, anchor, contents, cacheRng));
+    caveLootCaches.push(spawnLootContainerAt(three.scene, p.cratePos, contents, cacheRng, { muted: true, open: true }));
   }
 }
 _mark('terrain');
@@ -859,35 +867,16 @@ if (caveStream) {
       // Its own stream, seeded from the cave's own generation seed, so a re-streamed cave's tableau
       // is identical on re-entry (D290) and nothing draws from a shared scatter stream (D208).
       const rand = makeRng((cave.probe.seed ^ 0xbea713) >>> 0);
-
-      // ── SEATING. The anchor's height is exact at the SEAT and nowhere else: the tableau is a rigid
-      //    ~2.4m arrangement and the displaced cave floor falls away under its edges (measured, before
-      //    this: journal 8.8cm, lantern 10.0cm, crate 5.5cm in the air, with the seat at 0.4cm).
-      //    So the FIGURE — one rigid body that cannot follow the ground — is dropped to the LOWEST
-      //    rock under its own footprint, which beds the high side into stone instead of floating the
-      //    low side over it; and every loose prop is seated individually through `groundY`.
-      const cy = Math.cos(anchor.yaw), sy = Math.sin(anchor.yaw);
-      const rockAtLocal = (lx: number, lz: number): number =>
-        sampleBeatFloor(anchor.floor, anchor.pos.x + lx * cy + lz * sy, anchor.pos.z - lx * sy + lz * cy);
-      // The figure's own footprint: seat, both feet, and the reaching hand.
-      let groupY = Infinity;
-      for (const [lx, lz] of [[0, 0], [-0.16, 0.52], [0.16, 0.52], [0.1, 0.3]] as const) {
-        groupY = Math.min(groupY, rockAtLocal(lx, lz));
-      }
-      const de = buildDeadExplorer(rand, (lx, lz) => rockAtLocal(lx, lz) - groupY);
-      de.group.position.set(anchor.pos.x, groupY, anchor.pos.z);
-      de.group.rotation.y = anchor.yaw;
-      three.scene.add(de.group);
-      // World-space anchors derived from the group's own transform, so the props and the tableau can
-      // never disagree about where the hand is.
-      de.group.updateMatrixWorld(true);
-      const journalPos = de.group.localToWorld(de.journalLocal.clone());
-      const cratePos = de.group.localToWorld(de.crateLocal.clone());
+      // Seating (figure to the lowest rock under its footprint, loose props each on their own
+      // ground) lives in `placeDeadExplorer` — shared with the boot-time origin caches so the
+      // cycle-12 bedding work cannot rot on one side of a copy.
+      const de = placeDeadExplorer(three.scene, anchor, rand, sampleBeatFloor);
+      const journalPos = de.journalPos, cratePos = de.cratePos;
 
       // ⚠ `placeJournal` TAGS and `scene.add`s but does NOT register itself. Forget the push and the
       // prop is visible, correct and completely inert — a silent failure with no error. The
       // BEAT-BUILD gate's readability tooth exists for exactly this line.
-      const journal = placeJournal(three.scene, journalPos, anchor.yaw + de.journalYaw, 'cave_explorer');
+      const journal = placeJournal(three.scene, journalPos, de.journalYaw, 'cave_explorer');
       journalsList.push(journal);
 
       // The cache. If the player has opened this one before, it comes back with exactly what they

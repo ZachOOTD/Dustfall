@@ -1,18 +1,17 @@
-// Loot containers — a subset of the scattered wreckage in the world is
-// flagged as "searchable". The player aims + E to open a small overlay
-// showing the contents; click each item row to transfer to inventory.
+// Loot containers — a searchable crate. The player aims + E to open a small overlay showing the
+// contents; click each item row to transfer to inventory.
 //
-// Containers piggyback on the wreckage meshes that landmarks.ts already
-// spawns — we accept a list of candidate meshes + positions and tag a
-// random subset as searchable.
+// WALK-TEST 2026-07-30 — A CONTAINER ONLY EXISTS BESIDE A BODY. Zach: *"lets make it so those loot
+// boxes only spawn next to skeletons in caves. doesn't really make sense for them to be on their own
+// if the world is supposed to be empty. at least beside the skeletons the loot has a story/purpose."*
+// So this file offers exactly ONE spawn entry point — `spawnLootContainerAt`, called by the
+// dead-explorer tableau (deadExplorer.ts) and by nothing else. The two former world-scatter
+// spawners are deleted rather than left dead: an unreferenced but working orphan-crate spawner is
+// how that rule quietly comes back.
 
 import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
-import type { Terrain } from '../world/terrain.ts';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
-// Scavenger's Economy build 1 — the container drop table + roller (and its former
-// tuning.LOOT_CONTAINER_* constants) now live in the unified loot registry.
-import { rollContainerLoot } from '../config/lootRegistry.ts';
 
 export interface LootEntry {
   itemId: ItemId;
@@ -38,37 +37,14 @@ function tag(root: THREE.Object3D, id: number): void {
   });
 }
 
-/** Container contents roller — delegates to the unified registry
- *  (`rollContainerLoot`, weighted-pick cascade). Kept as a local alias so the
- *  spawn helpers below read unchanged. */
-const rollLoot = rollContainerLoot;
-
-/**
- * Given a list of candidate wreckage meshes (with their world positions),
- * tag a random fraction as searchable loot containers.
- */
-export function spawnLootContainers(
-  candidates: Array<{ mesh: THREE.Object3D; pos: THREE.Vector3 }>,
-  rand: Rng,
-  fraction: number = 0.5,
-): LootContainer[] {
-  const list: LootContainer[] = [];
-  for (const c of candidates) {
-    if (rand() > fraction) continue;
-    const contents = rollLoot(rand);
-    if (contents.length === 0) continue;
-    const id = _nextId++;
-    tag(c.mesh, id);
-    list.push({
-      id,
-      mesh: c.mesh,
-      pos: c.pos.clone(),
-      contents,
-      opened: false,
-    });
-  }
-  return list;
-}
+// WALK-TEST 2026-07-30 — THE TWO ORPHAN-CRATE SPAWNERS ARE DELETED, not left dead.
+// `spawnLootContainers` (tag a fraction of wreckage as searchable) and
+// `spawnStandaloneLootContainers` (12 crates scattered 15-245m from origin) had already fallen out
+// of the boot path at some earlier point and sat here unreferenced. Zach: *"doesn't really make
+// sense for them to be on their own if the world is supposed to be empty. at least beside the
+// skeletons the loot has a story/purpose."* Leaving a working orphan-crate spawner in the file is
+// how that rule quietly comes back — the only way to spawn a container now is beside a body, via
+// `spawnLootContainerAt` from a dead-explorer tableau.
 
 export function findLootContainerById(
   list: LootContainer[],
@@ -134,43 +110,4 @@ export function spawnLootContainerAt(
   tag(mesh, id);
   scene.add(mesh);
   return { id, mesh, pos: pos.clone(), contents, opened: false };
-}
-
-/** Spawn standalone loot crates (no dependency on existing landmarks). */
-export function spawnStandaloneLootContainers(
-  scene: THREE.Scene,
-  terrain: Terrain,
-  rand: Rng,
-  count: number = 12,
-): LootContainer[] {
-  const list: LootContainer[] = [];
-  for (let i = 0; i < count; i++) {
-    const radius = 15 + rand() * 230;
-    const angle = rand() * Math.PI * 2;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    const y = terrain.heightAt(x, z);
-    const mesh = makeCrate(rand);
-    mesh.position.set(x, y, z);
-    mesh.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-      }
-    });
-    const contents = rollLoot(rand);
-    if (contents.length === 0) continue;
-    const id = _nextId++;
-    tag(mesh, id);
-    scene.add(mesh);
-    list.push({
-      id,
-      mesh,
-      pos: new THREE.Vector3(x, y, z),
-      contents,
-      opened: false,
-    });
-  }
-  return list;
 }

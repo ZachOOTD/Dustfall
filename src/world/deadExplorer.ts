@@ -116,6 +116,47 @@ function makeSpilledFlake(rand: Rng): THREE.Mesh {
   return m;
 }
 
+/** WALK-TEST 2026-07-30 (Zach): *"lets make it so those loot boxes only spawn next to skeletons in
+ *  caves. doesn't really make sense for them to be on their own if the world is supposed to be
+ *  empty. at least beside the skeletons the loot has a story/purpose."*
+ *
+ *  ONE placement path for every tableau in the game — the boot-time origin caches and the streamed
+ *  warren beat both come through here. They used to be two copies of the seating maths (drop the
+ *  rigid figure to the LOWEST rock under its footprint, hand each loose prop its own ground), and
+ *  two copies is how the cave-12 bedding work would quietly rot on one side.
+ *
+ *  The JOURNAL is deliberately NOT placed here: it is what separates the authored beat (a named
+ *  survivor with a story, warrens only) from an anonymous salvager who did not make it back. The
+ *  caller places one or does not. */
+export function placeDeadExplorer(
+  scene: THREE.Scene,
+  anchor: { pos: THREE.Vector3; yaw: number; floor: { x0: number; z0: number; cell: number; n: number; h: number[] } },
+  rand: Rng,
+  sampleFloor: (f: { x0: number; z0: number; cell: number; n: number; h: number[] }, x: number, z: number) => number,
+): { group: THREE.Group; journalPos: THREE.Vector3; journalYaw: number; cratePos: THREE.Vector3 } {
+  const cy = Math.cos(anchor.yaw), sy = Math.sin(anchor.yaw);
+  const rockAtLocal = (lx: number, lz: number): number =>
+    sampleFloor(anchor.floor, anchor.pos.x + lx * cy + lz * sy, anchor.pos.z - lx * sy + lz * cy);
+  // The FIGURE is one rigid body and cannot follow the ground, so it drops to the LOWEST rock under
+  // its own footprint — bedding the high side into stone rather than floating the low side over it.
+  let groupY = Infinity;
+  for (const [lx, lz] of [[0, 0], [-0.16, 0.52], [0.16, 0.52], [0.1, 0.3]] as const) {
+    groupY = Math.min(groupY, rockAtLocal(lx, lz));
+  }
+  const de = buildDeadExplorer(rand, (lx, lz) => rockAtLocal(lx, lz) - groupY);
+  de.group.position.set(anchor.pos.x, groupY, anchor.pos.z);
+  de.group.rotation.y = anchor.yaw;
+  scene.add(de.group);
+  // World anchors derived from the group's own transform, so props and anchors cannot disagree.
+  de.group.updateMatrixWorld(true);
+  return {
+    group: de.group,
+    journalPos: de.group.localToWorld(de.journalLocal.clone()),
+    journalYaw: anchor.yaw + de.journalYaw,
+    cratePos: de.group.localToWorld(de.crateLocal.clone()),
+  };
+}
+
 /** Compose the tableau. `rand` is the caller's per-cave stream — the same seed always
  *  produces the same scene, so a re-streamed cave's body is identical on re-entry (D290).
  *
